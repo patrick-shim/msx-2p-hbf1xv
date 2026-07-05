@@ -26,6 +26,19 @@ struct Z80aRegisters {
     std::uint8_t i = 0;
     std::uint8_t r = 0;
 
+    // Internal WZ / MEMPTR register (M12-S3, gap #3/#35). Not directly software-
+    // accessible; observable only via the X/Y flags of BIT n,(HL) and
+    // BIT n,(IX/IY+d), which source bits 11/13 from WZ (fact-sheet §4). Updated
+    // at the enumerated rule sites in the CPU. Deterministically reset to 0.
+    std::uint16_t wz = 0;
+
+    // Q latch (M12-S4, gap #20/#21). Mirrors the value written to F by the most
+    // recent flag-modifying operation; it is set by set_f() and cleared to 0 at
+    // the start of every instruction (so an instruction that never writes F
+    // leaves Q = 0). Feeds the genuine-Zilog SCF/CCF undocumented X/Y rule
+    // X/Y = ((Q ^ F) | A) bits 5/3 (fact-sheet §8, Patrik-Rak). Reset to 0.
+    std::uint8_t q = 0;
+
     [[nodiscard]] std::uint8_t a() const;
     [[nodiscard]] std::uint8_t f() const;
     [[nodiscard]] std::uint8_t b() const;

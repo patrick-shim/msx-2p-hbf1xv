@@ -199,16 +199,25 @@ int main() {
             return t == 8 && c.state().regs().f() == (State::kFlagHalfCarry | State::kFlagCarry);
         });
 
-    run("Bit3MemHl_MemoryOperand_HalfSetTiming12",
+    run("Bit3MemHl_MemoryOperand_UndocXYFromWzHiByteTiming12",
         [](ArrayBus& b, cpu::Z80aCpu& c) {
+            // M12-S3 (gap #4): BIT n,(HL) sources undocumented X/Y from the WZ
+            // high byte, NOT the tested value. Here the tested byte 0x08 has bit3
+            // set but bit3 of the WZ high byte (0x08 -> bit3 set) is what feeds X;
+            // Y comes from WZ-hi bit5 (0x28 -> also bit5 set), independent of the
+            // operand. Fact-sheet §4; openMSX CPUCore.cc:3420.
             c.state().regs().hl = 0x4000;
-            b.memory[0x4000] = 0x08;  // bit3 set
+            c.state().regs().wz = 0x2800;  // WZ hi = 0x28: bits 3 and 5 set
+            b.memory[0x4000] = 0x00;       // bit3 CLEAR in operand -> Z/PV set
             c.state().regs().set_f(0x00);
             b.memory[0x0000] = 0xCB;
             b.memory[0x0001] = 0x5E;  // BIT 3,(HL)
         },
         [](ArrayBus&, cpu::Z80aCpu& c, std::uint32_t t) {
-            return t == 12 && c.state().regs().f() == (State::kFlagHalfCarry | State::kFlagX);
+            // bit3 clear -> Z|PV|H set; X/Y from WZ hi (0x28) -> X and Y set.
+            return t == 12 &&
+                   c.state().regs().f() == (State::kFlagZero | State::kFlagHalfCarry |
+                                            State::kFlagParityOverflow | State::kFlagX | State::kFlagY);
         });
 
     // --- RES / SET group ----------------------------------------------------

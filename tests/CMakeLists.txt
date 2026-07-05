@@ -118,6 +118,42 @@ add_executable(devices_z80a_trace_export_unit_test
 target_link_libraries(devices_z80a_trace_export_unit_test PRIVATE sony_msx_core)
 add_test(NAME devices_z80a_trace_export_unit_test COMMAND devices_z80a_trace_export_unit_test)
 
+add_executable(devices_z80a_wz_memptr_unit_test
+    unit/devices/z80a_wz_memptr_unit_test.cpp
+)
+target_link_libraries(devices_z80a_wz_memptr_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_wz_memptr_unit_test COMMAND devices_z80a_wz_memptr_unit_test)
+
+add_executable(devices_z80a_scf_ccf_q_unit_test
+    unit/devices/z80a_scf_ccf_q_unit_test.cpp
+)
+target_link_libraries(devices_z80a_scf_ccf_q_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_scf_ccf_q_unit_test COMMAND devices_z80a_scf_ccf_q_unit_test)
+
+add_executable(devices_z80a_nmos_interrupt_unit_test
+    unit/devices/z80a_nmos_interrupt_unit_test.cpp
+)
+target_link_libraries(devices_z80a_nmos_interrupt_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_nmos_interrupt_unit_test COMMAND devices_z80a_nmos_interrupt_unit_test)
+
+add_executable(devices_z80a_parity_undocumented_unit_test
+    unit/devices/z80a_parity_undocumented_unit_test.cpp
+)
+target_link_libraries(devices_z80a_parity_undocumented_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_parity_undocumented_unit_test COMMAND devices_z80a_parity_undocumented_unit_test)
+
+add_executable(devices_z80a_block_flags_unit_test
+    unit/devices/z80a_block_flags_unit_test.cpp
+)
+target_link_libraries(devices_z80a_block_flags_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_block_flags_unit_test COMMAND devices_z80a_block_flags_unit_test)
+
+add_executable(devices_z80a_16bit_daa_unit_test
+    unit/devices/z80a_16bit_daa_unit_test.cpp
+)
+target_link_libraries(devices_z80a_16bit_daa_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_16bit_daa_unit_test COMMAND devices_z80a_16bit_daa_unit_test)
+
 add_executable(machine_hbf1xv_memory_regions_unit_test
     unit/machine/hbf1xv_memory_regions_unit_test.cpp
 )
@@ -195,6 +231,12 @@ add_executable(machine_hbf1xv_interrupt_ack_integration_test
 )
 target_link_libraries(machine_hbf1xv_interrupt_ack_integration_test PRIVATE sony_msx_core)
 add_test(NAME machine_hbf1xv_interrupt_ack_integration_test COMMAND machine_hbf1xv_interrupt_ack_integration_test)
+
+add_executable(machine_hbf1xv_cpu_parity_integration_test
+    integration/machine/hbf1xv_cpu_parity_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_cpu_parity_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_cpu_parity_integration_test COMMAND machine_hbf1xv_cpu_parity_integration_test)
 
 add_executable(machine_hbf1xv_m11_parity_checkpoint_integration_test
     integration/machine/hbf1xv_m11_parity_checkpoint_integration_test.cpp

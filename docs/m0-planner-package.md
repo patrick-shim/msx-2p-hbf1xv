@@ -19,6 +19,8 @@ Referenced runtime and protocol paths:
 - `src/`
 - `tests/`
 - `agent-protocol/`
+- `references/`
+- `debug/`
 
 ## Subsystem Boundaries
 
@@ -97,6 +99,8 @@ Verified present at planning cycle execution time:
 5. `src/`
 6. `tests/`
 7. `agent-protocol/`
+8. `references/`
+9. `debug/`
 
 No folder bootstrap action required for this cycle.
 

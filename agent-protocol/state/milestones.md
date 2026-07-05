@@ -256,30 +256,51 @@ Use one section per milestone.
 - Integration Tests Required: Deterministic machine+bus stepping over slot-decoded memory; CPU program run to a checkpoint through the real bus.
 - Regression Scope: All M0–M10 suites must remain passing; QA sign-off required before closure.
 - Status: Done
-- Details: CLOSED by human release decision on 2026-07-06 (REQ-M11-005); tagged git `v1.0.11`. Planner package `docs/m11-planner-package.md` (REQ-M11-002). Implementation REQ-M11-003 delivered all 6 slices (S1 bus-contract+CPU I/O seam+M1-cycle; S2 memory slot-decode #A8/#FFFF; S3 I/O dispatch + S1985 mirrors #9C-9F/#AC-AF; S4 thin S1985 backup-RAM ID 0xFE + mapper readback 100xxxxx + M1-wait; S5 system integration replacing MachineBus; S6 A/B parity) — `docs/m11-implementation-report.md`. QA sign-off REQ-M11-004 (`docs/m11-qa-signoff.md`) = PASS: QA-executed ctest 38/38 (+10 new), no regression (8 R-3 timing oracles recomputed to datasheet+M1-wait, hand-verified not weakened), and A/B parity independently REPRODUCED by QA — genuine EMPTY trace-diff over 15/15 real records vs openMSX 19.1 Sony_HB-F1XV with real <S1985> (`docs/m11-parity-trace-diff.md`, `build/qa_m11_A.txt`/`qa_m11_B.txt`). Forward obligation to M12: flip reset slot default #A8=0xFF -> #A8=0 (slot-0 BIOS) once ROMs populate slot 0 (R-1/A-2). Backup-RAM .sram persistence accepted out-of-scope (A-5/R-6). Per user instruction, autopilot STOPS here awaiting human release decision + go-ahead before M12.
+- Details: CLOSED by human release decision on 2026-07-06 (REQ-M11-005); tagged git `v1.0.11`. Planner package `docs/m11-planner-package.md` (REQ-M11-002). Implementation REQ-M11-003 delivered all 6 slices (S1 bus-contract+CPU I/O seam+M1-cycle; S2 memory slot-decode #A8/#FFFF; S3 I/O dispatch + S1985 mirrors #9C-9F/#AC-AF; S4 thin S1985 backup-RAM ID 0xFE + mapper readback 100xxxxx + M1-wait; S5 system integration replacing MachineBus; S6 A/B parity) — `docs/m11-implementation-report.md`. QA sign-off REQ-M11-004 (`docs/m11-qa-signoff.md`) = PASS: QA-executed ctest 38/38 (+10 new), no regression (8 R-3 timing oracles recomputed to datasheet+M1-wait, hand-verified not weakened), and A/B parity independently REPRODUCED by QA — genuine EMPTY trace-diff over 15/15 real records vs openMSX 19.1 Sony_HB-F1XV with real <S1985> (`docs/m11-parity-trace-diff.md`, `build/qa_m11_A.txt`/`qa_m11_B.txt`). Forward obligation now owned by the MEMORY milestone (renumbered to M13 by DEC-0003): flip reset slot default #A8=0xFF -> #A8=0 (slot-0 BIOS) once ROMs populate slot 0 (R-1/A-2). Backup-RAM .sram persistence accepted out-of-scope (A-5/R-6). NOTE: after M11 closure the human inserted a new M12 (Z80A CPU parity review, DEC-0003) and renumbered memory->M13, VDP->M14; execution order is M11(done) -> M12(CPU parity) -> M13(memory) -> M14(VDP).
 
 ## M12 (Kickoff 2026-07-06)
 
 - Milestone ID: M12
-- Title: RAM / ROM Memory Devices & Slot Population (VRAM deferred to M13)
+- Title: Z80A CPU End-to-End Parity Review & Hardening (HB-F1XV Zilog NMOS)
 - Spec Owner: MSX Planner Agent
 - Developer Owner: MSX Developer Agent
 - QA Owner: MSX QA Agent
-- Scope: Implement the CPU-addressable memory devices and populate the M11 slot map per the Target Machine Specification and the openMSX HB-F1XV layout (`references/openmsx-21.0/src/memory/`, S1985 fact-sheet §4/§9): 64 KB main RAM as a memory-mapper device (openMSX slot 3-0, `#FC-#FF` segment registers, S1985 512 KB drive limit / HB-F1XV 64 KB population), and the ROM set — 32 KB BIOS/BASIC, 16 KB SUB-ROM (MSX-BASIC V3.0), 16 KB KANJI (KANJI BASIC + KANJI ROM), 16 KB DISK ROM. Per DEC-0002 the 128 KB VRAM is OWNED BY THE VDP and is OUT of M12 scope (delivered in M13). Wire these devices into the M11 slots/bus; asset loading uses local `bios/`/`roms/` (verified paths only — no fabricated provenance).
+- Scope: Comprehensive review of the current Z80A CPU implementation (`src/devices/cpu/*`, built in M9) against `references/fact-sheets/Zilog Z80A CPU.md` and openMSX (`references/openmsx-21.0/src/cpu/CPUCore.cc`, `CPURegs.cc`, `Z80.hh`), establishing end-to-end behavioral + timing parity for a genuine Zilog NMOS Z80A. Per DEC-0003: gap analysis -> plan -> implement any deltas -> full system integration test. Parity rubric (fact-sheet §4/§5/§8): undocumented X/Y (F3/F5) flags incl. 16-bit high-byte source; WZ/MEMPTR tracking for `BIT n,(HL)`/`(IX+d)` and every updating op; block-instruction flag quirks (`LDI/CPI/INI/OUTI` families incl. the NMOS `OUTI`-affects-carry edge); SCF/CCF Q-latch (`((Q^F)|A)` bits 5/3 rule); `SLL` (`CB 30-37`); `IXH/IXL/IYH/IYL`; DD/FD prefix chaining + NONI; ED holes as 2-byte NOPs; full-table `DAA`; R register low-7-bit increment (prefix/block rules, bit7 frozen); NMOS `OUT (C),0` = 0; NMOS `LD A,I`/`LD A,R` interrupt P/V bug; EI one-instruction delay; DI/EI/RETI/RETN IFF semantics; IM0/IM1/IM2 + NMI; MSX M1 wait (+1/opcode fetch, +1/prefix — owned at machine level per M11) and the intrinsic I/O wait; interrupt-acknowledge timing (IM1 13T bare). src placement stays under `src/devices/cpu/`; the planner may reorganize/add files (flag tables, undocumented-op modules) with best judgment per `src/CLAUDE.md`. This is a parity-hardening pass, NOT a rewrite (scope control: no gratuitous refactor).
+- Acceptance Criteria:
+	- Documented gap analysis mapping EACH fact-sheet parity item to current-impl status (present / absent / divergent) with concrete citations (our `file:line` vs `references/...` path).
+	- Every identified gap implemented and covered by a deterministic unit test grounded in the fact sheet / openMSX behavior.
+	- Full SYSTEM INTEGRATION test: the CPU exercised end-to-end through the M11 system bus (not isolated), covering the parity-critical behaviors.
+	- 100% pass of ALL unit + system-integration tests with ZERO regression across the M1–M12 suites (standing human close-authorization condition, DEC-0003).
+	- Evidence gates executed (`tools/validate-assets.ps1`, `tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt`, `cmake --build build --config Debug`, `ctest --test-dir build -C Debug --output-on-failure`).
+	- A/B trace-diff vs openMSX (real captured diff) exercising the parity-critical opcode/flag/timing behaviors; NO parity claim without a genuine diff.
+- Unit Tests Required: Deterministic tests for undocumented X/Y flags, WZ/MEMPTR (`BIT n,(HL)`/`(IX+d)`), block-instruction flag quirks (incl. `OUTI` carry), SCF/CCF Q-latch, `SLL`, `IXH/IXL/IYH/IYL`, `DAA` table, R-register increments, `OUT (C),0`=0, `LD A,I/R` NMOS bug, EI-delay, RETI/RETN IFF, and IM/NMI timing oracles.
+- Integration Tests Required: CPU-over-M11-bus system integration exercising the above end-to-end; a ZEXDOC/ZEXALL-style parity harness if feasible under the headless harness (otherwise the openMSX A/B trace-diff serves as the cross-check).
+- Regression Scope: ALL M1–M12 unit + system-integration suites must pass 100% with zero regression. QA sign-off required. Per DEC-0003, closure is AUTHORIZED on that exact condition (100% pass, zero regression M1–M12, QA Pass) without a further human release decision; otherwise escalate.
+- Status: Done
+- Details: CLOSED by coordinator under the DEC-0003 standing auto-close grant on 2026-07-06 (REQ-M12-005); tagged git `v1.0.12`. Planner package `docs/m12-planner-package.md` (REQ-M12-002): 36-item gap analysis (26 PRESENT, 4 DIVERGENT, 5 ABSENT, 1 UNVERIFIED). Implementation REQ-M12-003 (`docs/m12-implementation-report.md`) closed all target gaps as a parity-hardening pass confined to `src/devices/cpu/`: #3/#35 WZ/MEMPTR register + all §4 update sites; #4/#5 BIT n,(HL)/(IX+d) X/Y from WZ hi byte; #20/#21 genuine-Zilog SCF/CCF Q-latch X/Y=((Q^F)|A) bits 5/3; #30 RETI copies IFF2->IFF1; #31 NMOS LD A,I/R P/V interrupt bug. #34 HALT-R DEFERRED (planner default, protects the signed cpu_step oracle; tracked as DEC-0004). QA sign-off REQ-M12-004 (`docs/m12-qa-signoff.md`) = PASS: QA-executed ctest 45/45 (+7 suites), ZERO regression (8 M11 timing oracles unchanged/green; no datasheet T-state or increment_refresh_register() site altered; S6 integration proves IM1 ack=14 with no M1-wait double-count), gaps hand-verified genuine/correct, A/B parity QA-REPRODUCED (empty diff 48/48 vs openMSX 19.1 + adversarial corruption test confirming a true match) — `docs/m12-parity-trace-diff.md`. Residuals ruled NON-BLOCKING: ZEXALL/ZEXDOC honestly degraded (no legally-sourceable binary offline; acceptance made ZEX "if feasible", A/B fallback delivered) and HALT-R #34 defer (not a required acceptance item). DEC-0003 auto-close condition met.
+
+## M13 (Renumbered 2026-07-06 by DEC-0003; was M12)
+
+- Milestone ID: M13
+- Title: RAM / ROM Memory Devices & Slot Population (VRAM deferred to M14)
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Implement the CPU-addressable memory devices and populate the M11 slot map per the Target Machine Specification and the openMSX HB-F1XV layout (`references/openmsx-21.0/src/memory/`, S1985 fact-sheet §4/§9): 64 KB main RAM as a memory-mapper device (openMSX slot 3-0, `#FC-#FF` segment registers, S1985 512 KB drive limit / HB-F1XV 64 KB population), and the ROM set — 32 KB BIOS/BASIC, 16 KB SUB-ROM (MSX-BASIC V3.0), 16 KB KANJI (KANJI BASIC + KANJI ROM), 16 KB DISK ROM. Per DEC-0002 the 128 KB VRAM is OWNED BY THE VDP and is OUT of this milestone's scope (delivered in M14). Wire these devices into the M11 slots/bus; asset loading uses local `bios/`/`roms/` (verified paths only — no fabricated provenance). Carries the M11 forward-obligation (R-1/A-2): flip the bring-up reset slot default `#A8=0xFF` -> `#A8=0` (slot-0 BIOS) once ROMs populate slot 0.
 - Acceptance Criteria:
 	- Memory-mapper RAM device (64 KB) with `#FC-#FF` segment registers, wired into slot 3-0, replaces the inert DRAM region as the CPU RAM backing.
 	- ROM devices for BIOS/BASIC, SUB, KANJI, DISK implemented and mapped to their correct slots/pages per the HB-F1XV layout; missing local assets handled deterministically (documented, no fabrication).
 	- System integration: CPU can fetch/execute from ROM and read/write mapper RAM through the M11 bus; boot reaches a defined checkpoint.
 	- Evidence gates executed (validate-assets, checksum, Debug build, ctest all green).
-	- A/B trace-diff vs openMSX over a CPU-visible RAM/ROM program (real diff; VRAM parity excluded, it is M13).
+	- A/B trace-diff vs openMSX over a CPU-visible RAM/ROM program (real diff; VRAM parity excluded, it is M14).
 - Unit Tests Required: Deterministic mapper segment-register decode/readback, ROM read-only enforcement, slot-page mapping, and asset-absence handling tests.
 - Integration Tests Required: Deterministic boot/run through ROM+mapper-RAM over the M11 bus to a checkpoint.
 - Regression Scope: All prior suites remain passing; QA sign-off required before closure.
 - Status: Planned
 
-## M13 (Kickoff 2026-07-06)
+## M14 (Renumbered 2026-07-06 by DEC-0003; was M13)
 
-- Milestone ID: M13
+- Milestone ID: M14
 - Title: Yamaha V9958 VDP (incl. 128 KB VRAM ownership)
 - Spec Owner: MSX Planner Agent
 - Developer Owner: MSX Developer Agent

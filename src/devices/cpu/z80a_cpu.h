@@ -141,6 +141,14 @@ private:
     // single choke-point through which every opcode fetch AND the interrupt-ack
     // M1 pass. See m1_cycles_last_step().
     std::uint32_t m1_cycle_count_ = 0;
+
+    // Q latch snapshot (M12-S4, gap #20/#21). Captured at the top of each step()
+    // as the Q value produced by the PREVIOUS instruction, then regs().q is
+    // cleared so this instruction re-latches it via set_f(). alu_scf()/alu_ccf()
+    // read q_prev_ to form the genuine-Zilog X/Y = ((Q ^ F) | A) result. After a
+    // step that never writes F (incl. interrupt acceptance, EX AF,AF', POP AF),
+    // q_prev_ for the next step is 0.
+    std::uint8_t q_prev_ = 0;
 };
 
 }  // namespace sony_msx::devices::cpu

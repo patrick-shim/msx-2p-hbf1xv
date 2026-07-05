@@ -133,25 +133,26 @@ milestone_records:
     overall_done: true
     notes: "CLOSED 2026-07-06 (REQ-M11-005), git tag v1.0.11. QA PASS (REQ-M11-004, docs/m11-qa-signoff.md). Slices S1..S6 complete; ctest 38/38 (QA-executed, +10 new). Real A/B trace-diff EMPTY vs openMSX 19.1 Sony_HB-F1XV with genuine <S1985>, QA-reproduced (both sides driven, 15/15). No regression. Forward obligation: M12 planner flips reset slot default #A8=0xFF -> #A8=0 (slot-0 BIOS) once ROMs populate slot 0 (R-1). A-5/R-6 backup-RAM .sram persistence accepted out-of-scope."
   M12:
-    status: planned
+    status: done
     planning:
-      spec_defined: false
-      scope_in_scope_only: false
-      dependencies_mapped: false
-      acceptance_criteria_defined: false
-      risks_logged: false
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
     implementation:
-      code_changes_scoped_to_milestone: false
-      unit_tests_added_or_updated: false
-      integration_tests_added_or_updated: false
-      build_flow_referenced: false
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
     regression_qa:
-      regression_matrix_updated: false
-      impacted_areas_covered: false
-      blocker_risks_resolved_or_accepted: false
-      signoff_decision_recorded: false
-    overall_done: false
-    notes: "Planned per DEC-0002. RAM/ROM memory devices + slot population (VRAM deferred to M13). Depends on M11 bus/slot infrastructure."
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # ZEXALL degrade + HALT-R defer ruled non-blocking by QA
+      signoff_decision_recorded: true   # QA PASS (REQ-M12-004), QA-executed ctest 45/45, A/B reproduced
+    # Closed by coordinator under DEC-0003 standing auto-close grant (REQ-M12-005, 2026-07-06); git tag v1.0.12.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M12-005, coordinator auto-close per DEC-0003 grant), git tag v1.0.12. Z80A CPU parity hardening. QA PASS (docs/m12-qa-signoff.md): QA-executed ctest 45/45 (+7 suites), zero regression M1-M12 (8 M11 timing oracles unchanged; no T-state/refresh site altered; IM1 ack=14 no double-count). Gaps closed: #3/#35 WZ, #4/#5 BIT-from-WZ, #20/#21 SCF/CCF Q-latch, #30 RETI IFF, #31 NMOS LD A,I/R bug. #34 HALT-R deferred (DEC-0004). A/B empty diff 48/48 vs openMSX 19.1 QA-reproduced + adversarial corruption test. Residuals non-blocking: ZEXALL offline-degraded (acceptance made it 'if feasible'); HALT-R defer. Forward follow-ups: DEC-0004 HALT-R; stand up ZEX if a legal binary appears."
   M13:
     status: planned
     planning:
@@ -171,4 +172,24 @@ milestone_records:
       blocker_risks_resolved_or_accepted: false
       signoff_decision_recorded: false
     overall_done: false
-    notes: "Planned per DEC-0002. Yamaha V9958 VDP incl. 128KB VRAM ownership. Depends on M11 I/O bus + M12 memory."
+    notes: "Planned per DEC-0002 (renumbered from M12 by DEC-0003). RAM/ROM memory devices + slot population (VRAM deferred to M14). Depends on M11 bus/slot infrastructure. Carries M11 R-1/A-2 reset-slot-default flip. Retains normal human-release-decision gate."
+  M14:
+    status: planned
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: false
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+    notes: "Planned per DEC-0002 (renumbered from M13 by DEC-0003). Yamaha V9958 VDP incl. 128KB VRAM ownership. Depends on M11 I/O bus + M13 memory. Retains normal human-release-decision gate."

@@ -60,6 +60,11 @@ void Z80aRegisters::set_a(const std::uint8_t value) {
 
 void Z80aRegisters::set_f(const std::uint8_t value) {
     af = with_lo_byte(af, value);
+    // Q latch (M12-S4): every write to F re-latches Q to the new flag byte. The
+    // CPU clears Q to 0 at each instruction boundary, so after an instruction
+    // that never touches F, Q stays 0 (fact-sheet §8 Q rule). Instructions that
+    // write AF wholesale (POP AF, EX AF,AF') bypass set_f and thus leave Q = 0.
+    q = value;
 }
 
 void Z80aRegisters::set_b(const std::uint8_t value) {

@@ -800,3 +800,54 @@ Use this format:
 - Re: REQ-M11-005 (human release decision + git tag)
 - Outcome: M11 CLOSED. Status set to Done in `state/milestones.md`; `state/definition-of-done.yaml` M11 overall_done: true, status: done. current-phase updated to M11 closed / autopilot paused before M12 per prior user instruction. Project initialized under git; project sources tracked; annotated tag `v1.0.11` created at the closure commit (see git-import notes below). M12 (RAM/ROM memory) and M13 (V9958 VDP) remain Planned and NOT started — awaiting explicit go-ahead.
 - Responded At: 2026-07-06T09:30:00+09:00
+
+---
+
+- Response ID: RESP-M12-002
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M12
+- Re: REQ-M12-002 (CPU parity planning package)
+- Outcome: DELIVERED. Durable artifact `docs/m12-planner-package.md` (no production code).
+- Gap analysis: 36 parity items classified against current CPU source with file:line evidence. 26 PRESENT (incl. undocumented X/Y on 8/16-bit, ALL block-instruction flag quirks incl. NMOS OUTI-affects-carry at block_output:1225-1243, SLL, IXH/IXL/IYH/IYL, DD/FD chaining + NONI, ED-hole 2-NOP, full-table DAA, R-register low-7 incr + frozen bit7 + prefix/block/DDCB rules, NMOS OUT(C),0=0, full IM0/1/2/NMI). 4 DIVERGENT: (#4) BIT n,(HL) X/Y from tested value not WZ hi (execute_cb_prefixed:944); (#20) SCF/CCF X/Y pure A&kXY, no Q-latch/OR (z80a_cpu.cpp:559-576); (#30) RETI does NOT copy IFF2->IFF1 (z80a_cpu.cpp:1295-1300 vs openMSX CPUCore.cc:3911-3915); (#34) HALT does not refresh R (decision-gated). 5 ABSENT (2 clusters): no WZ/MEMPTR register or updates (#3/#35, confirmed z80a_state.h:13-46), no Q latch (#21), NMOS LD A,I/R P/V interrupt bug (#31). 1 UNVERIFIED: interrupted mid-LDIR X/Y (#36, ZEXALL-covered). Net: three fix clusters (WZ, SCF/CCF-Q, NMOS interrupt edges); rest is prove-it.
+- Slice plan: S1 parity proof net for the 26 PRESENT (test-only regression floor); S2 ZEXDOC/ZEXALL self-checking CP/M harness (brought online early); S3 WZ/MEMPTR register + BIT n,(HL) X/Y from WZ (#3/#4/#35); S4 SCF/CCF genuine-Zilog Q-latch ((Q^F)|A) (#20/#21); S5 NMOS interrupt edges + IFF: RETI IFF fix + LD A,I/R P/V bug + HALT-R decision (#30/#31); S6 system integration over real M11 SystemBus + openMSX A/B + flip ZEXALL to required-pass + closure.
+- System-integration test: `Machine_Hbf1xvCpuParity_Integration` — CPU through real SystemBus (slot decode + I/O + machine M1 wait), covers WZ->BIT, SCF/CCF-Q, OUTI carry through a real I/O port, IM1 acceptance with exact datasheet+M1-wait cycle oracle (verifies no double-count), RETI IFF restore, EI one-instruction delay.
+- A/B: `tools/openmsx-cpu-parity.ps1` (extends openmsx-trace-parity.ps1) -> `docs/m12-parity-trace-diff.md` + ZEXDOC (hard gate) / ZEXALL (hard gate at S6). Documented benign openMSX boundaries: WZ not exposed by openMSX reg (A-3); openMSX SCF/CCF uses (F|A) OR-form so a CORRECT Zilog Q-latch legitimately diverges (A-4, CPUCore.cc:4257-4274) — gated on ZEXALL/fact-sheet, not trace-diff.
+- Top risks: R-2 correct SCF/CCF-Q diverges from openMSX A/B oracle (mitigate: gate on ZEXALL+fact-sheet); R-1 broad WZ update-site coverage; R-3 ZEX binary legal sourcing (degrade honestly to A/B+unit nets, no fabrication); R-5/R-6 preserve the 8 QA-signed M11 timing oracles — flag/IFF fixes must NOT change any datasheet T-state or increment_refresh_register() call site (HALT-R #34 deferred by default for this reason); R-8 refactor creep forbidden — every production edit cites a gap ID, S1/S2 test-only.
+- Responded At: 2026-07-06T10:20:00+09:00
+
+- Response ID: RESP-M12-003
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M12
+- Re: REQ-M12-003 (implementation S1..S6)
+- Outcome: DELIVERED. Parity-hardening only; every production edit maps to a planner gap ID, confined to src/devices/cpu/. QA sign-off left to QA.
+- Gaps closed: #3/#35 WZ/MEMPTR register + all §4 update sites (each grounded to an openMSX setMemPtr line); #4/#5 BIT n,(HL)/(IX+d) X/Y sourced from wz>>8; #20/#21 genuine-Zilog SCF/CCF Q-latch X/Y=((Q^F)|A) bits 3/5 with Q latch reset after non-flag ops / EX AF,AF' / POP AF / interrupt accept; #30 RETI copies IFF2->IFF1 like RETN; #31 NMOS LD A,I/LD A,R P/V interrupt bug modeled. #34 HALT-R DEFERRED (planner default R-6, protects signed cpu_step oracle).
+- Files: production z80a_state.h/.cpp, z80a_cpu.h/.cpp. Tests: 6 new unit suites + 1 system-integration (tests/integration/machine/hbf1xv_cpu_parity_integration_test.cpp) + corrected pre-existing Bit3MemHl case + CMake reg. Tooling/docs: tools/openmsx-cpu-parity.ps1, docs/m12-parity-trace-diff.md, docs/m12-implementation-report.md, regenerated docs/asset-checksums.txt.
+- Tests/gates: +7 suites; 45/45 ctest pass, run twice deterministic, ZERO M1-M12 regression. Build exit 0 (pre-existing CP949 codepage warnings only). Asset gates pass. All 8 M11 timing oracles unchanged and green (cpu_step 22, ldir 102, indexed 105, IM2 49, IM0 38, event-log golden, CB program, m11-parity-checkpoint); no T-state or increment_refresh_register() site touched. S6 integration independently asserts IM1 ack == 14 (13 datasheet + 1 M1 wait, no double-count).
+- A/B: REAL captured diff, openMSX 19.1 (WSL) vs emulator over RAM-only checkpoint, 48 instructions, ARCHITECTURAL PARITY (empty diff) every field. WZ (A-3) + SCF/CCF X/Y (A-4) documented intentional-exclusion benign boundaries, proven by unit/integration instead; Q-latch NOT altered to match openMSX OR-form. Artifact docs/m12-parity-trace-diff.md.
+- ZEXDOC/ZEXALL: honestly DEGRADED — no legally-sourceable zexdoc.com/zexall.com binary in this offline environment; per planner A-1/§5.3 harness assessed-and-deferred. NO ZEX pass claimed/fabricated.
+- Residuals for QA judgment: (1) ZEX harness blocked on legal binary (degraded, not failed); (2) HALT-R #34 deferred per planner default; (3) R-4 LD A,I bug is an instruction-atomic approximation (observable via EI; LD A,I), documented in code + unit-proven.
+- Responded At: 2026-07-06T11:00:00+09:00
+
+- Response ID: RESP-M12-004
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M12
+- Re: REQ-M12-004 (regression assessment + sign-off, auto-close-gated)
+- Outcome: PASS (recommendation). Sign-off `docs/m12-qa-signoff.md`. DEC-0003 auto-close bar MET.
+- QA-executed ctest: QA rebuilt Debug (0 errors) + ran ctest twice -> 45/45 passed, 0 failed, deterministic, 0 skipped. No ZEX/DISABLED test registered, so "100% of all tests" == 45/45 with nothing hidden.
+- Regression: NONE. 8 QA-signed M11 timing oracles unchanged/green (cpu_step 22, ldir 102, indexed 105, IM2 49, IM0 38, event-log/CB/m11-checkpoint); increment_refresh_register() + datasheet T-state returns untouched. S6 integration proves machine M1 wait not double-counted (IM1 ack==14=13+1; whole-program==45=40+5).
+- Gap verification: all genuine/correct in source — #3/#35 WZ (real register written at ~40 §4 sites, consumed by BIT), #4/#5 BIT X/Y from wz>>8, #20/#21 SCF/CCF ((Q^F)|A) with Q latch set by set_f() + snapshot/cleared at step boundary, #30 RETI copies IFF2->IFF1, #31 LD A,I/R clears P/V on pending+IFF1. Two fact-sheet hand-checks matched (SCF Q-latch distinguisher; BIT n,(HL) with WZ hi=0x28).
+- A/B: PASS, QA-reproduced. QA re-ran tools/openmsx-cpu-parity.ps1 vs openMSX 19.1 (WSL) -> empty architectural diff 48/48; adversarially corrupted B af@seq5 -> comparator reported DIVERGENCE exit 1, proving the clean diff is a true match not rigged. SCF/CCF + WZ exclusions methodologically sound (genuine-Zilog Q-latch legitimately differs from openMSX OR-form; program has no SCF/CCF opcode).
+- Residual ruling (decision-critical): NEITHER blocks a clean Pass. ZEXALL/ZEXDOC honest-degradation acceptable — acceptance criteria make ZEX "if feasible... otherwise A/B serves as cross-check"; A/B fallback delivered + QA-reproduced; no ZEX test skipped. HALT-R (#34) defer acceptable — not a required acceptance item, planner-sanctioned, documented. Both recorded as non-blocking forward follow-ups.
+- Recommendation: PASS. M12 eligible for coordinator auto-close under DEC-0003.
+- Responded At: 2026-07-06T11:20:00+09:00
+
+- Response ID: RESP-M12-005
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner) / ledger
+- Milestone ID: M12
+- Re: REQ-M12-005 (coordinator auto-close under DEC-0003 grant)
+- Outcome: M12 CLOSED by coordinator under the DEC-0003 standing auto-close grant. Condition verified met: QA-executed ctest 45/45 (100%, 0 failed, 0 skipped), ZERO regression across M1-M12, QA recommendation PASS. No further human release decision required for M12 per DEC-0003. Status set Done in milestones.md; definition-of-done.yaml M12 overall_done: true. Git tag v1.0.12 created at the closure commit. HALT-R (#34) deferral formalized as DEC-0004. Proceeding to M13 (memory) per the human directive "after M12 is closed, then move onto M13"; M13 retains the normal human-release-decision gate.
+- Responded At: 2026-07-06T11:20:00+09:00

@@ -576,3 +576,55 @@ Use this format:
 - Scope: Close M11 (S1985 "MSX-ENGINE" Chipset & Full System Bus) on the strength of QA PASS (REQ-M11-004, `docs/m11-qa-signoff.md`): QA-executed ctest 38/38, no regression, A/B parity independently reproduced by QA vs openMSX 19.1 Sony_HB-F1XV with a genuine <S1985>. Add the project to git and tag the closed-milestone snapshot as `v1.0.11` (version scheme: last two digits = the signed-off/closed milestone number).
 - Acceptance Criteria: M11 marked Done in `state/milestones.md` and `state/definition-of-done.yaml` (overall_done: true); project under git with all project sources tracked; annotated tag `v1.0.11` created at the closure commit.
 - Requested At: 2026-07-06T09:30:00+09:00
+
+---
+
+- Request ID: REQ-M12-001
+- From: Human (project owner) via coordinator
+- To: Protocol ledger (kickoff)
+- Milestone ID: M12
+- Type: Milestone kickoff (inserted; renumber)
+- Scope: Per DEC-0003, RENUMBER planned memory milestone M12->M13 and VDP milestone M13->M14, and INSERT a new M12 = Z80A CPU End-to-End Parity Review & Hardening (HB-F1XV Zilog NMOS). Execution order M11(done) -> M12(CPU parity) -> M13(memory) -> M14(VDP). Standing human auto-close grant for M12 on 100% unit+system-integration pass, zero regression M1-M12, QA Pass.
+- Acceptance Criteria: milestones.md + definition-of-done.yaml reflect renumber + new M12 (met); DEC-0003 recorded (met); planner-first sequencing enforced.
+- Dependencies: M11 Done (v1.0.11); DEC-0003; references/fact-sheets/Zilog Z80A CPU.md; references/openmsx-21.0/src/cpu/.
+- Requested At: 2026-07-06T10:00:00+09:00
+
+- Request ID: REQ-M12-002
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent
+- Milestone ID: M12
+- Type: Planning package (CPU parity gap analysis + slice plan)
+- Scope: Produce the M12 planning package (durable artifact `docs/m12-planner-package.md`, no production code). Perform a COMPREHENSIVE gap analysis of the current Z80A CPU implementation (`src/devices/cpu/z80a_cpu.cpp/.h`, `z80a_state.*`, `cpu_bus_client.*`, `z80a_trace.h`) against `references/fact-sheets/Zilog Z80A CPU.md` and openMSX (`references/openmsx-21.0/src/cpu/CPUCore.cc`, `CPURegs.cc`, `Z80.hh`). For EACH parity item in the fact-sheet rubric (§4 undocumented/illegal: SLL CB 30-37, IXH/IXL/IYH/IYL, DD/FD prefix chaining + NONI, ED-hole 2-NOP, WZ/MEMPTR incl. BIT n,(HL)/(IX+d), block-instruction flag quirks LDI/CPI/INI/OUTI incl. NMOS OUTI-affects-carry, 16-bit ADD/ADC/SBC flags, full-table DAA; §5 interrupts: IM0/1/2 + NMI, IM1=0x0038, DI/EI/RETI/RETN IFF, EI one-instruction delay, NMOS LD A,I/LD A,R P/V interrupt bug, interrupt-ack timing IM1 13T bare; §8 quirks: SCF/CCF Q-latch ((Q^F)|A bits 5/3), OUT (C),0 = 0 on NMOS, R-register low-7-bit increment with prefix/block rules and frozen bit7, undocumented X/Y F3/F5), classify current status as PRESENT / ABSENT / DIVERGENT with a concrete citation (our file:line vs references path). Then produce a deterministic SLICE PLAN (M12-S1..Sn) to close every gap (or, where already at parity, to PROVE it with targeted parity tests), each slice with goal, files touched, deterministic unit tests, the system-integration coverage, and evidence-gate mapping. Decide src/ placement for any new artifacts (keep CPU under `src/devices/cpu/`; you may add flag-table / undocumented-op / parity-test modules per `src/CLAUDE.md`). Note MSX M1 wait is owned at the machine level (M11) — verify the CPU exposes the correct datasheet T-states + M1-cycle count so machine-level timing stays correct; do NOT double-count the wait in the CPU. Define the full SYSTEM INTEGRATION test (CPU exercised through the M11 SystemBus, not isolated) and the openMSX A/B trace-diff acceptance test (real diff, no parity claim without a genuine capture; consider whether a ZEXDOC/ZEXALL-style harness is feasible headless). This is a parity-hardening pass, NOT a rewrite — call out and resist any gratuitous refactor.
+- Acceptance Criteria: Package contains the per-item gap-analysis table (status + citations), the slice plan with per-slice unit + system-integration test obligations and evidence-gate mapping (`tools/validate-assets.ps1`, `tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt`, `cmake --build build --config Debug`, `ctest --test-dir build -C Debug --output-on-failure`), the explicit system-integration + A/B acceptance tests, and the hard rule that closure requires 100% pass with zero regression M1-M12 (DEC-0003). Risks/assumptions each carry a verification action. Every behavior claim grounded in a concrete `references/...` path. No production code.
+- Dependencies: DEC-0003; `references/fact-sheets/Zilog Z80A CPU.md`; `references/openmsx-21.0/src/cpu/`; current `src/devices/cpu/*`; `docs/m9-*` (prior CPU milestone); guardrails.
+- Requested At: 2026-07-06T10:00:00+09:00
+
+- Request ID: REQ-M12-003
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent
+- Milestone ID: M12
+- Type: Implementation (CPU parity slices S1..S6)
+- Scope: Implement the M12 slice plan in `docs/m12-planner-package.md` end to end. S1: parity-proof unit tests for the 26 PRESENT items (test-only regression floor). S2: bring up a ZEXDOC/ZEXALL self-checking harness (headless); if the ZEX binary cannot be legally sourced in this environment, degrade HONESTLY to the A/B + unit nets and document it (no fabrication). S3: add WZ/MEMPTR register + all update rules and source BIT n,(HL)/(IX+d) X/Y from WZ hi byte (closes #3/#4/#35). S4: SCF/CCF genuine-Zilog Q-latch, X/Y = bits 5/3 of ((Q^F)|A) (closes #20/#21). S5: NMOS interrupt edges — make RETI copy IFF2->IFF1 like RETN, model the NMOS LD A,I / LD A,R P/V interrupt bug; treat HALT-R (#34) per the planner's decision-gated default (defer unless it can be done without disturbing a signed timing oracle) (closes #30/#31). S6: the `Machine_Hbf1xvCpuParity_Integration` system-integration test over the real M11 SystemBus + the `tools/openmsx-cpu-parity.ps1` A/B trace-diff -> `docs/m12-parity-trace-diff.md`; flip ZEXALL to required-pass if available. Keep CPU under `src/devices/cpu/`; add flag-table/undocumented-op/parity-test modules with best judgment per `src/CLAUDE.md`.
+- Acceptance Criteria: Every DIVERGENT/ABSENT gap closed and covered by a deterministic unit test grounded in the fact sheet / openMSX. HARD CONSTRAINT (R-5/R-6): do NOT change any datasheet T-state or `increment_refresh_register()` call site — the 8 QA-signed M11 timing oracles must remain green unchanged; the CPU must not double-count the machine-level M1 wait. Full system-integration test passes. 100% pass of ALL unit + system-integration tests with ZERO regression across M1-M12 (DEC-0003 close condition). Refactor creep forbidden — every production edit cites a gap ID; S1/S2 are test-only. Evidence gates executed and captured: `tools/validate-assets.ps1`, `tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt`, `cmake --build build --config Debug`, `ctest --test-dir build -C Debug --output-on-failure` (report exact pass/fail). A/B: capture a REAL trace-diff or report BLOCKED honestly (respect the A-4 benign SCF/CCF divergence — gate that on ZEXALL/fact-sheet, not the trace-diff). Produce `docs/m12-implementation-report.md`.
+- Dependencies: `docs/m12-planner-package.md`; DEC-0003; `references/fact-sheets/Zilog Z80A CPU.md`; `references/openmsx-21.0/src/cpu/`; `src/devices/cpu/*`; guardrails.
+- Requested At: 2026-07-06T10:20:00+09:00
+
+- Request ID: REQ-M12-004
+- From: MSX Master Agent (coordinator)
+- To: MSX QA Agent
+- Milestone ID: M12
+- Type: Regression assessment + sign-off recommendation (auto-close-gated)
+- Scope: Independently assess M12 (Z80A CPU parity hardening) against its acceptance criteria in `state/milestones.md` and produce a sign-off recommendation (Pass / Conditional Pass / Fail) at `docs/m12-qa-signoff.md`. INDEPENDENTLY RE-EXECUTE `cmake --build build --config Debug` then `ctest --test-dir build -C Debug --output-on-failure` and report the ACTUAL pass/fail count yourself — do not trust the developer number. Verify the closed gaps are GENUINE (non-stub) in source and correct vs the fact sheet + openMSX: (#3/#35) WZ/MEMPTR register present and updated at the §4 rule sites; (#4/#5) BIT n,(HL)/(IX+d) X/Y sourced from WZ hi byte; (#20/#21) SCF/CCF X/Y = bits 5/3 of ((Q^F)|A) with a correctly-reset Q latch; (#30) RETI copies IFF2->IFF1; (#31) NMOS LD A,I/R P/V interrupt bug. Spot-check at least two by hand against the fact-sheet rule. Verify the S6 system-integration test genuinely exercises the CPU through the real M11 SystemBus (not isolated) and that its IM1-ack cycle oracle proves no M1-wait double-count. CRITICAL REGRESSION CHECK: confirm the 8 QA-signed M11 timing oracles are UNCHANGED and green and that NO datasheet T-state or increment_refresh_register() call site was altered. Adversarially validate the A/B evidence (`docs/m12-parity-trace-diff.md`) is a genuine captured diff against a real openMSX S1985 machine, and confirm the A-4 SCF/CCF benign-divergence handling is correct (a correct Zilog Q-latch SHOULD differ from openMSX's OR-form; that is not a defect).
+- DECISION-CRITICAL: DEC-0003 authorizes auto-close of M12 ONLY on 100% pass of ALL unit + system-integration tests, ZERO regression M1-M12, AND a QA recommendation of Pass. You MUST state explicitly whether the ZEXALL/ZEXDOC honest-degradation (no legally-sourceable binary offline) and the deferred HALT-R (#34) prevent a clean PASS or are acceptable accepted-residuals under the milestone's acceptance criteria. If your verdict is anything short of a clean Pass (e.g. Conditional Pass), say so plainly — the coordinator will NOT auto-close on less than Pass and will escalate to the human.
+- Acceptance Criteria: Sign-off records QA-executed ctest count, per-gap genuine/correct verification with the hand-checks, the M11-timing-oracle-unchanged regression confirmation, the A/B adversarial validation, an explicit ruling on the ZEXALL + HALT-R residuals vs the auto-close bar, and a clear Pass / Conditional Pass / Fail recommendation. No feature code by QA.
+- Dependencies: `docs/m12-implementation-report.md`; `docs/m12-parity-trace-diff.md`; `docs/m12-planner-package.md`; `state/milestones.md` (M12); DEC-0003; guardrails.
+- Requested At: 2026-07-06T11:00:00+09:00
+
+- Request ID: REQ-M12-005
+- From: MSX Master Agent (coordinator)
+- To: Protocol ledger (closure)
+- Milestone ID: M12
+- Type: Coordinator auto-close under DEC-0003 standing grant
+- Scope: Close M12 (Z80A CPU parity hardening) under the DEC-0003 standing auto-close authorization. Verified condition: QA-executed ctest 45/45 (100% pass, 0 failed, 0 skipped), ZERO regression M1-M12, QA recommendation PASS (REQ-M12-004, docs/m12-qa-signoff.md). Tag git snapshot v1.0.12 (scheme: last two digits = closed milestone number).
+- Acceptance Criteria: M12 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.12 at closure commit; DEC-0004 records HALT-R deferral.
+- Requested At: 2026-07-06T11:20:00+09:00

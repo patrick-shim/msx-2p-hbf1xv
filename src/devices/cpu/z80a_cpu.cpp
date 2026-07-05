@@ -41,6 +41,13 @@ std::uint32_t Z80aCpu::step() {
     // the interrupt-ack M1) via increment_refresh_register() (M11-S1).
     m1_cycle_count_ = 0;
 
+    // Q latch (M12-S4): snapshot the Q produced by the previous instruction, then
+    // clear the live latch so that only a flag write by THIS instruction re-sets
+    // it (fact-sheet §8). A step that never writes F — including interrupt
+    // acceptance below — therefore leaves Q = 0 for the next instruction.
+    q_prev_ = state_.regs().q;
+    state_.regs().q = 0;
+
     const bool blocked_this_step = state_.ei_delay_active();
 
     std::uint32_t tstates = 0;
@@ -557,21 +564,32 @@ void Z80aCpu::alu_cpl() {
 }
 
 void Z80aCpu::alu_scf() {
-    std::uint8_t flags = static_cast<std::uint8_t>(state_.regs().f() & (kS | kZ | kPV));
+    // Genuine-Zilog NMOS SCF undocumented X/Y (M12-S4, gap #20/#21): X/Y are bits
+    // 3/5 of ((Q ^ F) | A), where Q is the flag byte latched by the previous
+    // instruction (0 if it did not modify flags). Fact-sheet §8 (Patrik-Rak).
+    // NOTE: this deliberately diverges from openMSX's (F | A) OR-form
+    // (CPUCore.cc:4268-4269), which omits the Q latch — see planner A-4/R-2.
+    const std::uint8_t f = state_.regs().f();
+    const std::uint8_t xy_source = static_cast<std::uint8_t>((q_prev_ ^ f) | state_.regs().a());
+    std::uint8_t flags = static_cast<std::uint8_t>(f & (kS | kZ | kPV));
     flags |= kC;
-    flags |= static_cast<std::uint8_t>(state_.regs().a() & kXY);
+    flags |= static_cast<std::uint8_t>(xy_source & kXY);
     state_.regs().set_f(flags);
 }
 
 void Z80aCpu::alu_ccf() {
-    const std::uint8_t old_carry = static_cast<std::uint8_t>(state_.regs().f() & kC);
-    std::uint8_t flags = static_cast<std::uint8_t>(state_.regs().f() & (kS | kZ | kPV));
+    // Genuine-Zilog NMOS CCF: same ((Q ^ F) | A) X/Y rule as SCF; H takes the old
+    // carry (fact-sheet §8). Diverges from openMSX (F | A) form (A-4/R-2).
+    const std::uint8_t f = state_.regs().f();
+    const std::uint8_t old_carry = static_cast<std::uint8_t>(f & kC);
+    const std::uint8_t xy_source = static_cast<std::uint8_t>((q_prev_ ^ f) | state_.regs().a());
+    std::uint8_t flags = static_cast<std::uint8_t>(f & (kS | kZ | kPV));
     if (old_carry == 0) {
         flags |= kC;
     } else {
         flags |= kH;  // H becomes the previous carry.
     }
-    flags |= static_cast<std::uint8_t>(state_.regs().a() & kXY);
+    flags |= static_cast<std::uint8_t>(xy_source & kXY);
     state_.regs().set_f(flags);
 }
 
@@ -673,6 +691,7 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 state_.regs().set_b(b);
                 if (b != 0) {
                     state_.regs().pc = static_cast<std::uint16_t>(state_.regs().pc + d);
+                    state_.regs().wz = state_.regs().pc;  // WZ=dest when taken (§4)
                     return 13;
                 }
                 return 8;
@@ -680,12 +699,14 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
             case 3: {  // JR d
                 const std::int8_t d = static_cast<std::int8_t>(read_imm8());
                 state_.regs().pc = static_cast<std::uint16_t>(state_.regs().pc + d);
+                state_.regs().wz = state_.regs().pc;  // WZ=dest (§4)
                 return 12;
             }
             default: {  // JR cc[y-4], d
                 const std::int8_t d = static_cast<std::int8_t>(read_imm8());
                 if (check_condition(y - 4)) {
                     state_.regs().pc = static_cast<std::uint16_t>(state_.regs().pc + d);
+                    state_.regs().wz = state_.regs().pc;  // WZ=dest only when taken (§4)
                     return 12;
                 }
                 return 7;
@@ -696,39 +717,62 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 write_rp(p, read_imm16());
                 return 10;
             }
-            // ADD HL,rp[p]
+            // ADD HL,rp[p]. WZ = HL+1 taken before the add (§4; openMSX
+            // CPUCore.cc:3247).
+            state_.regs().wz = static_cast<std::uint16_t>(state_.regs().hl + 1);
             state_.regs().hl = alu_add16(state_.regs().hl, read_rp(p));
             return 11;
         case 2:
             if (q == 0) {
                 switch (p) {
-                case 0:  // LD (BC),A
+                case 0:  // LD (BC),A: WZ = (A<<8)|((BC+1)&0xFF)  (§4; openMSX:2711)
+                    state_.regs().wz = static_cast<std::uint16_t>(
+                        (static_cast<std::uint16_t>(state_.regs().a()) << 8) |
+                        ((state_.regs().bc + 1) & 0xFF));
                     bus_.write_data(state_.regs().bc, state_.regs().a());
                     return 7;
-                case 1:  // LD (DE),A
+                case 1:  // LD (DE),A: WZ = (A<<8)|((DE+1)&0xFF)
+                    state_.regs().wz = static_cast<std::uint16_t>(
+                        (static_cast<std::uint16_t>(state_.regs().a()) << 8) |
+                        ((state_.regs().de + 1) & 0xFF));
                     bus_.write_data(state_.regs().de, state_.regs().a());
                     return 7;
-                case 2:  // LD (nn),HL
-                    bus_.write_word_le(read_imm16(), state_.regs().hl);
+                case 2: {  // LD (nn),HL: WZ = nn+1  (§4; openMSX:2760)
+                    const std::uint16_t nn = read_imm16();
+                    state_.regs().wz = static_cast<std::uint16_t>(nn + 1);
+                    bus_.write_word_le(nn, state_.regs().hl);
                     return 16;
-                default:  // LD (nn),A
-                    bus_.write_data(read_imm16(), state_.regs().a());
+                }
+                default: {  // LD (nn),A: WZ = (A<<8)|((nn+1)&0xFF)  (openMSX:2752)
+                    const std::uint16_t nn = read_imm16();
+                    state_.regs().wz = static_cast<std::uint16_t>(
+                        (static_cast<std::uint16_t>(state_.regs().a()) << 8) | ((nn + 1) & 0xFF));
+                    bus_.write_data(nn, state_.regs().a());
                     return 13;
+                }
                 }
             }
             switch (p) {
-            case 0:  // LD A,(BC)
+            case 0:  // LD A,(BC): WZ = BC+1  (§4; openMSX:2773)
+                state_.regs().wz = static_cast<std::uint16_t>(state_.regs().bc + 1);
                 state_.regs().set_a(bus_.read_data(state_.regs().bc));
                 return 7;
-            case 1:  // LD A,(DE)
+            case 1:  // LD A,(DE): WZ = DE+1
+                state_.regs().wz = static_cast<std::uint16_t>(state_.regs().de + 1);
                 state_.regs().set_a(bus_.read_data(state_.regs().de));
                 return 7;
-            case 2:  // LD HL,(nn)
-                state_.regs().hl = bus_.read_word_le(read_imm16());
+            case 2: {  // LD HL,(nn): WZ = nn+1  (§4; openMSX:2808)
+                const std::uint16_t nn = read_imm16();
+                state_.regs().wz = static_cast<std::uint16_t>(nn + 1);
+                state_.regs().hl = bus_.read_word_le(nn);
                 return 16;
-            default:  // LD A,(nn)
-                state_.regs().set_a(bus_.read_data(read_imm16()));
+            }
+            default: {  // LD A,(nn): WZ = nn+1  (§4; openMSX:2781)
+                const std::uint16_t nn = read_imm16();
+                state_.regs().wz = static_cast<std::uint16_t>(nn + 1);
+                state_.regs().set_a(bus_.read_data(nn));
                 return 13;
+            }
             }
         case 3:
             if (q == 0) {  // INC rp[p]
@@ -797,6 +841,7 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
         case 0:  // RET cc[y]
             if (check_condition(y)) {
                 state_.regs().pc = pop16();
+                state_.regs().wz = state_.regs().pc;  // WZ = return address (openMSX:3898)
                 return 11;
             }
             return 5;
@@ -808,6 +853,7 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
             switch (p) {
             case 0:  // RET
                 state_.regs().pc = pop16();
+                state_.regs().wz = state_.regs().pc;  // WZ = return address (openMSX:3898)
                 return 10;
             case 1: {  // EXX
                 std::uint16_t tmp = state_.regs().bc;
@@ -828,8 +874,9 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 state_.regs().sp = state_.regs().hl;
                 return 6;
             }
-        case 2: {  // JP cc[y],nn
+        case 2: {  // JP cc[y],nn: WZ = nn even when not taken (§4; openMSX:3926)
             const std::uint16_t address = read_imm16();
+            state_.regs().wz = address;
             if (check_condition(y)) {
                 state_.regs().pc = address;
             }
@@ -837,15 +884,21 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
         }
         case 3:
             switch (y) {
-            case 0:  // JP nn
-                state_.regs().pc = read_imm16();
+            case 0: {  // JP nn: WZ = nn (§4; openMSX:3926)
+                const std::uint16_t address = read_imm16();
+                state_.regs().wz = address;
+                state_.regs().pc = address;
                 return 10;
+            }
             case 1:  // CB prefix
                 return execute_cb_prefixed();
             case 2: {  // OUT (n),A  -- port = (A<<8)|n, data = A (M11-S1 I/O seam).
                 const std::uint8_t n = read_imm8();
                 const std::uint16_t port =
                     static_cast<std::uint16_t>((static_cast<std::uint16_t>(state_.regs().a()) << 8) | n);
+                // WZ = (A<<8)|((n+1)&0xFF)  (§4; openMSX:4052).
+                state_.regs().wz = static_cast<std::uint16_t>(
+                    (static_cast<std::uint16_t>(state_.regs().a()) << 8) | ((n + 1) & 0xFF));
                 bus_.io_write(port, state_.regs().a());
                 return 11;
             }
@@ -853,6 +906,8 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 const std::uint8_t n = read_imm8();
                 const std::uint16_t port =
                     static_cast<std::uint16_t>((static_cast<std::uint16_t>(state_.regs().a()) << 8) | n);
+                // WZ = port+1 = ((A<<8)|n)+1  (§4; openMSX:4026).
+                state_.regs().wz = static_cast<std::uint16_t>(port + 1);
                 state_.regs().set_a(bus_.io_read(port));
                 return 11;
             }
@@ -864,6 +919,7 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 bus_.write_data(static_cast<std::uint16_t>(state_.regs().sp + 1),
                                 static_cast<std::uint8_t>((state_.regs().hl >> 8) & 0xFF));
                 state_.regs().hl = stacked;
+                state_.regs().wz = stacked;  // WZ = value exchanged from stack (openMSX:3999)
                 return 19;
             }
             case 5: {  // EX DE,HL
@@ -882,8 +938,9 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 state_.set_ei_delay_active(true);
                 return 4;
             }
-        case 4: {  // CALL cc[y],nn
+        case 4: {  // CALL cc[y],nn: WZ = nn even when not taken (§4; openMSX:3866)
             const std::uint16_t address = read_imm16();
+            state_.regs().wz = address;
             if (check_condition(y)) {
                 push16(state_.regs().pc);
                 state_.regs().pc = address;
@@ -897,8 +954,9 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
                 return 11;
             }
             switch (p) {
-            case 0: {  // CALL nn
+            case 0: {  // CALL nn: WZ = nn (§4; openMSX:3866)
                 const std::uint16_t address = read_imm16();
+                state_.regs().wz = address;
                 push16(state_.regs().pc);
                 state_.regs().pc = address;
                 return 17;
@@ -915,9 +973,10 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
             alu_apply(y, n);
             return 7;
         }
-        default:  // z == 7: RST y*8
+        default:  // z == 7: RST y*8: WZ = target (openMSX:3884)
             push16(state_.regs().pc);
             state_.regs().pc = static_cast<std::uint16_t>(y * 8);
+            state_.regs().wz = state_.regs().pc;
             return 11;
         }
     }
@@ -940,8 +999,13 @@ std::uint32_t Z80aCpu::execute_cb_prefixed() {
     if (x == 1) {  // BIT y, r[z]
         bool memory = false;
         const std::uint8_t value = read_reg_index(z, memory);
-        // For (HL), the undocumented X/Y bits reflect the tested value in this model.
-        alu_bit(y, value, value);
+        // M12-S3 (gap #4): for BIT n,(HL) the undocumented X/Y bits come from the
+        // high byte of WZ/MEMPTR (bits 11/13 of WZ), NOT the tested value
+        // (fact-sheet §4; openMSX bit_N_xhl(), CPUCore.cc:3420). Register-operand
+        // BIT still sources X/Y from the tested register value.
+        const std::uint8_t undoc_source =
+            is_memory ? static_cast<std::uint8_t>(state_.regs().wz >> 8) : value;
+        alu_bit(y, value, undoc_source);
         return is_memory ? 12 : 8;
     }
 
@@ -1090,6 +1154,19 @@ void Z80aCpu::ld_a_ir(const std::uint8_t value) {
     if (state_.iff2()) {
         flags |= kPV;  // P/V reflects IFF2 for LD A,I / LD A,R.
     }
+    // NMOS LD A,I / LD A,R interrupt bug (M12-S5, gap #31): on the genuine Zilog
+    // NMOS part, if a maskable interrupt is accepted during this instruction, the
+    // P/V flag reads 0 even though IFF2 was set (fact-sheet §5; openMSX models it
+    // as a fix-up at IRQ accept, CPUCore.cc:2476-2496). In this instruction-atomic
+    // core we approximate the silicon race at the boundary: an IRQ is accepted at
+    // the step immediately following LD A,I/R iff it is pending and IFF1 is set
+    // (LD A,I/R itself never arms an EI-delay, so the following boundary is never
+    // EI-blocked; this matches the openMSX note that the quirk is independent of a
+    // preceding EI, CPUCore.cc:2490-2493). This is an approximation (planner R-4);
+    // ZEXALL does not exercise the IRQ race, so it is unit-proven only.
+    if (state_.maskable_interrupt_pending() && state_.iff1()) {
+        flags &= static_cast<std::uint8_t>(~kPV);
+    }
     flags |= static_cast<std::uint8_t>(value & kXY);
     state_.regs().set_f(flags);
 }
@@ -1132,12 +1209,16 @@ std::uint32_t Z80aCpu::block_transfer(const int delta, const bool repeat) {
 
     if (repeat && bc_nonzero) {
         state_.regs().pc = static_cast<std::uint16_t>(state_.regs().pc - 2);
+        // LDIR/LDDR mid-iteration: WZ = PC+1 (§4; openMSX BLOCK_LD:4111).
+        state_.regs().wz = static_cast<std::uint16_t>(state_.regs().pc + 1);
         return 21;
     }
     return 16;
 }
 
 std::uint32_t Z80aCpu::block_compare(const int delta, const bool repeat) {
+    // CPI/CPD: WZ = WZ + delta (§4; openMSX BLOCK_CP:4061).
+    state_.regs().wz = static_cast<std::uint16_t>(state_.regs().wz + delta);
     const std::uint8_t a = state_.regs().a();
     const std::uint8_t value = bus_.read_data(state_.regs().hl);
     const std::uint8_t result = static_cast<std::uint8_t>(a - value);
@@ -1171,12 +1252,16 @@ std::uint32_t Z80aCpu::block_compare(const int delta, const bool repeat) {
 
     if (repeat && bc_nonzero && result != 0) {
         state_.regs().pc = static_cast<std::uint16_t>(state_.regs().pc - 2);
+        // CPIR/CPDR mid-iteration: WZ = PC+1 (§4; openMSX BLOCK_CP:4081).
+        state_.regs().wz = static_cast<std::uint16_t>(state_.regs().pc + 1);
         return 21;
     }
     return 16;
 }
 
 std::uint32_t Z80aCpu::block_input(const int delta, const bool repeat) {
+    // INI/IND: WZ = BC + delta taken BEFORE B is decremented (§4; openMSX:4126).
+    state_.regs().wz = static_cast<std::uint16_t>(state_.regs().bc + delta);
     // INI/IND/INIR/INDR: read the input port (C) into (HL). Dispatch keys on
     // port & 0xFF = C, so the pre-decrement B in the high byte is immaterial.
     const std::uint8_t data = bus_.io_read(state_.regs().bc);
@@ -1221,6 +1306,8 @@ std::uint32_t Z80aCpu::block_output(const int delta, const bool repeat) {
     const std::uint8_t b = static_cast<std::uint8_t>(state_.regs().b() - 1);
     state_.regs().set_b(b);
     state_.regs().hl = static_cast<std::uint16_t>(state_.regs().hl + delta);
+    // OUTI/OUTD: WZ = BC + delta taken AFTER B is decremented (§4; openMSX:4160).
+    state_.regs().wz = static_cast<std::uint16_t>(state_.regs().bc + delta);
 
     std::uint8_t flags = 0;
     if ((b & 0x80) != 0) {
@@ -1260,6 +1347,7 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
     if (x == 1) {
         switch (z) {
         case 0: {  // IN r[y],(C)  (y == 6 -> IN (C): flags only, no register write)
+            state_.regs().wz = static_cast<std::uint16_t>(state_.regs().bc + 1);  // WZ=BC+1 (§4;4008)
             const std::uint8_t data = bus_.io_read(state_.regs().bc);  // port = BC
             io_in_flags(data);
             if (y != 6) {
@@ -1268,12 +1356,15 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
             return 12;
         }
         case 1: {  // OUT (C),r[y]  (y == 6 -> OUT (C),0)
+            state_.regs().wz = static_cast<std::uint16_t>(state_.regs().bc + 1);  // WZ=BC+1 (§4;4042)
             bool touched_memory = false;
             const std::uint8_t data = (y == 6) ? 0x00 : read_reg_index(y, touched_memory);
             bus_.io_write(state_.regs().bc, data);  // port = BC
             return 12;
         }
         case 2:
+            // ADC/SBC HL,rp: WZ = HL+1 taken before the op (§4; openMSX:3799/3817).
+            state_.regs().wz = static_cast<std::uint16_t>(state_.regs().hl + 1);
             if (q == 0) {  // SBC HL,rp[p]
                 state_.regs().hl = alu_sbc16(read_rp(p));
             } else {  // ADC HL,rp[p]
@@ -1282,6 +1373,7 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
             return 15;
         case 3: {
             const std::uint16_t address = read_imm16();
+            state_.regs().wz = static_cast<std::uint16_t>(address + 1);  // WZ=nn+1 (§4;2760/2808)
             if (q == 0) {  // LD (nn),rp[p]
                 bus_.write_word_le(address, read_rp(p));
             } else {  // LD rp[p],(nn)
@@ -1292,11 +1384,13 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
         case 4:  // NEG (all y are documented/redundant NEG aliases)
             alu_neg();
             return 8;
-        case 5:  // RETN (all y except y==1) / RETI (y==1)
+        case 5:  // RETN (y!=1) / RETI (y==1): all ED-prefixed RETxx copy IFF2->IFF1
+            // M12-S5 (gap #30): RETI is functionally identical to RETN inside the
+            // CPU — both restore IFF1 from IFF2 (fact-sheet §5; openMSX retn() is
+            // also reti(), CPUCore.cc:3911-3915). WZ = return address.
             state_.regs().pc = pop16();
-            if (y != 1) {
-                state_.set_iff1(state_.iff2());
-            }
+            state_.regs().wz = state_.regs().pc;
+            state_.set_iff1(state_.iff2());
             return 14;
         case 6: {  // IM im[y]
             static constexpr InterruptMode kImTable[8] = {
@@ -1320,10 +1414,12 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
             case 3:  // LD A,R
                 ld_a_ir(state_.regs().r);
                 return 9;
-            case 4:  // RRD
+            case 4:  // RRD: WZ = HL+1 (§4; openMSX:3339)
+                state_.regs().wz = static_cast<std::uint16_t>(state_.regs().hl + 1);
                 alu_rrd();
                 return 18;
-            case 5:  // RLD
+            case 5:  // RLD: WZ = HL+1 (§4; openMSX:3366)
+                state_.regs().wz = static_cast<std::uint16_t>(state_.regs().hl + 1);
                 alu_rld();
                 return 18;
             default:  // 6, 7: NOP
@@ -1418,6 +1514,7 @@ std::uint32_t Z80aCpu::indexed_inc_dec(const int y, const bool use_iy, const boo
     if (y == 6) {  // INC/DEC (IX+d)
         const std::int8_t d = static_cast<std::int8_t>(read_imm8());
         const std::uint16_t address = index_displaced_address(use_iy, d);
+        state_.regs().wz = address;  // WZ = index+d (§4; openMSX:2800)
         const std::uint8_t value = bus_.read_data(address);
         const std::uint8_t result = is_dec ? alu_dec8(value) : alu_inc8(value);
         bus_.write_data(address, result);
@@ -1473,7 +1570,9 @@ std::uint32_t Z80aCpu::execute_indexed_opcode(const std::uint8_t opcode, const b
                 }
                 return execute_unprefixed(opcode);  // LD BC/DE/SP,nn (prefix ignored)
             }
-            // ADD IX/IY,rp[p] (rp[2] is the index register itself).
+            // ADD IX/IY,rp[p] (rp[2] is the index register itself). WZ = index+1
+            // taken before the add (§4; openMSX:3247 add HL analog for IX).
+            state_.regs().wz = static_cast<std::uint16_t>(get_index(use_iy) + 1);
             set_index(use_iy, alu_add16(get_index(use_iy), read_rp_indexed(p, use_iy)));
             return 11;
         case 2:
@@ -1511,7 +1610,9 @@ std::uint32_t Z80aCpu::execute_indexed_opcode(const std::uint8_t opcode, const b
             if (y == 6) {  // LD (IX+d),n  -- displacement precedes the immediate.
                 const std::int8_t d = static_cast<std::int8_t>(read_imm8());
                 const std::uint8_t n = read_imm8();
-                bus_.write_data(index_displaced_address(use_iy, d), n);
+                const std::uint16_t address = index_displaced_address(use_iy, d);
+                state_.regs().wz = address;  // WZ = index+d (§4; openMSX:2744)
+                bus_.write_data(address, n);
                 return 15;
             }
             if (y == 4 || y == 5) {  // LD IXH/IXL,n
@@ -1530,14 +1631,18 @@ std::uint32_t Z80aCpu::execute_indexed_opcode(const std::uint8_t opcode, const b
         }
         if (y == 6) {  // LD (IX+d),r[z] -- z uses REAL registers (H/L not IXH/IXL).
             const std::int8_t d = static_cast<std::int8_t>(read_imm8());
+            const std::uint16_t address = index_displaced_address(use_iy, d);
+            state_.regs().wz = address;  // WZ = index+d (§4; openMSX:2726)
             bool memory = false;
             const std::uint8_t value = read_reg_index(z, memory);
-            bus_.write_data(index_displaced_address(use_iy, d), value);
+            bus_.write_data(address, value);
             return 15;
         }
         if (z == 6) {  // LD r[y],(IX+d) -- y uses REAL registers.
             const std::int8_t d = static_cast<std::int8_t>(read_imm8());
-            const std::uint8_t value = bus_.read_data(index_displaced_address(use_iy, d));
+            const std::uint16_t address = index_displaced_address(use_iy, d);
+            state_.regs().wz = address;  // WZ = index+d (§4; openMSX:2800)
+            const std::uint8_t value = bus_.read_data(address);
             write_reg_index(y, value);
             return 15;
         }
@@ -1548,7 +1653,9 @@ std::uint32_t Z80aCpu::execute_indexed_opcode(const std::uint8_t opcode, const b
     case 2: {  // alu[y] A,r[z]
         if (z == 6) {  // alu A,(IX+d)
             const std::int8_t d = static_cast<std::int8_t>(read_imm8());
-            const std::uint8_t value = bus_.read_data(index_displaced_address(use_iy, d));
+            const std::uint16_t address = index_displaced_address(use_iy, d);
+            state_.regs().wz = address;  // WZ = index+d (§4; openMSX:2800)
+            const std::uint8_t value = bus_.read_data(address);
             alu_apply(y, value);
             return 15;
         }
@@ -1582,6 +1689,7 @@ std::uint32_t Z80aCpu::execute_indexed_opcode(const std::uint8_t opcode, const b
                 bus_.write_data(static_cast<std::uint16_t>(state_.regs().sp + 1),
                                 static_cast<std::uint8_t>((index >> 8) & 0xFF));
                 set_index(use_iy, stacked);
+                state_.regs().wz = stacked;  // WZ = value exchanged from stack (openMSX:3999)
                 return 19;
             }
             if (y == 1) {  // DDCB / FDCB prefix
@@ -1605,14 +1713,18 @@ std::uint32_t Z80aCpu::execute_indexed_cb(const bool use_iy) {
     // nor the sub-opcode is an M1 fetch, so R is not incremented for them.
     const std::int8_t d = static_cast<std::int8_t>(read_imm8());
     const std::uint16_t address = index_displaced_address(use_iy, d);
+    // M12-S3 (gap #5/#35): WZ = index+d for every DDCB/FDCB access (§4;
+    // openMSX bit_N_xix() setMemPtr, CPUCore.cc:3426). BIT n,(IX+d) then sources
+    // X/Y from WZ hi == address hi, which this keeps consistent.
+    state_.regs().wz = address;
     const std::uint8_t op = read_imm8();
     const int x = op >> 6;
     const int y = (op >> 3) & 0x07;
     const int z = op & 0x07;
 
-    if (x == 1) {  // BIT y,(IX+d): X/Y undocumented flags come from address high byte.
+    if (x == 1) {  // BIT y,(IX+d): X/Y undocumented flags come from WZ hi (= address hi).
         const std::uint8_t value = bus_.read_data(address);
-        alu_bit(y, value, static_cast<std::uint8_t>(address >> 8));
+        alu_bit(y, value, static_cast<std::uint8_t>(state_.regs().wz >> 8));
         return 16;  // 20T total including the 4T prefix.
     }
 
@@ -1674,11 +1786,13 @@ std::uint32_t Z80aCpu::service_maskable_interrupt() {
         const std::uint16_t vector = bus_.read_word_le(table_address);
         push16(state_.regs().pc);
         state_.regs().pc = vector;
+        state_.regs().wz = vector;  // WZ = handler address (§4; openMSX irq2:816)
         return 19;
     }
     default:  // InterruptMode::Im1: fixed restart to 0x0038.
         push16(state_.regs().pc);
         state_.regs().pc = kIm1Vector;
+        state_.regs().wz = kIm1Vector;  // WZ = handler address (§4; openMSX irq1:802)
         return 13;
     }
 }
