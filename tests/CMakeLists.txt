@@ -1,0 +1,227 @@
+add_executable(core_scheduler_unit_test
+    unit/core/scheduler_unit_test.cpp
+)
+target_link_libraries(core_scheduler_unit_test PRIVATE sony_msx_core)
+add_test(NAME core_scheduler_unit_test COMMAND core_scheduler_unit_test)
+
+add_executable(core_bus_contract_unit_test
+    unit/core/bus_contract_unit_test.cpp
+)
+target_link_libraries(core_bus_contract_unit_test PRIVATE sony_msx_core)
+add_test(NAME core_bus_contract_unit_test COMMAND core_bus_contract_unit_test)
+
+add_executable(devices_cpu_bus_client_unit_test
+    unit/devices/cpu_bus_client_unit_test.cpp
+)
+target_link_libraries(devices_cpu_bus_client_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cpu_bus_client_unit_test COMMAND devices_cpu_bus_client_unit_test)
+
+add_executable(devices_cpu_io_seam_unit_test
+    unit/devices/cpu_io_seam_unit_test.cpp
+)
+target_link_libraries(devices_cpu_io_seam_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cpu_io_seam_unit_test COMMAND devices_cpu_io_seam_unit_test)
+
+add_executable(devices_chipset_slot_bus_unit_test
+    unit/devices/chipset_slot_bus_unit_test.cpp
+)
+target_link_libraries(devices_chipset_slot_bus_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_slot_bus_unit_test COMMAND devices_chipset_slot_bus_unit_test)
+
+add_executable(devices_chipset_ppi_slot_select_unit_test
+    unit/devices/chipset_ppi_slot_select_unit_test.cpp
+)
+target_link_libraries(devices_chipset_ppi_slot_select_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_ppi_slot_select_unit_test COMMAND devices_chipset_ppi_slot_select_unit_test)
+
+add_executable(devices_chipset_io_bus_unit_test
+    unit/devices/chipset_io_bus_unit_test.cpp
+)
+target_link_libraries(devices_chipset_io_bus_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_io_bus_unit_test COMMAND devices_chipset_io_bus_unit_test)
+
+add_executable(devices_chipset_backup_ram_unit_test
+    unit/devices/chipset_backup_ram_unit_test.cpp
+)
+target_link_libraries(devices_chipset_backup_ram_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_backup_ram_unit_test COMMAND devices_chipset_backup_ram_unit_test)
+
+add_executable(devices_chipset_mapper_io_unit_test
+    unit/devices/chipset_mapper_io_unit_test.cpp
+)
+target_link_libraries(devices_chipset_mapper_io_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_mapper_io_unit_test COMMAND devices_chipset_mapper_io_unit_test)
+
+add_executable(devices_chipset_m1_wait_unit_test
+    unit/devices/chipset_m1_wait_unit_test.cpp
+)
+target_link_libraries(devices_chipset_m1_wait_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_m1_wait_unit_test COMMAND devices_chipset_m1_wait_unit_test)
+
+add_executable(devices_z80a_state_unit_test
+    unit/devices/z80a_state_unit_test.cpp
+)
+target_link_libraries(devices_z80a_state_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_state_unit_test COMMAND devices_z80a_state_unit_test)
+
+add_executable(devices_z80a_unprefixed_unit_test
+    unit/devices/z80a_unprefixed_unit_test.cpp
+)
+target_link_libraries(devices_z80a_unprefixed_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_unprefixed_unit_test COMMAND devices_z80a_unprefixed_unit_test)
+
+add_executable(devices_z80a_interrupts_unit_test
+    unit/devices/z80a_interrupts_unit_test.cpp
+)
+target_link_libraries(devices_z80a_interrupts_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_interrupts_unit_test COMMAND devices_z80a_interrupts_unit_test)
+
+add_executable(devices_z80a_unprefixed_ops_unit_test
+    unit/devices/z80a_unprefixed_ops_unit_test.cpp
+)
+target_link_libraries(devices_z80a_unprefixed_ops_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_unprefixed_ops_unit_test COMMAND devices_z80a_unprefixed_ops_unit_test)
+
+add_executable(devices_z80a_cb_prefixed_unit_test
+    unit/devices/z80a_cb_prefixed_unit_test.cpp
+)
+target_link_libraries(devices_z80a_cb_prefixed_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_cb_prefixed_unit_test COMMAND devices_z80a_cb_prefixed_unit_test)
+
+add_executable(devices_z80a_ed_prefixed_unit_test
+    unit/devices/z80a_ed_prefixed_unit_test.cpp
+)
+target_link_libraries(devices_z80a_ed_prefixed_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_ed_prefixed_unit_test COMMAND devices_z80a_ed_prefixed_unit_test)
+
+add_executable(devices_z80a_indexed_unit_test
+    unit/devices/z80a_indexed_unit_test.cpp
+)
+target_link_libraries(devices_z80a_indexed_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_indexed_unit_test COMMAND devices_z80a_indexed_unit_test)
+
+add_executable(devices_z80a_indexed_cb_unit_test
+    unit/devices/z80a_indexed_cb_unit_test.cpp
+)
+target_link_libraries(devices_z80a_indexed_cb_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_indexed_cb_unit_test COMMAND devices_z80a_indexed_cb_unit_test)
+
+add_executable(devices_z80a_interrupt_modes_unit_test
+    unit/devices/z80a_interrupt_modes_unit_test.cpp
+)
+target_link_libraries(devices_z80a_interrupt_modes_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_interrupt_modes_unit_test COMMAND devices_z80a_interrupt_modes_unit_test)
+
+add_executable(devices_z80a_trace_export_unit_test
+    unit/devices/z80a_trace_export_unit_test.cpp
+)
+target_link_libraries(devices_z80a_trace_export_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_trace_export_unit_test COMMAND devices_z80a_trace_export_unit_test)
+
+add_executable(machine_hbf1xv_memory_regions_unit_test
+    unit/machine/hbf1xv_memory_regions_unit_test.cpp
+)
+target_link_libraries(machine_hbf1xv_memory_regions_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_memory_regions_unit_test COMMAND machine_hbf1xv_memory_regions_unit_test)
+
+add_executable(machine_hbf1xv_slot_map_unit_test
+    unit/machine/hbf1xv_slot_map_unit_test.cpp
+)
+target_link_libraries(machine_hbf1xv_slot_map_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_slot_map_unit_test COMMAND machine_hbf1xv_slot_map_unit_test)
+
+add_executable(machine_hbf1xv_debug_dump_unit_test
+    unit/machine/hbf1xv_debug_dump_unit_test.cpp
+)
+target_link_libraries(machine_hbf1xv_debug_dump_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_debug_dump_unit_test COMMAND machine_hbf1xv_debug_dump_unit_test)
+
+add_executable(machine_hbf1xv_machine_integration_test
+    integration/machine/hbf1xv_machine_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_machine_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_machine_integration_test COMMAND machine_hbf1xv_machine_integration_test)
+
+add_executable(machine_hbf1xv_debug_event_log_integration_test
+    integration/machine/hbf1xv_debug_event_log_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_debug_event_log_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_debug_event_log_integration_test COMMAND machine_hbf1xv_debug_event_log_integration_test)
+
+add_executable(machine_hbf1xv_memory_regions_integration_test
+    integration/machine/hbf1xv_memory_regions_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_memory_regions_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_memory_regions_integration_test COMMAND machine_hbf1xv_memory_regions_integration_test)
+
+add_executable(machine_hbf1xv_system_bus_integration_test
+    integration/machine/hbf1xv_system_bus_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_system_bus_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_system_bus_integration_test COMMAND machine_hbf1xv_system_bus_integration_test)
+
+add_executable(machine_hbf1xv_cpu_step_integration_test
+    integration/machine/hbf1xv_cpu_step_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_cpu_step_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_cpu_step_integration_test COMMAND machine_hbf1xv_cpu_step_integration_test)
+
+add_executable(machine_hbf1xv_trace_program_integration_test
+    integration/machine/hbf1xv_trace_program_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_trace_program_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_trace_program_integration_test COMMAND machine_hbf1xv_trace_program_integration_test)
+
+add_executable(machine_hbf1xv_cb_program_integration_test
+    integration/machine/hbf1xv_cb_program_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_cb_program_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_cb_program_integration_test COMMAND machine_hbf1xv_cb_program_integration_test)
+
+add_executable(machine_hbf1xv_ldir_program_integration_test
+    integration/machine/hbf1xv_ldir_program_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_ldir_program_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_ldir_program_integration_test COMMAND machine_hbf1xv_ldir_program_integration_test)
+
+add_executable(machine_hbf1xv_indexed_program_integration_test
+    integration/machine/hbf1xv_indexed_program_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_indexed_program_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_indexed_program_integration_test COMMAND machine_hbf1xv_indexed_program_integration_test)
+
+add_executable(machine_hbf1xv_interrupt_ack_integration_test
+    integration/machine/hbf1xv_interrupt_ack_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_interrupt_ack_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_interrupt_ack_integration_test COMMAND machine_hbf1xv_interrupt_ack_integration_test)
+
+add_executable(machine_hbf1xv_m11_parity_checkpoint_integration_test
+    integration/machine/hbf1xv_m11_parity_checkpoint_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m11_parity_checkpoint_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m11_parity_checkpoint_integration_test COMMAND machine_hbf1xv_m11_parity_checkpoint_integration_test)
+
+add_executable(machine_hbf1xv_parity_checkpoint_integration_test
+    integration/machine/hbf1xv_parity_checkpoint_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_parity_checkpoint_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_parity_checkpoint_integration_test COMMAND machine_hbf1xv_parity_checkpoint_integration_test)
+
+add_executable(devices_cpu_bus_contract_integration_test
+    integration/devices/cpu_bus_contract_integration_test.cpp
+)
+target_link_libraries(devices_cpu_bus_contract_integration_test PRIVATE sony_msx_core)
+add_test(NAME devices_cpu_bus_contract_integration_test COMMAND devices_cpu_bus_contract_integration_test)
+
+add_executable(boot_system_test
+    system/boot_system_test.cpp
+)
+target_link_libraries(boot_system_test PRIVATE sony_msx_core)
+add_test(NAME boot_system_test COMMAND boot_system_test)
+
+add_executable(cpu_bootstrap_im1_system_test
+    system/cpu_bootstrap_im1_system_test.cpp
+)
+target_link_libraries(cpu_bootstrap_im1_system_test PRIVATE sony_msx_core)
+add_test(NAME cpu_bootstrap_im1_system_test COMMAND cpu_bootstrap_im1_system_test)

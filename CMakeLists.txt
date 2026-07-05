@@ -1,0 +1,45 @@
+cmake_minimum_required(VERSION 3.21)
+
+project(sony-msx-hbf1xv VERSION 0.1.0 LANGUAGES CXX)
+
+option(SONY_MSX_ENABLE_SDL3 "Build SDL3 frontend" OFF)
+
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+enable_testing()
+
+add_library(sony_msx_core STATIC
+    src/devices/cpu/cpu_bus_client.cpp
+    src/devices/cpu/z80a_state.cpp
+    src/devices/cpu/z80a_cpu.cpp
+    src/devices/chipset/slot_bus.cpp
+    src/devices/chipset/ppi_slot_select.cpp
+    src/devices/chipset/io_bus.cpp
+    src/devices/chipset/mapper_io.cpp
+    src/devices/chipset/switched_io.cpp
+    src/devices/chipset/s1985_engine.cpp
+    src/devices/chipset/system_bus.cpp
+    src/core/scheduler.cpp
+    src/machine/hbf1xv_machine.cpp
+    src/machine/ram_slot_backing.cpp
+    src/machine/cpu_trace_sink.cpp
+    src/machine/memory_region.cpp
+    src/machine/debug_dump.cpp
+    src/machine/debug_event_log.cpp
+)
+
+target_include_directories(sony_msx_core PUBLIC src)
+
+add_executable(sony_msx_headless src/main.cpp)
+target_link_libraries(sony_msx_headless PRIVATE sony_msx_core)
+
+if(SONY_MSX_ENABLE_SDL3)
+    find_package(SDL3 CONFIG REQUIRED)
+
+    add_executable(sony_msx_sdl3 src/frontend/sdl3_main.cpp)
+    target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_core SDL3::SDL3)
+endif()
+
+add_subdirectory(tests)

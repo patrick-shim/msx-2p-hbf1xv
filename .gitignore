@@ -1,0 +1,39 @@
+# --- Build output (regenerable; excluded from version control) ---
+/build/
+build/
+*.o
+*.obj
+*.exe
+*.pdb
+*.ilk
+*.lib
+*.a
+*.dll
+
+# CMake scratch
+CMakeUserPresets.json
+/cmake-build-*/
+
+# --- Generated debug/trace runtime output ---
+# The debug/ tree is created at runtime by the emulator (traces, logs, frames,
+# audio). Keep the directory scaffolding but do not track generated captures.
+/debug/**/*.trace
+/debug/**/*.log
+/debug/**/*.txt
+/debug/**/*.png
+/debug/**/*.wav
+/debug/**/*.bin
+
+# --- Editor / IDE / OS cruft ---
+.vs/
+*.user
+.idea/
+.vscode/*.log
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# NOTE: bios/ and roms/ contain local, legally-sourced development assets that
+# are NOT redistributable. They are tracked here per the project owner's
+# explicit request for a fully-tracked local repository. Do NOT push this
+# repository to a public remote without first removing those assets.

@@ -1,0 +1,174 @@
+version: 1
+schema: msx-agent-dod
+applies_to: all_milestones
+enforcement: required
+
+checklist:
+  planning:
+    spec_defined: false
+    scope_in_scope_only: false
+    dependencies_mapped: false
+    acceptance_criteria_defined: false
+    risks_logged: false
+    evidence:
+      required_files:
+        - agent-protocol/state/milestones.md
+        - agent-protocol/channels/requests.md
+        - agent-protocol/channels/responses.md
+  implementation:
+    code_changes_scoped_to_milestone: false
+    unit_tests_added_or_updated: false
+    integration_tests_added_or_updated: false
+    build_flow_referenced: false
+    evidence:
+      required_artifacts:
+        - changed_source_files
+        - unit_test_report
+        - integration_test_report
+  regression_qa:
+    regression_matrix_updated: false
+    impacted_areas_covered: false
+    blocker_risks_resolved_or_accepted: false
+    signoff_decision_recorded: false
+    evidence:
+      required_files:
+        - agent-protocol/channels/responses.md
+        - agent-protocol/channels/decisions.md
+
+phase_transition_rules:
+  planning_to_implementation:
+    requires:
+      - checklist.planning.spec_defined
+      - checklist.planning.acceptance_criteria_defined
+      - checklist.planning.risks_logged
+  implementation_to_regression_qa:
+    requires:
+      - checklist.implementation.unit_tests_added_or_updated
+      - checklist.implementation.integration_tests_added_or_updated
+  regression_qa_to_release_decision:
+    requires:
+      - checklist.regression_qa.regression_matrix_updated
+      - checklist.regression_qa.signoff_decision_recorded
+
+milestone_records:
+  M0:
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+  M9:
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      # R5 (openMSX opcode-trace parity) accepted as a deferred risk to M10 per DEC-0001.
+      blocker_risks_resolved_or_accepted: true
+      impacted_areas_covered: true
+      signoff_decision_recorded: true   # QA CONDITIONAL PASS (REQ-M9-010) + DEC-0001 deferral
+    # Closed by human release decision (REQ-M9-011, 2026-07-06) on the DEC-0001 deferral basis.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M9-011). ctest 21/21 green (QA-executed). Opcode families + interrupt architecture complete/verified. R5 parity deferred to M10 per DEC-0001."
+  M10:
+    status: in_progress
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true   # QA PASS (REQ-M10-008), QA-executed ctest 28/28, R5 diff re-run
+    # Closed by human release decision (REQ-M10-009, 2026-07-06) on QA PASS.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M10-009). Slices S1..S5 complete; ctest 28/28 (QA-executed). R5 DISCHARGED: QA re-ran tools/openmsx-trace-parity.ps1, reproduced empty architectural diff over 48 instr vs openMSX 19.1, adversarially validated the comparator. QA verdict PASS (docs/m10-qa-signoff.md). Residuals (non-blocking, future milestones): R5 bounded to a 48-instr RAM-only program not a full zexall sweep; cycle parity ungated (DP-4); SRAM 8KB assumption (DP-3); VDP/slot/BIOS/IO (DP-1/2/5)."
+  M11:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # R-1/A-2 tracked to M12; A-5/R-6 accepted out-of-scope
+      signoff_decision_recorded: true   # QA PASS (REQ-M11-004), QA-executed ctest 38/38, A/B reproduced
+    # Closed by human release decision (REQ-M11-005, 2026-07-06) on QA PASS; git tag v1.0.11.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M11-005), git tag v1.0.11. QA PASS (REQ-M11-004, docs/m11-qa-signoff.md). Slices S1..S6 complete; ctest 38/38 (QA-executed, +10 new). Real A/B trace-diff EMPTY vs openMSX 19.1 Sony_HB-F1XV with genuine <S1985>, QA-reproduced (both sides driven, 15/15). No regression. Forward obligation: M12 planner flips reset slot default #A8=0xFF -> #A8=0 (slot-0 BIOS) once ROMs populate slot 0 (R-1). A-5/R-6 backup-RAM .sram persistence accepted out-of-scope."
+  M12:
+    status: planned
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: false
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+    notes: "Planned per DEC-0002. RAM/ROM memory devices + slot population (VRAM deferred to M13). Depends on M11 bus/slot infrastructure."
+  M13:
+    status: planned
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: false
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+    notes: "Planned per DEC-0002. Yamaha V9958 VDP incl. 128KB VRAM ownership. Depends on M11 I/O bus + M12 memory."
