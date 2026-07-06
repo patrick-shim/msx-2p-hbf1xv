@@ -57,9 +57,15 @@ void Hbf1xvMachine::wire_bus() {
     slot_bus_.attach(3, 1, 0, &sub_rom_);
     slot_bus_.attach(3, 1, 1, &kanji_rom_);
     slot_bus_.attach(3, 1, 2, &kanji_rom_);
-    // Slot 3-2: WD2793 DISK ROM PRESENCE only, page 1 (<mem 0x4000/0x4000>,
-    // rom_visibility page 1, XML:161-176). FDC mechanics are OUT of M13.
-    slot_bus_.attach(3, 2, 1, &disk_rom_);
+    // Slot 3-2: WD2793 FDC (Sony connection style), page 1 (<mem 0x4000/0x4000>,
+    // rom_visibility page 1, XML:161-176). M16 attaches the SonyFdc decode (which
+    // WRAPS disk_rom_) here in place of the bare ROM, so page-1 reads route DISK
+    // ROM + the 0x7FF8-0x7FFF WD2793/glue register window (planner §3.1). The FDC
+    // core advances off the deterministic emulated-cycle FdcClock.
+    fdc_.attach_clock_source(&fdc_clock_);
+    fdc_.attach_drive(&disk_drive_);
+    disk_drive_.attach_image(&disk_image_);
+    slot_bus_.attach(3, 2, 1, &sony_fdc_);
     // Slot 3-3: MSX-MUSIC (FM-PAC) ROM PRESENCE only, page 1 (<mem 0x4000/0x4000>,
     // XML:180-196). OPLL synthesis + #7C/#7D I/O are OUT of M13.
     slot_bus_.attach(3, 3, 1, &fmmusic_rom_);
@@ -152,6 +158,15 @@ void Hbf1xvMachine::cold_boot() {
     psg_.reset();
     system_control_.reset();
     rtc_.reset();
+
+    // FDC (M16): reset the WD2793 core (TR=0xFF), the drive mechanism, and the
+    // Sony glue latches; re-mount the deterministic default 720 KB medium so every
+    // cold boot presents byte-identical disk content.
+    disk_image_ = devices::fdc::DiskImage();
+    disk_drive_.reset();
+    disk_drive_.attach_image(&disk_image_);
+    fdc_.reset();
+    sony_fdc_.reset();
 
     // Load the 16-byte S1985 backup RAM from its .sram file when configured
     // (M15-S5, backlog C4). Absent/short file -> deterministic zero state (the
@@ -355,6 +370,10 @@ bool Hbf1xvMachine::slot_expanded(const int primary) const {
     return slot_bus_.is_expanded(primary);
 }
 
+std::uint8_t Hbf1xvMachine::debug_sub_slot_register(const int primary) const {
+    return slot_bus_.sub_slot_register(primary);
+}
+
 const devices::cpu::Z80aCpu& Hbf1xvMachine::cpu() const {
     return cpu_;
 }
@@ -417,6 +436,34 @@ devices::video::V9958Vdp& Hbf1xvMachine::vdp() {
 
 std::uint64_t Hbf1xvMachine::RtcClock::cpu_cycles() const {
     return scheduler_.total_cycles();
+}
+
+std::uint64_t Hbf1xvMachine::FdcClock::cpu_cycles() const {
+    return scheduler_.total_cycles();
+}
+
+const devices::fdc::Wd2793& Hbf1xvMachine::fdc() const {
+    return fdc_;
+}
+
+devices::fdc::Wd2793& Hbf1xvMachine::fdc() {
+    return fdc_;
+}
+
+const devices::fdc::DiskDrive& Hbf1xvMachine::disk_drive() const {
+    return disk_drive_;
+}
+
+devices::fdc::DiskDrive& Hbf1xvMachine::disk_drive() {
+    return disk_drive_;
+}
+
+const devices::fdc::DiskImage& Hbf1xvMachine::disk_image() const {
+    return disk_image_;
+}
+
+devices::fdc::DiskImage& Hbf1xvMachine::disk_image() {
+    return disk_image_;
 }
 
 const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {

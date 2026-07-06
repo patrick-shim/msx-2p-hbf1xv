@@ -401,3 +401,55 @@ target_compile_definitions(machine_hbf1xv_m15_boot_checkpoint_integration_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m15_boot_checkpoint_integration_test
     COMMAND machine_hbf1xv_m15_boot_checkpoint_integration_test)
+
+# --- M16 FDC (Fujitsu MB89311 / WD2793, Sony connection style) ---------------
+add_executable(devices_fdc_disk_image_unit_test
+    unit/devices/fdc/disk_image_unit_test.cpp
+)
+target_link_libraries(devices_fdc_disk_image_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_disk_image_unit_test COMMAND devices_fdc_disk_image_unit_test)
+
+add_executable(devices_fdc_wd2793_type1_unit_test
+    unit/devices/fdc/wd2793_type1_unit_test.cpp
+)
+target_link_libraries(devices_fdc_wd2793_type1_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_wd2793_type1_unit_test COMMAND devices_fdc_wd2793_type1_unit_test)
+
+add_executable(devices_fdc_wd2793_type2_unit_test
+    unit/devices/fdc/wd2793_type2_unit_test.cpp
+)
+target_link_libraries(devices_fdc_wd2793_type2_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_wd2793_type2_unit_test COMMAND devices_fdc_wd2793_type2_unit_test)
+
+add_executable(devices_fdc_wd2793_type3_unit_test
+    unit/devices/fdc/wd2793_type3_unit_test.cpp
+)
+target_link_libraries(devices_fdc_wd2793_type3_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_wd2793_type3_unit_test COMMAND devices_fdc_wd2793_type3_unit_test)
+
+add_executable(devices_fdc_wd2793_type4_unit_test
+    unit/devices/fdc/wd2793_type4_unit_test.cpp
+)
+target_link_libraries(devices_fdc_wd2793_type4_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_wd2793_type4_unit_test COMMAND devices_fdc_wd2793_type4_unit_test)
+
+add_executable(devices_fdc_sony_fdc_unit_test
+    unit/devices/fdc/sony_fdc_unit_test.cpp
+)
+target_link_libraries(devices_fdc_sony_fdc_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_fdc_sony_fdc_unit_test COMMAND devices_fdc_sony_fdc_unit_test)
+
+add_executable(machine_hbf1xv_m16_fdc_integration_test
+    integration/machine/hbf1xv_m16_fdc_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m16_fdc_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m16_fdc_integration_test COMMAND machine_hbf1xv_m16_fdc_integration_test)
+
+add_executable(machine_hbf1xv_m16_boot_checkpoint_integration_test
+    integration/machine/hbf1xv_m16_boot_checkpoint_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m16_boot_checkpoint_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m16_boot_checkpoint_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m16_boot_checkpoint_integration_test
+    COMMAND machine_hbf1xv_m16_boot_checkpoint_integration_test)

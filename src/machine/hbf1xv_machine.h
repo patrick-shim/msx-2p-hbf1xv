@@ -19,6 +19,11 @@
 #include "devices/chipset/system_control.h"
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
+#include "devices/fdc/disk_drive.h"
+#include "devices/fdc/disk_image.h"
+#include "devices/fdc/fdc_clock_source.h"
+#include "devices/fdc/sony_fdc.h"
+#include "devices/fdc/wd2793.h"
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
 #include "devices/rtc/rp5c01.h"
@@ -78,6 +83,12 @@ public:
     [[nodiscard]] std::uint8_t debug_io_read(std::uint16_t port);
     void debug_io_write(std::uint16_t port, std::uint8_t value);
     [[nodiscard]] bool slot_expanded(int primary) const;
+    // Direct (non-#FFFF-indirected) sub-slot register readback for a primary
+    // slot, for diagnostics/tests that need to know the TRUE current page-1
+    // routing regardless of which primary slot currently occupies page 3 (the
+    // 0xFFFF access itself is indirected through whatever primary answers page
+    // 3 -- this bypasses that indirection). Non-perturbing.
+    [[nodiscard]] std::uint8_t debug_sub_slot_register(int primary) const;
     [[nodiscard]] const devices::cpu::Z80aCpu& cpu() const;
     devices::cpu::Z80aCpu& cpu();
     [[nodiscard]] std::uint64_t elapsed_cycles() const;
@@ -147,6 +158,17 @@ public:
     peripherals::JoystickPorts& joystick();
     [[nodiscard]] const devices::chipset::S1985Engine& s1985() const;
     devices::chipset::S1985Engine& s1985();
+
+    // FDC subsystem (M16). The WD2793 core answers the Sony register window
+    // 0x7FF8-0x7FFF over the DISK ROM at slot 3-2 page 1; the drive mounts the
+    // deterministic 720 KB image. Tests drive commands over the bus and inspect
+    // controller/drive state here.
+    [[nodiscard]] const devices::fdc::Wd2793& fdc() const;
+    devices::fdc::Wd2793& fdc();
+    [[nodiscard]] const devices::fdc::DiskDrive& disk_drive() const;
+    devices::fdc::DiskDrive& disk_drive();
+    [[nodiscard]] const devices::fdc::DiskImage& disk_image() const;
+    devices::fdc::DiskImage& disk_image();
 
     // S1985 16-byte backup-RAM .sram persistence (M15-S5, backlog C4). Set the
     // file path BEFORE cold_boot to load it (absent -> deterministic zero state,
@@ -240,6 +262,19 @@ private:
         const core::Scheduler& scheduler_;
     };
 
+    // Deterministic emulated-cycle clock source for the FDC (M16, X-pattern of
+    // RtcClock). Returns scheduler total cycles READ-ONLY; all FDC Busy/DRQ/step/
+    // index/motor timing advances off this, never the host wall clock or CPU
+    // T-state accounting (protecting the M9/M12 oracles).
+    class FdcClock final : public devices::fdc::FdcClockSource {
+    public:
+        explicit FdcClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t cpu_cycles() const override;
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion sram_{kSramBytes};
@@ -273,8 +308,17 @@ private:
     devices::memory::RomDevice bios_rom_{0x0000, 0x8000};   // slot 0-0 p0-1 (BIOS+BASIC)
     devices::memory::RomDevice sub_rom_{0x0000, 0x4000};    // slot 3-1 p0   (SUB)
     devices::memory::RomDevice kanji_rom_{0x4000, 0x8000};  // slot 3-1 p1-2 (Kanji driver)
-    devices::memory::RomDevice disk_rom_{0x4000, 0x4000};   // slot 3-2 p1   (DISK presence)
+    devices::memory::RomDevice disk_rom_{0x4000, 0x4000};   // slot 3-2 p1   (DISK ROM window)
     devices::memory::RomDevice fmmusic_rom_{0x4000, 0x4000};  // slot 3-3 p1 (FM-MUSIC presence)
+
+    // FDC (M16): WD2793 core + built-in 720 KB drive + deterministic image, and
+    // the SonyFdc decode that wraps disk_rom_ and answers 0x7FF8-0x7FFF. Attached
+    // at slot 3-2 page 1 in place of the bare disk_rom_ (planner §3.1).
+    FdcClock fdc_clock_{scheduler_};
+    devices::fdc::DiskImage disk_image_;
+    devices::fdc::DiskDrive disk_drive_;
+    devices::fdc::Wd2793 fdc_;
+    devices::fdc::SonyFdc sony_fdc_{disk_rom_, fdc_, disk_drive_, fdc_clock_};
 
     devices::chipset::SystemBus bus_{slot_bus_, io_bus_};
 

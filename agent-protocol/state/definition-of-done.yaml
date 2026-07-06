@@ -217,22 +217,23 @@ milestone_records:
     overall_done: true
     notes: "CLOSED 2026-07-06 (DEC-0010 / REQ-M15-005), git tag v1.0.15. QA PASS (REQ-M15-004, docs/m15-qa-signoff.md). Device integration + S1985 chipset fully wired: PSG/YM2149 (numeric), RTC/RP5C01 (in-memory deterministic epoch), full i8255 PPI + keyboard + joystick, S1985 backup-RAM .sram persistence, boot-checkpoint advance. ctest 64/64 (QA-executed, +8), zero regression (X4 CPU timing untouched, M9/M12 oracles green unchanged; X1 #A8 preserved byte-for-byte). openMSX A/B empty diff 15/15 QA-reproduced (substantive PSG R0/R7). Boot advanced ~0x043C -> PC 0x454/max 0x488 (deterministic). Backlog B1/B2/C4/C6 -> DONE (M15); C5 IN-PROGRESS (full boot needs FDC/M16). Awaiting human release decision + tag v1.0.15. Stale-status drift (QA-found) corrected same-cycle."
   M16:
-    status: planning
+    status: implementation
     planning:
-      spec_defined: false
-      scope_in_scope_only: false
-      dependencies_mapped: false
-      acceptance_criteria_defined: false
-      risks_logged: false
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
     implementation:
-      code_changes_scoped_to_milestone: false
-      unit_tests_added_or_updated: false
-      integration_tests_added_or_updated: false
-      build_flow_referenced: false
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
     regression_qa:
-      regression_matrix_updated: false
-      impacted_areas_covered: false
-      blocker_risks_resolved_or_accepted: false
-      signoff_decision_recorded: false
-    overall_done: false
-    notes: "Kickoff 2026-07-06 per DEC-0009/DEC-0010 (FDC moved up, next after M15). Fujitsu MB89311 FDC + 720KB 3.5in drive wired onto the slot-3-2 DISK ROM (M13). Closes backlog B8; advances C5. Normal human-release gate. Planner-first (REQ-M16-002)."
+      regression_matrix_updated: true   # ctest 72/72 (56 M0-M14 + 8 M15 + 8 M16 new), zero regression
+      impacted_areas_covered: true      # FDC unit/integration + real A/B (register-sequence + boot-window)
+      blocker_risks_resolved_or_accepted: true   # R-M16-1/2/4/5/6/7 resolved; R-M16-3 (boot-advance depth) accepted as a documented, honestly-reported residual per the planner's own contingency language
+      signoff_decision_recorded: true   # QA PASS (RESP-M16-004, docs/m16-qa-signoff.md), QA-executed ctest 72/72 fresh reproduction, A/B independently re-verified
+    overall_done: true
+    # Closed by human release decision (DEC-0011 / REQ-M16-005, 2026-07-07); git tag v1.0.16.
+    notes: "CLOSED 2026-07-07 (DEC-0011 / REQ-M16-005), git tag v1.0.16. Closes backlog B8. Implementation (REQ-M16-003) complete per docs/m16-implementation-report.md. WD2793 core (Type I/II/III/IV, context-sensitive status/INTRQ/DRQ, HLD) under src/devices/fdc/, Sony connection-style decode wrapping the M13 DISK ROM at slot 3-2, deterministic 720KB image, ~4s motor-off, DSKCHG. A genuine HEAD_LOADED divergence vs openMSX was found via A/B probing and fixed (grounded in WD2793.cc:420-433/522-533/820-834/1062-1073). ctest 72/72 green, zero regression M1-M15 (M9/M12 timing oracles untouched). Real openMSX 19.1 A/B: architectural parity over a 3000-instruction real-boot window, and a dedicated FDC register/command probe (identical disk image) matching functionally down to the transferred 512 bytes (docs/m16-parity-trace-diff.md). Backlog B8 -> DONE (M16); C5 advanced (real-boot max PC 0x7D6F, was 0x488) but HONESTLY still IN-PROGRESS -- the automatic disk-boot handshake is not reached within an unattended cold boot (residual, not fabricated, judged non-blocking by QA and pre-authorized as a fallback in the planner package, carried forward as a condition for whichever future milestone claims C5 fully closed). QA PASS (RESP-M16-004, docs/m16-qa-signoff.md): QA independently reproduced the 72/72 ctest run, verified both bug-fix citations directly against WD2793.cc, confirmed no test was weakened, and independently diffed the raw openMSX trace files. Awaiting human directive to kick off M17."

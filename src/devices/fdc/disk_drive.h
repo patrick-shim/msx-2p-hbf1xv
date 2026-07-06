@@ -1,0 +1,87 @@
+#pragma once
+
+#include <cstdint>
+
+#include "devices/fdc/disk_image.h"
+
+namespace sony_msx::devices::fdc {
+
+// Built-in 3.5" 720 KB drive mechanism abstraction (M16-S4). Models head
+// position (track), side select, motor on/off with the ~4 s delayed motor-off
+// timer, ready / write-protect / track-00 / index-pulse / disk-changed sense,
+// and sector access over the mounted DiskImage. Behaviour reference (read only,
+// never copied, GPL isolation): references/openmsx-21.0/src/fdc/DiskDrive.cc,
+// RealDrive.cc (delayed motor-off RealDrive.cc:263-321), DriveMultiplexer.cc.
+//
+// Single physical drive (<drives>1</drives>, Sony_HB-F1XV.xml). The Sony glue
+// drive-select (0x7FFD bits1..0) chooses drive A (00/10), B (01) or NONE (11);
+// selecting B/NONE presents as not-ready (available_ = false) because the second
+// drive is absent (PhilipsFDC.cc:158-169; fact-sheet §7). All time inputs are
+// absolute emulated cycle counts from the FdcClockSource — no wall clock.
+class DiskDrive {
+public:
+    // 3,579,545 Hz system clock; ~4 s delayed motor-off = 4 * clock cycles.
+    static constexpr std::uint64_t kSystemClockHz = 3579545;
+    static constexpr std::uint64_t kMotorOffCycles = 4 * kSystemClockHz;  // 14,318,180
+    // 300 rpm -> 200 ms index period; a ~5% index-pulse width window.
+    static constexpr std::uint64_t kIndexPeriodCycles = kSystemClockHz / 5;  // 715,909
+    static constexpr std::uint64_t kIndexPulseWidthCycles = kIndexPeriodCycles / 64;
+
+    void reset();
+
+    void attach_image(DiskImage* image) { image_ = image; }
+    [[nodiscard]] DiskImage* image() const { return image_; }
+
+    // Drive select: `available` true when a present physical drive is selected.
+    void set_available(bool available) { available_ = available; }
+    [[nodiscard]] bool available() const { return available_; }
+
+    // Side latch (Sony 0x7FFC bit0).
+    void set_side(std::uint8_t side) { side_ = side & 1u; }
+    [[nodiscard]] std::uint8_t side() const { return side_; }
+
+    // Motor control with delayed motor-off (now = absolute emulated cycles).
+    void set_motor(bool on, std::uint64_t now);
+    [[nodiscard]] bool motor_on(std::uint64_t now) const;
+
+    // Head positioning (Type I mechanics). step_in increments the physical track
+    // (toward 79), step_out decrements (toward 0); both clamp at the ends.
+    void step(bool inward);
+    void restore();  // seek physically to track 0
+    [[nodiscard]] std::uint8_t physical_track() const { return physical_track_; }
+    void set_physical_track(std::uint8_t track) { physical_track_ = track; }
+
+    // Sense lines.
+    [[nodiscard]] bool ready() const;               // disk inserted AND drive selected
+    [[nodiscard]] bool is_track00() const;          // head at cylinder 0
+    [[nodiscard]] bool write_protected() const;
+    [[nodiscard]] bool index_pulse(std::uint64_t now) const;
+
+    // Cycles remaining until the next index-pulse window begins (0 when `now`
+    // is already inside one). Grounds WD2793 Type IV i2 (index-pulse IRQ)
+    // scheduling: openMSX schedules INTRQ at the drive's next index pulse
+    // rather than asserting it immediately (references/openmsx-21.0/src/fdc/
+    // WD2793.cc:1049-1050 `irqTime = drive.getTimeTillIndexPulse(time)`).
+    [[nodiscard]] std::uint64_t cycles_until_index_pulse(std::uint64_t now) const;
+
+    // Disk-changed latch (Sony DSKCHG at 0x7FFD bit2, 0 = changed). Set true when
+    // the mounted medium is (deterministically) swapped; cleared once acknowledged.
+    [[nodiscard]] bool disk_changed() const { return disk_changed_; }
+    void set_disk_changed(bool changed) { disk_changed_ = changed; }
+
+    // Sector access at the current physical track + side latch.
+    bool read_sector(std::uint8_t sector, std::uint8_t* out) const;
+    bool write_sector(std::uint8_t sector, const std::uint8_t* in);
+
+private:
+    DiskImage* image_ = nullptr;
+    std::uint8_t physical_track_ = 0;
+    std::uint8_t side_ = 0;
+    bool available_ = true;
+    bool motor_on_ = false;
+    bool motor_off_pending_ = false;
+    std::uint64_t motor_off_deadline_ = 0;
+    bool disk_changed_ = false;
+};
+
+}  // namespace sony_msx::devices::fdc

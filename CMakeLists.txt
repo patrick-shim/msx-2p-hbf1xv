@@ -25,6 +25,10 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/system_control.cpp
     src/devices/audio/psg_ym2149.cpp
     src/devices/rtc/rp5c01.cpp
+    src/devices/fdc/disk_image.cpp
+    src/devices/fdc/disk_drive.cpp
+    src/devices/fdc/wd2793.cpp
+    src/devices/fdc/sony_fdc.cpp
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
     src/devices/video/vdp_vram.cpp

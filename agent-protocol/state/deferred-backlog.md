@@ -33,7 +33,7 @@ milestone reference so "no one misses a bit":
 | B5 | **Kanji font ROM access via I/O `#D8-#DB`** — 256 KB JIS1+JIS2 font (`bios/f1xvkfn.rom`); M13 mapped the Kanji *driver* (slot 3-1) but not the I/O-accessed font | OPEN | M13 | Kanji/peripheral milestone | `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml` (kanji I/O `#D8-DB`); S1985 fact-sheet §9 |
 | B6 | **Halnote / MSX-JE firmware mapping** — slot 0-3, 1 MB `bios/f1xvfirm.rom`, `mappertype=Halnote` + SRAM; M13 left it reserved open-bus | OPEN | M13 | Halnote/firmware milestone | Sony_HB-F1XV.xml (slot 0-3 Halnote) |
 | B7 | **Cartridge loading** — external primary slots 1 & 2 (`roms/aleste.rom` sample); M13 left them empty | OPEN | M13 | Cartridge/slot-manager milestone | Sony_HB-F1XV.xml (slots 1,2); Target Machine Spec (2 cartridge slots) |
-| B8 | **FDC drive mechanics** — Fujitsu MB89311 controller + 720 KB 3.5" drive behavior; M13 mapped only the DISK ROM presence (slot 3-2) | IN-PROGRESS (M16) | M13 | **M16 (active — opened per DEC-0010)** | `references/fact-sheets/FDC for Sony HB-F1XV.md`; `references/openmsx-21.0/src/fdc/`; Target Machine Spec (BUILT-IN MEDIA) |
+| B8 | **FDC drive mechanics** — Fujitsu MB89311 controller + 720 KB 3.5" drive behavior; M13 mapped only the DISK ROM presence (slot 3-2) | DONE (M16) | M13 | M16 (`src/devices/fdc/{wd2793,disk_drive,disk_image,sony_fdc,fdc_clock_source}.*`) — WD2793 core (Type I/II/III/IV, context-sensitive status, INTRQ/DRQ, HLD per openMSX WD2793.cc grounding), Sony connection-style decode wrapping the M13 DISK ROM, deterministic 720 KB image, ~4 s delayed motor-off, DSKCHG; unit + integration tests green; real openMSX A/B evidence (register/command sequence + functional Read-Sector completion + 512-byte content match) — `docs/m16-parity-trace-diff.md` | `references/fact-sheets/FDC for Sony HB-F1XV.md`; `references/openmsx-21.0/src/fdc/`; Target Machine Spec (BUILT-IN MEDIA) |
 | B9 | **VRAM / V9958 VDP** — 128 KB VRAM owned by the VDP; the display processor (register/VRAM/status/interrupt CONTRACT; rendering DEPTH split to D1-D7) | DONE (M14) | DEC-0002 / M13 | M14 (closed, v1.0.14) | `references/fact-sheets/Yamaha V9958 VDP.md`; `references/openmsx-21.0/src/video/` |
 
 ## B. Other known deferrals (tracked from earlier milestones / decisions)
@@ -44,11 +44,12 @@ milestone reference so "no one misses a bit":
 | C2 | **Z80 HALT-R increment (#34)** — R continues to increment while halted | OPEN | DEC-0004 | Timing-fidelity milestone (with C1) | Zilog Z80A fact-sheet §8 |
 | C3 | **ZEXDOC/ZEXALL full parity sweep** — needs a legally-sourced ZEX binary (unavailable offline in M12); A/B trace-diff served as the M12 cross-check | OPEN | M10/M12 | CPU-validation milestone | Zilog Z80A fact-sheet §8 (test suites) |
 | C4 | **S1985 backup-RAM `.sram` persistence** (16-byte, switched-I/O ID 0xFE) — M11 modeled volatile behavior only | DONE (M15) | M11 (A-5/R-6) | M15 (`S1985Engine::load/save_backup_ram` + machine `set_backup_ram_path`/`flush_backup_ram`); absent file → deterministic zero (M11 golden intact) | S1985 fact-sheet §6 |
-| C5 | **Full boot past first device read** — BIOS boot currently verified in lockstep only up to the first VDP/PSG/RTC read | IN-PROGRESS (M15 partial) | M13 | M15 advanced the deterministic boot checkpoint past the M13 ~0x043C boundary (max PC 0x488, final 0x454 over 4096 instructions) with real PSG/RTC/keyboard/VDP; FULL boot to a prompt still needs the FDC (M16) | M13 parity boundary (`docs/m13-parity-trace-diff.md`) |
+| C5 | **Full boot past first device read** — BIOS boot currently verified in lockstep only up to the first VDP/PSG/RTC read | IN-PROGRESS (M16 partial) | M13 | M15 advanced the checkpoint past the M13 ~0x043C boundary (max PC 0x488). M16 advances it FURTHER with the FDC now live at slot 3-2: real-boot max PC reaches 0x7D6F over 400,000 instructions (deterministic, two-run identical), and real openMSX A/B parity is confirmed architecturally identical over a 3000-instruction real-boot window (`docs/m16-parity-trace-diff.md` Subject 1). RESIDUAL (honestly recorded, not fabricated): the automatic disk-ROM boot handshake (DSKCHG → Restore → Read Sector LBA 0) is genuinely never observed within an unattended, keyboard-less cold boot (confirmed up to a 20,000,000-instruction diagnostic run) — the FDC device itself is independently correct and A/B-confirmed (`docs/m16-parity-trace-diff.md` Subject 2, a dedicated CPU-driven register-sequence probe with the identical disk image), but the real auto-boot TRIGGER condition needs further investigation (disk-ROM/SUB-ROM disassembly) before C5 can close on "full boot to a prompt" | M13 parity boundary (`docs/m13-parity-trace-diff.md`); M16 evidence (`docs/m16-parity-trace-diff.md`, `docs/m16-implementation-report.md`) |
 | C6 | **Peripherals: keyboard matrix + joystick** (PPI port B/C rows `#A9/#AA`, PSG port A/B joystick) — DP-5 | DONE (M15) | baseline | M15 (`src/devices/chipset/ppi_8255.*` full i8255 + `src/peripherals/{keyboard_matrix,joystick}.*`); `#A8` slot-select preserved byte-for-byte (X1) | S1985 fact-sheet §2/§3 |
 | C7 | **Printer (Centronics) `#90/#91` + cassette interface** | OPEN | baseline | I/O-peripheral milestone | S1985 fact-sheet §8 |
 | C8 | **Sony speed-controller + hardware PAUSE (MB670836); Ren-Sha Turbo autofire** — HB-F1XV-specific | OPEN | baseline | HB-F1XV-specifics milestone | S1985 fact-sheet §9; Zilog Z80A fact-sheet §6 |
 | C9 | **SDL3 frontend** (video/audio/input presentation) — in baseline scope, not yet built | OPEN | baseline | Frontend milestone | `references/sdl3/`; project-baseline Scope |
+| C10 | **FDC flux-level / DMK disk fidelity** (raw flux, weak bits, copy-protection, DMK images) — M16 delivers WD2793 sector-level (2DD .dsk) fidelity; flux-level is a later stage. (Proposed as "B10" by the M16 planner) | OPEN | M16 | FDC-fidelity milestone | `references/openmsx-21.0/src/fdc/DMKDiskImage.*`; `references/fact-sheets/FDC for Sony HB-F1XV.md` |
 
 ## C. M14 VDP-depth deferrals (recorded by the M14 planner, REQ-M14-002)
 
@@ -70,13 +71,21 @@ waiver). Grounded in `references/fact-sheets/Yamaha V9958 VDP.md` and
 
 ---
 
-Last updated: 2026-07-06 (M15 device-integration IMPLEMENTED per REQ-M15-003 / DEC-0009:
-B1 PSG, B2 RTC, C4 backup-RAM persistence, C6 PPI+keyboard+joystick → DONE (M15); C5
-partially advanced (boot checkpoint moved past M13 ~0x043C to max PC 0x488; full boot
-still pending FDC/M16). ctest 64/64 green, zero regression; real openMSX HB-F1XV A/B
-empty diff — see `docs/m15-implementation-report.md`, `docs/m15-parity-trace-diff.md`.
-QA sign-off pending. Prior status: M14 closed/tagged v1.0.14, B9 DONE. FDC (B8) is M16
-next per human priority.) Indicative follow-on order
+Last updated: 2026-07-07 (M16 CLOSED per DEC-0011/REQ-M16-005, tagged v1.0.16: **B8 → DONE
+(M16)** — WD2793 core (Type I/II/III/IV, context-sensitive status/INTRQ/DRQ, HLD fixed
+against a genuine openMSX A/B divergence found this cycle), Sony connection-style decode,
+deterministic 720 KB image, motor-off, DSKCHG, all under `src/devices/fdc/`; C10 (flux/DMK
+fidelity, ex-"B10") re-affirmed OPEN. **C5 advanced (still IN-PROGRESS, carried forward)**:
+real-boot max PC now 0x7D6F (was 0x488), real openMSX A/B parity confirmed over a
+3000-instruction boot window and (separately) over a dedicated FDC register/command probe
+with the identical disk image (functional match down to the transferred 512 bytes); the
+automatic disk-boot handshake itself is honestly reported as NOT reached within an
+unattended run (residual, not fabricated, QA-accepted as non-blocking for M16) — see
+`docs/m16-implementation-report.md`, `docs/m16-parity-trace-diff.md`, `docs/m16-qa-signoff.md`.
+Whichever future milestone claims C5 fully closed must specifically re-investigate the real
+auto-disk-boot trigger condition. ctest 72/72 green, zero regression across M1-M15. QA PASS
+(RESP-M16-004). Six milestones M11-M16 now tagged (v1.0.11..v1.0.16). M17 not yet kicked
+off — awaiting human directive.) Indicative follow-on order
 (re-confirmed per kickoff): M16 FDC · M17 FM-PAC/OPLL(+B4 SRAM) · M18 peripheral I/O
 (B5 Kanji-font, C7 printer/cassette) · M19 cartridges (B7) · M20 Halnote (B6) · M21 VDP
 rendering (D1/D5/D6/D7) · M22 sprites/command (D2/D3) · M23 exact cycle timing (C1/C2/D4)
