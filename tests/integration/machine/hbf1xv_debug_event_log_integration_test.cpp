@@ -32,6 +32,7 @@ std::string run_event_log() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.set_event_logging_enabled(true);
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
     machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     for (int i = 0; i < 4; ++i) {
         machine.step_cpu_instruction();
@@ -55,6 +56,7 @@ int main() {
     {
         sony_msx::machine::Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
         machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
         machine.step_cpu_instruction();
         if (!expect_true(!machine.event_logging_enabled() && machine.debug_event_log().empty(),
@@ -68,6 +70,7 @@ int main() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.set_event_logging_enabled(true);
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
     machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     for (int i = 0; i < 4; ++i) {
         machine.step_cpu_instruction();
@@ -119,6 +122,7 @@ int main() {
         m.set_debug_root(root);
         m.set_event_logging_enabled(true);
         m.cold_boot();
+        m.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
         m.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
         for (int i = 0; i < 4; ++i) {
             m.step_cpu_instruction();
@@ -149,6 +153,7 @@ int main() {
         sony_msx::machine::Hbf1xvMachine m;
         m.set_event_logging_enabled(true);
         m.cold_boot();
+        m.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
         m.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
         m.step_cpu_instruction();
         const std::size_t after_first = m.debug_event_log().size();

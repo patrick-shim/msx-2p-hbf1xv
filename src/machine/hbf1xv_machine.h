@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "core/bus.h"
 #include "core/scheduler.h"
@@ -16,10 +17,12 @@
 #include "devices/chipset/system_bus.h"
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
+#include "devices/memory/memory_mapper_ram.h"
+#include "devices/memory/rom_device.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
-#include "machine/ram_slot_backing.h"
+#include "machine/rom_asset_loader.h"
 
 namespace sony_msx::machine {
 
@@ -28,6 +31,28 @@ public:
     Hbf1xvMachine();
 
     void cold_boot();
+
+    // Directory the ROM asset loader resolves the local bios/*.rom images from
+    // (default "bios"). Set BEFORE cold_boot; cold_boot (re)loads the images and
+    // records any missing-asset diagnostics (A-7). An absolute path keeps asset
+    // loading independent of the working directory (tests inject the repo path).
+    void set_asset_root(std::filesystem::path root);
+    [[nodiscard]] const std::filesystem::path& asset_root() const;
+
+    // Missing-asset diagnostics recorded by the most recent cold_boot (empty when
+    // every required ROM was present + correctly sized). Never fabricated.
+    [[nodiscard]] const std::vector<std::string>& rom_diagnostics() const;
+
+    // Test/debug helper (M13-S4, discharges the M11 R-1/R-2 obligation): page the
+    // 64 KB mapper RAM (slot 3-0) into all four CPU pages as a FLAT, linear 64 KB
+    // view — the exact configuration the BIOS installs and that the M11 bring-up
+    // default provided implicitly before the authentic #A8=0 reset flip. It sets
+    // #A8 so every page selects primary slot 3, the slot-3 sub-slot register to 0
+    // (sub-slot 0 = RAM mapper), and mapper segments {0,1,2,3} for pages {0,1,2,3}
+    // (page p -> physical p*0x4000). CPU-over-RAM behaviour tests call this after
+    // cold_boot to page RAM in explicitly, rather than relying on a hidden default.
+    void map_flat_ram();
+
     void run_frame();
     void run_frames(std::uint32_t frames);
     void run_cycles(std::uint64_t cycles);
@@ -35,6 +60,17 @@ public:
     std::uint32_t step_cpu_instruction();
     void load_memory(std::uint16_t address, const std::uint8_t* bytes, std::uint32_t size);
     [[nodiscard]] std::uint8_t read_memory(std::uint16_t address) const;
+
+    // Non-perturbing debug seams over the full decode fabric (M13). Unlike
+    // read_memory/load_memory (which are DRAM-direct, segment-independent), these
+    // route through the SlotBus / IoBus exactly as the CPU does, so tests/tools
+    // can inspect slot/sub-slot/mapper resolution without running the CPU. They
+    // do not advance the CPU or the clock.
+    [[nodiscard]] std::uint8_t debug_bus_read(std::uint16_t address);
+    void debug_bus_write(std::uint16_t address, std::uint8_t value);
+    [[nodiscard]] std::uint8_t debug_io_read(std::uint16_t port);
+    void debug_io_write(std::uint16_t port, std::uint8_t value);
+    [[nodiscard]] bool slot_expanded(int primary) const;
     [[nodiscard]] const devices::cpu::Z80aCpu& cpu() const;
     devices::cpu::Z80aCpu& cpu();
     [[nodiscard]] std::uint64_t elapsed_cycles() const;
@@ -134,6 +170,15 @@ private:
     // (re)initialized in cold_boot).
     void wire_bus();
 
+    // Cold-boot RAM power-on content (A-5): the XML `initialContent` alternating
+    // 00/FF pattern (Sony_HB-F1XV.xml:129) decoded + repeat-filled across 64 KB,
+    // matching openMSX Ram::clear (references/openmsx-21.0/src/memory/Ram.cc:37-78).
+    void initialize_dram_pattern();
+
+    // (Re)load the local bios/ ROM images into the ROM devices from asset_root_,
+    // applying the deterministic missing-asset policy; records diagnostics.
+    void load_rom_assets();
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion vram_{kVramBytes};
@@ -143,12 +188,25 @@ private:
     // decode fabrics and the residual engine layer; the CPU talks to SystemBus.
     devices::chipset::SlotBus slot_bus_;
     devices::chipset::IoBus io_bus_;
-    RamSlotBacking dram_backing_{dram_};        // slot 3-0 main RAM (fact-sheet §9)
     devices::chipset::PpiSlotSelect ppi_slot_select_{slot_bus_};  // #A8 (+#AC mirror)
-    devices::chipset::MapperIo mapper_io_;      // #FC-#FF mapper readback
+    devices::chipset::MapperIo mapper_io_;      // #FC-#FF mapper readback (segment owner)
     devices::chipset::SwitchedIoController switched_io_;  // #40-#4F switched I/O
     devices::chipset::S1985Engine s1985_engine_;  // backup RAM ID 0xFE + M1 wait
+
+    // CPU-addressable memory devices (M13). The mapper RAM consumes mapper_io_'s
+    // live segments; the ROM devices are read-only windows over the loaded images.
+    // Window base/size come from the Sony_HB-F1XV.xml `<mem>` placements (§2).
+    devices::memory::MemoryMapperRam ram_mapper_{dram_, mapper_io_};  // slot 3-0 p0-3
+    devices::memory::RomDevice bios_rom_{0x0000, 0x8000};   // slot 0-0 p0-1 (BIOS+BASIC)
+    devices::memory::RomDevice sub_rom_{0x0000, 0x4000};    // slot 3-1 p0   (SUB)
+    devices::memory::RomDevice kanji_rom_{0x4000, 0x8000};  // slot 3-1 p1-2 (Kanji driver)
+    devices::memory::RomDevice disk_rom_{0x4000, 0x4000};   // slot 3-2 p1   (DISK presence)
+    devices::memory::RomDevice fmmusic_rom_{0x4000, 0x4000};  // slot 3-3 p1 (FM-MUSIC presence)
+
     devices::chipset::SystemBus bus_{slot_bus_, io_bus_};
+
+    std::filesystem::path asset_root_{"bios"};
+    std::vector<std::string> rom_diagnostics_;
 
     devices::cpu::CpuBusClient cpu_bus_client_;
     devices::cpu::Z80aCpu cpu_;

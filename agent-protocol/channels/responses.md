@@ -851,3 +851,57 @@ Use this format:
 - Re: REQ-M12-005 (coordinator auto-close under DEC-0003 grant)
 - Outcome: M12 CLOSED by coordinator under the DEC-0003 standing auto-close grant. Condition verified met: QA-executed ctest 45/45 (100%, 0 failed, 0 skipped), ZERO regression across M1-M12, QA recommendation PASS. No further human release decision required for M12 per DEC-0003. Status set Done in milestones.md; definition-of-done.yaml M12 overall_done: true. Git tag v1.0.12 created at the closure commit. HALT-R (#34) deferral formalized as DEC-0004. Proceeding to M13 (memory) per the human directive "after M12 is closed, then move onto M13"; M13 retains the normal human-release-decision gate.
 - Responded At: 2026-07-06T11:20:00+09:00
+
+---
+
+- Response ID: RESP-M13-002
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M13
+- Re: REQ-M13-002 (planning package)
+- Outcome: DELIVERED. `docs/m13-planner-package.md` (no production code).
+- Slot map (from Sony_HB-F1XV.xml): slot 0-0 BIOS+BASIC 32K pages 0-1 (reset origin); 0-3 MSX-JE 1M Halnote+SRAM DEFERRED; slots 1,2 external cartridges; 3-0 Main RAM MemoryMapper 64K (4x16K); 3-1 SUB 16K p0 + Kanji driver 32K p1-2; 3-2 DISK 16K p1 presence-only; 3-3 FM-MUSIC 16K p1 presence-only; Kanji font 256K via I/O #D8-#DB (not memory-mapped). CORRECTION vs M11: slot 0 is ALSO expanded (set_expanded(0,true)), not only slot 3.
+- Asset->slot: f1xvbios->0-0, f1xvext->3-1 p0, f1xvkdr->3-1 p1-2, f1xvdisk->3-2 p1, f1xvmus->3-3 p1; f1xvkfn (I/O, deferred), f1xvfirm (Halnote, deferred), aleste (cartridge, deferred). Missing-asset policy: 0xFF-fill + logged diagnostic (no silent zero-fill, no fabricated SHA); real SHAs via tools/checksum-assets.ps1.
+- src/ placement: new src/devices/memory/{rom_device,memory_mapper_ram}.{h,cpp}; machine src/machine/rom_asset_loader.{h,cpp} + hbf1xv_machine edits, retiring ram_slot_backing.*. Double-owning resolved: M11 MapperIo remains sole owner of #FC-FF segments + 100xxxxx readback; MemoryMapperRam is a pure consumer via MapperIo::segment(page). Readback 5-bit &0x1F vs physical 2-bit &3 masks differ authentically.
+- Slices: S1 memory device layer (RomDevice + MemoryMapperRam) + unit tests; S2 asset loader + missing-asset policy; S3 slot population wiring (expand slots 0 & 3, RAM init pattern, keeps #A8=0xFF to stay green); S4 reset-flip #A8=0xFF->0 + boot checkpoint + M11/M12 suite reconciliation; S5 A/B trace-diff + regression close.
+- Reset-flip + boot checkpoint: cold_boot sets authentic #A8=0 (page0->slot 0-0 BIOS, PC=0 fetches BIOS byte0); checkpoint asserts bus[0]==BIOS image[0] then single-steps bounded K instrs asserting each fetched opcode==slot-resolved ROM byte (golden self-derived). Reconciliation: update M11 test pinning #A8=0xFF to #A8=0; add documented map_flat_ram() so existing CPU-over-RAM program tests page RAM explicitly (segments {0,1,2,3}) — no silent weakening (mirrors M11 R-3).
+- A/B: extend tools/openmsx-trace-parity.ps1 vs openMSX Sony_HB-F1XV; subjects (1) BIOS-boot checkpoint diff bounded before first VDP #98/#99 access, (2) BIOS-independent RAM/ROM probe (read BIOS bytes, mapper RAM r/w, segment switch->100xxxxx). VRAM excluded (M14). No parity claim without genuine capture.
+- Top risks: R-1/A-2 reset-flip reroutes page0 RAM->BIOS (mitigate map_flat_ram + justified test updates); R-2 segment folding vs flat-RAM (linear debug accessors + map_flat_ram); R-3/A-5 XML RAM initialContent alternating 00/FF not zero (may update M10 dump golden); R-5/A-4 cold-boot segment defaults must be read from references/openmsx-21.0/src/memory/MSXMemoryMapper.cc in S1; R-4 openMSX BIOS-ROM presence for boot A/B.
+- Responded At: 2026-07-06T11:45:00+09:00
+
+- Response ID: RESP-M13-003
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M13
+- Re: REQ-M13-003 (implementation S1..S5)
+- Outcome: DELIVERED. QA sign-off left to QA.
+- Files: new src/devices/memory/{rom_device,memory_mapper_ram}.{h,cpp} + README; new src/machine/rom_asset_loader.{h,cpp}; edited src/machine/hbf1xv_machine.{h,cpp} (slot population, set_expanded(0&3), #A8=0 reset flip, A-5 RAM pattern, asset load, map_flat_ram(), non-perturbing debug bus/IO seams), src/main.cpp (--bios-boot-trace + map_flat_ram in --parity-trace), CMakeLists.txt. RETIRED src/machine/ram_slot_backing.{h,cpp} (superseded by MemoryMapperRam; MapperIo remains sole owner of #FC-FF + 100xxxxx readback, RAM device only consumes segments). New tools/openmsx-mem-parity.ps1, tests/parity/m13_mem_probe.bin, docs/m13-parity-trace-diff.md, refreshed docs/asset-checksums.txt, docs/m13-implementation-report.md.
+- Tests: +5 new executables (ROM device, mapper RAM, asset loader, BIOS boot checkpoint, M13 mem-parity checkpoint). Total 50/50 ctest pass on clean rebuild, 0 failed. Build succeeds (pre-existing C4819 warnings only, 0 errors).
+- Prior suites: all M0-M12 green; tests touched by reset-flip / segment-folding / A-5 pattern updated to authentic values with documented justification (report §8), never weakened. Notable: hbf1xv_slot_map + hbf1xv_system_bus rewritten (register-capture, mapper-safe); cpu_parity OUTI retargeted #FC->#FD (page-1) because the now-real mapper would remap the executing page; debug_dump DRAM golden asserts whole 64KB A-5 pattern via production serializer; memory_regions DRAM zero-init -> A-5 pattern.
+- Boot checkpoint: authentic #A8=0 boots slot-0 BIOS; bus[0x0000]==BIOS[0]==0xF3 (not open bus); every fetched opcode over 32 steps matches BIOS image; deterministic; reaches PC=0x0448.
+- A/B (real captures vs openMSX 19.1 Sony_HB-F1XV on WSL): both subjects ARCHITECTURAL PARITY, empty diff — RAM/ROM probe 13/13 (RAM=0xEE, mapper readback=0x85, BIOS byte=0xF3); BIOS-boot checkpoint clean at K=24 and extended to K=200. Local BIOS SHA1s exactly match the XML "confirmed by Meits" revisions, so both emulators run identical images.
+- Blockers: none.
+- Responded At: 2026-07-06T12:30:00+09:00
+
+- Response ID: RESP-M13-004
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M13
+- Re: REQ-M13-004 (regression assessment + sign-off)
+- Outcome: PASS (recommendation). Sign-off `docs/m13-qa-signoff.md`. M13 retains normal human-release gate.
+- QA-executed ctest: QA rebuilt Debug (exit 0) + ran ctest itself -> 50/50 passed, 0 failed.
+- Regression/weakening: NONE. Spot-checks authentic: (1) cpu_parity OUTI #FC->#FD retarget legitimate — under the now-real mapper OUT(#FC),0xFF would fold page-0 segment to physical 0xC000 and corrupt the executing page; #FD targets an unused page while keeping OUTI carry/counter/dispatch/readback (0x9F) + timing oracle (45) identical. (2) debug_dump DRAM golden authentic + strengthened — QA decoded the XML gz-base64 initialContent with zlib = (00,FF)*128 + (FF,00)*128, matches code+test; CPU golden (A=2D F=28 PC=0006 R=04 TSTATES=22) unchanged so M12 CPU behavior untouched.
+- Boot checkpoint: GENUINE. Golden self-derived from real f1xvbios.rom, per-fetch opcode==bios[pc], asserts byte0!=open-bus + PC advances. QA run advanced PC 0x0000->0x043C through real BIOS (F3 DI -> C3 JP 0x0416 -> AF).
+- A/B + SHA1: QA independently computed all 5 local BIOS SHA1s -> all match XML "confirmed by Meits" revisions (both emulators run identical images). QA drove real openMSX Sony_HB-F1XV on WSL and reproduced the boot subject: trace-diff.py exit 0 (EMPTY DIFF) over 24 instructions. Comparator not rigged: corrupt B register -> exit 1 DIVERGENCE with concrete row; empty B -> exit 2 BLOCKED. QA evidence: build/qa_boot_A.txt, qa_boot_B.txt, qa_boot_diff.md.
+- Also verified: single owner of #FC-FF (only mapper_io_; MemoryMapperRam is a pure const& consumer); ram_slot_backing.* deleted; slot population matches Sony_HB-F1XV.xml with both slots 0 & 3 expanded; missing-asset policy deterministic (0xFF-fill + diagnostic, no fabricated provenance).
+- Residual disposition: R-6/D-3/D-4/D-5 accepted-and-tracked to named future milestones (FDC, FM-PAC, Halnote, Kanji-font I/O, cartridge); cross-emulator cycle parity out of scope as in prior milestones.
+- Recommendation: PASS. Ready for human release decision.
+- Responded At: 2026-07-06T12:45:00+09:00
+
+- Response ID: RESP-M13-005
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M13
+- Re: REQ-M13-005 / DEC-0006 (human release decision + tag)
+- Outcome: M13 CLOSED. Status Done in milestones.md; definition-of-done.yaml M13 overall_done: true. Git tag v1.0.13 at the closure commit. Deferred-scope backlog established at agent-protocol/state/deferred-backlog.md (DEC-0005) capturing PSG, RTC, FM-PAC internals + MSX-JE SRAM, Kanji-font #D8-DB I/O, Halnote firmware, cartridge loading, FDC drive mechanics, VRAM/VDP (B9 -> M14), plus other known deferrals (cycle timing, HALT-R, ZEXALL, .sram persistence, keyboard/joystick, printer/cassette, speed/pause, SDL3). Every future planner must consult it (DEC-0005). Proceeding to M14 (V9958 VDP), normal human-release-decision gate.
+- Responded At: 2026-07-06T13:00:00+09:00

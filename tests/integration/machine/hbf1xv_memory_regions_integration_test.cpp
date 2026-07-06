@@ -31,6 +31,9 @@ int main() {
 
     Hbf1xvMachine machine;
     machine.cold_boot();
+    // Authentic reset boots slot-0 BIOS (#A8=0). This test loads + runs a program
+    // from RAM, so page the flat 64 KB mapper RAM in explicitly (M13-S4).
+    machine.map_flat_ram();
 
     // CPU-visible DRAM alias coherence: load_memory writes the DRAM region and
     // read_memory + the region accessor observe the same bytes.

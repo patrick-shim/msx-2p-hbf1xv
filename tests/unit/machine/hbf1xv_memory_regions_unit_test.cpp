@@ -41,6 +41,30 @@ bool region_all_zero(const sony_msx::machine::MemoryRegion& region) {
     return snapshot.size() == region.size();
 }
 
+// M13 A-5: main RAM powers on with the XML alternating 00/FF initialContent
+// (Sony_HB-F1XV.xml:129) — the 512-byte pattern (00,FF x128 then FF,00 x128)
+// repeated across 64 KB, matching openMSX Ram::clear. It is NOT all-zero.
+std::uint8_t a5_byte(const std::size_t index) {
+    const std::size_t p = index & 0x1FFu;
+    if (p < 256) {
+        return (p & 1u) ? 0xFF : 0x00;
+    }
+    return (p & 1u) ? 0x00 : 0xFF;
+}
+
+bool region_matches_a5_pattern(const sony_msx::machine::MemoryRegion& region) {
+    const std::vector<std::uint8_t> snapshot = region.dump();
+    if (snapshot.size() != region.size()) {
+        return false;
+    }
+    for (std::size_t i = 0; i < snapshot.size(); ++i) {
+        if (snapshot[i] != a5_byte(i)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 int main() {
@@ -58,8 +82,10 @@ int main() {
     expect_size(machine.vram().size(), 128u * 1024u, "VramRegion_Size_Matches");
     expect_size(machine.sram().size(), 8u * 1024u, "SramRegion_Size_Matches");
 
-    // Deterministic zero-init at cold boot.
-    expect(region_all_zero(machine.dram()), "ColdBoot_Dram_ZeroInitialized");
+    // Deterministic power-on content at cold boot. DRAM carries the XML A-5
+    // alternating 00/FF pattern (M13, justified update from the M10 zero-init
+    // assumption); VRAM and FM-PAC SRAM remain zero-initialized.
+    expect(region_matches_a5_pattern(machine.dram()), "ColdBoot_Dram_A5AlternatingPattern");
     expect(region_all_zero(machine.vram()), "ColdBoot_Vram_ZeroInitialized");
     expect(region_all_zero(machine.sram()), "ColdBoot_Sram_ZeroInitialized");
 
@@ -110,9 +136,10 @@ int main() {
     expect(small.read(2) == 1 && small.read(3) == 2, "Load_PastEnd_ClampsDeterministically");
     expect(small.size() == 4, "Load_PastEnd_SizeUnchanged");
 
-    // Cold boot re-zeros every region deterministically.
+    // Cold boot re-initializes every region deterministically (DRAM -> A-5
+    // pattern, VRAM/SRAM -> zero).
     machine.cold_boot();
-    expect(region_all_zero(machine.dram()), "ColdBootAgain_Dram_ReZeroed");
+    expect(region_matches_a5_pattern(machine.dram()), "ColdBootAgain_Dram_ReInitializedToA5Pattern");
     expect(region_all_zero(machine.vram()), "ColdBootAgain_Vram_ReZeroed");
     expect(region_all_zero(machine.sram()), "ColdBootAgain_Sram_ReZeroed");
 

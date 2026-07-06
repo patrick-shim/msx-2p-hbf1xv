@@ -32,6 +32,7 @@ int main() {
     {
         sony_msx::machine::Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // ISR + program run from RAM; page flat 64K RAM (M13-S4)
         machine.cpu().set_interrupt_mode(InterruptMode::Im2);
         machine.cpu().state().set_iff1(true);
         machine.cpu().state().regs().i = 0x40;
@@ -81,6 +82,7 @@ int main() {
     {
         sony_msx::machine::Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // ISR + program run from RAM; page flat 64K RAM (M13-S4)
         machine.cpu().set_interrupt_mode(InterruptMode::Im0);
         machine.cpu().state().set_iff1(true);
 

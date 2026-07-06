@@ -21,9 +21,11 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/switched_io.cpp
     src/devices/chipset/s1985_engine.cpp
     src/devices/chipset/system_bus.cpp
+    src/devices/memory/rom_device.cpp
+    src/devices/memory/memory_mapper_ram.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
-    src/machine/ram_slot_backing.cpp
+    src/machine/rom_asset_loader.cpp
     src/machine/cpu_trace_sink.cpp
     src/machine/memory_region.cpp
     src/machine/debug_dump.cpp

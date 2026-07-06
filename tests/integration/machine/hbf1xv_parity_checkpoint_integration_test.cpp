@@ -100,6 +100,7 @@ const char* kGoldenTrace =
 std::string run_parity_trace() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM at 0xC000 (page 3); page flat 64K RAM (M13-S4)
     machine.load_memory(kBase, kParityProgram.data(),
                         static_cast<std::uint32_t>(kParityProgram.size()));
     machine.cpu().state().regs().pc = kBase;
@@ -115,6 +116,7 @@ std::string run_parity_trace() {
 int main() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM at 0xC000 (page 3); page flat 64K RAM (M13-S4)
     machine.load_memory(kBase, kParityProgram.data(),
                         static_cast<std::uint32_t>(kParityProgram.size()));
     machine.cpu().state().regs().pc = kBase;

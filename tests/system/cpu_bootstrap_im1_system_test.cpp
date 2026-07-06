@@ -21,6 +21,7 @@ int main() {
     // Suite: System_CpuBootstrapIm1_System
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // bootstrap program runs from RAM page 0 (M13-S4)
 
     if (!expect_true(machine.cpu().state().interrupt_mode() == sony_msx::devices::cpu::InterruptMode::Im1,
             "ColdBoot_InitialState_DefaultsToIm1")) {

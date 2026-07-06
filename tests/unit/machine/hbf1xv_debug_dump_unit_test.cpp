@@ -1,11 +1,14 @@
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
+#include <vector>
 
+#include "machine/debug_dump.h"
 #include "machine/hbf1xv_machine.h"
 
 namespace {
@@ -26,9 +29,37 @@ const std::array<std::uint8_t, 6> kProgram{
     0x76,        // HALT
 };
 
+// M13 A-5: main RAM powers on with the XML alternating 00/FF initialContent
+// (Sony_HB-F1XV.xml:129), not all-zero. The 512-byte pattern (00,FF x128 then
+// FF,00 x128) is repeated over 64 KB.
+std::uint8_t a5_byte(const std::size_t index) {
+    const std::size_t p = index & 0x1FFu;
+    if (p < 256) {
+        return (p & 1u) ? 0xFF : 0x00;
+    }
+    return (p & 1u) ? 0x00 : 0xFF;
+}
+
+// The exact expected [DRAM] dump section, built independently of the machine
+// from the A-5 pattern with the program bytes overwritten at 0x0000, then run
+// through the SAME production serializer (debug_dump::serialize_region). This
+// asserts the ENTIRE 64 KB region byte-for-byte (stronger than the M10 partial
+// substring, whose all-zero fold no longer holds post A-5).
+std::string expected_dram_section() {
+    std::vector<std::uint8_t> dram(64u * 1024u);
+    for (std::size_t i = 0; i < dram.size(); ++i) {
+        dram[i] = a5_byte(i);
+    }
+    for (std::size_t i = 0; i < kProgram.size(); ++i) {
+        dram[i] = kProgram[i];  // program (no memory writes) overwrites 0x0000..0x0005
+    }
+    return sony_msx::machine::debug_dump::serialize_region("DRAM", dram.data(), dram.size());
+}
+
 std::string run_dump() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // run the program from RAM (M13-S4, authentic #A8=0 boots BIOS)
     machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     for (int i = 0; i < 4; ++i) {
         machine.step_cpu_instruction();
@@ -77,17 +108,21 @@ int main() {
         return 1;
     }
 
-    // --- DRAM region: program bytes on the first line, folded zeros, framed. ---
-    // Line 0 carries the program bytes; line 1 (first all-zero line) differs
-    // from line 0 so it is emitted verbatim; identical zero lines after it fold
-    // into a single '*'; the final line is always emitted verbatim.
-    const std::string expected_dram =
-        "[DRAM] size=65536\n"
-        "00000000 3E 2A 06 03 80 76 00 00 00 00 00 00 00 00 00 00\n"
-        "00000010 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n"
-        "*\n"
-        "0000FFF0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n";
-    if (!expect_true(contains(dump, expected_dram), "Dump_DramRegion_FoldedHexExact")) {
+    // --- DRAM region: program bytes on the first line, then the A-5 alternating
+    //     00/FF power-on pattern, hex-folded and framed. The whole 64 KB section
+    //     is checked byte-for-byte via the production serializer over an
+    //     independently-built expected buffer (M13-S4 justified update from the
+    //     M10 all-zero golden; A-5 / R-3). ---
+    const std::string expected_dram = expected_dram_section();
+    if (!expect_true(contains(dump, expected_dram), "Dump_DramRegion_A5PatternFoldedHexExact")) {
+        std::cerr << "  --- expected DRAM head ---\n" << expected_dram.substr(0, 200) << "\n";
+        return 1;
+    }
+    // Sanity anchors: the first data line carries the program bytes then the
+    // pattern tail, and the last line is the FF,00 half of the pattern.
+    if (!expect_true(contains(dump, "[DRAM] size=65536\n"
+                                    "00000000 3E 2A 06 03 80 76 00 FF 00 FF 00 FF 00 FF 00 FF\n"),
+                     "Dump_DramRegion_FirstLine_ProgramThenPattern")) {
         return 1;
     }
 
@@ -124,6 +159,7 @@ int main() {
     {
         sony_msx::machine::Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // run program from RAM (M13-S4)
         machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
         for (int i = 0; i < 4; ++i) {
             machine.step_cpu_instruction();
@@ -158,6 +194,7 @@ int main() {
         sony_msx::machine::Hbf1xvMachine machine;
         machine.set_debug_root(root);
         machine.cold_boot();
+        machine.map_flat_ram();  // run program from RAM (M13-S4)
         machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
         for (int i = 0; i < 4; ++i) {
             machine.step_cpu_instruction();

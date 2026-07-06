@@ -52,6 +52,48 @@ add_executable(devices_chipset_mapper_io_unit_test
 target_link_libraries(devices_chipset_mapper_io_unit_test PRIVATE sony_msx_core)
 add_test(NAME devices_chipset_mapper_io_unit_test COMMAND devices_chipset_mapper_io_unit_test)
 
+# --- M13 memory devices + asset loader --------------------------------------
+# Absolute path to the repo bios/ directory so tests that need real ROM images
+# (asset loader, slot map, boot checkpoint, mem parity) do not depend on cwd.
+set(SONY_MSX_BIOS_DIR_ABS "${CMAKE_SOURCE_DIR}/bios")
+
+add_executable(devices_memory_rom_device_unit_test
+    unit/devices/memory_rom_device_unit_test.cpp
+)
+target_link_libraries(devices_memory_rom_device_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_memory_rom_device_unit_test COMMAND devices_memory_rom_device_unit_test)
+
+add_executable(devices_memory_mapper_ram_unit_test
+    unit/devices/memory_mapper_ram_unit_test.cpp
+)
+target_link_libraries(devices_memory_mapper_ram_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_memory_mapper_ram_unit_test COMMAND devices_memory_mapper_ram_unit_test)
+
+add_executable(machine_rom_asset_loader_unit_test
+    unit/machine/rom_asset_loader_unit_test.cpp
+)
+target_link_libraries(machine_rom_asset_loader_unit_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_rom_asset_loader_unit_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_rom_asset_loader_unit_test COMMAND machine_rom_asset_loader_unit_test)
+
+add_executable(machine_hbf1xv_bios_boot_integration_test
+    integration/machine/hbf1xv_bios_boot_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_bios_boot_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_bios_boot_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_bios_boot_integration_test COMMAND machine_hbf1xv_bios_boot_integration_test)
+
+add_executable(machine_hbf1xv_m13_mem_parity_checkpoint_integration_test
+    integration/machine/hbf1xv_m13_mem_parity_checkpoint_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m13_mem_parity_checkpoint_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m13_mem_parity_checkpoint_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m13_mem_parity_checkpoint_integration_test
+    COMMAND machine_hbf1xv_m13_mem_parity_checkpoint_integration_test)
+
 add_executable(devices_chipset_m1_wait_unit_test
     unit/devices/chipset_m1_wait_unit_test.cpp
 )
@@ -164,6 +206,8 @@ add_executable(machine_hbf1xv_slot_map_unit_test
     unit/machine/hbf1xv_slot_map_unit_test.cpp
 )
 target_link_libraries(machine_hbf1xv_slot_map_unit_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_slot_map_unit_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_slot_map_unit_test COMMAND machine_hbf1xv_slot_map_unit_test)
 
 add_executable(machine_hbf1xv_debug_dump_unit_test

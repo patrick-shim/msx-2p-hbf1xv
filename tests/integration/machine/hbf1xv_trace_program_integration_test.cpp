@@ -29,6 +29,7 @@ const std::array<std::uint8_t, 6> kProgram{
 std::string run_traced_serialization() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
     machine.set_cpu_trace_enabled(true);
     machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     for (int i = 0; i < 4; ++i) {
@@ -55,6 +56,7 @@ int main() {
     // --- Trace is off by default; stepping records nothing until enabled. ---
     sony_msx::machine::Hbf1xvMachine baseline;
     baseline.cold_boot();
+    baseline.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
     baseline.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     if (!expect_true(!baseline.cpu_trace_enabled() && baseline.cpu_trace().empty(),
                      "DefaultMachine_TraceDisabled_NoRecords")) {
@@ -69,6 +71,7 @@ int main() {
     // --- Enabled trace collects one record per instruction to the checkpoint. ---
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM page 0 (M13-S4)
     machine.set_cpu_trace_enabled(true);
     machine.load_memory(0x0000, kProgram.data(), static_cast<std::uint32_t>(kProgram.size()));
     for (int i = 0; i < 4; ++i) {

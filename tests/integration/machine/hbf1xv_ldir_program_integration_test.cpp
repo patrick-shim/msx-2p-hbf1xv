@@ -27,6 +27,9 @@ bool expect_true(const bool condition, const char* case_name) {
 int main() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    // Authentic reset boots slot-0 BIOS (M13-S4 #A8=0); page flat RAM in for this
+    // CPU-over-RAM program (M11 R-1/R-2).
+    machine.map_flat_ram();
 
     // LD HL,0x4000 ; LD DE,0x5000 ; LD BC,0x0003 ; LDIR ; HALT
     const std::array<std::uint8_t, 12> program{

@@ -154,27 +154,28 @@ milestone_records:
     overall_done: true
     notes: "CLOSED 2026-07-06 (REQ-M12-005, coordinator auto-close per DEC-0003 grant), git tag v1.0.12. Z80A CPU parity hardening. QA PASS (docs/m12-qa-signoff.md): QA-executed ctest 45/45 (+7 suites), zero regression M1-M12 (8 M11 timing oracles unchanged; no T-state/refresh site altered; IM1 ack=14 no double-count). Gaps closed: #3/#35 WZ, #4/#5 BIT-from-WZ, #20/#21 SCF/CCF Q-latch, #30 RETI IFF, #31 NMOS LD A,I/R bug. #34 HALT-R deferred (DEC-0004). A/B empty diff 48/48 vs openMSX 19.1 QA-reproduced + adversarial corruption test. Residuals non-blocking: ZEXALL offline-degraded (acceptance made it 'if feasible'); HALT-R defer. Forward follow-ups: DEC-0004 HALT-R; stand up ZEX if a legal binary appears."
   M13:
-    status: planned
+    status: done
     planning:
-      spec_defined: false
-      scope_in_scope_only: false
-      dependencies_mapped: false
-      acceptance_criteria_defined: false
-      risks_logged: false
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
     implementation:
-      code_changes_scoped_to_milestone: false
-      unit_tests_added_or_updated: false
-      integration_tests_added_or_updated: false
-      build_flow_referenced: false
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
     regression_qa:
-      regression_matrix_updated: false
-      impacted_areas_covered: false
-      blocker_risks_resolved_or_accepted: false
-      signoff_decision_recorded: false
-    overall_done: false
-    notes: "Planned per DEC-0002 (renumbered from M12 by DEC-0003). RAM/ROM memory devices + slot population (VRAM deferred to M14). Depends on M11 bus/slot infrastructure. Carries M11 R-1/A-2 reset-slot-default flip. Retains normal human-release-decision gate."
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # R-6/D-3/D-4/D-5 accepted-tracked to future milestones
+      signoff_decision_recorded: true   # QA PASS (REQ-M13-004), QA-executed ctest 50/50, boot A/B reproduced
+    # Closed by human release decision (DEC-0006 / REQ-M13-005, 2026-07-06); git tag v1.0.13.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (DEC-0006 / REQ-M13-005), git tag v1.0.13. QA PASS (REQ-M13-004, docs/m13-qa-signoff.md). RAM/ROM devices + slot population per Sony_HB-F1XV.xml (slot 0-0 BIOS, 3-0 RAM mapper, 3-1 SUB+Kanji, 3-2 DISK, 3-3 FM-MUSIC; slots 0 & 3 expanded). Machine now BOOTS real BIOS (#A8=0, bus[0]=0xF3 DI, PC advances through BIOS). ctest 50/50 (QA-executed, +5), zero regression (updated tests authentic not weakened; single #FC-FF owner; ram_slot_backing retired). BIOS SHA1s match openMSX 'confirmed by Meits'; both A/B subjects empty diff, QA-reproduced with comparator failure-mode checks. Deferred out-of-scope (tracked): FM-PAC internals+SRAM, Kanji-font I/O #D8-DB, Halnote/MSX-JE firmware, cartridge loading, FDC drive mechanics, VRAM/VDP (M14). Awaiting human release decision + tag v1.0.13."
   M14:
-    status: planned
+    status: planning
     planning:
       spec_defined: false
       scope_in_scope_only: false

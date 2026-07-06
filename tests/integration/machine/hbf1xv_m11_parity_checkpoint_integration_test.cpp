@@ -59,6 +59,7 @@ const char* kGoldenTrace =
 std::string run_probe_trace() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM at 0xC000 (page 3); page flat 64K RAM (M13-S4)
     machine.load_memory(kBase, kProbe.data(), static_cast<std::uint32_t>(kProbe.size()));
     machine.cpu().state().regs().pc = kBase;
     machine.set_cpu_trace_enabled(true);
@@ -73,6 +74,7 @@ std::string run_probe_trace() {
 int main() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    machine.map_flat_ram();  // program runs from RAM at 0xC000 (page 3); page flat 64K RAM (M13-S4)
     machine.load_memory(kBase, kProbe.data(), static_cast<std::uint32_t>(kProbe.size()));
     machine.cpu().state().regs().pc = kBase;
     machine.set_cpu_trace_enabled(true);

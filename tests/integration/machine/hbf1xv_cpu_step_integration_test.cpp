@@ -21,6 +21,9 @@ int main() {
     // Suite: Machine_Hbf1xvCpuStep_Integration
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    // Authentic reset boots slot-0 BIOS (M13-S4 #A8=0). This test runs a program
+    // from RAM, so page the flat 64 KB mapper RAM in explicitly (M11 R-1/R-2).
+    machine.map_flat_ram();
 
     if (!expect_true(machine.cpu().state().interrupt_mode() == sony_msx::devices::cpu::InterruptMode::Im1,
             "ColdBoot_DefaultInterruptMode_Im1")) {

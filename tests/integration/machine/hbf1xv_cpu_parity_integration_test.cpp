@@ -55,6 +55,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4, M11 R-1/R-2)
         // LD A,(0x2820) -> WZ = 0x2821 (hi 0x28: bits 3 and 5); LD HL,0x0200;
         // BIT 0,(HL) sources X/Y from WZ hi = 0x28 -> X and Y set; HALT.
         const std::array<std::uint8_t, 9> program{
@@ -80,6 +81,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4, M11 R-1/R-2)
         // LD A,0x00 ; CP 0x20 (F.Y set from operand, Q=F, A=0) ; SCF ; HALT.
         // Genuine Zilog: X/Y moved from A(=0) -> 0. openMSX OR-form would set Y.
         const std::array<std::uint8_t, 5> program{
@@ -101,11 +103,15 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
-        // LD BC,0x02FC ; LD HL,0x0300 ; OUTI ; HALT.
-        // (HL)=0xFF -> written to mapper port 0xFC. After: B=0x01, HL=0x0301,
+        machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4, M11 R-1/R-2)
+        // LD BC,0x02FD ; LD HL,0x0300 ; OUTI ; HALT.
+        // (HL)=0xFF -> written to mapper port 0xFD. After: B=0x01, HL=0x0301,
         // k = data(0xFF) + newL(0x01) = 0x100 > 255 -> carry set (NMOS behavior).
+        // M13-S4: the mapper is now REAL, so the OUTI targets the PAGE-1 segment
+        // register (#FD), not #FC — writing #FC (page 0) would remap the very page
+        // the code executes from. Dispatch/readback behaviour is identical.
         const std::array<std::uint8_t, 9> program{
-            0x01, 0xFC, 0x02,  // LD BC,0x02FC
+            0x01, 0xFD, 0x02,  // LD BC,0x02FD
             0x21, 0x00, 0x03,  // LD HL,0x0300
             0xED, 0xA3,        // OUTI
             0x76,              // HALT
@@ -126,13 +132,15 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
-        // OUTI writes 0xFF to mapper port 0xFC; mapper stores val & 0x1F and reads
-        // back 0x80 | (val & 0x1F) = 0x9F -> proves dispatch keyed on port & 0xFF.
+        machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4, M11 R-1/R-2)
+        // OUTI writes 0xFF to mapper port 0xFD (PAGE-1 segment; #FC would remap the
+        // executing page under the real M13 mapper). Readback 0x80 | (0xFF & 0x1F)
+        // = 0x9F -> proves dispatch keyed on port & 0xFF.
         const std::array<std::uint8_t, 12> program{
-            0x01, 0xFC, 0x02,  // LD BC,0x02FC
+            0x01, 0xFD, 0x02,  // LD BC,0x02FD
             0x21, 0x00, 0x03,  // LD HL,0x0300
-            0xED, 0xA3,        // OUTI  -> port 0xFC
-            0xDB, 0xFC,        // IN A,(0xFC)  -> readback
+            0xED, 0xA3,        // OUTI  -> port 0xFD
+            0xDB, 0xFD,        // IN A,(0xFD)  -> readback
             0x76,              // HALT
         };
         machine.load_memory(0x0000, program.data(), static_cast<std::uint32_t>(program.size()));
@@ -149,6 +157,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4, M11 R-1/R-2)
         // Main: EI ; NOP ; NOP ; HALT.
         const std::array<std::uint8_t, 4> main_program{0xFB, 0x00, 0x00, 0x76};
         machine.load_memory(0x0000, main_program.data(),
@@ -188,14 +197,17 @@ int main() {
     // Program: LD BC,nn(10) + LD HL,nn(10) + OUTI(16) + HALT(4) = 40 datasheet.
     // M1 cycles: 1 + 1 + 2(ED A3) + 1 = 5 -> +5 S1985 M1 wait -> 45 total.
     {
+        // OUTI targets #FD (page-1 mapper segment) so the real M13 mapper does not
+        // remap the executing page-0 code; timing is unchanged (M13-S4).
         const std::array<std::uint8_t, 9> program{
-            0x01, 0xFC, 0x02, 0x21, 0x00, 0x03, 0xED, 0xA3, 0x76,
+            0x01, 0xFD, 0x02, 0x21, 0x00, 0x03, 0xED, 0xA3, 0x76,
         };
         auto run_once = []() {
             Hbf1xvMachine machine;
             machine.cold_boot();
+            machine.map_flat_ram();  // CPU-over-RAM program; page flat 64K RAM (M13-S4)
             const std::array<std::uint8_t, 9> prog{
-                0x01, 0xFC, 0x02, 0x21, 0x00, 0x03, 0xED, 0xA3, 0x76,
+                0x01, 0xFD, 0x02, 0x21, 0x00, 0x03, 0xED, 0xA3, 0x76,
             };
             machine.load_memory(0x0000, prog.data(), static_cast<std::uint32_t>(prog.size()));
             const std::uint8_t data = 0xFF;

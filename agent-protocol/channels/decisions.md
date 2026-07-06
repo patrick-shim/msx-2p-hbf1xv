@@ -47,3 +47,19 @@ Use this format:
 - Impacted Milestones: M12 (closed with #34 accepted-deferred), future timing-fidelity milestone (owner of #34).
 - Risk Notes: Deferral is not a correctness waiver — #34 affects only halted-state R-register/refresh timing, invisible to normal instruction-stream execution and to the ZEXALL rubric. Revisit when exact cycle/T-state timing (DP-4) is scoped.
 - Effective Date: 2026-07-06
+
+- Decision ID: DEC-0005
+- Requested By: Human (project owner) on 2026-07-06: "keep all of which you mentioned deferred item PSG, or RTC ... FM-PAC internals + MSX-JE SRAM, Kanji-font #D8-DB I/O, Halnote firmware, cartridge loading, FDC drive mechanics, and VRAM/VDP (M14) recorded for later milestone reference for planner so no one misses a bit."
+- Approved By: Human (project owner, source of truth).
+- Decision: Establish `agent-protocol/state/deferred-backlog.md` as the AUTHORITATIVE registry of deferred-but-committed scope. Every future planner package MUST consult it and explicitly state which backlog items the milestone closes and re-affirm the remainder as still-open; the coordinator marks an item DONE (Mxx) in the same cycle it closes (rows are never deleted — history is preserved). Nothing in the backlog is a scope waiver; each item is committed scope from the project baseline / Target Machine Specification, merely sequenced later. The initial registry captures the human-listed items (PSG, RTC, FM-PAC internals + MSX-JE SRAM, Kanji-font #D8-DB I/O, Halnote firmware, cartridge loading, FDC drive mechanics, VRAM/VDP->M14) plus other known deferrals from M9-M13 (exact cycle timing DP-4, HALT-R #34 per DEC-0004, ZEXALL sweep, S1985 .sram persistence, keyboard/joystick DP-5, printer/cassette, Sony speed/pause + Ren-Sha Turbo, SDL3 frontend).
+- Impacted Milestones: all future milestones (planner obligation); M14 owns backlog item B9 (VRAM/VDP).
+- Risk Notes: The backlog must be kept current every cycle or it silently rots — treat "update backlog" as part of milestone closure. It complements (does not replace) `state/milestones.md`.
+- Effective Date: 2026-07-06
+
+- Decision ID: DEC-0006
+- Requested By: Human (project owner) on 2026-07-06: "let's moved to M14 and close M13."
+- Approved By: Human (project owner, source of truth) — release decision.
+- Decision: CLOSE M13 (RAM/ROM Memory Devices & Slot Population) on the strength of QA PASS (REQ-M13-004, `docs/m13-qa-signoff.md`): QA-executed ctest 50/50, zero regression, machine boots real BIOS in lockstep with openMSX (SHA1-identical images), single mapper-register owner, updated tests audited authentic. Tag the closure snapshot `v1.0.13`. Proceed to M14 (V9958 VDP). M14 uses the NORMAL human-release-decision gate (no auto-close grant unless separately granted); autopilot will pause at M14 QA sign-off for the human decision.
+- Impacted Milestones: M13 (closed), M14 (opened; normal gate).
+- Risk Notes: M14 (V9958 VDP + 128 KB VRAM) is the most complex chip in the system — must be sliced into deterministic increments; no A/B parity claim without a genuine captured trace-diff (guardrails, DEC-0001 precedent). Closes backlog item B9.
+- Effective Date: 2026-07-06
