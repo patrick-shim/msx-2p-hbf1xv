@@ -217,7 +217,7 @@ milestone_records:
     overall_done: true
     notes: "CLOSED 2026-07-06 (DEC-0010 / REQ-M15-005), git tag v1.0.15. QA PASS (REQ-M15-004, docs/m15-qa-signoff.md). Device integration + S1985 chipset fully wired: PSG/YM2149 (numeric), RTC/RP5C01 (in-memory deterministic epoch), full i8255 PPI + keyboard + joystick, S1985 backup-RAM .sram persistence, boot-checkpoint advance. ctest 64/64 (QA-executed, +8), zero regression (X4 CPU timing untouched, M9/M12 oracles green unchanged; X1 #A8 preserved byte-for-byte). openMSX A/B empty diff 15/15 QA-reproduced (substantive PSG R0/R7). Boot advanced ~0x043C -> PC 0x454/max 0x488 (deterministic). Backlog B1/B2/C4/C6 -> DONE (M15); C5 IN-PROGRESS (full boot needs FDC/M16). Awaiting human release decision + tag v1.0.15. Stale-status drift (QA-found) corrected same-cycle."
   M16:
-    status: implementation
+    status: done
     planning:
       spec_defined: true
       scope_in_scope_only: true
