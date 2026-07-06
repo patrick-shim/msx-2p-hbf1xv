@@ -34,7 +34,7 @@ milestone reference so "no one misses a bit":
 | B6 | **Halnote / MSX-JE firmware mapping** — slot 0-3, 1 MB `bios/f1xvfirm.rom`, `mappertype=Halnote` + SRAM; M13 left it reserved open-bus | OPEN | M13 | Halnote/firmware milestone | Sony_HB-F1XV.xml (slot 0-3 Halnote) |
 | B7 | **Cartridge loading** — external primary slots 1 & 2 (`roms/aleste.rom` sample); M13 left them empty | OPEN | M13 | Cartridge/slot-manager milestone | Sony_HB-F1XV.xml (slots 1,2); Target Machine Spec (2 cartridge slots) |
 | B8 | **FDC drive mechanics** — Fujitsu MB89311 controller + 720 KB 3.5" drive behavior; M13 mapped only the DISK ROM presence (slot 3-2) | OPEN | M13 | FDC milestone | `references/fact-sheets/FDC for Sony HB-F1XV.md`; Target Machine Spec (BUILT-IN MEDIA) |
-| B9 | **VRAM / V9958 VDP** — 128 KB VRAM owned by the VDP; the display processor | IN-PROGRESS (M14) | DEC-0002 / M13 | **M14 (active)** | `references/fact-sheets/Yamaha V9958 VDP.md`; `references/openmsx-21.0/src/video/` |
+| B9 | **VRAM / V9958 VDP** — 128 KB VRAM owned by the VDP; the display processor (register/VRAM/status/interrupt CONTRACT; rendering DEPTH split to D1-D7) | DONE (M14) | DEC-0002 / M13 | M14 (closed, v1.0.14) | `references/fact-sheets/Yamaha V9958 VDP.md`; `references/openmsx-21.0/src/video/` |
 
 ## B. Other known deferrals (tracked from earlier milestones / decisions)
 
@@ -50,6 +50,25 @@ milestone reference so "no one misses a bit":
 | C8 | **Sony speed-controller + hardware PAUSE (MB670836); Ren-Sha Turbo autofire** — HB-F1XV-specific | OPEN | baseline | HB-F1XV-specifics milestone | S1985 fact-sheet §9; Zilog Z80A fact-sheet §6 |
 | C9 | **SDL3 frontend** (video/audio/input presentation) — in baseline scope, not yet built | OPEN | baseline | Frontend milestone | `references/sdl3/`; project-baseline Scope |
 
+## C. M14 VDP-depth deferrals (recorded by the M14 planner, REQ-M14-002)
+
+M14 delivers the V9958 register/VRAM/status/interrupt CONTRACT (device-level, unit- +
+A/B-verifiable) so software can drive the chip. The following rendering/timing/command
+DEPTH is explicitly sequenced out of M14 per DEC-0005 (each is committed scope, not a
+waiver). Grounded in `references/fact-sheets/Yamaha V9958 VDP.md` and
+`references/openmsx-21.0/src/video/`.
+
+| # | Item | Status | Origin | Candidate owner | Grounding |
+|---|------|--------|--------|-----------------|-----------|
+| D1 | **Pixel-accurate raster rendering pipeline** — per-mode VRAM→framebuffer for all Target-Spec modes (TEXT1/2, G1–G7, MULTICOLOR), border, blink, per-scanline output. M14 stores mode-selection bits + palette but emits NO pixels | OPEN | M14 | Video-rendering milestone | fact-sheet §3/§5; `references/openmsx-21.0/src/video/` (Renderer/`VDP.cc` display path) |
+| D2 | **Sprite rendering + collision / 5th-sprite detection** — Sprite Mode 1 & 2, 8/line, per-line color, EC/IC/CC, the 1-px vertical shift, S#0 5S/C and S#3–S#6 collision coords | OPEN | M14 | Sprite milestone (with D1) | fact-sheet §6; `references/openmsx-21.0/src/video/SpriteChecker.cc/.hh` |
+| D3 | **VDP command engine** — R#32–R#46, HMMC/YMMM/HMMM/HMMV/LMMC/LMCM/LMMM/LMMV/LINE/SRCH/PSET/POINT + logical ops (IMP/AND/OR/EOR/NOT + T-variants), S#2 TR/CE handshake, S#7 color, S#8/9 border, R#25 CMD-in-all-modes | OPEN | M14 | Command-engine milestone | fact-sheet §8; `references/openmsx-21.0/src/video/VDPCmdEngine.cc/.hh` |
+| D4 | **Cycle-accurate VDP access-slot / command timing** — 1368 VDP-cycles/line, slot tables (154/88/31), 16-cycle request latency, CPU-access priority, the ~29-Z80-cycle safe-access gap, too-fast dropped-request behavior, exact sub-frame raster position of the line/VBlank IRQ | OPEN | M14 | Timing-fidelity milestone (with C1) | fact-sheet §2/§7/§8; `references/openmsx-21.0/src/video/VDPAccessSlots.cc/.hh` |
+| D5 | **YJK / YJK+YAE color decode + 15-bit DAC output** — SCREEN 10/11/12 Y/J/K unpack, `R=clamp(Y+J)`, `G=clamp(Y+K)`, `B=clamp((5Y−2J−K+2)/4)`, the 3-bit→5-bit palette expansion table. M14 stores R#25 YJK/YAE bits only; no color is computed/emitted | OPEN | M14 | Video-rendering milestone (with D1) | fact-sheet §5 |
+| D6 | **Horizontal scroll visual effect (R#25/26/27) + interlace/EO fields, blink timing, superimpose/digitize, external video** — M14 stores the register bits; the display consequences are rendering-time | OPEN | M14 | Video-rendering milestone (with D1) | fact-sheet §1/§3/§7/§9 |
+| D7 | **G6/G7 VRAM address interleave in the display/command path** — `physical=(logical>>1)|(logical<<16)` for planar modes. M14 keeps a flat 128 KB store and models the CPU-port auto-increment addressing; the planar display/command interleave is only observable once D1/D3 exist | OPEN | M14 | Video-rendering / command milestone | fact-sheet §2; `references/openmsx-21.0/src/video/VDP.cc:851-857` (`executeCpuVramAccess` planar path) |
+
 ---
 
-Last updated: 2026-07-06 (M13 closed; M14 VDP opened). Maintainer: MSX Master Agent (coordinator).
+Last updated: 2026-07-06 (M13 closed; M14 VDP opened; M14 planner added VDP-depth
+deferrals D1–D7). Maintainer: MSX Master Agent (coordinator) / MSX Planner Agent (D1–D7).

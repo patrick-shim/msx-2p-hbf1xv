@@ -144,6 +144,13 @@ void Z80aCpu::request_maskable_interrupt(const std::uint8_t bus_vector) {
     state_.request_maskable_interrupt(bus_vector);
 }
 
+void Z80aCpu::clear_maskable_interrupt() {
+    // Thin pass-through (M14-S4). Lets a level-holding device (the V9958 /INT
+    // owner) release the maskable-interrupt request without reaching into the
+    // CPU state directly. No interrupt-acceptance logic is added or altered.
+    state_.clear_maskable_interrupt();
+}
+
 void Z80aCpu::request_nmi() {
     state_.request_nmi();
 }

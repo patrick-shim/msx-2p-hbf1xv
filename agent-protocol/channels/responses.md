@@ -905,3 +905,65 @@ Use this format:
 - Re: REQ-M13-005 / DEC-0006 (human release decision + tag)
 - Outcome: M13 CLOSED. Status Done in milestones.md; definition-of-done.yaml M13 overall_done: true. Git tag v1.0.13 at the closure commit. Deferred-scope backlog established at agent-protocol/state/deferred-backlog.md (DEC-0005) capturing PSG, RTC, FM-PAC internals + MSX-JE SRAM, Kanji-font #D8-DB I/O, Halnote firmware, cartridge loading, FDC drive mechanics, VRAM/VDP (B9 -> M14), plus other known deferrals (cycle timing, HALT-R, ZEXALL, .sram persistence, keyboard/joystick, printer/cassette, speed/pause, SDL3). Every future planner must consult it (DEC-0005). Proceeding to M14 (V9958 VDP), normal human-release-decision gate.
 - Responded At: 2026-07-06T13:00:00+09:00
+
+---
+
+- Response ID: RESP-M14-002
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M14
+- Re: REQ-M14-002 (planning package)
+- Outcome: DELIVERED. `docs/m14-planner-package.md` (no production code). deferred-backlog.md updated with section C rows D1-D7.
+- src/ placement + vram_ migration: new src/devices/video/{vdp_vram,v9958_vdp}.* (+ optional v9958_registers/v9958_status/vdp_mode.h); VDP is a core::IoDevice keyed on port&0x03; machine wiring stays in src/machine/hbf1xv_machine.*. The inert MemoryRegion vram_ (hbf1xv_machine.h:184) is REMOVED from the machine; VDP owns the 128KB; debug dump repointed to vdp_.vram(). After M14 no CPU-addressable VRAM survives.
+- Model: #98 VRAM data 17-bit (R#14<<14)|ptr addressing + auto-increment + read-ahead + shared latch (VDP.cc:770-857); #99 two-write register-set/address-setup + status read (VDP.cc:663-707,988-1012); #9A 9-bit GRB palette; #9B R#17 indirect + AII (VDP.cc:720-731). S#0..S#9 contract level (S#1 reset 0x04=ID#2). Interrupts: VBlank (S#0 F/R#1 IE0) + line (S#1 FH/R#0 IE1/R#19), level-held /INT = vert OR horiz, cleared on status read (VDP.cc:402-415,961-986), driving the M12 IM1 path via a thin IrqLine adapter (reused not rebuilt).
+- In-scope vs deferred: IN = register file, 4 ports + auto-increment/read-ahead, 128KB VRAM ownership + addressing, S#0..S#9, VBlank/line interrupts at frame/line-count granularity, mode-bit decode + stored V9958 feature bits, integration. DEFERRED (backlog D1-D7): D1 pixel raster rendering, D2 sprites+collision, D3 command engine R#32-46, D4 cycle-accurate access-slot/command timing + exact sub-frame IRQ position, D5 YJK/YAE decode + 15-bit DAC, D6 h-scroll/interlace/blink/superimpose, D7 G6/G7 planar interleave. Justification: M14 makes the register/VRAM/status/interrupt contract correct + A/B-verifiable; pixel/sprite/command/slot-timing depth needs a rendering surface / cycle-accurate clock not yet built.
+- Slices: S1 VDP skeleton + VRAM ownership migration + #98 data path (auto-increment/read-ahead); S2 #99 two-write register/address protocol + R#0-27 file + #9B indirect/AII; S3 #9A palette + mode decode + R#25/26/27 storage; S4 S#0..S#9 + VBlank & line interrupts + /INT seam to M12 CPU; S5 system integration + per-frame VSYNC + #9C-9F mirror equivalence; S6 openMSX A/B trace-diff (incl. VRAM read-back) -> docs/m14-parity-trace-diff.md.
+- A/B: openMSX Sony_HB-F1XV on WSL; CPU->VDP sequence (register writes, VRAM fill via #98 auto-increment, palette + #9B indirect, address-read + #98 read-back, IE0 -> VBlank -> IM1 accept -> S#0 read clears F); compares control-register file, R#15/16/17 pointers, S#0/1/2 checkpoints, VRAM bytes (now comparable), palette, interrupt acceptance; empty diff = pass with adversarial comparator check.
+- Top risks: R-1 interrupt level-vs-edge/accept-clear coordination with M12 IM1 (VDP is line owner, released only on S#0 read; verify service_maskable_interrupt()); R-2 VBlank sub-frame timing deferred to D4 (frame-boundary delivery; A/B checkpoints frame-aligned); R-3 debug-dump golden churn from repointing VRAM (A-5); R-4 mirror routing (port&0x03 decode); R-5 S#2 undocumented bits 2/3 (follow openMSX 0x0C).
+- Responded At: 2026-07-06T13:20:00+09:00
+
+- Response ID: RESP-M14-003
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M14
+- Re: REQ-M14-003 (implementation S1..S6)
+- Outcome: DELIVERED (implementation complete). HELD before QA per human instruction to stop for human comment right after planning (message arrived while developer was already running). Not committed, not closed.
+- vram_ migration: MemoryRegion vram_ + machine::kVramBytes + vram()/vram_size() REMOVED from Hbf1xvMachine; VRAM lives in VdpVram owned by vdp_, reachable only via ports #98/#99 (+ #9C/#9D mirror) or machine.vdp().vram() for debug/tests. cold_boot -> vdp_.reset() zero-clears VRAM (debug-dump golden byte-unchanged, R-3).
+- Files: new src/devices/video/{vdp_vram,v9958_vdp}.{h,cpp} + vdp_mode.h + irq_line.h; edited src/machine/hbf1xv_machine.{h,cpp} (V9958Vdp vdp_ + CpuIrqAdapter, wired #98-9B, on_vsync per frame, level-sample /INT, debug dump -> vdp_.vram()), src/devices/cpu/z80a_cpu.{h,cpp} (thin clear_maskable_interrupt() pass-through; M12 IM1 accept path untouched), src/main.cpp (--vdp-parity), root CMakeLists.txt. New tools/openmsx-vdp-parity.ps1, tests/parity/m14_vdp_probe.bin.
+- Interrupt seam (R-1): service_maskable_interrupt() clears CPU pending on accept (z80a_cpu.cpp:1762); VDP owns the level, machine re-asserts from vdp_.irq_active() each step (assert-only), VDP releases via set_irq(false) on S#0/S#1 read. Level-hold-until-status-read.
+- Tests: +6 suites (5 unit + 1 integration). Total ctest 56/56 pass, 0 failed. Build exit 0 (pre-existing C4819 warnings only). Asset gates pass. Prior suites green; memory_regions unit+integration repointed machine.vram() -> machine.vdp().vram() with justification (VRAM migrated), no assertion weakened; debug_dump golden unchanged.
+- Integration: machine_hbf1xv_vdp_io_integration_test — mirror equivalence (#9C/#9D -> same VDP), CPU OUT(#98) auto-increment fill lands in VRAM, VRAM separate from DRAM, VBlank accepted through M12 IM1 (ISR reads S#0 clears F + releases /INT, accept counter == 1, irq_active() false after).
+- A/B: genuine capture vs openMSX 19.1 Sony_HB-F1XV V9958 over tests/parity/m14_vdp_probe.bin -> docs/m14-parity-trace-diff.md ARCHITECTURAL PARITY (empty diff): VRAM read-back [0..255] ramp byte-identical (now comparable), VRAM pointer 0x0002 identical (read-ahead+auto-inc), R#0/1/7/14/17 identical, adversarial corruption detected. BIOS-preset registers + frame-timing S#0 F / S#2 EO excluded from the gate (deferred D4; verified in-emulator by deterministic tests).
+- Boundary: stayed within register/VRAM/status/interrupt contract; NO D1-D7 (flat VRAM store + linear port addressing, planar interleave deferred D7; interrupts at frame/line granularity, sub-frame position deferred D4). Assumption: control regs store raw written bytes (openMSX applies controlValueMasks) — gate registers use clean values that survive masking; revisit masking at the command-engine/rendering milestone.
+- Responded At: 2026-07-06T13:40:00+09:00
+
+- Response ID: RESP-M14-004
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M14
+- Re: REQ-M14-004 (regression assessment + sign-off)
+- Outcome: PASS (recommendation). Sign-off `docs/m14-qa-signoff.md`. M14 retains normal human-release gate.
+- QA-executed ctest: QA rebuilt Debug (exit 0) + ran ctest itself -> 56/56 passed, 0 failed (0.90s). Tests 51-56 = 5 new VDP unit suites + 1 VDP integration; 1-50 (M0-M13) green.
+- Regression/weakening: NONE. hbf1xv_memory_regions unit+integration are authentic repoints machine.vram()->machine.vdp().vram() (retain 128KB size, cold-boot zero-init, boundary round-trips, region independence, load->dump->reload identity); debug-dump golden byte-unchanged (VRAM zero at boot via vdp_.reset()). Confirmed no MemoryRegion vram_ / kVramBytes / vram()/vram_size() remain on the machine; no CPU-addressable VRAM window survives.
+- Interrupt seam: VERIFIED. V9958 /INT level-held, cleared on S#0/S#1 read; M12 service_maskable_interrupt() accept path UNCHANGED (z80a_cpu.cpp:1765-1769); only addition = thin clear_maskable_interrupt() pass-through (:147-152). Integration Interrupt_AcceptedExactlyOnce -> exactly one accept, /INT released after S#0 read, no re-trigger loop. Wired-OR (vert OR horiz) hold unit-verified.
+- A/B: QA independently reproduced vs genuine openMSX Sony_HB-F1XV V9958 on WSL -> ARCHITECTURAL PARITY (empty diff). VRAM read-back genuinely compared now (excluded in M13): openMSX ramp 00 01 02 ... 256 bytes byte-identical; R#7=0x2A, R#17=0x08, VRAM pointer 0002 matched; adversarial corruption check PASSED (comparator proven). Two fact-sheet hand-checks (auto-increment R#14 carry; S#0 F flag) derive correctly. QA artifacts: build/qa_m14_vdp_A.txt, qa_m14_vdp_B.txt, qa_m14_vdp_diff.md.
+- Boundary/backlog: CLEAN. No D1-D7 depth (grep of src/devices/video/ found only deferral comments). deferred-backlog.md has D1-D7 present (OPEN) + B9 IN-PROGRESS (M14).
+- Process-integrity/ledger drift (non-blocking, flagged for coordinator): (1) milestones.md M14 Status:Planned was stale vs reality; (2) citation drift z80a_cpu.cpp:1762 cited vs actual :1769. Milestone numbering (M12 CPU/M13 memory/M14 VDP), DEC-0002/0003/0005/0006, REQ/RESP-M14-002/003/004 mutually consistent.
+- Recommendation: PASS. Ready for human release decision.
+- Responded At: 2026-07-06T14:20:00+09:00
+
+- Response ID: RESP-M14-004-COORD-NOTE
+- From: MSX Master Agent (coordinator)
+- To: ledger
+- Milestone ID: M14
+- Re: QA process-integrity findings (RESP-M14-004)
+- Outcome: Both non-blocking ledger drifts CORRECTED same-cycle: (1) milestones.md M14 Status updated from Planned -> "Ready for QA - QA PASS; awaiting human release decision" with Details. (2) docs/m14-implementation-report.md citation corrected 1762 -> 1769 (RESP-M14-003 is append-only history and reads :1762; authoritative value is z80a_cpu.cpp:1769 per QA). definition-of-done M14 regression_qa flags set; overall_done remains false pending human release decision.
+- Responded At: 2026-07-06T14:20:00+09:00
+
+- Response ID: RESP-M14-005
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M14
+- Re: REQ-M14-005 / DEC-0007 (release decision + tag)
+- Outcome: M14 CLOSED. Status Done in milestones.md; definition-of-done.yaml M14 overall_done: true. Git tag v1.0.14 at the closure commit. deferred-backlog B9 marked DONE (M14). All four milestones M11-M14 now tagged (v1.0.11..v1.0.14). Next: M15 planning-only per DEC-0008 (device integration + S1985 chipset fully wired), then STOP for human review.
+- Responded At: 2026-07-06T14:40:00+09:00

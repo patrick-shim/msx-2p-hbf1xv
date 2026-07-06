@@ -52,9 +52,9 @@ int main() {
 
     // Snapshot inert regions before running the CPU.
     machine.sram().write(0x0010, 0xAB);
-    machine.vram().write(0x4000, 0xCD);
+    machine.vdp().vram().write(0x4000, 0xCD);
     const std::vector<std::uint8_t> sram_before = machine.sram().dump();
-    const std::vector<std::uint8_t> vram_before = machine.vram().dump();
+    const std::vector<std::uint8_t> vram_before = machine.vdp().vram().dump();
 
     // Run the loaded program to HALT; inert regions must be untouched.
     for (int steps = 0; steps < 8 && !machine.cpu().state().halted(); ++steps) {
@@ -62,20 +62,20 @@ int main() {
     }
     expect(machine.cpu().state().halted(), "RunProgram_ReachesHalt");
     expect(machine.sram().dump() == sram_before, "RunProgram_SramRegion_Unperturbed");
-    expect(machine.vram().dump() == vram_before, "RunProgram_VramRegion_Unperturbed");
+    expect(machine.vdp().vram().dump() == vram_before, "RunProgram_VramRegion_Unperturbed");
 
     // Load -> dump -> reload round-trip across the machine boundary (VRAM).
-    std::vector<std::uint8_t> vram_pattern(machine.vram_size());
+    std::vector<std::uint8_t> vram_pattern(machine.vdp().vram().size());
     for (std::size_t index = 0; index < vram_pattern.size(); ++index) {
         vram_pattern[index] = static_cast<std::uint8_t>((index ^ 0x5Au) & 0xFFu);
     }
-    machine.vram().load(0, vram_pattern.data(), vram_pattern.size());
-    const std::vector<std::uint8_t> vram_dump = machine.vram().dump();
+    machine.vdp().vram().load(0, vram_pattern.data(), vram_pattern.size());
+    const std::vector<std::uint8_t> vram_dump = machine.vdp().vram().dump();
     expect(vram_dump == vram_pattern, "Vram_LoadDumpThroughMachine_Matches");
 
-    machine.vram().clear();
-    machine.vram().load(0, vram_dump.data(), vram_dump.size());
-    expect(machine.vram().dump() == vram_pattern, "Vram_ReloadDump_ByteIdentical");
+    machine.vdp().vram().clear();
+    machine.vdp().vram().load(0, vram_dump.data(), vram_dump.size());
+    expect(machine.vdp().vram().dump() == vram_pattern, "Vram_ReloadDump_ByteIdentical");
 
     // Determinism: two independent machines with identical inputs dump
     // byte-identical region contents.

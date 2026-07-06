@@ -27,6 +27,9 @@ public:
     // Acknowledge hook: the interrupting device supplies a byte on the data bus.
     // IM0 executes it as an opcode; IM2 uses it as the vector-table low byte.
     void request_maskable_interrupt(std::uint8_t bus_vector);
+    // Release a level-held maskable-interrupt request (M14-S4). Thin pass-through
+    // for a device that owns the /INT line (e.g. the V9958); no accept logic.
+    void clear_maskable_interrupt();
     void request_nmi();
 
     void set_interrupt_mode(InterruptMode mode);

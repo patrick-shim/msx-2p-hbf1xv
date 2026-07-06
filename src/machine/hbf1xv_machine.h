@@ -19,6 +19,8 @@
 #include "devices/cpu/z80a_cpu.h"
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
+#include "devices/video/irq_line.h"
+#include "devices/video/v9958_vdp.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
@@ -96,27 +98,34 @@ public:
     //
     // - DRAM = 64 KB main RAM. This is the same store the CPU sees over the
     //   bus; load_memory/read_memory below are the CPU-visible aliases.
-    // - VRAM = 128 KB V9958 video RAM storage only (no VDP behavior).
     // - SRAM = FM-PAC battery SRAM inert region.
     //   Assumption: the strict spec table lists no SRAM capacity; the standard
     //   Panasonic FM-PAC carries 8 KB of battery-backed SRAM, so kSramBytes is
     //   set to 8 KB. Verification action: confirm the FM-PAC SRAM capacity
     //   against the real device datasheet / an FM-PAC ROM+SRAM dump when the
     //   FM-PAC device milestone (planner DP-3) is implemented.
+    //
+    // The 128 KB VRAM MIGRATED to the V9958 VDP device (M14-S1). It is no longer
+    // an inert machine MemoryRegion: the CPU reaches it ONLY through the VDP I/O
+    // ports #98/#99 (+ the S1985 #9C/#9D mirror). Its store + authoritative size
+    // now live in devices::video::VdpVram (VdpVram::kVramBytes); access it via
+    // vdp().vram().
     static constexpr std::size_t kDramBytes = 64 * 1024;
-    static constexpr std::size_t kVramBytes = 128 * 1024;
     static constexpr std::size_t kSramBytes = 8 * 1024;
 
     [[nodiscard]] std::size_t dram_size() const;
-    [[nodiscard]] std::size_t vram_size() const;
     [[nodiscard]] std::size_t sram_size() const;
 
     [[nodiscard]] const MemoryRegion& dram() const;
     MemoryRegion& dram();
-    [[nodiscard]] const MemoryRegion& vram() const;
-    MemoryRegion& vram();
     [[nodiscard]] const MemoryRegion& sram() const;
     MemoryRegion& sram();
+
+    // The V9958 VDP device (M14). Owns the 128 KB VRAM and answers ports
+    // #98-#9B (+ the S1985 #9C-#9F mirror). Debug tooling reaches VRAM via
+    // vdp().vram(); tests drive the register/status/interrupt contract here.
+    [[nodiscard]] const devices::video::V9958Vdp& vdp() const;
+    devices::video::V9958Vdp& vdp();
 
     // Full-state debug dump + execution-event logging (M10-S3).
     //
@@ -179,9 +188,20 @@ private:
     // applying the deterministic missing-asset policy; records diagnostics.
     void load_rom_assets();
 
+    // Level-held /INT adapter (M14-S4): forwards the V9958's owned interrupt
+    // line to the M12 Z80A maskable-interrupt request/clear, REUSING the IM1
+    // acceptance path unchanged. Bound to cpu_ (declared below) at construction.
+    class CpuIrqAdapter final : public devices::video::IrqLine {
+    public:
+        explicit CpuIrqAdapter(devices::cpu::Z80aCpu& cpu) : cpu_(cpu) {}
+        void set_irq(bool asserted) override;
+
+    private:
+        devices::cpu::Z80aCpu& cpu_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
-    MemoryRegion vram_{kVramBytes};
     MemoryRegion sram_{kSramBytes};
 
     // S1985 "MSX-ENGINE" chipset + full system bus (M11). The machine owns the
@@ -210,6 +230,12 @@ private:
 
     devices::cpu::CpuBusClient cpu_bus_client_;
     devices::cpu::Z80aCpu cpu_;
+
+    // V9958 VDP (M14) + its /INT adapter. cpu_irq_adapter_ binds cpu_ (declared
+    // above) and is registered as the VDP's IRQ sink in wire_bus().
+    devices::video::V9958Vdp vdp_;
+    CpuIrqAdapter cpu_irq_adapter_{cpu_};
+
     CpuTraceSink cpu_trace_sink_;
     DebugEventLog debug_event_log_;
     bool event_logging_enabled_ = false;

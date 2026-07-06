@@ -1,7 +1,7 @@
 # Current Phase
 
 - Objective: M13 (RAM/ROM Memory Devices & Slot Population) CLOSED by human release decision (DEC-0006 / REQ-M13-005); tagged git `v1.0.13`. Now driving M14 (Yamaha V9958 VDP incl. 128 KB VRAM). Order: M11(v1.0.11) -> M12(v1.0.12) -> M13(v1.0.13) -> M14(VDP, active).
-- Active Phase: M14 Planning (planner-first)
+- Active Phase: M14 — QA PASS recorded; awaiting human release decision (+ tag v1.0.14). Human reviewed the M14 plan on 2026-07-06 and approved continuation, with a standing directive to keep all process records up-to-date, propagated, and well-maintained so no follow-up/deferred item is missed. QA sign-off REQ-M14-004 = PASS (QA-executed ctest 56/56, VRAM migrated, interrupt seam verified, openMSX A/B reproduced, D1-D7 boundary held). QA's process-integrity check found two non-blocking ledger drifts; both corrected same-cycle (M14 milestone status; z80a_cpu.cpp citation 1762->1769). M14 retains the normal human-release-decision gate. Standing rhythm: offer a post-planning human checkpoint on future milestones.
 - Phase Owner: MSX Master Agent (coordinator)
 - Phase Status: M13 closed + tagged v1.0.13; deferred-scope backlog established (agent-protocol/state/deferred-backlog.md, DEC-0005) — every future planner must consult it. M14 kicked off (REQ-M14-001) + planner package requested (REQ-M14-002). M14 owns deferred-backlog item B9 (VRAM/VDP). Normal human-release-decision gate (no auto-close grant unless separately granted). No production code yet for M14.
 - Entry Criteria (M14): M13 Done (met); planner package required before developer implementation.

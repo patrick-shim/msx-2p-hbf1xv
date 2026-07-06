@@ -63,6 +63,88 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
     return 0;
 }
 
+// M14-S6 VDP parity mode. Runs a flat RAM-only Z80 program (a CPU->VDP driver
+// that writes control registers, fills a VRAM block via #98 auto-increment, and
+// exercises palette + #9B indirect + the read-ahead path) exactly as the
+// parity-trace mode does, then emits a canonical, deterministic dump of the
+// externally comparable VDP architectural state: the physical VRAM block, the
+// 14-bit VRAM pointer, R#14, and the control-register file. The SAME program
+// runs on openMSX's genuine V9958 (tools/openmsx-vdp-parity.ps1) and the two
+// dumps are diffed. VRAM is now comparable (it was excluded in M13's diff).
+int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
+                   std::uint32_t vram_bytes, const std::string& out_path) {
+    std::ifstream in(bin_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "vdp-parity: cannot open program: " << bin_path << "\n";
+        return 2;
+    }
+    const std::vector<std::uint8_t> program((std::istreambuf_iterator<char>(in)),
+                                            std::istreambuf_iterator<char>());
+    if (program.empty()) {
+        std::cerr << "vdp-parity: empty program: " << bin_path << "\n";
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+    machine.map_flat_ram();
+    machine.load_memory(base, program.data(), static_cast<std::uint32_t>(program.size()));
+    machine.cpu().state().regs().pc = base;
+
+    std::uint32_t steps = 0;
+    while (steps < max_steps && !machine.cpu().state().halted()) {
+        machine.step_cpu_instruction();
+        ++steps;
+    }
+
+    auto hex2 = [](std::uint32_t v) {
+        static const char* d = "0123456789ABCDEF";
+        std::string s;
+        s.push_back(d[(v >> 4) & 0xF]);
+        s.push_back(d[v & 0xF]);
+        return s;
+    };
+    auto hex4 = [&](std::uint32_t v) { return hex2((v >> 8) & 0xFF) + hex2(v & 0xFF); };
+
+    const auto& vdp = machine.vdp();
+    std::string out;
+    out += "[VDP-PARITY]\n";
+    out += "VRAMPTR=" + hex4(vdp.vram_pointer()) + "\n";
+    out += "R14=" + hex2(vdp.control_register(14)) + "\n";
+    // Control-register file R#0..R#27 (decimal-labeled). Only the registers the
+    // driver program EXPLICITLY writes are cross-comparable with openMSX (whose
+    // BIOS pre-sets the rest); the harness gates on that subset + VRAM.
+    auto dec2 = [](int v) {
+        std::string s;
+        s.push_back(static_cast<char>('0' + (v / 10) % 10));
+        s.push_back(static_cast<char>('0' + v % 10));
+        return s;
+    };
+    for (int r = 0; r <= 27; ++r) {
+        out += "REG" + dec2(r) + "=" + hex2(vdp.control_register(r)) + "\n";
+    }
+    // Physical VRAM block (the pass/fail gate: a genuine VRAM read-back).
+    out += "VRAM\n";
+    for (std::uint32_t off = 0; off < vram_bytes; off += 16) {
+        out += hex4(off);
+        for (std::uint32_t i = 0; i < 16 && off + i < vram_bytes; ++i) {
+            out += " " + hex2(vdp.vram().read(off + i));
+        }
+        out += "\n";
+    }
+
+    std::ofstream out_file(out_path, std::ios::binary | std::ios::trunc);
+    if (!out_file) {
+        std::cerr << "vdp-parity: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out_file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    std::cerr << "vdp-parity: steps=" << steps
+              << " halted=" << (machine.cpu().state().halted() ? 1 : 0)
+              << " vramptr=" << std::hex << vdp.vram_pointer() << std::dec << "\n";
+    return 0;
+}
+
 }  // namespace
 
 // M13-S5 BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
@@ -107,6 +189,20 @@ int main(int argc, char** argv) {
         }
         return run_bios_boot_trace(argv[2], static_cast<std::uint32_t>(std::strtoul(argv[3], nullptr, 10)),
                                    argv[4]);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--vdp-parity") {
+        if (argc < 7) {
+            std::cerr << "usage: " << argv[0]
+                      << " --vdp-parity <program.bin> <base_hex> <max_steps> <vram_bytes> <out.txt>\n";
+            return 2;
+        }
+        const std::string bin_path = argv[2];
+        const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
+        const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
+        const auto vram_bytes = static_cast<std::uint32_t>(std::strtoul(argv[5], nullptr, 10));
+        const std::string out_path = argv[6];
+        return run_vdp_parity(bin_path, base, max_steps, vram_bytes, out_path);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--parity-trace") {

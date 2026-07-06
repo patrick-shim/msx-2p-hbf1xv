@@ -14,6 +14,17 @@ namespace {
 constexpr std::uint64_t kFrameCycles = 228 * 262;
 }  // namespace
 
+void Hbf1xvMachine::CpuIrqAdapter::set_irq(const bool asserted) {
+    // Forward the V9958's level-held /INT to the M12 Z80A. Asserting requests a
+    // maskable interrupt; releasing clears it. No acceptance logic is added here
+    // — the IM1 accept path (14T, proven in M12) is reused unchanged.
+    if (asserted) {
+        cpu_.request_maskable_interrupt();
+    } else {
+        cpu_.clear_maskable_interrupt();
+    }
+}
+
 Hbf1xvMachine::Hbf1xvMachine() : cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
     wire_bus();
 }
@@ -63,13 +74,23 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.register_mirror(0xAA, 0xAE);
     io_bus_.register_mirror(0xAB, 0xAF);
 
-    // VDP port mirror #98-#9B -> #9C-#9F (fact-sheet §7). No device is attached
-    // in M11 (the V9958 is M13); the alias is wired so the M13 VDP on #98-#9B is
-    // automatically reachable on #9C-#9F.
+    // VDP port mirror #98-#9B -> #9C-#9F (fact-sheet §7). The alias was pre-wired
+    // in M11; the M14 V9958 is now attached on the four base ports, so it is
+    // automatically reachable on #9C-#9F (A-1/A-2; the VDP decodes port & 0x03).
     io_bus_.register_mirror(0x98, 0x9C);
     io_bus_.register_mirror(0x99, 0x9D);
     io_bus_.register_mirror(0x9A, 0x9E);
     io_bus_.register_mirror(0x9B, 0x9F);
+
+    // Attach the V9958 VDP on its four base ports (M14-S5). The S1985 straight-
+    // alias mirror above routes #9C-#9F to the SAME device. The VDP owns the
+    // 128 KB VRAM; the CPU reaches VRAM only through #98/#99 (+ the mirror).
+    io_bus_.attach(0x98, &vdp_);
+    io_bus_.attach(0x99, &vdp_);
+    io_bus_.attach(0x9A, &vdp_);
+    io_bus_.attach(0x9B, &vdp_);
+    // The VDP owns its /INT line and drives the CPU through the adapter (M14-S4).
+    vdp_.set_irq_line(&cpu_irq_adapter_);
 
     // Mapper I/O readback on #FC-#FF (fact-sheet §4), pattern configured by S1985.
     s1985_engine_.configure_mapper(mapper_io_);
@@ -88,11 +109,15 @@ void Hbf1xvMachine::wire_bus() {
 void Hbf1xvMachine::cold_boot() {
     scheduler_.reset();
     // Main RAM power-on content (A-5): the XML alternating 00/FF initialContent,
-    // NOT all-zero (Sony_HB-F1XV.xml:129; openMSX Ram::clear, Ram.cc:37-78). VRAM
-    // and FM-PAC SRAM remain zero-initialized (no initialContent for them).
+    // NOT all-zero (Sony_HB-F1XV.xml:129; openMSX Ram::clear, Ram.cc:37-78). The
+    // FM-PAC SRAM remains zero-initialized (no initialContent).
     initialize_dram_pattern();
-    vram_.clear();
     sram_.clear();
+
+    // The V9958 VDP resets its own state, including clearing its 128 KB VRAM to
+    // zero (matching the retired vram_.clear()), reloading the boot palette, and
+    // releasing the /INT line (M14-S1/S4).
+    vdp_.reset();
 
     // Reset the S1985 chipset volatile state (primary select + sub-slot regs -> 0).
     slot_bus_.reset();
@@ -191,6 +216,14 @@ const std::vector<std::string>& Hbf1xvMachine::rom_diagnostics() const {
 void Hbf1xvMachine::run_frame() {
     scheduler_.tick(kFrameCycles);
     ++frame_count_;
+
+    // Deterministic per-frame VBlank delivery (M14-S5). run_frame advances the
+    // clock a whole frame atomically, so the VDP VBlank is modeled at the frame
+    // boundary: on_vsync sets S#0 F and, when R#1 IE0 is enabled, asserts the
+    // vertical /INT line. The CPU then accepts it on the next step_cpu_instruction
+    // (which level-samples the held line). Exact sub-frame raster position is
+    // DEFERRED (backlog D4).
+    vdp_.on_vsync();
 }
 
 void Hbf1xvMachine::run_frames(const std::uint32_t frames) {
@@ -214,6 +247,17 @@ bool Hbf1xvMachine::run_until_cycle(const std::uint64_t target_cycle) {
 }
 
 std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
+    // Level-sample the VDP's held /INT (M14-S4, R-1). The Z80A accept path
+    // clears its internal pending flag on service, but real hardware holds /INT
+    // until the S#0 status read releases it. Re-asserting the request from the
+    // VDP's held level each step models that hold WITHOUT clobbering an
+    // externally-injected interrupt (we only ASSERT here; the VDP releases via
+    // the adapter's set_irq(false) on the status read). When the VDP line is
+    // idle this is a no-op, so manual interrupt-injection tests are unaffected.
+    if (vdp_.irq_active()) {
+        cpu_.request_maskable_interrupt();
+    }
+
     const bool halted_before = cpu_.state().halted();
     const std::uint16_t pre_pc = cpu_.state().regs().pc;
     const std::uint8_t opcode0 = bus_.read(pre_pc);
@@ -315,10 +359,6 @@ std::size_t Hbf1xvMachine::dram_size() const {
     return dram_.size();
 }
 
-std::size_t Hbf1xvMachine::vram_size() const {
-    return vram_.size();
-}
-
 std::size_t Hbf1xvMachine::sram_size() const {
     return sram_.size();
 }
@@ -331,12 +371,12 @@ MemoryRegion& Hbf1xvMachine::dram() {
     return dram_;
 }
 
-const MemoryRegion& Hbf1xvMachine::vram() const {
-    return vram_;
+const devices::video::V9958Vdp& Hbf1xvMachine::vdp() const {
+    return vdp_;
 }
 
-MemoryRegion& Hbf1xvMachine::vram() {
-    return vram_;
+devices::video::V9958Vdp& Hbf1xvMachine::vdp() {
+    return vdp_;
 }
 
 const MemoryRegion& Hbf1xvMachine::sram() const {
@@ -378,7 +418,10 @@ std::string Hbf1xvMachine::serialize_state_dump() const {
     out += debug_dump::serialize_cpu(cpu_.state());
     out += debug_dump::serialize_region("DRAM", dram_.data(), dram_.size());
     out += debug_dump::serialize_region("SRAM", sram_.data(), sram_.size());
-    out += debug_dump::serialize_region("VRAM", vram_.data(), vram_.size());
+    // VRAM now lives in the VDP device (M14-S1 migration, A-5). The dump reads it
+    // through the VDP's const VRAM accessor; the boot content is still all-zero
+    // (the VDP clears VRAM at reset), so the M10/M13 dump golden is unchanged (R-3).
+    out += debug_dump::serialize_region("VRAM", vdp_.vram().data(), vdp_.vram().size());
     out += "[END]\n";
     return out;
 }

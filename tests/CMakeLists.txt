@@ -311,3 +311,40 @@ add_executable(cpu_bootstrap_im1_system_test
 )
 target_link_libraries(cpu_bootstrap_im1_system_test PRIVATE sony_msx_core)
 add_test(NAME cpu_bootstrap_im1_system_test COMMAND cpu_bootstrap_im1_system_test)
+
+# --- M14 V9958 VDP (register/VRAM/status/interrupt contract) -----------------
+add_executable(devices_vdp_vram_unit_test
+    unit/devices/video_vdp_vram_unit_test.cpp
+)
+target_link_libraries(devices_vdp_vram_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_vram_unit_test COMMAND devices_vdp_vram_unit_test)
+
+add_executable(devices_v9958_ports_unit_test
+    unit/devices/video_v9958_ports_unit_test.cpp
+)
+target_link_libraries(devices_v9958_ports_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_ports_unit_test COMMAND devices_v9958_ports_unit_test)
+
+add_executable(devices_v9958_registers_unit_test
+    unit/devices/video_v9958_registers_unit_test.cpp
+)
+target_link_libraries(devices_v9958_registers_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_registers_unit_test COMMAND devices_v9958_registers_unit_test)
+
+add_executable(devices_v9958_palette_mode_unit_test
+    unit/devices/video_v9958_palette_mode_unit_test.cpp
+)
+target_link_libraries(devices_v9958_palette_mode_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_palette_mode_unit_test COMMAND devices_v9958_palette_mode_unit_test)
+
+add_executable(devices_v9958_status_irq_unit_test
+    unit/devices/video_v9958_status_irq_unit_test.cpp
+)
+target_link_libraries(devices_v9958_status_irq_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_status_irq_unit_test COMMAND devices_v9958_status_irq_unit_test)
+
+add_executable(machine_hbf1xv_vdp_io_integration_test
+    integration/machine/hbf1xv_vdp_io_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_vdp_io_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_vdp_io_integration_test COMMAND machine_hbf1xv_vdp_io_integration_test)

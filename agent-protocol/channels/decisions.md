@@ -63,3 +63,19 @@ Use this format:
 - Impacted Milestones: M13 (closed), M14 (opened; normal gate).
 - Risk Notes: M14 (V9958 VDP + 128 KB VRAM) is the most complex chip in the system — must be sliced into deterministic increments; no A/B parity claim without a genuine captured trace-diff (guardrails, DEC-0001 precedent). Closes backlog item B9.
 - Effective Date: 2026-07-06
+
+- Decision ID: DEC-0007
+- Requested By: Human (project owner) on 2026-07-06: "close M14 + tag v1.0.14."
+- Approved By: Human (project owner, source of truth) — release decision.
+- Decision: CLOSE M14 (Yamaha V9958 VDP register/VRAM/status/interrupt contract) on QA PASS (REQ-M14-004, docs/m14-qa-signoff.md): QA-executed ctest 56/56, zero regression, 128 KB VRAM migrated into the VDP (no CPU-addressable VRAM remains), interrupt seam verified (one accept, /INT cleared on S#0 read), openMSX A/B empty diff QA-reproduced with VRAM read-back compared, D1-D7 rendering depth deferred + backlog-recorded. Tag closure snapshot v1.0.14. Closes deferred-backlog item B9.
+- Impacted Milestones: M14 (closed). Backlog B9 -> DONE (M14).
+- Risk Notes: M14 is the VDP CONTRACT only; the display/rendering/sprite/command/cycle-timing DEPTH remains committed scope as backlog rows D1-D7 (not a waiver).
+- Effective Date: 2026-07-06
+
+- Decision ID: DEC-0008
+- Requested By: Human (project owner) on 2026-07-06: "Plan for M15 and stop for a review. deliberately work on deferred / pending items as M15. all the pending items as per agent-protocol/state/deferred-backlog.md. if there needs add / modify / re-arrange in other implementation through M1 to M14, please go ahead and do it, make sure all book-keeping / recording protocol is fully respected. RAISE questions if anything above requires confirmation, clarification. the goal of this milestone is really to have complete devices integrations with completed implementation of chipset wired."
+- Approved By: Human (project owner, source of truth) — standing directive; PLAN then STOP for human review.
+- Decision: Open M15 with the north-star GOAL "complete device integrations with the S1985 chipset fully wired" — i.e. replace the M11 chipset SEAMS (PSG #A0-A2, RTC #B4/B5) with real device implementations and complete the remaining device integrations from the deferred backlog. M15 is a PLANNING-ONLY step this cycle: the MSX Planner produces the package, the coordinator STOPS and presents it for human review BEFORE any implementation (honoring the post-planning human-checkpoint rhythm). The planner is directed to consult the ENTIRE deferred-backlog, recommend each item IN vs DEFERRED for M15 with justification, and — because "all pending items" is too large for a single deterministic milestone — PROPOSE a decomposition (M15 as the device-integration milestone + a recommended sequence for the remainder: VDP rendering D1-D7, CPU/VDP cycle timing C1-C4, input/peripherals C6-C8, SDL3 frontend C9), surfacing the scope options for the human to confirm at review. The planner MAY propose add/modify/re-arrange of M1-M14 implementation where required for clean device integration; any such change must be captured in the protocol ledger (decisions/requests/responses/milestones/backlog) per DEC-0005 record-keeping discipline. No production code in this step.
+- Impacted Milestones: M15 (new — device-integration / chipset-completion; planning-only this cycle) and, per the planner's proposed decomposition, candidate follow-on milestones for the remaining backlog.
+- Risk Notes: Scope is broad and MUST be sliced deterministically; the coordinator will NOT let M15 balloon into an unverifiable mega-milestone — the human review confirms the in/out boundary and the decomposition before implementation. Every deferred-backlog item touched must be status-updated in the same cycle it is addressed. New device fact-sheets (e.g. OPLL/YM2413 for FM-PAC) exist under references/fact-sheets/ and must ground device behavior.
+- Effective Date: 2026-07-06

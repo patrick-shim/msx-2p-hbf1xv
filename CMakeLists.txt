@@ -23,6 +23,8 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/system_bus.cpp
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
+    src/devices/video/vdp_vram.cpp
+    src/devices/video/v9958_vdp.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp
