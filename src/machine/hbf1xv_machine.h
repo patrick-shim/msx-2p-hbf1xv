@@ -8,23 +8,28 @@
 
 #include "core/bus.h"
 #include "core/scheduler.h"
+#include "devices/audio/psg_ym2149.h"
 #include "devices/chipset/io_bus.h"
 #include "devices/chipset/mapper_io.h"
-#include "devices/chipset/ppi_slot_select.h"
+#include "devices/chipset/ppi_8255.h"
 #include "devices/chipset/s1985_engine.h"
 #include "devices/chipset/slot_bus.h"
 #include "devices/chipset/switched_io.h"
 #include "devices/chipset/system_bus.h"
+#include "devices/chipset/system_control.h"
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
+#include "devices/rtc/rp5c01.h"
 #include "devices/video/irq_line.h"
 #include "devices/video/v9958_vdp.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
 #include "machine/rom_asset_loader.h"
+#include "peripherals/joystick.h"
+#include "peripherals/keyboard_matrix.h"
 
 namespace sony_msx::machine {
 
@@ -127,6 +132,29 @@ public:
     [[nodiscard]] const devices::video::V9958Vdp& vdp() const;
     devices::video::V9958Vdp& vdp();
 
+    // M15 device integration accessors (PSG/RTC/PPI/keyboard/joystick). Tests
+    // drive human input and inspect device state through these; the CPU reaches
+    // them over the M11 IoBus at #A0-A2 / #B4/B5 / #A8-AB / #F5.
+    [[nodiscard]] const devices::audio::PsgYm2149& psg() const;
+    devices::audio::PsgYm2149& psg();
+    [[nodiscard]] const devices::rtc::Rp5c01& rtc() const;
+    devices::rtc::Rp5c01& rtc();
+    [[nodiscard]] const devices::chipset::Ppi8255& ppi() const;
+    devices::chipset::Ppi8255& ppi();
+    [[nodiscard]] const peripherals::KeyboardMatrix& keyboard() const;
+    peripherals::KeyboardMatrix& keyboard();
+    [[nodiscard]] const peripherals::JoystickPorts& joystick() const;
+    peripherals::JoystickPorts& joystick();
+    [[nodiscard]] const devices::chipset::S1985Engine& s1985() const;
+    devices::chipset::S1985Engine& s1985();
+
+    // S1985 16-byte backup-RAM .sram persistence (M15-S5, backlog C4). Set the
+    // file path BEFORE cold_boot to load it (absent -> deterministic zero state,
+    // preserving the M11 golden). flush_backup_ram writes the current 16 bytes.
+    void set_backup_ram_path(std::filesystem::path path);
+    [[nodiscard]] const std::filesystem::path& backup_ram_path() const;
+    bool flush_backup_ram() const;
+
     // Full-state debug dump + execution-event logging (M10-S3).
     //
     // Determinism is guaranteed by construction: every serializer is hand-rolled
@@ -200,6 +228,18 @@ private:
         devices::cpu::Z80aCpu& cpu_;
     };
 
+    // Deterministic emulated-cycle clock source for the RTC (X4). Returns the
+    // scheduler's total cycles READ-ONLY — the RTC advances its time from this
+    // without ever touching CPU T-state accounting or the host wall clock.
+    class RtcClock final : public devices::rtc::RtcClockSource {
+    public:
+        explicit RtcClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t cpu_cycles() const override;
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion sram_{kSramBytes};
@@ -208,10 +248,23 @@ private:
     // decode fabrics and the residual engine layer; the CPU talks to SystemBus.
     devices::chipset::SlotBus slot_bus_;
     devices::chipset::IoBus io_bus_;
-    devices::chipset::PpiSlotSelect ppi_slot_select_{slot_bus_};  // #A8 (+#AC mirror)
+    // Human-input peripherals (M15). Declared before the PPI so the PPI can bind
+    // the keyboard matrix by reference at construction.
+    peripherals::KeyboardMatrix keyboard_;
+    peripherals::JoystickPorts joystick_;
+    devices::chipset::Ppi8255 ppi_{slot_bus_, keyboard_};  // #A8-#AB (+#AC-AF mirror)
     devices::chipset::MapperIo mapper_io_;      // #FC-#FF mapper readback (segment owner)
     devices::chipset::SwitchedIoController switched_io_;  // #40-#4F switched I/O
     devices::chipset::S1985Engine s1985_engine_;  // backup RAM ID 0xFE + M1 wait
+
+    // PSG (YM2149) on #A0-A2 and RTC (RP5C01) on #B4/B5 — the M11 seam ports now
+    // answered by real devices (M15). The #F5 system-control register gates the
+    // RTC CLOCK-IC. rtc_clock_ feeds the RTC deterministic emulated time.
+    devices::audio::PsgYm2149 psg_;
+    devices::chipset::SystemControlF5 system_control_;  // #F5 (RTC clock gate)
+    RtcClock rtc_clock_{scheduler_};
+    devices::rtc::Rp5c01 rtc_;  // #B4/#B5
+    std::filesystem::path backup_ram_path_;
 
     // CPU-addressable memory devices (M13). The mapper RAM consumes mapper_io_'s
     // live segments; the ROM devices are read-only windows over the loaded images.

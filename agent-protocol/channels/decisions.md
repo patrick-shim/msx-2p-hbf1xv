@@ -79,3 +79,25 @@ Use this format:
 - Impacted Milestones: M15 (new — device-integration / chipset-completion; planning-only this cycle) and, per the planner's proposed decomposition, candidate follow-on milestones for the remaining backlog.
 - Risk Notes: Scope is broad and MUST be sliced deterministically; the coordinator will NOT let M15 balloon into an unverifiable mega-milestone — the human review confirms the in/out boundary and the decomposition before implementation. Every deferred-backlog item touched must be status-updated in the same cycle it is addressed. New device fact-sheets (e.g. OPLL/YM2413 for FM-PAC) exist under references/fact-sheets/ and must ground device behavior.
 - Effective Date: 2026-07-06
+
+- Decision ID: DEC-0009
+- Requested By: Human (project owner) on 2026-07-06 — answers to the M15 planner's scope questions at review.
+- Approved By: Human (project owner, source of truth).
+- Decision: LOCK the M15 scope per the human's review answers:
+  (Q1 boot bar) M15 C5 acceptance = ADVANCE THE A/B BOOT CHECKPOINT past the first PSG/RTC/keyboard reads to a deterministic PC/instruction checkpoint matched to openMSX; M15 does NOT need to reach a BASIC prompt (that needs FDC/cartridge, later).
+  (Q2 RTC) RTC uses an IN-MEMORY DETERMINISTIC EPOCH (fixed start each run); file/CMOS persistence deferred to a later persistence milestone — preserves the determinism non-negotiable.
+  (Q3 next-after-M15) FDC/DISK IS PRIORITIZED NEXT: the FDC milestone moves up to M16 (ahead of FM-PAC/audio). The remaining follow-on order shifts accordingly and is re-confirmed at each kickoff (indicative: M16 FDC, M17 FM-PAC/OPLL, M18 peripheral I/O, M19 cartridges, M20 Halnote, M21 VDP rendering, M22 sprites/command, M23 exact cycle timing, M24 ZEXALL, M25 Sony speed/pause, M26 SDL3).
+  (Q4 audio scope) M15 delivers the NUMERIC/REGISTER-ACCURATE PSG SAMPLE MODEL ONLY (headless, deterministic); actual audio output/presentation is deferred to the SDL3 frontend milestone (C9).
+  Coordinator-resolved (not human-gated): Q3-tech (#F5 bit-7 CLOCK-IC gating polarity) and RTC Block-2 boot-config to be grounded by the developer in S1985 fact-sheet §5 + openMSX RP5C01/MSXRTC for A/B parity; Q4-seq (MSX-JE 16KB SRAM, backlog B4) pairs with the FM-PAC/MSX-MUSIC milestone (now M17).
+  M15 IN set (final): B1 PSG (numeric), B2 RTC (in-memory epoch), C6 full i8255 PPI + keyboard matrix + joystick, C4 S1985 backup-RAM .sram persistence, C5 boot-checkpoint advance (not BASIC). All other backlog rows remain DEFERRED to the sequence above.
+- Impacted Milestones: M15 (scope locked), M16 (now FDC, moved up), and the shifted follow-on sequence.
+- Risk Notes: The FDC reorder means audio (FM-PAC) lands after disk; acceptable per human priority (boot/disk progress first). M15 remains headless-deterministic (no audio presentation, no RTC file state). Implementation still HELD pending the human's explicit go-ahead to build (post-planning checkpoint rhythm).
+- Effective Date: 2026-07-06
+
+- Decision ID: DEC-0010
+- Requested By: Human (project owner) on 2026-07-06 via /msx-master directive: "start orchestration until M16 as stated."
+- Approved By: Human (project owner, source of truth) — release decision.
+- Decision: CLOSE M15 (Device Integration Completion & S1985 Chipset Full Wiring) on QA PASS (REQ-M15-004, docs/m15-qa-signoff.md): QA-executed ctest 64/64, zero regression (X4 CPU timing untouched / M9-M12 oracles green; X1 #A8 preserved byte-for-byte), openMSX A/B empty diff 15/15 QA-reproduced (substantive PSG R0/R7), boot-checkpoint advanced ~0x043C -> PC 0x454/max 0x488 deterministically. Tag closure snapshot v1.0.15. Closes deferred-backlog rows B1 (PSG numeric), B2 (RTC in-memory epoch), C4 (backup-RAM .sram persistence), C6 (i8255 PPI + keyboard + joystick); C5 advanced partial. Proceed to M16 = FDC (planner-first, normal human-release gate). Two documented M15 assumptions (#F5 reset-enabled 0x80 for openMSX parity; RTC fixed 1988-01-01 epoch) are deterministic + tested; accepted.
+- Impacted Milestones: M15 (closed). M16 (FDC) opened next. Backlog B1/B2/C4/C6 -> DONE (M15).
+- Risk Notes: M15 delivered the numeric PSG (no audio presentation — deferred SDL3/M26) and in-memory RTC (no persistence). Full boot still needs the FDC (M16) then further devices. M16 is behavior-affecting (disk I/O) — real openMSX A/B required, no fabricated parity.
+- Effective Date: 2026-07-06

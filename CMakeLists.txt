@@ -16,15 +16,21 @@ add_library(sony_msx_core STATIC
     src/devices/cpu/z80a_cpu.cpp
     src/devices/chipset/slot_bus.cpp
     src/devices/chipset/ppi_slot_select.cpp
+    src/devices/chipset/ppi_8255.cpp
     src/devices/chipset/io_bus.cpp
     src/devices/chipset/mapper_io.cpp
     src/devices/chipset/switched_io.cpp
     src/devices/chipset/s1985_engine.cpp
     src/devices/chipset/system_bus.cpp
+    src/devices/chipset/system_control.cpp
+    src/devices/audio/psg_ym2149.cpp
+    src/devices/rtc/rp5c01.cpp
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp
+    src/peripherals/keyboard_matrix.cpp
+    src/peripherals/joystick.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp

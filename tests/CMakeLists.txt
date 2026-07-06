@@ -348,3 +348,56 @@ add_executable(machine_hbf1xv_vdp_io_integration_test
 )
 target_link_libraries(machine_hbf1xv_vdp_io_integration_test PRIVATE sony_msx_core)
 add_test(NAME machine_hbf1xv_vdp_io_integration_test COMMAND machine_hbf1xv_vdp_io_integration_test)
+
+# --- M15 device integration (PSG/RTC/PPI+keyboard/joystick/backup-RAM) --------
+add_executable(devices_audio_psg_ym2149_unit_test
+    unit/devices/audio_psg_ym2149_unit_test.cpp
+)
+target_link_libraries(devices_audio_psg_ym2149_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_psg_ym2149_unit_test COMMAND devices_audio_psg_ym2149_unit_test)
+
+add_executable(peripherals_joystick_unit_test
+    unit/peripherals/joystick_unit_test.cpp
+)
+target_link_libraries(peripherals_joystick_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_joystick_unit_test COMMAND peripherals_joystick_unit_test)
+
+add_executable(peripherals_keyboard_matrix_unit_test
+    unit/peripherals/keyboard_matrix_unit_test.cpp
+)
+target_link_libraries(peripherals_keyboard_matrix_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_keyboard_matrix_unit_test COMMAND peripherals_keyboard_matrix_unit_test)
+
+add_executable(devices_rtc_rp5c01_unit_test
+    unit/devices/rtc_rp5c01_unit_test.cpp
+)
+target_link_libraries(devices_rtc_rp5c01_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_rtc_rp5c01_unit_test COMMAND devices_rtc_rp5c01_unit_test)
+
+add_executable(devices_chipset_ppi_8255_unit_test
+    unit/devices/chipset_ppi_8255_unit_test.cpp
+)
+target_link_libraries(devices_chipset_ppi_8255_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_ppi_8255_unit_test COMMAND devices_chipset_ppi_8255_unit_test)
+
+add_executable(devices_chipset_backup_ram_sram_unit_test
+    unit/devices/chipset_backup_ram_sram_unit_test.cpp
+)
+target_link_libraries(devices_chipset_backup_ram_sram_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_backup_ram_sram_unit_test COMMAND devices_chipset_backup_ram_sram_unit_test)
+
+add_executable(machine_hbf1xv_m15_devices_integration_test
+    integration/machine/hbf1xv_m15_devices_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m15_devices_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m15_devices_integration_test
+    COMMAND machine_hbf1xv_m15_devices_integration_test)
+
+add_executable(machine_hbf1xv_m15_boot_checkpoint_integration_test
+    integration/machine/hbf1xv_m15_boot_checkpoint_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m15_boot_checkpoint_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m15_boot_checkpoint_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m15_boot_checkpoint_integration_test
+    COMMAND machine_hbf1xv_m15_boot_checkpoint_integration_test)

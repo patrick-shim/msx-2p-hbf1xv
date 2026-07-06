@@ -44,3 +44,6 @@ Mandatory references before answering:
 3. Allowed Next Handoff (single)
 4. Blockers
 5. Recommended Transition
+
+## Update Project README.md ##
+1. After each milestone with git commit, update **Project Scafford** section of the root @README.md to reflect the latest directory structure. 

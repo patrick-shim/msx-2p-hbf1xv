@@ -730,3 +730,66 @@ Use this format:
 - Scope: Close M14 on QA PASS (REQ-M14-004). Tag v1.0.14.
 - Acceptance Criteria: M14 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.14; backlog B9 -> DONE (M14).
 - Requested At: 2026-07-06T14:40:00+09:00
+
+---
+
+- Request ID: REQ-M15-001
+- From: MSX Master Agent (coordinator)
+- To: Protocol ledger (kickoff)
+- Milestone ID: M15
+- Type: Milestone kickoff (planning-only this cycle)
+- Scope: Open M15 per DEC-0008. North-star goal: complete device integrations with the S1985 chipset fully wired (real PSG/RTC devices replacing the M11 seams + remaining device integrations from the backlog). PLANNING ONLY this cycle — coordinator STOPS for human review before implementation.
+- Acceptance Criteria: M15 milestone entry present (met); DEC-0008 recorded (met); planner-first; implementation gated on human review.
+- Dependencies: M14 Done (v1.0.14); deferred-backlog.md; DEC-0008; references/fact-sheets/*; references/openmsx-21.0/src/{sound,fdc}/, MSXRTC/RP5C01/I8255/MSXPPI.
+- Requested At: 2026-07-06T14:45:00+09:00
+
+- Request ID: REQ-M15-002
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent
+- Milestone ID: M15
+- Type: Planning package (device-integration decomposition; NO implementation)
+- Scope: Produce the M15 planning package (durable artifact `docs/m15-planner-package.md`, no production code). North-star GOAL: complete device integrations with the S1985 chipset FULLY WIRED — replace the M11 chipset seams (PSG #A0-A2, RTC #B4/B5) with real device implementations and complete the remaining device integrations. MANDATORY: consult the ENTIRE `agent-protocol/state/deferred-backlog.md` and, for EVERY row (B1-B8, C1-C9, D1-D7), recommend IN-M15 vs DEFER-to-named-follow-on with a one-line justification — nothing silently dropped (DEC-0005). Because "all pending items" is too large for one deterministic milestone, PROPOSE a decomposition: define M15 as the device-integration/chipset-completion milestone with a concrete, ordered slice plan, AND propose a recommended sequence of follow-on milestones (M16, M17, ...) for the deferred remainder (e.g. VDP rendering D1-D7, exact cycle timing C1-C4, input/peripherals if not in M15, SDL3 frontend C9). For each IN device: ground behavior in its concrete fact-sheet + openMSX reference (PSG -> S1985 fact-sheet §2 + references/openmsx-21.0/src/sound/AY8910.*/MSXPSG.*; RTC -> S1985 §5 + RP5C01.*/MSXRTC.*; FM-PAC -> references/fact-sheets/Yamaha YM2413 FM Chip.md + sound/YM2413*.*; keyboard/joystick -> S1985 §2/§3 + I8255.*/MSXPPI.*; backup-RAM persistence -> S1985 §6; FDC -> references/fact-sheets/FDC for Sony HB-F1XV.md + src/fdc/; Kanji font -> Sony_HB-F1XV.xml #D8-DB; Halnote/cartridge -> Sony_HB-F1XV.xml), define src/ placement (propose src/devices/audio/ for PSG+OPLL, src/devices/rtc/, src/peripherals/ for keyboard/joystick, src/devices/fdc/, etc. per src/CLAUDE.md), specify how each wires into the M11 io_bus / S1985 engine and reconciles with existing seams, and give per-device deterministic unit + system-integration test obligations + the openMSX A/B acceptance approach. Identify any REQUIRED add/modify/re-arrange of M1-M14 implementation (e.g. the S1985 engine must now host real PSG/RTC instead of seams; the PPI keyboard rows; the joystick path shared between PSG port A and the S1985) and record it as a planned change (DEC-0008 authorizes; ledger must capture). Call out an explicit BOOT consequence: real PSG/RTC/keyboard may let BIOS boot PAST the current first-device-read boundary (backlog C5) — assess how far and make it a checkpoint. Evidence-gate mapping per slice. Risks/assumptions each with a verification action. Ground every claim in a concrete references path. NO PRODUCTION CODE — this is a plan for human review.
+- Acceptance Criteria: Package contains: the full-backlog IN/DEFER disposition table (every row), the proposed M15 slice plan + the recommended follow-on milestone sequence, per-IN-device spec+placement+wiring+tests grounded in concrete references, the list of required M1-M14 changes, the boot-boundary (C5) assessment, evidence-gate mapping, and risks with verification actions. No production code. Explicitly note this is presented for human review before implementation (DEC-0008).
+- Dependencies: `agent-protocol/state/deferred-backlog.md`; DEC-0002/0005/0008; references/fact-sheets/{Yamaha S1985 MSX-ENGINE Chipset,Yamaha YM2413 FM Chip,FDC for Sony HB-F1XV}.md; references/openmsx-21.0/src/{sound,fdc}/ + RP5C01/MSXRTC/I8255/MSXPPI; M11 chipset src (src/devices/chipset/*); M13 memory/slot src; src/CLAUDE.md; guardrails.
+- Requested At: 2026-07-06T14:45:00+09:00
+
+- Request ID: REQ-M15-003
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent
+- Milestone ID: M15
+- Type: Implementation (device integration slices S1..S6)
+- Scope: Implement the M15 slice plan in `docs/m15-planner-package.md` end to end, within the DEC-0009-locked scope. S1 PSG/YM2149 device on #A0-A2 (16 registers, 5-bit/32-step envelope, mixer R7 with MSX bit6=0/bit7=1 masking, stereo B=L/C=R/A=both) — NUMERIC/register-accurate sample model only, NO audio output/presentation (deferred SDL3/M26). S2 joystick peripheral + PSG port A (R14 read) / port B (R15 write) per S1985 fact-sheet §2; joystick hangs off the PSG (X5), not the S1985 engine. S3 RTC/RP5C01 on #B4/B5 gated by #F5 bit7 (ground the polarity + Block-2 boot-config in S1985 fact-sheet §5 + openMSX RP5C01/MSXRTC) — IN-MEMORY DETERMINISTIC EPOCH (fixed start each run), NO file persistence. S4 expand ppi_slot_select into a full i8255 PPI (#A8 port A slot-select PRESERVED byte-for-byte; #A9 port B keyboard-row read inverted; #AA port C keyboard/LED/cassette; #AB control bit-set/reset) + keyboard matrix (11x8, inverted, 0=pressed). S5 S1985 16-byte backup-RAM .sram persistence (switched-I/O ID 0xFE; C4). S6 system integration (wire_bus X2 attaches PSG/RTC/#F5/PPI-B-C-control), boot-checkpoint ADVANCE past the first PSG/RTC/keyboard reads to a deterministic PC/instruction checkpoint (C5), + openMSX A/B trace-diff -> docs/m15-parity-trace-diff.md. src/ placement per src/CLAUDE.md (propose src/devices/audio/ PSG, src/devices/rtc/, src/peripherals/ keyboard+joystick+PPI). CRITICAL (X4): advance PSG envelope + RTC time READ-ONLY off elapsed_cycles() — do NOT modify step_cpu_instruction T-state math or any datasheet T-state / increment_refresh_register() site (protect the M9/M12 timing oracles).
+- Acceptance Criteria: All M15 IN-set devices implemented to spec grounded in fact-sheet + openMSX (concrete citations), wired into the M11 io_bus / S1985 chipset replacing the open-bus seams. Deterministic unit tests per device (PSG registers/envelope/mixer/stereo, joystick via PSG ports, RTC blocks/BCD/gate/deterministic epoch, i8255 PPI ports + keyboard matrix inversion, backup-RAM switched-I/O) + system-integration tests (CPU->device over the M11 bus; boot-checkpoint advance). X1 PPI expansion PRESERVES #A8 byte-for-byte — reuse the M11/M13 slot tests as a locked guard. ALL prior M0-M14 suites remain green — any test touched updated to the authentic value with documented justification, never weakened. Evidence gates captured: tools/validate-assets.ps1, tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt, cmake --build build --config Debug, ctest --test-dir build -C Debug --output-on-failure (report EXACT pass/fail). A/B: real diff to docs/m15-parity-trace-diff.md or honest BLOCKED. Update deferred-backlog.md rows B1/B2/C4/C6 (and C5 partial) to DONE (M15) in the same cycle. Produce docs/m15-implementation-report.md. Do NOT implement any DEFERRED backlog item (FDC, FM-PAC, Kanji-font, etc.).
+- Dependencies: docs/m15-planner-package.md; DEC-0008/0009; references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md §2/§3/§5/§6; references/openmsx-21.0/src/sound/{AY8910,MSXPSG}.*, RP5C01.*/MSXRTC.*, I8255.*/MSXPPI.*; src/devices/chipset/*; src/machine/hbf1xv_machine.*; guardrails.
+- Requested At: 2026-07-06T16:30:00+09:00
+
+- Request ID: REQ-M15-004
+- From: MSX Master Agent (coordinator)
+- To: MSX QA Agent
+- Milestone ID: M15
+- Type: Regression assessment + sign-off recommendation
+- Scope: Independently assess M15 (device integration + S1985 chipset full wiring) against its acceptance criteria in `state/milestones.md` (DEC-0009-locked scope) and produce a sign-off at `docs/m15-qa-signoff.md`. INDEPENDENTLY RE-EXECUTE `cmake --build build --config Debug` then `ctest --test-dir build -C Debug --output-on-failure` and report the ACTUAL pass/fail count. Verify GENUINE (non-stub) in source: PSG YM2149 (16 regs, 5-bit/32-step envelope, R7 mixer MSX masking bit6=0/bit7=1, YM2149 read-as-written, stereo A=both/B=L/C=R, NUMERIC model only — confirm NO audio-output/presentation was pulled in); joystick via PSG R14/R15 (hangs off PSG not S1985 engine, X5); RTC RP5C01 (#B4/B5 gated by #F5 bit7, 4 blocks/BCD/Block-2 reg0=0x0A, regs 14-15 unreadable, IN-MEMORY DETERMINISTIC epoch — confirm NO host clock / NO file dependency for time); full i8255 PPI (#A8 port A slot-select PRESERVED byte-for-byte, #A9 inverted keyboard row, #AA port C, #AB control) + 11x8 inverted keyboard matrix; S1985 backup-RAM .sram persistence (deterministic, absent-file -> deterministic default). HAND-CHECK at least TWO behaviors vs the S1985 fact-sheet (e.g. PSG R7 mask result; RTC Block-2 reg0 CMOS-valid value; keyboard-matrix inversion). CRITICAL X4 REGRESSION: confirm PSG envelope + RTC time advance READ-ONLY off elapsed_cycles()/scheduler and that step_cpu_instruction T-state math + every datasheet T-state / increment_refresh_register() site are UNCHANGED — spot-verify the M9/M12 timing oracles (cpu_step 22, ldir 102, indexed 105, IM2 49, IM0 38) are green with unchanged expected values. CRITICAL X1: confirm the PPI expansion PRESERVED #A8 slot-select byte-for-byte (the M11/M13 slot tests reused verbatim + green; Ppi8255 port A == PpiSlotSelect). Adversarially validate the A/B (docs/m15-parity-trace-diff.md) is a genuine captured diff vs real openMSX Sony_HB-F1XV with substantive device values (PSG R0=0x34, R7=0x80 masked) — reproduce if you can drive openMSX; confirm the comparator can report divergence. Validate the boot-checkpoint advance (C5) is genuine (boot really reaches ~PC 0x454/0x488 fetching real BIOS opcodes past the first device reads, deterministic, self-derived golden — not hardcoded). BOUNDARY: confirm NO deferred item (FDC/FM-PAC/Kanji-font/cartridge/Halnote/VDP-rendering) was implemented; confirm backlog rows B1/B2/C4/C6 -> DONE (M15), C5 -> IN-PROGRESS partial. PROCESS-INTEGRITY: verify milestones.md/definition-of-done.yaml/decisions(DEC-0008/0009)/requests/responses/deferred-backlog are mutually consistent for M15, no dropped item, correct numbering. Disposition the two documented assumptions (#F5 reset-enabled default; fixed 1988-01-01 epoch). NOTE: M15 retains the NORMAL human-release-decision gate — a Pass lets the coordinator present M15 to the human, not auto-close.
+- Acceptance Criteria: Sign-off records QA-executed ctest count, per-device genuine/correct verification + the two hand-checks, the X4 timing-oracle + X1 #A8-preservation regression confirmation, the A/B adversarial validation, the boot-checkpoint genuineness check, the boundary + backlog check, the process-integrity check, assumption disposition, and a clear Pass/Conditional Pass/Fail recommendation. No feature code by QA.
+- Dependencies: docs/m15-implementation-report.md; docs/m15-parity-trace-diff.md; docs/m15-planner-package.md; agent-protocol/state/deferred-backlog.md; DEC-0008/0009; state/milestones.md (M15); guardrails.
+- Requested At: 2026-07-06T17:15:00+09:00
+
+- Request ID: REQ-M15-005
+- From: Human (project owner, source of truth) via /msx-master directive "start orchestration until M16"
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M15
+- Type: Human release decision (milestone closure)
+- Scope: Close M15 (device integration + S1985 chipset fully wired) on QA PASS (REQ-M15-004). Tag v1.0.15. Proceed to M16 (FDC).
+- Acceptance Criteria: M15 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.15; backlog B1/B2/C4/C6 DONE (M15).
+- Requested At: 2026-07-06T18:00:00+09:00
+
+---
+
+- Request ID: REQ-M16-001
+- From: MSX Master Agent (coordinator)
+- To: Protocol ledger (kickoff)
+- Milestone ID: M16
+- Type: Milestone kickoff
+- Scope: Open M16 = FDC drive mechanics (Fujitsu MB89311 + 720 KB 3.5" floppy drive), per DEC-0009 (FDC moved up to next-after-M15) and DEC-0010. Closes deferred-backlog B8; advances C5 toward full boot. Wire the FDC onto the DISK ROM already mapped at slot 3-2 (M13). Normal human-release-decision gate (no auto-close). Grounding: references/fact-sheets/FDC for Sony HB-F1XV.md, references/openmsx-21.0/src/fdc/.
+- Acceptance Criteria: M16 milestone entry present (met); DEC-0009/0010 recorded (met); planner-first; backlog B8 -> IN-PROGRESS (M16).
+- Dependencies: M15 Done (v1.0.15); M13 DISK ROM (slot 3-2); M11 io_bus; deferred-backlog B8.
+- Requested At: 2026-07-06T18:00:00+09:00

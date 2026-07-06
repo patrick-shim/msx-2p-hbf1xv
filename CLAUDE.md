@@ -54,7 +54,7 @@ V9958 VDP, PSG, YM2413, RTC, FDC, I/O, slot logic, mapper); peripherals (keyboar
 joystick); machine composition; SDL3 frontend; unit/integration/system tests; local
 `bios/` + `roms/` assets; docs and decisions under `docs/`; automation under `tools/`.
 - Fully compiled executable with appropriate CLI options needed to load cartridges, load disks, in headless or SDL3 (windows).
-- Debug capabilities (full state dump - cpu states, dram, sram, vram content, etc) and logs of the execution events in `debug/traces/` and `debug/logs`.  You may add subfolders uner this `debug/` neccesary to capture frames, events, and audio elements.
+- Debug capabilities (full state dump - cpu states, dram, sram, vram content, etc) and logs of the execution events in `debug/traces/` and `debug/logs`.  You may add subfolders uner this `debug/` neccesary to capture frames, events, and audio elements if not-exist as needed.
 - Generate all needed tools in python and powershell in `tools/` to develop, test and debug (including, without limitation, memory to content to png or audio convert, etc).
 
 
@@ -169,3 +169,4 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
   source (API reference), and `fact-sheets/` (hardware specs). Reference only; never copied into
   `src/`. See [Reference materials](#reference-materials-grounding-sources).
 - `.claude/` — agents, commands, workflow, and settings for the orchestration.
+- `debug/` - debug traces, video frames, audio captures, cpu and memory dumps, and etc.

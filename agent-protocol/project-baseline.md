@@ -40,6 +40,7 @@ any deviation is a defect. No substitution of components, capacities, or variant
 - Incremental verification: every milestone must carry executable test evidence.
 - Evidence-grounded automation: agents must rely on repository artifacts, including tools scripts and local assets, without inventing missing files.
 - Reference alignment: behavior-affecting changes should include A/B checks against openMSX on WSL when applicable.
+- Debugging data: `debug/` directory is a sole source of debug data for all the agents (read from and written to) and `tools/`.
 
 ## Scope
 
@@ -56,7 +57,7 @@ any deviation is a defect. No substitution of components, capacities, or variant
 - Project documentation and decision records under `docs/`.
 - Fully compiled executable with appropriate CLI options needed to load cartridges, load disks, in headless or SDL3 (windows).
 - Debug capabilities: full state dump (CPU registers/state, DRAM, SRAM, VRAM content, etc.) and execution-event logs under `debug/traces/` and `debug/logs/`. Subfolders may be added under `debug/` as necessary to capture frames, events, and audio elements. These capabilities underpin opcode-trace, per-instruction parity verification against openMSX, which additionally requires full machine slot/RAM/SRAM/VRAM wiring plus a CPU trace-export facility. This debug/trace/parity capability is owned by milestone M10 (see `agent-protocol/state/milestones.md` and decision `DEC-0001`).
-- Generate all needed tools in python and powershell in `tools/` to develop, test and debug (including, without limitation, memory to content to png or audio convert, etc).
+- Generate all needed tools in python or powershell in `tools/` to develop, test and debug (including, without limitation, memory to content to png or audio convert, etc).
 - Automation scripts under `tools/` (Python/PowerShell).
 
 ### Out of Scope (unless explicitly approved)
@@ -125,6 +126,7 @@ Specification or license terms. Do not assert a reference says something without
 - `roms/`: local ROM assets for development/testing.
 - `references/`: read-only grounding sources (openMSX 21.0 source, SDL3 source, `fact-sheets/`).
 - `tools/`: helper automation scripts used by agents and developers.
+- `debug/`: logs, traces, frame captures, audio captures, cpu and memory dumps, and etc.
 
 Directory usage rules:
 
@@ -134,3 +136,4 @@ Directory usage rules:
 - Behavior/spec claims should be grounded in `references/` and cite the concrete file path; never
   copy `references/openmsx-21.0/` or `references/sdl3/` code into `src/`.
 - openMSX A/B smoke evidence should be captured via `tools/openmsx-ab-smoke.ps1` and stored in `docs/openmsx-ab-smoke.md`.
+- While QAing and debugging, all data must be read or written from/to this `debug/` directory (NOTE: organize sub-directories if needed).

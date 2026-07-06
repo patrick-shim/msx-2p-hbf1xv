@@ -1,5 +1,8 @@
 #include "devices/chipset/s1985_engine.h"
 
+#include <fstream>
+#include <ios>
+
 namespace sony_msx::devices::chipset {
 
 void S1985Engine::reset() {
@@ -71,6 +74,32 @@ void S1985Engine::switched_write(const core::BusAddress port, const core::BusDat
 
 std::uint8_t S1985Engine::backup_byte(const std::uint8_t index) const {
     return sram_[index & 0x0F];
+}
+
+bool S1985Engine::load_backup_ram(const std::filesystem::path& path) {
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return false;  // absent/unreadable -> keep the deterministic reset state
+    }
+    std::array<char, kBackupRamBytes> buffer{};
+    file.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    if (file.gcount() != static_cast<std::streamsize>(kBackupRamBytes)) {
+        return false;  // short/wrong-size -> untouched (no partial/garbage load)
+    }
+    for (std::size_t i = 0; i < kBackupRamBytes; ++i) {
+        sram_[i] = static_cast<std::uint8_t>(buffer[i]);
+    }
+    return true;
+}
+
+bool S1985Engine::save_backup_ram(const std::filesystem::path& path) const {
+    std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(sram_.data()),
+               static_cast<std::streamsize>(sram_.size()));
+    return static_cast<bool>(file);
 }
 
 }  // namespace sony_msx::devices::chipset

@@ -2,6 +2,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 
 #include "core/bus.h"
 #include "core/device_contracts.h"
@@ -50,6 +51,17 @@ public:
 
     // Test/debug view of the backup-RAM store.
     [[nodiscard]] std::uint8_t backup_byte(std::uint8_t index) const;
+
+    // Battery-backed backup-RAM .sram persistence (M15-S5, backlog C4).
+    //
+    // openMSX saves the 16-byte backup RAM as an SRAM persistency file
+    // (fact-sheet §6; MSXS1985 SRAM "S1985 Backup RAM" size 0x10). load_backup_ram
+    // reads exactly kBackupRamBytes from `path` INTO the store; save_backup_ram
+    // writes the store OUT. Deterministic: an absent/short/unreadable file leaves
+    // the store untouched (zero after reset()), so the M11 golden (absent file ->
+    // zero state) is preserved. No wall-clock, no fabricated provenance.
+    bool load_backup_ram(const std::filesystem::path& path);
+    [[nodiscard]] bool save_backup_ram(const std::filesystem::path& path) const;
 
 private:
     [[nodiscard]] core::BusData peek_switched(core::BusAddress port) const;

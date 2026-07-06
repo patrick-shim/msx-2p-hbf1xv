@@ -195,3 +195,44 @@ milestone_records:
     # Closed by human release decision (DEC-0007 / REQ-M14-005, 2026-07-06); git tag v1.0.14.
     overall_done: true
     notes: "CLOSED 2026-07-06 (DEC-0007 / REQ-M14-005), git tag v1.0.14. Closes backlog B9. QA PASS (REQ-M14-004, docs/m14-qa-signoff.md). V9958 VDP register/VRAM/status/interrupt CONTRACT. 128KB VRAM migrated out of the machine into the VDP (no CPU-addressable VRAM remains). ctest 56/56 (QA-executed, +6), zero regression (memory_regions repointed authentically; debug-dump golden unchanged), interrupt seam verified (one accept, /INT cleared on S#0 read), openMSX A/B empty diff QA-reproduced with VRAM read-back compared. D1-D7 rendering/sprite/command/timing/YJK/effects/planar depth DEFERRED + recorded in deferred-backlog.md; closes B9. Awaiting human release decision + tag v1.0.14. Two QA-found ledger drifts corrected same-cycle (M14 status; z80a_cpu.cpp citation 1762->1769)."
+  M15:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # 2 assumptions (#F5 reset-enabled; 1988 epoch) deterministic + tested
+      signoff_decision_recorded: true   # QA PASS (REQ-M15-004), QA-executed ctest 64/64, A/B + boot reproduced
+    # Closed by human release decision (DEC-0010 / REQ-M15-005, 2026-07-06); git tag v1.0.15.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (DEC-0010 / REQ-M15-005), git tag v1.0.15. QA PASS (REQ-M15-004, docs/m15-qa-signoff.md). Device integration + S1985 chipset fully wired: PSG/YM2149 (numeric), RTC/RP5C01 (in-memory deterministic epoch), full i8255 PPI + keyboard + joystick, S1985 backup-RAM .sram persistence, boot-checkpoint advance. ctest 64/64 (QA-executed, +8), zero regression (X4 CPU timing untouched, M9/M12 oracles green unchanged; X1 #A8 preserved byte-for-byte). openMSX A/B empty diff 15/15 QA-reproduced (substantive PSG R0/R7). Boot advanced ~0x043C -> PC 0x454/max 0x488 (deterministic). Backlog B1/B2/C4/C6 -> DONE (M15); C5 IN-PROGRESS (full boot needs FDC/M16). Awaiting human release decision + tag v1.0.15. Stale-status drift (QA-found) corrected same-cycle."
+  M16:
+    status: planning
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: false
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+    notes: "Kickoff 2026-07-06 per DEC-0009/DEC-0010 (FDC moved up, next after M15). Fujitsu MB89311 FDC + 720KB 3.5in drive wired onto the slot-3-2 DISK ROM (M13). Closes backlog B8; advances C5. Normal human-release gate. Planner-first (REQ-M16-002)."

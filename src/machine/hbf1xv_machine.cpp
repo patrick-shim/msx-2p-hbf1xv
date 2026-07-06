@@ -65,14 +65,34 @@ void Hbf1xvMachine::wire_bus() {
     slot_bus_.attach(3, 3, 1, &fmmusic_rom_);
 
     // --- I/O fabric (IoBus) ---
-    // PPI port A slot-select on #A8, plus the S1985 straight-alias mirror of all
-    // four PPI ports #A8-#AB -> #AC-#AF (fact-sheet §3, §10). Only #A8 has a
-    // device in M11; #A9-#AB and their mirrors are inert seams.
-    io_bus_.attach(0xA8, &ppi_slot_select_);
+    // Full i8255 PPI on #A8-#AB (M15-S4, expands the M11 port-A-only seam), plus
+    // the S1985 straight-alias mirror of all four PPI ports #A8-#AB -> #AC-#AF
+    // (fact-sheet §3, §10). #A8 slot-select is preserved byte-for-byte (X1); the
+    // keyboard rows on #A9-#AB (and their mirrors) are now live.
+    io_bus_.attach(0xA8, &ppi_);
+    io_bus_.attach(0xA9, &ppi_);
+    io_bus_.attach(0xAA, &ppi_);
+    io_bus_.attach(0xAB, &ppi_);
     io_bus_.register_mirror(0xA8, 0xAC);
     io_bus_.register_mirror(0xA9, 0xAD);
     io_bus_.register_mirror(0xAA, 0xAE);
     io_bus_.register_mirror(0xAB, 0xAF);
+
+    // PSG (YM2149) on #A0-#A2 (M15-S1), replacing the M11 open-bus seam. The
+    // joystick peripheral backs PSG port A/B (R14/R15) — X5: peripheral -> PSG.
+    psg_.attach_port_source(&joystick_);
+    io_bus_.attach(0xA0, &psg_);
+    io_bus_.attach(0xA1, &psg_);
+    io_bus_.attach(0xA2, &psg_);
+
+    // RTC (RP5C01) on #B4/#B5 (M15-S3), replacing the M11 open-bus seam. The RTC
+    // advances its time READ-ONLY off the deterministic scheduler clock, and its
+    // data path is gated by the #F5 system-control CLOCK-IC enable (bit 7).
+    rtc_.attach_clock_source(&rtc_clock_);
+    rtc_.attach_clock_gate(&system_control_);
+    io_bus_.attach(0xB4, &rtc_);
+    io_bus_.attach(0xB5, &rtc_);
+    io_bus_.attach(0xF5, &system_control_);
 
     // VDP port mirror #98-#9B -> #9C-#9F (fact-sheet §7). The alias was pre-wired
     // in M11; the M14 V9958 is now attached on the four base ports, so it is
@@ -124,6 +144,22 @@ void Hbf1xvMachine::cold_boot() {
     switched_io_.reset();
     s1985_engine_.reset();
 
+    // Reset the M15 devices to deterministic power-on state (X3). New devices are
+    // reset after the existing ones; ordering additions only.
+    keyboard_.reset();
+    joystick_.reset();
+    ppi_.reset();
+    psg_.reset();
+    system_control_.reset();
+    rtc_.reset();
+
+    // Load the 16-byte S1985 backup RAM from its .sram file when configured
+    // (M15-S5, backlog C4). Absent/short file -> deterministic zero state (the
+    // reset() above), preserving the M11 golden.
+    if (!backup_ram_path_.empty()) {
+        s1985_engine_.load_backup_ram(backup_ram_path_);
+    }
+
     // Populate the ROM devices from the local bios/ assets (missing-asset policy
     // A-7: absent/unreadable/wrong-size -> 0xFF fill + recorded diagnostic).
     load_rom_assets();
@@ -135,8 +171,8 @@ void Hbf1xvMachine::cold_boot() {
     // bring-up default (#A8 = 0xFF), now that slot 0 is populated with the BIOS
     // ROM device. Tests that run a program from RAM call map_flat_ram() to page
     // the 64 KB RAM in explicitly (M13-S4 reconciliation).
-    ppi_slot_select_.io_write(0xA8, 0x00);  // drives slot_bus_ primary select -> slot 0
-    slot_bus_.write_ffff(0x00);             // page-3 sub-slot register -> sub 0
+    ppi_.io_write(0xA8, 0x00);  // drives slot_bus_ primary select -> slot 0 (X1 preserved)
+    slot_bus_.write_ffff(0x00);  // page-3 sub-slot register -> sub 0
 
     cpu_.reset();
     cpu_.set_interrupt_mode(devices::cpu::InterruptMode::Im1);
@@ -194,7 +230,7 @@ void Hbf1xvMachine::map_flat_ram() {
     // linear 64 KB view (see the header doc). #A8 = 0xFF -> every page primary
     // slot 3; slot-3 sub-slot register 0 -> sub 0 = RAM mapper; mapper segments
     // {0,1,2,3} -> page p maps to physical p*0x4000.
-    ppi_slot_select_.io_write(0xA8, 0xFF);
+    ppi_.io_write(0xA8, 0xFF);
     slot_bus_.write_ffff(0x00);
     for (std::uint16_t page = 0; page < 4; ++page) {
         mapper_io_.io_write(static_cast<std::uint16_t>(0xFC + page), static_cast<std::uint8_t>(page));
@@ -377,6 +413,73 @@ const devices::video::V9958Vdp& Hbf1xvMachine::vdp() const {
 
 devices::video::V9958Vdp& Hbf1xvMachine::vdp() {
     return vdp_;
+}
+
+std::uint64_t Hbf1xvMachine::RtcClock::cpu_cycles() const {
+    return scheduler_.total_cycles();
+}
+
+const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {
+    return psg_;
+}
+
+devices::audio::PsgYm2149& Hbf1xvMachine::psg() {
+    return psg_;
+}
+
+const devices::rtc::Rp5c01& Hbf1xvMachine::rtc() const {
+    return rtc_;
+}
+
+devices::rtc::Rp5c01& Hbf1xvMachine::rtc() {
+    return rtc_;
+}
+
+const devices::chipset::Ppi8255& Hbf1xvMachine::ppi() const {
+    return ppi_;
+}
+
+devices::chipset::Ppi8255& Hbf1xvMachine::ppi() {
+    return ppi_;
+}
+
+const peripherals::KeyboardMatrix& Hbf1xvMachine::keyboard() const {
+    return keyboard_;
+}
+
+peripherals::KeyboardMatrix& Hbf1xvMachine::keyboard() {
+    return keyboard_;
+}
+
+const peripherals::JoystickPorts& Hbf1xvMachine::joystick() const {
+    return joystick_;
+}
+
+peripherals::JoystickPorts& Hbf1xvMachine::joystick() {
+    return joystick_;
+}
+
+const devices::chipset::S1985Engine& Hbf1xvMachine::s1985() const {
+    return s1985_engine_;
+}
+
+devices::chipset::S1985Engine& Hbf1xvMachine::s1985() {
+    return s1985_engine_;
+}
+
+void Hbf1xvMachine::set_backup_ram_path(std::filesystem::path path) {
+    backup_ram_path_ = std::move(path);
+}
+
+const std::filesystem::path& Hbf1xvMachine::backup_ram_path() const {
+    return backup_ram_path_;
+}
+
+bool Hbf1xvMachine::flush_backup_ram() const {
+    if (backup_ram_path_.empty()) {
+        return false;
+    }
+    return s1985_engine_.save_backup_ram(backup_ram_path_);
 }
 
 const MemoryRegion& Hbf1xvMachine::sram() const {

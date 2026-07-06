@@ -967,3 +967,78 @@ Use this format:
 - Re: REQ-M14-005 / DEC-0007 (release decision + tag)
 - Outcome: M14 CLOSED. Status Done in milestones.md; definition-of-done.yaml M14 overall_done: true. Git tag v1.0.14 at the closure commit. deferred-backlog B9 marked DONE (M14). All four milestones M11-M14 now tagged (v1.0.11..v1.0.14). Next: M15 planning-only per DEC-0008 (device integration + S1985 chipset fully wired), then STOP for human review.
 - Responded At: 2026-07-06T14:40:00+09:00
+
+---
+
+- Response ID: RESP-M15-002
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M15
+- Re: REQ-M15-002 (planning package — device-integration decomposition)
+- Outcome: DELIVERED. `docs/m15-planner-package.md` (no production code). PRESENTED FOR HUMAN REVIEW before implementation (DEC-0008).
+- IN-M15 set (S1985 chipset devices + human input; unblocks boot; deterministic): B1 PSG/YM2149, B2 RTC/RP5C01, C4 S1985 backup-RAM .sram persistence, C6 keyboard matrix + joystick + full i8255 PPI, C5 boot-checkpoint advance (partial).
+- DEFER set with named follow-ons: B3 OPLL + B4 MSX-JE SRAM -> M16 (MSX-MUSIC/FM-PAC); B5 Kanji-font I/O + C7 printer/cassette -> M17 (Peripheral I/O); B8 FDC -> M18; B7 cartridges -> M19; B6 Halnote -> M20; D1/D5/D6/D7 VDP rendering -> M21; D2/D3 sprites/command -> M22; C1/C2/D4 exact cycle timing -> M23; C3 ZEXALL -> M24; C8 Sony speed/pause -> M25; C9 SDL3 -> M26. B9 already DONE (M14).
+- Key grounding: PSG #A0-A2 and RTC #B4/B5 seams are currently UNMAPPED (open-bus 0xFF, hbf1xv_machine.cpp:32-107); "replace the seam" = attach real devices on those ports + expand PpiSlotSelect into a full i8255.
+- M15 slices: S1 PSG YM2149 (#A0-A2, 5-bit envelope, mixer, stereo B=L/C=R/A=both); S2 joystick + PSG port A/B (R14/R15); S3 RTC RP5C01 (#B4/B5 + #F5 gate, deterministic epoch); S4 full i8255 PPI (expand ppi_slot_select->ppi_8255) + keyboard matrix (#A9/#AA/#AB); S5 S1985 backup-RAM .sram persistence; S6 system integration + boot-checkpoint advance + A/B + zero-regression sweep.
+- Required M1-M14 changes (DEC-0008, ledger-tracked when executed): X1 expand ppi_slot_select->full i8255 (preserve #A8 byte-for-byte, reuse M11 tests as locked guard); X2 wire_bus attach PSG/RTC/#F5/PPI; X3 cold_boot reset ordering; X4 advance PSG envelope + RTC time READ-ONLY off elapsed_cycles() — do NOT touch step_cpu_instruction T-state math (protects signed M9/M12 oracle) [highest risk]; X5 joystick connects to PSG not S1985Engine (fact-sheet §2).
+- Boot-boundary C5: current PC 0x0000->~0x043C (M13); with real PSG/RTC/keyboard/VDP boot should advance through MSX2+ init (PSG R7, RTC Block-2 CMOS reg0=0x0A, keyboard boot-key scan) up to the Disk-ROM slot handshake (needs FDC -> M18). M15 C5 acceptance = deterministic PC/instruction-count checkpoint past first-device reads, A/B-matched + QA-reproduced.
+- Top risks: R-1 RTC non-determinism, R-2 PPI expansion breaking #A8, R-3 device-time perturbing the CPU timing oracle, R-4 #F5 polarity.
+- SCOPE QUESTIONS for human review: Q1 is "advance the A/B boot checkpoint" the right C5 bar, or must M15 reach a BASIC prompt (needs FDC/cartridge)? Q2 persist RTC CMOS to file in M15 or keep in-memory-deterministic? Q3 confirm #F5 bit-7 gating + RTC Block-2 boot-config for A/B parity. Q4 assign MSX-JE 16KB SRAM (B4) to M16 (FM-PAC) or M20 (MSX-JE/Halnote)? Q5 confirm M16-M26 order — should FDC (M18) come earlier given boot importance? Q6 confirm M15 delivers numeric PSG sample model only, audio presentation deferred to SDL3 (M26)?
+- Responded At: 2026-07-06T15:10:00+09:00
+
+- Response ID: RESP-M15-002b
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M15
+- Re: Human go-ahead to implement M15 + request to hold ~60 min (usage-limit reset)
+- Outcome: STANDING GO-AHEAD RECORDED. Human on 2026-07-06 approved the M15 plan ("planning is good") and granted go-ahead to implement M15 S1-S6 via developer -> QA, then PAUSE at QA for the human release decision (M15 keeps the normal gate). Human also requested a ~60-minute hold (usage-limit reset) and will return. EXECUTION IS INTENTIONALLY HELD at the human's request; NO developer subagent launched. On resume, the coordinator will: run msx-developer for M15 S1-S6 per the DEC-0009-locked scope (B1 PSG numeric, B2 RTC in-memory epoch, C6 PPI+keyboard+joystick, C4 backup-RAM persistence, C5 boot-advance checkpoint; changes X1-X5 with device-time advanced READ-ONLY off elapsed_cycles() to protect the M9/M12 timing oracles), capture evidence gates, then run msx-qa, then STOP at QA sign-off for the human release decision. No auto-close grant for M15.
+- Responded At: 2026-07-06T15:25:00+09:00
+
+- Response ID: RESP-M15-003
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M15
+- Re: REQ-M15-003 (implementation S1..S6)
+- Outcome: DELIVERED. QA sign-off left to QA.
+- Files: new src/devices/audio/psg_ym2149.{h,cpp} (S1), src/peripherals/joystick.{h,cpp} (S2), src/devices/rtc/rp5c01.{h,cpp} + src/devices/chipset/system_control.{h,cpp} (#F5 gate, S3), src/devices/chipset/ppi_8255.{h,cpp} + src/peripherals/keyboard_matrix.{h,cpp} (S4). Modified s1985_engine.{h,cpp} (.sram persistence C4/X6), hbf1xv_machine.{h,cpp} (X2/X3/X4/X5 wiring), CMakeLists + tests/CMakeLists. New probe tests/parity/m15_io_probe.bin.
+- Tests: +8 (6 unit: audio_psg_ym2149, peripherals_joystick, peripherals_keyboard_matrix, rtc_rp5c01, chipset_ppi_8255, chipset_backup_ram_sram; 2 integration: hbf1xv_m15_devices, hbf1xv_m15_boot_checkpoint). ctest 64/64 passed, 0 failed (56 prior + 8 new). Build clean (pre-existing C4819 warnings only).
+- Zero regression: M9/M12 timing oracles (cpu_step, m1_wait, cpu_parity, m11_parity, m13_mem_parity) unchanged/green; step_cpu_instruction T-state math + refresh sites untouched (X4). M11/M13 #A8 slot-select guard reused VERBATIM + green; Ppi8255 port A IS the reused PpiSlotSelect (X1 byte-for-byte preserved).
+- Boot-checkpoint advance (C5): deterministic boot moved from M13 ~0x043C to max PC 0x488 (final 0x454) over 4096 instructions with real PSG/RTC/keyboard/VDP. Full boot to prompt still needs FDC (M16).
+- A/B: REAL empty diff vs genuine openMSX 19.1 Sony_HB-F1XV, 15 instructions, substantive — openMSX returns A=0x34 (PSG R0 readback) + A=0x80 (PSG R7 with MSX port-direction mask) matching byte-for-byte. docs/m15-parity-trace-diff.md.
+- Backlog: B1, B2, C4, C6 -> DONE (M15); C5 -> IN-PROGRESS (partial). Updated same-cycle.
+- Assumptions (verification-tagged, not blockers): #F5 gate reset defaults enabled (0x80) to preserve openMSX parity (openMSX doesn't gate RTC); RTC fixed synthetic 1988-01-01 epoch per DEC-0009. Both deterministic + tested.
+- Report: docs/m15-implementation-report.md.
+- Responded At: 2026-07-06T17:15:00+09:00
+
+- Response ID: RESP-M15-004
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M15
+- Re: REQ-M15-004 (regression assessment + sign-off)
+- Outcome: PASS (recommendation). Sign-off docs/m15-qa-signoff.md. M15 retains normal human-release gate.
+- QA-executed ctest: QA rebuilt clean + ran ctest itself -> 64/64 passed, 0 failed (8 new M15 tests #57-64 green; 56 prior unchanged).
+- Regression/weakening: NONE (all M15 coverage additive).
+- X4 (CPU timing) CLEAN: step_cpu_instruction still cpu_.step() + s1985_engine_.m1_wait_tstates(...) untouched; PSG advances read-only off advance_cycles() (not in CPU path); RTC advances lazily off scheduler total_cycles(). Oracles green, unchanged values: cpu_step 22, cb 102, ldir 102, indexed 105, IM2 49, IM0 38.
+- X1 (#A8) CLEAN: Ppi8255 composes PpiSlotSelect verbatim, delegates port A byte-for-byte; PpiSlotSelect::io_write still drives slot_bus_.set_primary_select; M11 #A8 asserts reused as locked guard.
+- A/B: QA independently REPRODUCED empty diff 15/15 vs genuine openMSX 19.1 Sony_HB-F1XV, substantive values (seq3 A=0x34 PSG R0, seq14 A=0x80 PSG R7 masked). Comparator adversarially validated (corrupt->exit1 divergence, empty->exit2 blocked, genuine->exit0).
+- Boot checkpoint: REPRODUCED final PC=0x454, max PC=0x488 (> M13 0x043C), deterministic across two runs, self-derived golden (not hardcoded).
+- Device genuineness + 3 hand-checks passed: PSG R7 write 0x00 -> 0x80; RTC Block-2 reg0 = 0x0A CMOS-valid; keyboard inversion idle 0xFF, 0=pressed. PSG numeric-only (no audio sink), RTC in-memory deterministic 1988 epoch (no host-clock/file), joystick off PSG (X5), backup-RAM persistence deterministic (absent-file default). Boundary: no deferred item implemented; backlog B1/B2/C4/C6 -> DONE (M15), C5 -> IN-PROGRESS.
+- Ledger drift (non-blocking): milestones.md M15 still read "implementation HELD / not started" and DoD M15 notes "PLANNING ONLY this cycle" — stale vs completed implementation (current-phase was accurate). Flagged for coordinator refresh at closure.
+- Recommendation: PASS. Ready for human release decision.
+- Responded At: 2026-07-06T17:35:00+09:00
+
+- Response ID: RESP-M15-004-COORD-NOTE
+- From: MSX Master Agent (coordinator)
+- To: ledger
+- Milestone ID: M15
+- Re: QA process-integrity finding (RESP-M15-004)
+- Outcome: Stale-status drift CORRECTED same-cycle: milestones.md M15 Status -> "Ready for QA - QA PASS; awaiting human release decision" with completed-implementation Details; definition-of-done.yaml M15 regression_qa flags set, status -> awaiting_release_decision, notes refreshed from "PLANNING ONLY" to the delivered/QA-PASS state (overall_done stays false pending human release decision).
+- Responded At: 2026-07-06T17:35:00+09:00
+
+- Response ID: RESP-M15-005
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M15
+- Re: REQ-M15-005 / DEC-0010 (release decision + tag)
+- Outcome: M15 CLOSED. Status Done in milestones.md; definition-of-done.yaml M15 overall_done: true. Git tag v1.0.15 at the closure commit. Backlog B1/B2/C4/C6 -> DONE (M15). Residual planning-only drift (QA/orchestration-flagged) cleaned. Five milestones M11-M15 now tagged (v1.0.11..v1.0.15). Proceeding to M16 (FDC) planner-first per the human "orchestration until M16" directive; M16 keeps the normal human-release-decision gate (STOP at M16 QA).
+- Responded At: 2026-07-06T18:00:00+09:00
