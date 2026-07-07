@@ -279,3 +279,24 @@ milestone_records:
     overall_done: true
     # Closed by human release decision (DEC-0014 / REQ-M18-003, 2026-07-07); git tag v1.0.18 (committed separately from M17).
     notes: "CLOSED 2026-07-07 (DEC-0014 / REQ-M18-003), git tag v1.0.18. Closes backlog B5 and C7. Peripheral I/O -- KanjiFontRom (#D8-#DB, MSXKanji-style, confirmed NOT MSXKanji12), PrinterPort (#90-#97, falling-edge capture), CassetteInterface (no CPU-visible port, derives from existing Ppi8255/JoystickPorts, zero edits to ppi_8255.*) -- implemented per docs/m18-implementation-report.md. QA independently verified device identity against MSXKanji.cc/MSXPrinterPort.cc/Printer.cc, confirmed zero edits to ppi_8255.{h,cpp} and to step_cpu_instruction/run_cycles/run_frame, confirmed the JoystickPorts regression guard is genuine and additive, and independently reproduced the Kanji content-parity claim THREE ways (own SHA1 check, direct file byte spot-check, and a live WSL openMSX 19.1 Tcl probe reproducing an identical Kanji read) -- going beyond the developer's own verification. Full deferred-backlog review re-confirmed (all rows); new Section E (F1/F2) correctly added. ctest 79/79 QA-reproduced, zero regression, CPU-timing oracles untouched."
+  M19:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 92/92 (81 M1-M18 + 10 M19 core + 1 metalgear follow-up), zero regression, QA-reproduced
+      impacted_areas_covered: true      # 6 cartridge mapper types + CartridgeSlot + CLI unit/integration + real A/B + 2 real-file smoke fixtures
+      blocker_risks_resolved_or_accepted: true   # one non-blocking doc-comment staleness found by QA and fixed by the coordinator; no behavior/test impact
+      signoff_decision_recorded: true   # QA PASS (RESP-M19-004, docs/m19-qa-signoff.md), QA-executed ctest 92/92 fresh reproduction, A/B + both real-file fixtures independently re-verified incl. live WSL openMSX
+    overall_done: true
+    # Closed by human release decision (DEC-0015 / REQ-M19-003, 2026-07-07); git tag v1.0.19.
+    notes: "CLOSED 2026-07-07 (DEC-0015 / REQ-M19-003), git tag v1.0.19. Closes backlog B7. Cartridge loading (external primary slots 1 & 2): six MVP mapper types (Mirrored, Generic8kB, Generic16kB, Ascii8kB, Ascii16kB, Konami no-SCC) sharing a CartridgeRomWindow primitive grounded byte-exact in RomBlocks::setRom; CartridgeSlot wrapper (empty-slot open-bus regression guard); CLI via --cartN/--cartN-type. QA independently verified the bank-resolution mask fallback-only semantics and the Konami mirror-quirk (slots 0/2 permanently fixed, 1/3-4/6-5/7 live mirror pairs) against RomBlocks.cc/RomKonami.cc directly. roms/aleste.rom used as a non-identity-claiming Generic8kB mechanical smoke fixture; roms/metalgear.rom (added later, per human note) identified as a genuine Konami-mapper 'Metal Gear' (1987) dump via an exact SHA1 match to references/openmsx-21.0/share/softwaredb.xml, independently reproduced by both the coordinator and QA, plus live WSL openMSX corroboration. One non-blocking doc-comment staleness (cartridge_konami_rom.h) found by QA and fixed by the coordinator post-QA (comment-only, zero behavior/test impact, ctest re-confirmed 92/92 after the fix). Real openMSX 19.1 A/B: content-bearing empty diff with empirically-verified slot-lettering (R-M19-6). Full deferred-backlog review re-confirmed (all rows); B7 -> DONE; new Section F (G1-G4) added, OPEN. Zero regression, CPU-timing oracles untouched (no cartridge device is a clock consumer)."

@@ -74,6 +74,17 @@ void Hbf1xvMachine::wire_bus() {
     // only on io_bus_ #7C/#7D.
     slot_bus_.attach(3, 3, 1, &fmmusic_rom_);
 
+    // External cartridge bays: primary slots 1 and 2 (M19, backlog B7). Both
+    // are bare, unexpanded XML `<primary external="true">` elements (A-M19-1,
+    // Sony_HB-F1XV.xml:119,121) -- NO set_expanded call for either; each
+    // CartridgeSlot is attached at ALL 4 pages of its own primary slot, sub 0
+    // (SlotBus::sub_for_page already returns 0 unconditionally for a
+    // non-expanded primary, so this requires zero change to SlotBus itself).
+    for (int page = 0; page < devices::chipset::SlotBus::kPages; ++page) {
+        slot_bus_.attach(1, 0, page, &cartridge_slot1_);
+        slot_bus_.attach(2, 0, page, &cartridge_slot2_);
+    }
+
     // --- I/O fabric (IoBus) ---
     // Full i8255 PPI on #A8-#AB (M15-S4, expands the M11 port-A-only seam), plus
     // the S1985 straight-alias mirror of all four PPI ports #A8-#AB -> #AC-#AF
@@ -212,6 +223,12 @@ void Hbf1xvMachine::cold_boot() {
     disk_drive_.attach_image(&disk_image_);
     fdc_.reset();
     sony_fdc_.reset();
+
+    // External cartridge slots (M19): reinitialize bank state of whatever is
+    // currently loaded; no-op when empty; NEVER unloads (A-M19-9 -- matches
+    // real hardware power-cycle-with-cartridge-inserted semantics).
+    cartridge_slot1_.reset();
+    cartridge_slot2_.reset();
 
     // Load the 16-byte S1985 backup RAM from its .sram file when configured
     // (M15-S5, backlog C4). Absent/short file -> deterministic zero state (the
@@ -514,6 +531,41 @@ const devices::fdc::DiskImage& Hbf1xvMachine::disk_image() const {
 
 devices::fdc::DiskImage& Hbf1xvMachine::disk_image() {
     return disk_image_;
+}
+
+devices::cartridge::CartridgeLoadResult Hbf1xvMachine::load_cartridge(
+    const int slot_number, const devices::cartridge::CartridgeMapperType type, std::vector<std::uint8_t> image) {
+    if (slot_number == 1) {
+        return cartridge_slot1_.load(type, std::move(image));
+    }
+    if (slot_number == 2) {
+        return cartridge_slot2_.load(type, std::move(image));
+    }
+    return devices::cartridge::CartridgeLoadResult::InvalidSlotNumber;
+}
+
+void Hbf1xvMachine::unload_cartridge(const int slot_number) {
+    if (slot_number == 1) {
+        cartridge_slot1_.unload();
+    } else if (slot_number == 2) {
+        cartridge_slot2_.unload();
+    }
+}
+
+const devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot1() const {
+    return cartridge_slot1_;
+}
+
+devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot1() {
+    return cartridge_slot1_;
+}
+
+const devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot2() const {
+    return cartridge_slot2_;
+}
+
+devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot2() {
+    return cartridge_slot2_;
 }
 
 const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {

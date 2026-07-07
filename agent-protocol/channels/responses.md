@@ -1332,3 +1332,236 @@ Use this format:
 - Re: REQ-M18-003 (release decision + tag)
 - Outcome: M18 CLOSED. `agent-protocol/state/milestones.md` M18 status -> Done; `definition-of-done.yaml` M18 overall_done -> true (regression_qa.signoff_decision_recorded already true from RESP-M18-003). Git tag `v1.0.18` at the M18 closure commit (committed separately from M17 per the human's explicit "commit, and tag seperately" instruction). Backlog B5, C7 -> DONE (M18); F1/F2 remain OPEN. Eight milestones M11-M18 now tagged (v1.0.11..v1.0.18).
 - Responded At: 2026-07-07T12:25:00+09:00
+
+---
+
+- Response ID: RESP-M19-001
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M19
+- Re: REQ-M19-001 (planning package)
+- Outcome: DELIVERED. `docs/m19-planner-package.md` (no production code).
+- Confirmed via direct XML read (`Sony_HB-F1XV.xml:119,121`): primary slots 1 and 2 are each a bare, unexpanded `<primary external="true".../>` element (no `<secondary>` children) — no `SlotBus::set_expanded`/sub-slot logic needed, zero change to `SlotBus` itself required.
+- Mapper-type MVP scope: six types sharing one `CartridgeRomWindow` primitive (grounds openMSX's `RomBlocks<BANK_SIZE>` bank-resolution algorithm) — `Mirrored`, `Generic8kB`, `Generic16kB`, `Ascii8kB`, `Ascii16kB`, `Konami` (no SCC) — using openMSX's own canonical name strings for `--cartN-type`. Explicit type required; defaults to `Mirrored` (matching openMSX's own default) only when the flag is omitted, never auto-detected from content.
+- Deferred as new backlog rows: **G1** (KonamiSCC + embedded SCC sound chip — a new audio device, not an incremental mapper), **G2** (ROM-database/heuristic mapper-type auto-detection), **G3** (full `CartridgeSlotManager`-style runtime hot-plug — this project has no runtime command console), **G4** (the long tail of ~80 other specialized/vendor mapper types).
+- Flagged finding, self-resolved (no decision gate needed, unlike DEC-0012): `roms/aleste.rom`'s real-world mapper/game identity cannot be confirmed (2MB size is incompatible with the obvious Mirrored/classic-Konami guesses; no SHA1 to cross-reference `softwaredb.xml`). Disposition: used ONLY as a mechanical "large real file loads correctly" smoke fixture under the explicitly non-hardware-claiming `Generic8kB` type; ALL byte-exact protocol tests use synthetic hand-authored fixtures instead (mirrors the M16 synthesized-disk-image precedent).
+- CLI: `--cart1 <path> [--cart1-type <name>]` / `--cart2 <path> [--cart2-type <name>]` via a new pure, directly-unit-tested argv parser (`src/machine/cartridge_cli.*`); a NEW, deliberately stricter missing/invalid-cartridge policy (loud stderr diagnostic + non-zero exit, never silent) distinct from the existing `RomAssetLoader` BIOS-asset graceful-degradation policy.
+- Slice plan: S1 shared window primitive + mapper-type enum; S2 the six MVP mapper devices; S3 `CartridgeSlot` wrapper (load/unload/reset dispatch, empty-slot open-bus regression guard); S4 machine wiring + system integration (both slots + the `aleste.rom` mechanical smoke test); S5 CLI integration; S6 openMSX A/B (content-bearing — both sides load an identically-authored synthetic cartridge) + backlog finalization.
+- Full deferred-backlog review (per the human's explicit instruction): every row A.B1-B9, B.C1-C10, C.D1-D7, D.E1-E2, E.F1-F2 re-affirmed with justification in package §4; new Section F (G1-G4) proposed.
+- Backlog: closes B7 (on developer delivery); G1-G4 added as new OPEN rows.
+- Gate: normal human-release-decision gate (no auto-close) — DEC-0003's auto-close grant is M12-only.
+- Responded At: 2026-07-07T13:30:00+09:00
+
+---
+
+- Response ID: RESP-M19-002
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M19
+- Re: REQ-M19-002 (implementation S1..S6 per docs/m19-planner-package.md)
+- Outcome: DELIVERED. `ctest` 91/91 green (81 prior M1-M18 + 10 new M19 test executables), 0
+  failed, zero regression. Fresh `cmake --build build --config Debug` (0 errors, only pre-existing
+  C4819 codepage warnings unrelated to this change). QA sign-off left to QA (not attempted here,
+  per guardrails).
+- Files (new): `src/devices/cartridge/{cartridge_mapper_type,cartridge_rom_window,
+  cartridge_mapper_device,cartridge_mirrored_rom,cartridge_generic8kb_rom,
+  cartridge_generic16kb_rom,cartridge_ascii8kb_rom,cartridge_ascii16kb_rom,cartridge_konami_rom,
+  cartridge_slot}.{h,cpp}` (`cartridge_mapper_device.h` header-only); `src/machine/cartridge_cli.
+  {h,cpp}`; 8 new unit test files under `tests/unit/devices/cartridge/` +
+  `tests/unit/machine/cartridge_cli_unit_test.cpp`; 2 new integration test files
+  (`tests/integration/machine/hbf1xv_m19_cartridge_integration_test.cpp`,
+  `hbf1xv_m19_aleste_smoke_integration_test.cpp`); `tools/gen-m19-cartridge-probe.py`;
+  `tools/openmsx-m19-cartridge-parity.ps1`; `tests/parity/m19_cartridge.rom` +
+  `m19_cartridge_probe.bin`; `docs/m19-parity-trace-diff.md`; `docs/m19-implementation-report.md`.
+- Files (modified, additive only): `src/machine/hbf1xv_machine.{h,cpp}` (+`cartridge_slot1_{1}`/
+  `cartridge_slot2_{2}` members; `wire_bus()` attaches each at all 4 pages of its own primary slot,
+  sub 0, with NO `set_expanded` call for either; `cold_boot()` calls both `.reset()`; new
+  `load_cartridge`/`unload_cartridge`/`cartridge_slot1()`/`cartridge_slot2()` API); `src/main.cpp`
+  (+`load_cartridges_from_args()` shared helper wired into BOTH the default run path and the
+  extended `--parity-trace` mode, which now takes an additional `cli_args` parameter);
+  `CMakeLists.txt` / `tests/CMakeLists.txt` (+9 source files, +10 test targets, +
+  `SONY_MSX_ROMS_DIR_ABS`); `docs/asset-checksums.txt` (refreshed; `aleste.rom` SHA256 unchanged,
+  `metalgear.rom` now also present in `roms/` — unrelated to M19, untouched otherwise).
+- Bank-resolution mask subtlety (A-M19-6, R-M19-1) implemented and unit-tested EXACTLY: the mask
+  is consulted only as a fallback for an already-out-of-range request, never an unconditional
+  AND — both branches asserted for a default mask and an overridden (Konami-style, 31) mask,
+  including the "oversized (>256 KB) Konami image, mask never engages beyond the image's own bank
+  count" case, cited verbatim from `RomBlocks.cc:107-118`.
+- **Grounding finding surfaced and corrected (mirrors the DEC-0012 precedent, not silently
+  buried):** the task brief's own "slots 0/1/2 stay permanently fixed at bank 0" Konami shorthand
+  is an overstatement of `RomKonami.cc:38-52,61-67` — only window-slots 0 and 2 are genuinely
+  fixed (both set only by `reset()`'s single `bank_switch(2,0)` call, since page 2 is never
+  reachable from any write address); window-slot 1 mirrors slot 3's LIVE value on every write to
+  page 3 (and symmetrically slot 6 mirrors slot 4, slot 7 mirrors slot 5). The shipped device code
+  is a literal, correct translation of `RomKonami.cc`'s actual algorithm (so it was always
+  correct); the unit test and this report were written to state the CORRECTED, grounded claim
+  explicitly (`docs/m19-implementation-report.md` §2.1 has the full derivation).
+- Empty-slot regression guard (A-M19-9) and `slot_expanded(1)==false`/`slot_expanded(2)==false`
+  (R-M19-8) both hold, confirmed by dedicated integration-test assertions.
+- `CartridgeSlot::reset()` reinitializes bank state but NEVER unloads (A-M19-9) — unit- and
+  integration-tested via a load → bank-switch-away → `cold_boot()` → assert-reverted-but-still-
+  loaded sequence.
+- New cartridge-CLI loud/non-zero-exit failure policy confirmed NOT to leak into `RomAssetLoader`'s
+  existing graceful-degradation path: `rom_asset_loader.{h,cpp}` were not touched this milestone
+  (confirmed by direct diff review), and every pre-existing BIOS/Kanji-font/disk-image test
+  remains green unmodified.
+- `roms/aleste.rom` used ONLY as a disclosed, non-hardware-claiming `Generic8kB` mechanical smoke
+  fixture (file size + independently-recomputed SHA256 + 2-byte header read-back) — no claim
+  anywhere about its real-world game/mapper identity.
+- A/B (REAL, genuinely captured vs openMSX 19.1, WSL, `Sony_HB-F1XV` machine, NOT BLOCKED):
+  slot-lettering (R-M19-6) empirically confirmed via a live WSL Tcl probe (distinguishable
+  synthetic markers + `debug write ioports 0xA8`/`debug read memory`) — `-carta` = this machine's
+  primary slot 1, `-cartb` = primary slot 2, on this installed openMSX/machine combination. The
+  extended `--parity-trace` (now recognizing `--cart1`/`--cart1-type`) vs. an openMSX chained
+  single-step Tcl script mounting the SAME synthetic `Generic8kB` cartridge via `-carta -romtype
+  8kB` produced an **EMPTY DIFF over all 8 instructions**, including the AF register at the three
+  `LD A,(addr)` read-back steps (`0x00` reset-default, `0x03` after bank-switch, `0x01`
+  unaffected-slot) — simultaneously the architectural AND content-bearing proof, no second
+  subject needed. Adversarial comparator self-check passed (empty-side → exit 2 BLOCKED;
+  corrupted-field → exit 1 DIVERGENCE, 4 field mismatches correctly flagged).
+- Backlog: B7 → DONE (M19); G1 (KonamiSCC + embedded SCC chip), G2 (ROM-database/heuristic
+  auto-detection), G3 (runtime hot-plug), G4 (~80-type long tail) added as new OPEN rows under a
+  new "Section F" heading. Updated `agent-protocol/state/deferred-backlog.md` same-cycle.
+- Report: `docs/m19-implementation-report.md`.
+- Residual risks (honestly recorded, none blocking): (1) KonamiSCC/embedded-SCC-chip (G1),
+  ROM-database auto-detection (G2), runtime hot-plug (G3), and the ~80-type long tail (G4) are all
+  explicitly out of scope, as agreed in the planner package; (2) `roms/aleste.rom`'s real-world
+  identity remains genuinely unconfirmed, used only as a disclosed mechanical smoke fixture; (3)
+  the Konami "fixed slots" grounding finding (above) is a documentation/test correction only, not
+  a shipped-behaviour risk — the device code was always correct.
+- Gate: normal human-release-decision gate (no auto-close) — this response is implementation-only
+  (REQ-M19-002); QA sign-off is a separate, subsequent gate.
+- Responded At: 2026-07-07T15:10:00+09:00
+
+---
+
+- Response ID: RESP-M19-003
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M19
+- Re: Coordinator follow-up on RESP-M19-002 — comment-precision fix + second real-file smoke
+  fixture (`roms/metalgear.rom`)
+- Outcome: DELIVERED, additive. `ctest` **92/92** green (91 prior M19-initial + 1 new), 0 failed,
+  zero regression. Fresh `cmake --build build --config Debug` (0 errors). `tools/validate-assets.ps1`
+  and `tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt` both re-run; both `roms/` SHA256
+  values unchanged.
+- **Comment fix**: `src/devices/cartridge/cartridge_konami_rom.cpp`'s inline comment above
+  `mem_write` (previously "slots 0/1 never move again after reset()") corrected to state the
+  precise, grounded claim: only window-slots 0 and 2 are permanently fixed at bank 0; window-slot
+  1 mirrors window-slot 3's LIVE value (and symmetrically 4↔6, 5↔7). Comment-only change, zero
+  behavior impact (the shipped algorithm was always a correct, literal translation of
+  `RomKonami.cc`).
+- **`roms/metalgear.rom` disposition chosen: identified `Konami`** (NOT the disclaimed
+  `Generic8kB` pattern used for `aleste.rom`), because the identity IS directly confirmable by
+  concrete, citable evidence — not general genre knowledge:
+  1. This file's SHA1 (`919fa773e1f239dc90fa47e2770f3f5eca7f9bfe`) matches, byte-for-byte, ONE of
+     the `<dump><megarom><type>Konami</type><hash>919fa773e1f239dc90fa47e2770f3f5eca7f9bfe</hash>
+     </megarom></dump>` entries under `<title>Metal Gear</title>` (`genmsxid` 1028, Konami, 1987,
+     MSX2, JP) in `references/openmsx-21.0/share/softwaredb.xml` — checked directly (grep +
+     Python SHA1), not asserted from memory. The same title also records `ASCII8`/`KonamiSCC`/
+     `ReproCartridgeV1` dumps under DIFFERENT hashes, so the type claim is tied to this file's
+     EXACT byte content, not a genre generalization.
+  2. Independently verified live: mounted the identical file in real WSL openMSX 19.1 via
+     `-carta roms/metalgear.rom -romtype Konami` — loaded without any rejection/fatal error, and
+     `debug read memory 0x4000`/`0x4001` (after `debug write ioports 0xA8 0xF7`, this project's
+     own SlotBus-derived page-1-to-slot-1 routing) returned `0x41`/`0x42` ('A'/'B'), matching this
+     emulator's own result byte-for-byte. This is genuinely stronger real-world validation than
+     `aleste.rom`'s disposition.
+- Scope discipline preserved: `roms/metalgear.rom` is still NEVER used for any byte-exact
+  bank-switch/protocol correctness claim (those remain exclusively on synthetic fixtures,
+  unchanged). The new test (`tests/integration/machine/hbf1xv_m19_metalgear_smoke_integration_test
+  .cpp`, same `SONY_MSX_ROMS_DIR` mechanism as the aleste smoke test) asserts ONLY: file size
+  (139,264 bytes = 17×8KB banks); an independently-computed SHA1 matching the softwaredb.xml-cited
+  hash; an independently-computed SHA256 matching `docs/asset-checksums.txt`; successful `Konami`
+  load + `mapper_type() == Konami`; and the two header bytes ('A'/'B') read back correctly at CPU
+  page 1 after `cold_boot()`.
+- Files (new): `tests/integration/machine/hbf1xv_m19_metalgear_smoke_integration_test.cpp` (includes
+  a second self-contained, from-spec SHA-1 implementation alongside the existing SHA-256 one, for
+  this test's own softwaredb.xml-hash cross-check — no shared test-only library exists in this
+  project, each test executable is self-contained, mirroring the aleste smoke test's own SHA-256
+  precedent).
+- Files (modified, additive/comment-only): `tests/CMakeLists.txt` (+1 test target, reusing the
+  existing `SONY_MSX_ROMS_DIR_ABS` variable); `src/devices/cartridge/cartridge_konami_rom.cpp`
+  (comment fix only); `docs/asset-checksums.txt` (refreshed, byte-identical values);
+  `docs/m19-implementation-report.md` (new §9 addendum).
+- Report: `docs/m19-implementation-report.md` §9.
+- Residual risk (honestly recorded, non-blocking): the softwaredb.xml SHA1 match confirms this
+  EXACT file is a catalogued `Konami`-typed dump of the real "Metal Gear" (Konami, 1987) — a much
+  stronger confirmation than `aleste.rom`'s — but, consistent with this project's disclosure
+  discipline, no claim is made about actual gameplay correctness or about game content/behavior
+  beyond the two header bytes and the mechanical load-success check.
+- Gate: normal human-release-decision gate (no auto-close) — this response is implementation-only;
+  QA sign-off is a separate, subsequent gate.
+- Responded At: 2026-07-07T15:45:00+09:00
+
+---
+
+- Response ID: RESP-M19-004
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M19
+- Re: REQ-M19-002/RESP-M19-003 (regression assessment + sign-off recommendation)
+- Outcome: **PASS** (one non-blocking Required Fix recorded; does not gate this Pass). Full report:
+  `docs/m19-qa-signoff.md`.
+- QA independently reproduced, not merely re-read: fresh `cmake -S . -B build
+  -DSONY_MSX_ENABLE_SDL3=OFF` + `cmake --build build --config Debug` (0 errors); fresh `ctest
+  --test-dir build -C Debug --output-on-failure` = **92/92 passed, 0 failed**; `git diff v1.0.18`
+  inspection confirming zero changes to `src/devices/cpu/`/`src/core/` and zero
+  `step_cpu_instruction`/`run_cycles`/`run_frame`/`elapsed_cycles` occurrences in the machine-file
+  diff (structural, not just empirical, zero-regression proof); `git log` confirming
+  `rom_asset_loader.{h,cpp}` untouched since the M13 close commit (CLI failure-policy isolation
+  holds).
+- Bank-resolution mask subtlety (R-M19-1) independently verified byte-exact against
+  `RomBlocks.cc:107-118` directly by QA (mask consulted only as an out-of-range fallback, never an
+  unconditional AND).
+- Konami mirror-quirk correction (R-M19-3) independently re-derived from `RomKonami.cc:38-52,61-67`
+  by QA and confirmed correct in the shipped `cartridge_konami_rom.cpp` and its unit test. **Finding
+  surfaced by QA (non-blocking, documentation-only):** the class-level doc comment in
+  `cartridge_konami_rom.h` (lines 38-44) was NOT actually corrected in the RESP-M19-003 follow-up
+  round as claimed — it still reads "...slots 0/1/2 ALL stay permanently at bank 0," the exact
+  overstatement the `.cpp` file's own (correctly fixed) inline comment and the unit test both
+  debunk. Grepped `src/` and confirmed this is the only remaining occurrence. Zero effect on shipped
+  behavior (confirmed correct and tested); recorded as a Required Fix (§7 of the sign-off doc), not
+  a blocking condition.
+- `roms/aleste.rom` non-identity-claiming discipline confirmed by direct file read + a project-wide
+  grep for "Aleste"/"aleste" (zero stray claims found).
+- `roms/metalgear.rom`'s NEW `Konami`-identified disposition independently re-verified three ways:
+  (1) own SHA1 (`919fa773e1f239dc90fa47e2770f3f5eca7f9bfe`) + SHA256
+  (`399447d8012035b5a97dd3aec235a8e7d03b8da499196b6f047e1c7290a35760`) recomputation, both matching
+  the test/checksums exactly; (2) direct `grep` of `references/openmsx-21.0/share/softwaredb.xml`
+  confirming the SHA1 falls under the "Metal Gear" / `genmsxid 1028` / Konami / 1987 / MSX2 / JP
+  title block, `Konami`-typed, distinct from that title's other `ASCII8`/`KonamiSCC`/
+  `ReproCartridgeV1`-typed hashes; (3) a from-scratch WSL openMSX 19.1 Tcl probe, written and driven
+  by QA itself (not reusing the developer's harness), mounting the identical file via `-carta
+  roms/metalgear.rom -romtype Konami` — loaded without rejection, and `debug read memory
+  0x4000`/`0x4001` after `debug write ioports 0xA8 0xF7` returned `0x41`/`0x42`, matching this
+  emulator's own result byte-for-byte (this also independently corroborates R-M19-6's slot-lettering
+  claim).
+- openMSX A/B evidence: QA read the raw captured trace files (`build/m19_cartridge_trace_{A,B}
+  .txt`) directly, not just `docs/m19-parity-trace-diff.md`'s summary, and confirmed all 8
+  instructions match byte-for-byte including the content-bearing AF read-back values
+  (`0000`→`0300`→`0100`).
+- `machine.slot_expanded(1)==false`/`slot_expanded(2)==false` (R-M19-8) confirmed genuinely asserted
+  in `hbf1xv_m19_cartridge_integration_test.cpp` and holding; `wire_bus()` confirmed to never call
+  `set_expanded(1,...)`/`set_expanded(2,...)`.
+- Full deferred-backlog review confirmed complete: every row re-affirmed, B7 → DONE (M19) correctly
+  justified, new Section F (G1-G4) correctly added, none silently dropped.
+- Required Fix (non-blocking, recommended before/alongside the human release decision): correct the
+  stale class-level doc comment in `src/devices/cartridge/cartridge_konami_rom.h` (lines 38-44) per
+  §7 of `docs/m19-qa-signoff.md`.
+- Recommendation to coordinator: this PASS authorizes presenting M19 for the human release decision
+  (normal gate, no auto-close per DEC-0003). QA does NOT modify
+  `agent-protocol/state/definition-of-done.yaml`'s `signoff_decision_recorded`/`overall_done` flags
+  itself — that ledger transition is the coordinator's to apply based on this recommendation.
+- Report: `docs/m19-qa-signoff.md`.
+- Responded At: 2026-07-07T16:30:00+09:00
+
+---
+
+- Response ID: RESP-M19-005
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M19
+- Re: REQ-M19-003 (release decision + tag)
+- Outcome: M19 CLOSED. `agent-protocol/state/milestones.md` M19 status -> Done; `definition-of-done.yaml` M19 overall_done -> true (regression_qa.signoff_decision_recorded already true from RESP-M19-004). Git tag `v1.0.19` at the closure commit. Backlog B7 -> DONE (M19); new rows G1 (KonamiSCC + SCC chip), G2 (auto-detection), G3 (runtime hot-plug), G4 (long-tail mapper types) remain OPEN under Section F. Nine milestones M11-M19 now tagged (v1.0.11..v1.0.19).
+- Responded At: 2026-07-07T14:25:00+09:00

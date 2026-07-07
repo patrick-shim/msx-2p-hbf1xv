@@ -5,9 +5,73 @@
 #include <string>
 #include <vector>
 
+#include "machine/cartridge_cli.h"
 #include "machine/hbf1xv_machine.h"
 
 namespace {
+
+// M19-S5 cartridge loading (backlog B7). Shared by BOTH the default/normal
+// run path and the existing --parity-trace mode (planner §2.4/§2.7 -- no
+// duplicated parser/loader logic). Deliberately STRICTER than the
+// RomAssetLoader BIOS/Kanji-font/disk-image policy (which is non-fatal,
+// 0xFF-fill + a recorded diagnostic, rom_asset_loader.h:14-22): a
+// user-specified --cartN is an explicit, one-off, this-run-only request, so
+// an unreadable file OR any non-Ok CartridgeLoadResult prints a specific,
+// loud diagnostic to stderr and this function returns a non-zero code --
+// NEVER a silent fallback to "no cartridge." This policy lives ONLY here,
+// scoped to the new cartridge_cli/load_cartridge call sites; it must never
+// leak into RomAssetLoader's existing graceful-degradation call sites
+// (Hbf1xvMachine::load_rom_assets).
+int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const std::vector<std::string>& args) {
+    using sony_msx::devices::cartridge::CartridgeLoadResult;
+    using sony_msx::devices::cartridge::to_string;
+    using sony_msx::machine::ParsedCartridgeSlotCli;
+
+    const sony_msx::machine::ParsedCartridgeCli parsed = sony_msx::machine::parse_cartridge_cli(args);
+    for (const std::string& err : parsed.errors) {
+        std::cerr << "cartridge: " << err << "\n";
+    }
+    if (!parsed.errors.empty()) {
+        return 2;
+    }
+
+    auto load_one = [&](const int slot_number, const ParsedCartridgeSlotCli& spec) -> int {
+        if (!spec.path.has_value()) {
+            return 0;
+        }
+        std::ifstream in(*spec.path, std::ios::binary);
+        if (!in) {
+            std::cerr << "cartridge: cannot open --cart" << slot_number << " file: " << *spec.path << "\n";
+            return 2;
+        }
+        const std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
+                                               std::istreambuf_iterator<char>());
+        const CartridgeLoadResult result = machine.load_cartridge(slot_number, spec.type, image);
+        if (result != CartridgeLoadResult::Ok) {
+            std::cerr << "cartridge: failed to load --cart" << slot_number << " (" << *spec.path << ") as "
+                       << to_string(spec.type) << ": ";
+            switch (result) {
+                case CartridgeLoadResult::ImageSizeInvalidForMapperType:
+                    std::cerr << "image size is invalid for this mapper type\n";
+                    break;
+                case CartridgeLoadResult::InvalidSlotNumber:
+                    std::cerr << "invalid slot number\n";
+                    break;
+                case CartridgeLoadResult::Ok:
+                    break;
+            }
+            return 2;
+        }
+        std::cerr << "cartridge: --cart" << slot_number << " loaded (" << *spec.path << ", "
+                   << to_string(spec.type) << ")\n";
+        return 0;
+    };
+
+    if (const int rc = load_one(1, parsed.slot1); rc != 0) {
+        return rc;
+    }
+    return load_one(2, parsed.slot2);
+}
 
 // M10-S4 parity-trace mode. Loads a flat RAM-only Z80 program at a fixed base,
 // forces this emulator's cold_boot reset vector, sets PC to the base, enables
@@ -16,8 +80,16 @@ namespace {
 // is written to the output path in the exact CpuTraceSink text format so it can
 // be diffed line-for-line against the openMSX-side trace produced by
 // tools/openmsx-trace-parity.ps1.
+//
+// `cli_args` is the full argv-derived argument vector (M19-S6): when it
+// carries --cart1/--cart1-type (and/or --cart2/--cart2-type), the SAME
+// parser/loader used by the default run path (load_cartridges_from_args)
+// mounts the requested cartridge(s) right after cold_boot, before the driver
+// program runs -- letting a Z80 driver program page a real mapper into a CPU
+// page via #A8 and exercise it (planner §2.7). Absent any --cartN flag this
+// is a no-op, so every pre-M19 parity-trace invocation is unchanged.
 int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
-                     const std::string& out_path) {
+                     const std::string& out_path, const std::vector<std::string>& cli_args) {
     std::ifstream in(bin_path, std::ios::binary);
     if (!in) {
         std::cerr << "parity-trace: cannot open program: " << bin_path << "\n";
@@ -32,6 +104,9 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
 
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();  // AF=BC=DE=HL=0, SP=FFFF, PC=0, I=R=0, IFF1=IFF2=0, IM1.
+    if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
+        return rc;
+    }
     // Authentic reset boots slot-0 BIOS (M13-S4 #A8=0). The parity harness runs a
     // flat RAM-only program, so page the 64 KB mapper RAM into all four pages.
     machine.map_flat_ram();
@@ -243,6 +318,11 @@ int run_bios_boot_trace(const std::string& bios_dir, std::uint32_t max_steps,
 }
 
 int main(int argc, char** argv) {
+    // Full argv (minus argv[0]) for the M19 cartridge CLI (--cart1/
+    // --cart1-type/--cart2/--cart2-type), parsed order-independently
+    // regardless of which mode (default run or --parity-trace) is active.
+    const std::vector<std::string> args(argv + 1, argv + argc);
+
     if (argc >= 2 && std::string(argv[1]) == "--bios-boot-trace") {
         if (argc < 5) {
             std::cerr << "usage: " << argv[0]
@@ -290,11 +370,14 @@ int main(int argc, char** argv) {
         const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
         const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
         const std::string out_path = argv[5];
-        return run_parity_trace(bin_path, base, max_steps, out_path);
+        return run_parity_trace(bin_path, base, max_steps, out_path, args);
     }
 
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
+    if (const int rc = load_cartridges_from_args(machine, args); rc != 0) {
+        return rc;
+    }
     machine.run_frame();
 
     std::cout << "sony-msx-hbf1xv headless scaffold\n";

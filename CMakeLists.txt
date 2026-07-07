@@ -33,6 +33,15 @@ add_library(sony_msx_core STATIC
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
     src/devices/memory/battery_backed_sram.cpp
+    src/devices/cartridge/cartridge_mapper_type.cpp
+    src/devices/cartridge/cartridge_rom_window.cpp
+    src/devices/cartridge/cartridge_mirrored_rom.cpp
+    src/devices/cartridge/cartridge_generic8kb_rom.cpp
+    src/devices/cartridge/cartridge_generic16kb_rom.cpp
+    src/devices/cartridge/cartridge_ascii8kb_rom.cpp
+    src/devices/cartridge/cartridge_ascii16kb_rom.cpp
+    src/devices/cartridge/cartridge_konami_rom.cpp
+    src/devices/cartridge/cartridge_slot.cpp
     src/devices/kanji/kanji_font_rom.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp
@@ -43,6 +52,7 @@ add_library(sony_msx_core STATIC
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp
+    src/machine/cartridge_cli.cpp
     src/machine/cpu_trace_sink.cpp
     src/machine/memory_region.cpp
     src/machine/debug_dump.cpp

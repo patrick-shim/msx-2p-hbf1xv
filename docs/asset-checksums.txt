@@ -1,5 +1,5 @@
 ﻿Asset checksum report
-Generated at: 2026-07-07T08:31:23.8809710+09:00
+Generated at: 2026-07-07T10:40:27.1111794+09:00
 Algorithm: SHA256
 
 [bios]
@@ -17,5 +17,6 @@ Files:     7
 [roms]
 Directory: C:\Users\pashim\source\sony-msx-hbf1xv\roms
 Exists:    True
-Files:     1
+Files:     2
 - aleste.rom | 2097152 bytes | 4ea1e183467abe094df88901fc5dc70f0df5c1fc424de19f212692001bd5ad43
+- metalgear.rom | 139264 bytes | 399447d8012035b5a97dd3aec235a8e7d03b8da499196b6f047e1c7290a35760

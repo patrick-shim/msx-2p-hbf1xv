@@ -500,3 +500,92 @@ target_compile_definitions(machine_hbf1xv_m18_peripheral_io_integration_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m18_peripheral_io_integration_test
     COMMAND machine_hbf1xv_m18_peripheral_io_integration_test)
+
+# --- M19 external cartridge slots 1/2 (RomBlocks/RomPlain/RomGeneric8kB/16kB/
+#     RomAscii8kB/16kB/RomKonami MVP family, no SCC) -----------------------
+add_executable(devices_cartridge_rom_window_unit_test
+    unit/devices/cartridge/cartridge_rom_window_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_rom_window_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_rom_window_unit_test COMMAND devices_cartridge_rom_window_unit_test)
+
+add_executable(devices_cartridge_mapper_type_unit_test
+    unit/devices/cartridge/cartridge_mapper_type_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_mapper_type_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_mapper_type_unit_test COMMAND devices_cartridge_mapper_type_unit_test)
+
+add_executable(devices_cartridge_mirrored_rom_unit_test
+    unit/devices/cartridge/cartridge_mirrored_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_mirrored_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_mirrored_rom_unit_test COMMAND devices_cartridge_mirrored_rom_unit_test)
+
+add_executable(devices_cartridge_generic8kb_rom_unit_test
+    unit/devices/cartridge/cartridge_generic8kb_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_generic8kb_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_generic8kb_rom_unit_test COMMAND devices_cartridge_generic8kb_rom_unit_test)
+
+add_executable(devices_cartridge_generic16kb_rom_unit_test
+    unit/devices/cartridge/cartridge_generic16kb_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_generic16kb_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_generic16kb_rom_unit_test COMMAND devices_cartridge_generic16kb_rom_unit_test)
+
+add_executable(devices_cartridge_ascii8kb_rom_unit_test
+    unit/devices/cartridge/cartridge_ascii8kb_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_ascii8kb_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_ascii8kb_rom_unit_test COMMAND devices_cartridge_ascii8kb_rom_unit_test)
+
+add_executable(devices_cartridge_ascii16kb_rom_unit_test
+    unit/devices/cartridge/cartridge_ascii16kb_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_ascii16kb_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_ascii16kb_rom_unit_test COMMAND devices_cartridge_ascii16kb_rom_unit_test)
+
+add_executable(devices_cartridge_konami_rom_unit_test
+    unit/devices/cartridge/cartridge_konami_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_konami_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_konami_rom_unit_test COMMAND devices_cartridge_konami_rom_unit_test)
+
+add_executable(devices_cartridge_slot_unit_test
+    unit/devices/cartridge/cartridge_slot_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_slot_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_slot_unit_test COMMAND devices_cartridge_slot_unit_test)
+
+add_executable(machine_cartridge_cli_unit_test
+    unit/machine/cartridge_cli_unit_test.cpp
+)
+target_link_libraries(machine_cartridge_cli_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_cartridge_cli_unit_test COMMAND machine_cartridge_cli_unit_test)
+
+add_executable(machine_hbf1xv_m19_cartridge_integration_test
+    integration/machine/hbf1xv_m19_cartridge_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m19_cartridge_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m19_cartridge_integration_test
+    COMMAND machine_hbf1xv_m19_cartridge_integration_test)
+
+set(SONY_MSX_ROMS_DIR_ABS "${CMAKE_SOURCE_DIR}/roms")
+
+add_executable(machine_hbf1xv_m19_aleste_smoke_integration_test
+    integration/machine/hbf1xv_m19_aleste_smoke_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m19_aleste_smoke_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m19_aleste_smoke_integration_test
+    PRIVATE SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m19_aleste_smoke_integration_test
+    COMMAND machine_hbf1xv_m19_aleste_smoke_integration_test)
+
+add_executable(machine_hbf1xv_m19_metalgear_smoke_integration_test
+    integration/machine/hbf1xv_m19_metalgear_smoke_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m19_metalgear_smoke_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m19_metalgear_smoke_integration_test
+    PRIVATE SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m19_metalgear_smoke_integration_test
+    COMMAND machine_hbf1xv_m19_metalgear_smoke_integration_test)

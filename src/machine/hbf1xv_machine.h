@@ -18,6 +18,8 @@
 #include "devices/chipset/switched_io.h"
 #include "devices/chipset/system_bus.h"
 #include "devices/chipset/system_control.h"
+#include "devices/cartridge/cartridge_mapper_type.h"
+#include "devices/cartridge/cartridge_slot.h"
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 #include "devices/fdc/disk_drive.h"
@@ -192,6 +194,23 @@ public:
     devices::fdc::DiskDrive& disk_drive();
     [[nodiscard]] const devices::fdc::DiskImage& disk_image() const;
     devices::fdc::DiskImage& disk_image();
+
+    // External cartridge slots (M19, backlog B7). Primary slots 1 and 2 are
+    // bare, unexpanded XML `<primary external="true">` bays (A-M19-1); each is
+    // wired to ITS OWN CartridgeSlot device at all 4 CPU pages in wire_bus()
+    // (no SlotBus::set_expanded call for either -- SlotBus::sub_for_page
+    // already returns 0 unconditionally for a non-expanded primary). Loading
+    // is additive/explicit: an unloaded slot is byte-for-byte identical to
+    // the M13-M18 open-bus default (regression guard). load_cartridge/
+    // unload_cartridge are usable directly by tests without any CLI/argv/
+    // file-I/O plumbing (mirrors load_memory/set_asset_root).
+    [[nodiscard]] devices::cartridge::CartridgeLoadResult load_cartridge(
+        int slot_number, devices::cartridge::CartridgeMapperType type, std::vector<std::uint8_t> image);
+    void unload_cartridge(int slot_number);
+    [[nodiscard]] const devices::cartridge::CartridgeSlot& cartridge_slot1() const;
+    devices::cartridge::CartridgeSlot& cartridge_slot1();
+    [[nodiscard]] const devices::cartridge::CartridgeSlot& cartridge_slot2() const;
+    devices::cartridge::CartridgeSlot& cartridge_slot2();
 
     // S1985 16-byte backup-RAM .sram persistence (M15-S5, backlog C4). Set the
     // file path BEFORE cold_boot to load it (absent -> deterministic zero state,
@@ -383,6 +402,13 @@ private:
     devices::fdc::DiskDrive disk_drive_;
     devices::fdc::Wd2793 fdc_;
     devices::fdc::SonyFdc sony_fdc_{disk_rom_, fdc_, disk_drive_, fdc_clock_};
+
+    // External cartridge slots (M19, backlog B7): primary slots 1 and 2,
+    // each a bare, unexpanded external bay (A-M19-1). Empty by default
+    // (nullptr mapper inside CartridgeSlot) -- byte-for-byte M13-M18 open-bus
+    // regression guard until load_cartridge() is called.
+    devices::cartridge::CartridgeSlot cartridge_slot1_{1};
+    devices::cartridge::CartridgeSlot cartridge_slot2_{2};
 
     devices::chipset::SystemBus bus_{slot_bus_, io_bus_};
 

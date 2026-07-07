@@ -32,7 +32,7 @@ milestone reference so "no one misses a bit":
 | B4 | **MSX-JE 16 KB SRAM** (battery-backed) | OPEN — **re-grounded + re-owned to B6 (DEC-0012)** | M13 | B6 (Halnote milestone, indicative M20) — NOT M17/B3. Concrete grounding (`Sony_HB-F1XV.xml:105-115`, `RomHalnote.cc:37-46`) shows this SRAM belongs to the Halnote-mapped MSX-JE firmware ROM at slot 0-3, not the YM2413/MSX-MUSIC device at slot 3-3 (which the XML shows has no `<sramname>` at all). M17 builds a reusable, standalone, deterministic `BatteryBackedSram` primitive (`src/devices/memory/battery_backed_sram.*`, 16KB, generalizing the M15 S1985 `.sram` pattern) ready for B6 to wire directly — but does NOT instantiate/wire it to any slot this milestone (no real consumer yet; wiring it into slot 3-3 would fabricate hardware this machine does not have). | S1985 fact-sheet §9; `references/openmsx-21.0/src/memory/RomHalnote.cc:37-46`; Sony_HB-F1XV.xml:105-115 |
 | B5 | **Kanji font ROM access via I/O `#D8-#DB`** — 256 KB JIS1+JIS2 font (`bios/f1xvkfn.rom`); M13 mapped the Kanji *driver* (slot 3-1) but not the I/O-accessed font | **DONE (M18)** | M13 | M18 (`src/devices/kanji/kanji_font_rom.*`) — direct-port `KanjiFontRom` device (NOT the switched-I/O `MSXKanji12`, confirmed via the machine XML), two independent address counters (`adr1_`/`adr2_`) for the JIS1/JIS2 halves, six-behavior `#D8-#DB` protocol grounded byte-for-byte in `MSXKanji.cc:32-88`; reads the real 256 KB `bios/f1xvkfn.rom` (SHA1-verified identical to the XML-cited revision, `218d91eb6df2823c924d3774a9f455492a10aecb`); real openMSX A/B evidence — content-level parity confirmed (empty diff, byte values manually cross-checked at 4 representative offsets spanning both halves) — `docs/m18-parity-trace-diff.md`. | `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml` (kanji I/O `#D8-DB`); S1985 fact-sheet §9; `references/openmsx-21.0/src/MSXKanji.cc` |
 | B6 | **Halnote / MSX-JE firmware mapping** — slot 0-3, 1 MB `bios/f1xvfirm.rom`, `mappertype=Halnote` + 16KB SRAM; M13 left it reserved open-bus | OPEN — **confirmed true owner of B4's 16KB SRAM (DEC-0012)** | M13 | Halnote/firmware milestone (indicative M20) | Sony_HB-F1XV.xml (slot 0-3 Halnote); `references/openmsx-21.0/src/memory/RomHalnote.cc:37-46` (`sram = make_unique<SRAM>(..., 0x4000, ...)` = 16KB, grounds the exact size) |
-| B7 | **Cartridge loading** — external primary slots 1 & 2 (`roms/aleste.rom` sample); M13 left them empty | OPEN | M13 | Cartridge/slot-manager milestone | Sony_HB-F1XV.xml (slots 1,2); Target Machine Spec (2 cartridge slots) |
+| B7 | **Cartridge loading** — external primary slots 1 & 2 (`roms/aleste.rom` sample); M13 left them empty | **DONE (M19)** | M13 | M19 (`src/devices/cartridge/*`) — shared `CartridgeRomWindow` (8-slot x 8 KB, byte-exact `RomBlocks::setRom` bank-resolution, mask-as-fallback-only) + `CartridgeMapperType` (6-value enum, openMSX-canonical name strings) + six MVP mapper devices (`Mirrored`, `Generic8kB`, `Generic16kB`, `Ascii8kB`, `Ascii16kB`, `Konami` no-SCC) + `CartridgeSlot` wrapper (empty=open-bus regression guard, load/unload/reset dispatch, size-invalid loads rejected without partial application); wired at primary slots 1/2 (all 4 pages each, confirmed NOT expanded) via `Hbf1xvMachine::load_cartridge`/`unload_cartridge`; CLI (`--cart1`/`--cart1-type`/`--cart2`/`--cart2-type`, pure `cartridge_cli` parser, deliberately stricter loud/non-zero-exit failure policy kept separate from `RomAssetLoader`'s graceful-degradation policy); `roms/aleste.rom` used ONLY as a disclosed, non-hardware-claiming `Generic8kB` mechanical smoke fixture (SHA256 + 2-byte read-back check), never asserted as a real, identified cartridge; real openMSX 19.1 A/B evidence — empty diff (architectural + content-bearing, including the read-back marker bytes) over 8 instructions, `-carta` empirically confirmed (live WSL Tcl probe) to land in this machine's primary slot 1 — `docs/m19-parity-trace-diff.md`. KonamiSCC, ROM-database auto-detection, and runtime hot-plug split out as new rows G1-G3; the ~80-type long tail as G4 (not a partial close — mirrors the M14/M17/M18 contract-vs-depth precedent). | Sony_HB-F1XV.xml (slots 1,2); Target Machine Spec (2 cartridge slots); `references/openmsx-21.0/src/memory/{RomBlocks,RomPlain,RomGeneric8kB,RomGeneric16kB,RomAscii8kB,RomAscii16kB,RomKonami,RomInfo}.*` |
 | B8 | **FDC drive mechanics** — Fujitsu MB89311 controller + 720 KB 3.5" drive behavior; M13 mapped only the DISK ROM presence (slot 3-2) | DONE (M16) | M13 | M16 (`src/devices/fdc/{wd2793,disk_drive,disk_image,sony_fdc,fdc_clock_source}.*`) — WD2793 core (Type I/II/III/IV, context-sensitive status, INTRQ/DRQ, HLD per openMSX WD2793.cc grounding), Sony connection-style decode wrapping the M13 DISK ROM, deterministic 720 KB image, ~4 s delayed motor-off, DSKCHG; unit + integration tests green; real openMSX A/B evidence (register/command sequence + functional Read-Sector completion + 512-byte content match) — `docs/m16-parity-trace-diff.md` | `references/fact-sheets/FDC for Sony HB-F1XV.md`; `references/openmsx-21.0/src/fdc/`; Target Machine Spec (BUILT-IN MEDIA) |
 | B9 | **VRAM / V9958 VDP** — 128 KB VRAM owned by the VDP; the display processor (register/VRAM/status/interrupt CONTRACT; rendering DEPTH split to D1-D7) | DONE (M14) | DEC-0002 / M13 | M14 (closed, v1.0.14) | `references/fact-sheets/Yamaha V9958 VDP.md`; `references/openmsx-21.0/src/video/` |
 
@@ -92,9 +92,65 @@ of M18 (committed scope, not a waiver).
 | F1 | **Cassette tape image-format/signal fidelity** — real `.CAS`/`.WAV`/`.TSX` decode/encode, realistic FSK/UDF bit modulation and timing, save-to-host-file. M18 delivers the CPU-visible register contract (motor/output/input bits) + a deterministic in-memory synthetic bitstream only; zero real audio-file support. | OPEN | M18 | Future audio/tape-format milestone, paired with C9 (SDL3 frontend) | `references/openmsx-21.0/src/cassette/{CasImage,WavImage,TsxImage,TsxParser,CassettePlayer}.*`; S1985 fact-sheet §8 |
 | F2 | **Printer image/ESC-sequence rendering depth** — dot-matrix font rendering, ESC command interpretation, virtual page → PNG output (openMSX's `ImagePrinter`/`ImagePrinterMSX`). M18 delivers the CPU-visible port contract (strobe/data/busy protocol) + deterministic raw-byte capture only; zero rendering. | OPEN | M18 | Future rendering-depth milestone, paired with C9 | `references/openmsx-21.0/src/Printer.cc` (`ImagePrinter`/`ImagePrinterMSX`); S1985 fact-sheet §8 |
 
+## F. M19 cartridge-mapper-depth deferrals (recorded by the M19 planner, REQ-M19-001)
+
+M19 delivers six MVP external-cartridge mapper types (Mirrored/Generic8kB/Generic16kB/
+Ascii8kB/Ascii16kB/Konami no-SCC) as a byte-exact CONTRACT (device-level, unit- +
+A/B-verifiable) — mirrors the M14/M17/M18 contract-vs-depth split. The following mapper-family
+DEPTH is explicitly sequenced out of M19 (committed scope, not a waiver).
+
+| # | Item | Status | Origin | Candidate owner | Grounding |
+|---|---|---|---|---|---|
+| G1 | **KonamiSCC mapper + embedded SCC/SCC+ 5-channel wavetable sound chip** — `RomKonamiSCC` additionally owns a real `SCC scc;` member, a genuinely NEW audio device, not an incremental mapper variant. M19 delivers the plain `Konami` mapper (no SCC) only. | OPEN | M19 | Future audio milestone, paired with E1 (YM2413 DSP depth) / C9 (SDL3 frontend) | `references/openmsx-21.0/src/memory/RomKonamiSCC.hh/.cc`, `SCC.hh` |
+| G2 | **ROM-database/SHA1 auto-mappertype-detection + heuristic byte-pattern auto-detection** (`RomInfo`/`RomDatabase`/`share/softwaredb.xml`; `RomFactory.cc:82-169` `guessRomType`). M19 requires an explicit `--cartN-type` (defaults to `Mirrored` only when the flag is OMITTED) — never infers a type from content. | OPEN | M19 | Future milestone, only if auto-identification becomes a real need | `references/openmsx-21.0/src/memory/RomFactory.cc:171-210`; `RomInfo.hh/.cc`; `share/softwaredb.xml` |
+| G3 | **Full `CartridgeSlotManager`-style dynamic runtime hot-plug** (Tcl `cart`/`ext` commands, live insert/eject while running). M19's cartridge composition is fixed at construction/cold-boot time, matching every other device in this project. | OPEN | M19 | Future milestone, only if live insert/eject during a running session becomes a real requirement (e.g. alongside a future interactive/SDL3 session) | `references/openmsx-21.0/src/CartridgeSlotManager.hh/.cc` |
+| G4 | **The long tail of ~80 other specialized/vendor-specific mapper types** in `RomTypes.hh` (Panasonic/National-internal, NEO-8/16, Majutsushi, Synthesizer, PlayBall, Zemina family, Holy Qu'ran (1/2), FSA1FM (1/2), the Manbow2/MegaFlashROMSCC(+)/RBSC/HamarajaNight flash-cart family, ReproCartridge (V1/V2), KonamiUltimateCollection, MSXDOS2, R-Type, CrossBlaim, HarryFox, GameMaster2, ASCII8/16-with-SRAM variants, Koei (8/32), Wizardry, MSXWrite, MultiRom, RAMFILE, ColecoMegaCart, WonderKid, Dooly, MSXtra, Yamanooto, AlAlamiah30in1, RetroHard31in1, ROMHunterMk2, ASCII16X — excluding `Halnote` (B6, internal slot 0-3, unrelated) and `DRAM` (MSXturboR-specific, not this machine). | OPEN | M19 | Future milestone(s), only if/when a specific real cartridge requiring one of these is actually wanted | `RomTypes.hh:8-100`; `RomFactory.cc:221-382` |
+
 ---
 
-Last updated: 2026-07-07 (M18 CLOSED per DEC-0014/REQ-M18-003, tagged v1.0.18: **B5 → DONE (M18)**
+Last updated: 2026-07-07 (M19 CLOSED per DEC-0015/REQ-M19-003, tagged v1.0.19: **B7 → DONE (M19)** — `CartridgeRomWindow`/`CartridgeMapperType`/six MVP
+mapper devices/`CartridgeSlot` under `src/devices/cartridge/`, wired at primary slots 1/2
+(all 4 pages each, confirmed unexpanded via `machine.slot_expanded(1/2) == false`);
+`Hbf1xvMachine::load_cartridge`/`unload_cartridge` API; `cold_boot()` reinitializes bank state
+without ever unloading a cartridge; pure `cartridge_cli` argv parser + `src/main.cpp` wiring
+(loud/non-zero-exit failure policy kept structurally separate from the existing
+`RomAssetLoader` graceful-degradation policy — verified by a dedicated regression check).
+`roms/aleste.rom` used ONLY as a disclosed mechanical smoke fixture (`Generic8kB`, SHA256 +
+2-byte header read-back), never asserted as a real, identified cartridge. ctest 91/91 green
+(87 prior M1-M18 + 4 new M19 unit/integration test executables, ~60 additional individual
+unit-test cases across 8 new test files), zero regression — in particular the M9/M12
+CPU-timing oracles and the M13-M18 slot-map/device-accessor goldens all remained green,
+confirming no new clock consumer was introduced. Real openMSX 19.1 (WSL) A/B evidence:
+`-carta` empirically confirmed (live WSL Tcl probe, distinguishable synthetic markers +
+`debug write ioports 0xA8`/`debug read memory`) to land in this machine's primary slot 1 for
+this installed openMSX/machine combination; the identical `Generic8kB` synthetic
+cartridge + Z80 driver program produce an EMPTY diff across all 8 instructions on both sides
+(architectural PC/register/flags AND the content-bearing read-back marker bytes, since the
+per-instruction trace's AF field captures each `LD A,(addr)` result) — `docs/m19-parity-trace-diff.md`.
+Adversarial comparator self-check passed (empty-side → BLOCKED exit 2, corrupted-field →
+DIVERGENCE exit 1). A genuine grounding finding surfaced and corrected during development:
+the task brief's own "slots 0/1/2 stay permanently fixed at bank 0" Konami shorthand is an
+overstatement of `RomKonami.cc:38-52,61-67` — only window-slots 0 and 2 are truly fixed
+(both set only by `reset()`'s single `bank_switch(2,0)` call, since page 2 is never reachable
+from any write address); slot 1 mirrors slot 3's LIVE value on every write to page 3 (and
+symmetrically slot 6 mirrors slot 4, slot 7 mirrors slot 5) — corrected in both the
+implementation and its own unit test, documented in `docs/m19-implementation-report.md`.
+G1-G4 added as new OPEN rows (Section F) for KonamiSCC+embedded-SCC-chip,
+ROM-database/heuristic auto-detection, runtime hot-plug, and the ~80-type long tail. A follow-up
+round (per a human note about a newly-added second real cartridge file, `roms/metalgear.rom`)
+identified it as a genuine Konami-mapper "Metal Gear" (1987) dump via an exact SHA1 match to
+`references/openmsx-21.0/share/softwaredb.xml`, independently reproduced by the coordinator and
+QA, plus live WSL openMSX corroboration — added as a second mechanical smoke fixture (loaded as
+`Konami`, unlike `aleste.rom`'s disclosed-unidentified `Generic8kB` disposition); ctest 92/92
+green after this addition. QA (`docs/m19-qa-signoff.md`, RESP-M19-004) = PASS, independently
+reproducing ctest 92/92, the bank-resolution mask and Konami mirror-quirk grounding, and both
+real-file fixtures' disposition discipline; one non-blocking doc-comment staleness
+(`cartridge_konami_rom.h` retaining the disproven "slots 0/1/2 all fixed" claim) found by QA and
+fixed by the coordinator post-QA (comment-only, ctest re-confirmed 92/92). CLOSED by human
+release decision (DEC-0015/REQ-M19-003); tagged v1.0.19. Nine milestones M11-M19 now tagged
+(v1.0.11..v1.0.19).
+
+Prior status: M18 CLOSED per DEC-0014/REQ-M18-003, tagged v1.0.18: **B5 → DONE (M18)**
 — `KanjiFontRom` device (two-counter `adr1_`/`adr2_` address-latch + auto-increment protocol over
 `#D8-#DB`, byte-exact per `MSXKanji.cc:32-88`) reads the real 256 KB `bios/f1xvkfn.rom` (SHA1
 `218d91eb6df2823c924d3774a9f455492a10aecb`, confirmed identical to the XML-cited revision).
