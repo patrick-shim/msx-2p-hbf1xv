@@ -354,6 +354,11 @@ void Hbf1xvMachine::run_frame() {
     // (which level-samples the held line). Exact sub-frame raster position is
     // DEFERRED (backlog D4).
     vdp_.on_vsync();
+    // M23-S2 bookkeeping (additive-only; the sole change to this function this
+    // cycle): remember the cycle count at the most recent VSync so
+    // cycles_since_last_vsync()/vdp_cycle_position() can report a raster
+    // position relative to it. Does not affect scheduling/CPU timing.
+    last_vsync_cycle_ = elapsed_cycles();
 }
 
 void Hbf1xvMachine::run_frames(const std::uint32_t frames) {
@@ -471,6 +476,17 @@ std::uint64_t Hbf1xvMachine::frame_count() const {
 
 std::uint64_t Hbf1xvMachine::frame_cycles_per_frame() const {
     return kFrameCycles;
+}
+
+std::uint64_t Hbf1xvMachine::cycles_since_last_vsync() const {
+    // Relative to the most recent run_frame()'s on_vsync() call, or program
+    // start (last_vsync_cycle_ defaults to 0) if run_frame() has never been
+    // called (R-M23-5's documented, tested boundary condition).
+    return elapsed_cycles() - last_vsync_cycle_;
+}
+
+int Hbf1xvMachine::vdp_cycle_position() const {
+    return devices::video::vdp_access_timing::vdp_cycle_within_line(cycles_since_last_vsync());
 }
 
 void Hbf1xvMachine::set_cpu_trace_enabled(const bool enabled) {

@@ -770,3 +770,32 @@ add_executable(hbf1xv_m22_sprites_command_engine_system_test
 target_link_libraries(hbf1xv_m22_sprites_command_engine_system_test PRIVATE sony_msx_core)
 add_test(NAME hbf1xv_m22_sprites_command_engine_system_test
     COMMAND hbf1xv_m22_sprites_command_engine_system_test)
+
+# --- M23 Z80 HALT-R closure (C2, DONE) + VDP access-timing foundation --------
+# (C1/D4, narrowed/non-gating) --------------------------------------------
+add_executable(devices_z80a_halt_r_unit_test
+    unit/devices/z80a_halt_r_unit_test.cpp
+)
+target_link_libraries(devices_z80a_halt_r_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_z80a_halt_r_unit_test COMMAND devices_z80a_halt_r_unit_test)
+
+add_executable(machine_hbf1xv_m23_halt_r_integration_test
+    integration/machine/hbf1xv_m23_halt_r_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m23_halt_r_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m23_halt_r_integration_test
+    COMMAND machine_hbf1xv_m23_halt_r_integration_test)
+
+add_executable(devices_video_vdp_access_timing_unit_test
+    unit/devices/video_vdp_access_timing_unit_test.cpp
+)
+target_link_libraries(devices_video_vdp_access_timing_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_video_vdp_access_timing_unit_test
+    COMMAND devices_video_vdp_access_timing_unit_test)
+
+add_executable(machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test
+    integration/machine/hbf1xv_m23_vdp_access_timing_non_gating_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test
+    COMMAND machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test)

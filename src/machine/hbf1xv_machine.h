@@ -35,6 +35,7 @@
 #include "devices/video/frame_buffer.h"
 #include "devices/video/irq_line.h"
 #include "devices/video/v9958_vdp.h"
+#include "devices/video/vdp_access_timing.h"
 #include "devices/video/vdp_frame_renderer.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
@@ -103,6 +104,20 @@ public:
     [[nodiscard]] std::uint64_t elapsed_cycles() const;
     [[nodiscard]] std::uint64_t frame_count() const;
     [[nodiscard]] std::uint64_t frame_cycles_per_frame() const;
+
+    // VDP access-timing foundation accessors (M23-S2, backlog C1/D4 partial;
+    // additive-only, NON-GATING -- nothing in step_cpu_instruction()/
+    // run_cycles()/run_until_cycle() consults these). cycles_since_last_vsync()
+    // is elapsed_cycles() relative to the most recent run_frame()'s on_vsync()
+    // call (or program start, cycle 0, if run_frame() has never been called --
+    // an honest, tested boundary condition, R-M23-5; every M21/M22 system test
+    // drives the CPU purely via step_cpu_instruction() and never calls
+    // run_frame()). vdp_cycle_position() is a thin wrapper over
+    // vdp_access_timing::vdp_cycle_within_line() for that same relative
+    // position. See devices/video/vdp_access_timing.h for the full contract
+    // and the non-gating warning.
+    [[nodiscard]] std::uint64_t cycles_since_last_vsync() const;
+    [[nodiscard]] int vdp_cycle_position() const;
 
     // Deterministic CPU trace-export facility (M10-S1). Off by default. When
     // enabled, the machine attaches its owned sink as the CPU's per-instruction
@@ -462,6 +477,13 @@ private:
     bool event_logging_enabled_ = false;
     std::filesystem::path debug_root_{"debug"};
     std::uint64_t frame_count_ = 0;
+
+    // VDP access-timing foundation bookkeeping (M23-S2). Updated by exactly
+    // ONE added line inside the existing run_frame(), alongside the existing
+    // vdp_.on_vsync() call -- run_frame() is otherwise unchanged. Defaults to
+    // 0 (program start), matching the documented "no vsync yet" semantic of
+    // cycles_since_last_vsync()/vdp_cycle_position() above.
+    std::uint64_t last_vsync_cycle_ = 0;
 };
 
 }  // namespace sony_msx::machine

@@ -56,6 +56,22 @@ std::uint32_t Z80aCpu::step() {
     } else if (!blocked_this_step && state_.maskable_interrupt_pending() && state_.iff1()) {
         tstates = service_maskable_interrupt();
     } else if (state_.halted()) {
+        // Halted "idle" step (M23-S1, closes backlog C2/DEC-0004). Real Z80
+        // silicon internally refetches the current opcode -- a phantom M1 cycle
+        // -- for every machine cycle spent in the HALT loop, and that SAME M1
+        // both ticks the refresh register and (via the S1985's machine-level
+        // +1-per-M1 formula, hbf1xv_machine.cpp) advances the clock; the two
+        // effects are not separable mechanisms on real hardware
+        // (references/openmsx-21.0/src/cpu/Z80.hh:19-21, HALT_STATES = 4 +
+        // WAIT_CYCLES; CPUCore.cc:2508-2511, incR(advanceHalt(HALT_STATES,...))
+        // -- the identical `halts` computation drives both). This CPU core
+        // keeps publishing the bare, unchanged datasheet T-state count (4,
+        // A-M23-1's invariant: the core's own returned value never becomes 5 --
+        // only the machine-level `datasheet + m1_wait` sum does, with zero
+        // change to that existing formula); calling increment_refresh_register()
+        // here is the ONLY change this cycle -- it registers one M1 cycle so
+        // the existing, unmodified S1985 M1-wait arithmetic naturally applies.
+        increment_refresh_register();
         tstates = 4;
     } else {
         const std::uint8_t opcode = fetch_opcode();

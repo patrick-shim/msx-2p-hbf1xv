@@ -88,8 +88,21 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
 // program runs -- letting a Z80 driver program page a real mapper into a CPU
 // page via #A8 and exercise it (planner §2.7). Absent any --cartN flag this
 // is a no-op, so every pre-M19 parity-trace invocation is unchanged.
+// `halt_idle_extra_steps` (M23-S3, backlog C2 A/B evidence; mirrors the M19
+// --cart1/--cart2 precedent of extending THIS SAME mode additively for a new
+// milestone's specific A/B need, planner §2.4/§2.7): OPTIONAL, defaults to 0,
+// which preserves the exact pre-M23 behavior byte-for-byte (the main loop
+// below is completely unchanged -- it still stops stepping exactly at the
+// halt boundary, per the established, safe "stop at halt" convention every
+// other call site in this project uses, tests/CLAUDE.md). When > 0 AND the
+// CPU is halted after that unchanged loop, this steps `halt_idle_extra_steps`
+// MORE times while already halted -- the ONLY way to observe the M23-S1
+// HALT-R phantom-M1-refetch behavior (R incrementing once per halted idle
+// step) through the existing trace-export mechanism, which records every
+// step() call unconditionally regardless of halted state.
 int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
-                     const std::string& out_path, const std::vector<std::string>& cli_args) {
+                     const std::string& out_path, const std::vector<std::string>& cli_args,
+                     std::uint32_t halt_idle_extra_steps = 0) {
     std::ifstream in(bin_path, std::ios::binary);
     if (!in) {
         std::cerr << "parity-trace: cannot open program: " << bin_path << "\n";
@@ -118,6 +131,17 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
     while (steps < max_steps && !machine.cpu().state().halted()) {
         machine.step_cpu_instruction();
         ++steps;
+    }
+
+    // M23-S3 addition (see the halt_idle_extra_steps doc comment above): only
+    // engages when the caller explicitly asks for it AND the CPU is actually
+    // halted; otherwise this is a complete no-op (byte-identical pre-M23
+    // behavior for every existing invocation).
+    if (halt_idle_extra_steps > 0 && machine.cpu().state().halted()) {
+        for (std::uint32_t i = 0; i < halt_idle_extra_steps; ++i) {
+            machine.step_cpu_instruction();
+            ++steps;
+        }
     }
 
     const std::string trace = machine.cpu_trace().serialize();
@@ -715,14 +739,19 @@ int main(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "--parity-trace") {
         if (argc < 6) {
             std::cerr << "usage: " << argv[0]
-                      << " --parity-trace <program.bin> <base_hex> <max_steps> <out.txt>\n";
+                      << " --parity-trace <program.bin> <base_hex> <max_steps> <out.txt>"
+                         " [halt_idle_extra_steps]\n";
             return 2;
         }
         const std::string bin_path = argv[2];
         const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
         const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
         const std::string out_path = argv[5];
-        return run_parity_trace(bin_path, base, max_steps, out_path, args);
+        // Optional 6th positional arg (M23-S3, backlog C2 A/B evidence); absent
+        // -> 0, the exact pre-M23 behavior (see run_parity_trace's doc comment).
+        const auto halt_idle_extra_steps =
+            (argc >= 7) ? static_cast<std::uint32_t>(std::strtoul(argv[6], nullptr, 10)) : 0U;
+        return run_parity_trace(bin_path, base, max_steps, out_path, args, halt_idle_extra_steps);
     }
 
     sony_msx::machine::Hbf1xvMachine machine;

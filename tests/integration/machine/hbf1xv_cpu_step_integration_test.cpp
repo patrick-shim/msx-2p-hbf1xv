@@ -39,8 +39,13 @@ int main() {
     machine.load_memory(0x0000, program.data(), static_cast<std::uint32_t>(program.size()));
 
     // Machine T-states are MSX-accurate: datasheet + S1985 +1-per-M1 wait (M11,
-    // fact-sheet §8). LD A,n = 7+1, INC A = 4+1, HALT = 4+1; the halted idle step
-    // performs no opcode fetch (0 M1) so it stays at 4T.
+    // fact-sheet §8). LD A,n = 7+1, INC A = 4+1, HALT = 4+1; the halted idle
+    // step ALSO performs a phantom M1 opcode refetch (M23-S1, closes backlog
+    // C2/DEC-0004), so it is 4+1 = 5T, not 4T. Grounded:
+    // references/openmsx-21.0/src/cpu/Z80.hh:19-21 (HALT_STATES = 4 +
+    // WAIT_CYCLES) and CPUCore.cc:2508-2511 (incR(advanceHalt(...))) -- the
+    // SAME `halts` computation drives both the R-register increment and the
+    // clock advance on real hardware, so they cannot be separated.
     const std::uint32_t t0 = machine.step_cpu_instruction();
     if (!expect_true(t0 == 8 && machine.cpu().state().regs().a() == 0x2A,
             "CpuStep_LdAImmediate_DeterministicRegisterUpdate")) {
@@ -61,13 +66,17 @@ int main() {
 
     const std::uint16_t pc_before_idle = machine.cpu().state().regs().pc;
     const std::uint32_t t3 = machine.step_cpu_instruction();
-    if (!expect_true(t3 == 4 && machine.cpu().state().regs().pc == pc_before_idle,
+    // t3 == 5 (was 4 pre-M23): the halted idle step now correctly bills the
+    // phantom M1 refetch's S1985 wait (M23-S1, DEC-0004, backlog C2 closes in
+    // full). See the grounding comment above t0.
+    if (!expect_true(t3 == 5 && machine.cpu().state().regs().pc == pc_before_idle,
             "CpuStep_HaltedNoInterrupt_StaysAtSameProgramCounter")) {
         return 1;
     }
 
-    // 8 + 5 + 5 + 4 = 22 (datasheet 19 + three M1 waits on the fetched ops).
-    if (!expect_true(machine.elapsed_cycles() == 22,
+    // 8 + 5 + 5 + 5 = 23 (was 22 pre-M23; datasheet 19 + FOUR M1 waits: the
+    // three fetched ops plus the halted idle step's phantom refetch, A-M23-4).
+    if (!expect_true(machine.elapsed_cycles() == 23,
             "CpuStep_SequenceExecuted_MachineCycleCounterTracksTstates")) {
         return 1;
     }
