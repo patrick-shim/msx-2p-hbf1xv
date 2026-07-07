@@ -63,6 +63,17 @@ struct VdpModeState {
     return (base & 0x18) != 0;
 }
 
+// True iff this base mode uses the G6/G7 planar VRAM interleave (M21-S4,
+// backlog D7). Independently re-derived from
+// references/openmsx-21.0/src/video/DisplayMode.hh:140-143 (`isPlanar`):
+// `(base & 0x14) == 0x14`. Correctly identifies GRAPHIC6 (0x14) and
+// GRAPHIC7 (0x1C), and -- since YJK/YAE only set bits 5/6 of the full mode
+// byte, never touching base bits 2/4 -- both V9958 YJK overlay modes too
+// (their `base` stays 0x1C), while excluding GRAPHIC5 (0x10).
+[[nodiscard]] constexpr bool vdp_base_is_planar(std::uint8_t base) {
+    return (base & 0x14) == 0x14;
+}
+
 [[nodiscard]] constexpr VdpModeState decode_vdp_mode(std::uint8_t reg0, std::uint8_t reg1,
                                                      std::uint8_t reg25) {
     VdpModeState state;

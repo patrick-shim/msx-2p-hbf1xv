@@ -83,6 +83,15 @@ public:
     [[nodiscard]] std::uint16_t palette_entry(int index) const;  // 9-bit GRB
     [[nodiscard]] const VdpModeState& mode() const;
 
+    // --- Blink state (M21-S2, backlog D6). ---
+    // Frame-hook-driven countdown, decremented once per on_vsync() (mirrors
+    // openMSX's own frameStart() blink logic, VDP.cc:600-608) and re-armed
+    // from R#13 on both natural expiry and on any write to R#13 itself
+    // (VDP.cc:1040-1057 -- a write to R#13 resets blink state even when the
+    // written value is unchanged). No new clock consumer: driven only by the
+    // existing on_vsync() hook.
+    [[nodiscard]] bool blink_state() const;
+
 private:
     // #98 VRAM data path.
     void vram_data_write(std::uint8_t value);
@@ -132,6 +141,12 @@ private:
 
     IrqLine* irq_sink_ = nullptr;
     VdpModeState mode_{};
+
+    // Blink countdown state (M21-S2, backlog D6; VDP.cc:600-608/1040-1057).
+    // Frames remaining at the current blink phase; 0 = stable (no further
+    // toggling) until R#13 is next written with both nibbles non-zero.
+    int blink_countdown_ = 0;
+    bool blink_state_ = false;
 };
 
 }  // namespace sony_msx::devices::video

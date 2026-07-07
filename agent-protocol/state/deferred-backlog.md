@@ -61,13 +61,13 @@ waiver). Grounded in `references/fact-sheets/Yamaha V9958 VDP.md` and
 
 | # | Item | Status | Origin | Candidate owner | Grounding |
 |---|------|--------|--------|-----------------|-----------|
-| D1 | **Pixel-accurate raster rendering pipeline** — per-mode VRAM→framebuffer for all Target-Spec modes (TEXT1/2, G1–G7, MULTICOLOR), border, blink, per-scanline output. M14 stores mode-selection bits + palette but emits NO pixels | OPEN | M14 | Video-rendering milestone | fact-sheet §3/§5; `references/openmsx-21.0/src/video/` (Renderer/`VDP.cc` display path) |
+| D1 | **Pixel-accurate raster rendering pipeline** — per-mode VRAM→framebuffer for all Target-Spec modes (TEXT1/2, G1–G7, MULTICOLOR), border, blink, per-scanline output. M14 stores mode-selection bits + palette but emits NO pixels | **DONE (M21)** | M14 | M21 (`src/devices/video/vdp_frame_renderer.*`) — deterministic, pull-model `VdpFrameRenderer` over the existing M14 `V9958Vdp` contract; every Target-Spec mode byte-exact per `CharacterConverter.{hh,cc}`/`BitmapConverter.{hh,cc}`, incl. independently-verified dimensions (MULTICOLOR's real 256×192 canvas, not the fact-sheet's 64×48 color-cell-grid figure); border/backdrop color; blink. | fact-sheet §3/§5; `references/openmsx-21.0/src/video/` (Renderer/`VDP.cc` display path) |
 | D2 | **Sprite rendering + collision / 5th-sprite detection** — Sprite Mode 1 & 2, 8/line, per-line color, EC/IC/CC, the 1-px vertical shift, S#0 5S/C and S#3–S#6 collision coords | OPEN | M14 | Sprite milestone (with D1) | fact-sheet §6; `references/openmsx-21.0/src/video/SpriteChecker.cc/.hh` |
 | D3 | **VDP command engine** — R#32–R#46, HMMC/YMMM/HMMM/HMMV/LMMC/LMCM/LMMM/LMMV/LINE/SRCH/PSET/POINT + logical ops (IMP/AND/OR/EOR/NOT + T-variants), S#2 TR/CE handshake, S#7 color, S#8/9 border, R#25 CMD-in-all-modes | OPEN | M14 | Command-engine milestone | fact-sheet §8; `references/openmsx-21.0/src/video/VDPCmdEngine.cc/.hh` |
 | D4 | **Cycle-accurate VDP access-slot / command timing** — 1368 VDP-cycles/line, slot tables (154/88/31), 16-cycle request latency, CPU-access priority, the ~29-Z80-cycle safe-access gap, too-fast dropped-request behavior, exact sub-frame raster position of the line/VBlank IRQ | OPEN | M14 | Timing-fidelity milestone (with C1) | fact-sheet §2/§7/§8; `references/openmsx-21.0/src/video/VDPAccessSlots.cc/.hh` |
-| D5 | **YJK / YJK+YAE color decode + 15-bit DAC output** — SCREEN 10/11/12 Y/J/K unpack, `R=clamp(Y+J)`, `G=clamp(Y+K)`, `B=clamp((5Y−2J−K+2)/4)`, the 3-bit→5-bit palette expansion table. M14 stores R#25 YJK/YAE bits only; no color is computed/emitted | OPEN | M14 | Video-rendering milestone (with D1) | fact-sheet §5 |
-| D6 | **Horizontal scroll visual effect (R#25/26/27) + interlace/EO fields, blink timing, superimpose/digitize, external video** — M14 stores the register bits; the display consequences are rendering-time | OPEN | M14 | Video-rendering milestone (with D1) | fact-sheet §1/§3/§7/§9 |
-| D7 | **G6/G7 VRAM address interleave in the display/command path** — `physical=(logical>>1)|(logical<<16)` for planar modes. M14 keeps a flat 128 KB store and models the CPU-port auto-increment addressing; the planar display/command interleave is only observable once D1/D3 exist | OPEN | M14 | Video-rendering / command milestone | fact-sheet §2; `references/openmsx-21.0/src/video/VDP.cc:851-857` (`executeCpuVramAccess` planar path) |
+| D5 | **YJK / YJK+YAE color decode + 15-bit DAC output** — SCREEN 10/11/12 Y/J/K unpack, `R=clamp(Y+J)`, `G=clamp(Y+K)`, `B=clamp((5Y−2J−K+2)/4)`, the 3-bit→5-bit palette expansion table. M14 stores R#25 YJK/YAE bits only; no color is computed/emitted | **DONE (M21)** | M14 | M21 (`src/devices/video/vdp_frame_renderer.cpp`) — byte-exact per `BitmapConverter.cc:217-285`; the YJK B-channel plain-`int`-truncating-division formula independently verified (both QA and the developer re-derived, by hand, that the floor-vs-truncation divergence is real at the pre-clamp level but never observable in the final `clamp(x,0,31)` output for this formula's value range); 3-bit→5-bit expansion table shared with every other color-output path. | fact-sheet §5 |
+| D6 | **Horizontal scroll visual effect (R#25/26/27) + interlace/EO fields, blink timing, superimpose/digitize, external video** — M14 stores the register bits; the display consequences are rendering-time | **DONE (M21)** | M14 | M21 (`src/devices/video/vdp_frame_renderer.cpp`, `src/devices/video/v9958_vdp.cpp` blink-countdown) — vertical scroll (R#23), horizontal scroll for character modes (R#26, inside the per-mode converter) and bitmap modes (R#26/27, independently grounded), border mask (R#25 bit1), multi-page scroll (R#25 bit0 + R#2 bit5), blink (R#12/13, driven by the existing `on_vsync()` hook — no new clock consumer), interlace/EO bitmap-page addressing (hedged to an openMSX-parity confidence bar, since even openMSX's own source carries "TODO: verify" comments on this exact mechanism — QA independently confirmed this hedge is honest, not over-claimed), superimpose/digitize correctly scoped N/A (HB-F1XV has no digitizer/genlock hardware, fact-sheet §9). | fact-sheet §1/§3/§7/§9 |
+| D7 | **G6/G7 VRAM address interleave in the display/command path** — `physical=(logical>>1)|(logical<<16)` for planar modes. M14 keeps a flat 128 KB store and models the CPU-port auto-increment addressing; the planar display/command interleave is only observable once D1/D3 exist | **IN-PROGRESS (M21 partial)** | M14 | M21 closed the CPU-port piece (`V9958Vdp::effective_address()`, a 17-bit rotate-right-by-1, `(logical>>1)\|((logical&1)<<16)`, independently confirmed byte-for-byte against `VDP.cc:849-857` by both the coordinator and QA) and the display-path piece (`VdpFrameRenderer`'s `planar_row_spans`, cross-checked against a byte-by-byte rotate reference). The command-engine-path piece (the command engine's own coordinate-to-VRAM-address resolution) is explicitly carried forward to **M22** (paired with D3) — mirrors the C5 precedent of a single row tracked IN-PROGRESS across milestones rather than force-closed or split into a new letter-row. | fact-sheet §2; `references/openmsx-21.0/src/video/VDP.cc:851-857` (`executeCpuVramAccess` planar path) |
 
 ## D. M17 YM2413 DSP/timing deferrals (recorded by the M17 planner, REQ-M17-001; approved DEC-0012)
 
@@ -108,7 +108,53 @@ DEPTH is explicitly sequenced out of M19 (committed scope, not a waiver).
 
 ---
 
-Last updated: 2026-07-07 (M20 CLOSED per DEC-0017/REQ-M20-004, tagged v1.0.20: **B4 → DONE (M20)**
+Last updated: 2026-07-07 (M21 CLOSED per DEC-0018/REQ-M21-004, tagged v1.0.21: **D1 → DONE (M21)**,
+**D5 → DONE (M21)**, **D6 → DONE (M21)**, **D7 → IN-PROGRESS (M21 partial)** — the first pixel-rendering
+output path for this emulator. `VdpFrameRenderer`/`FrameBuffer` (`src/devices/video/`), a deterministic,
+pull-model, frozen-register-snapshot renderer (RGB555 pixels, zero new clock consumer) built purely over
+the existing M14 `V9958Vdp` port contract, needing no SDL3 frontend (still unbuilt, C9/M26) to be fully
+unit/integration-testable. Every Target-Spec text/graphics mode (TEXT1/2, GRAPHIC1-7, MULTICOLOR;
+TEXT1Q/MULTIQ/Unknown correctly rendered as flat blank since HB-F1XV's V9958 is never `isMSX1VDP()`)
+byte-exact per `CharacterConverter.{hh,cc}`/`BitmapConverter.{hh,cc}`, with independently-re-derived
+dimensions (MULTICOLOR's real canvas is 256×192, not the fact-sheet's 64×48 color-cell-grid figure).
+YJK/YJK+YAE decode byte-exact per `BitmapConverter.cc:217-285`, including a rigorous, independently
+re-verified finding that the YJK B-channel's floor-vs-truncation rounding risk, while real at the
+pre-clamp arithmetic level, is never observable in the final clamped RGB555 output for this formula's
+value range (both the developer and QA independently re-derived this by hand). GRAPHIC7's fixed
+256-color byte layout confirmed **GGGRRRBB** (green in the TOP 3 bits), not the naively-expected
+RRRGGGBB — independently verified against `SDLRasterizer.cc:330-336` by the coordinator, developer, AND
+QA, three times over. The G6/G7 planar VRAM interleave (D7) is a 17-bit rotate-right-by-1
+(`physical=(logical>>1)|((logical&1)<<16)`), independently confirmed byte-for-byte against
+`VDP.cc:849-857` by all three reviewers; M21 closes its CPU-port piece (a small, surgical, single-function
+edit to the already-shipped M14 `V9958Vdp::effective_address()`, confirmed NOT to touch
+`advance_vram_pointer()`'s R#14-carry logic) and its display-path piece, carrying the command-engine-path
+piece forward to **M22** (paired with D3) as a single tracked IN-PROGRESS row, not force-closed or split
+into a new letter — mirroring the C5 precedent. Scroll/blink/interlace effects (D6) delivered, with
+interlace/EO bitmap-page addressing honestly hedged to an "openMSX-parity" confidence bar (matching even
+openMSX's OWN disclosed "TODO: verify" uncertainty on this exact mechanism) and superimpose/digitize
+correctly scoped N/A (HB-F1XV has no digitizer hardware, fact-sheet §9). During implementation, the
+developer independently caught and fixed a real bug in a first draft of the interlace/EO Field-selection
+logic (a naive substitution would have silently flipped every bitmap-mode page read by default) — QA
+independently assessed the fix as sound, with one non-blocking nuance flagged for forward visibility (the
+final implementation is a documented SIMPLIFICATION of `getEvenOddMask()`, not a bit-for-bit port, since
+the exact formula is a per-scanline mechanism this milestone's frozen-snapshot architecture cannot host —
+that's D4/M23 territory). ctest 106/106 green (95 prior M1-M20 + 11 new), zero regression, independently
+reproduced by both the coordinator and QA from clean rebuilds; the existing M14 VRAM-pointer/R#14-carry
+unit tests confirmed genuinely unmodified (`git diff` against the M14 commit, empty diff). Real openMSX
+A/B evidence (`docs/m21-parity-trace-diff.md`): a deliberately-chosen derived-value/raw-VRAM comparison
+technique (not a screenshot-pixel diff, reasoned as fragile/not decision-relevant given openMSX's own
+gamma/color-matrix/scaler presentation-layer confounds) — 4/4 probes achieved genuine raw
+VRAM/palette/register ARCHITECTURAL PARITY, including a direct live cross-engine confirmation of the D7
+planar transform's physical bank1 placement; the computed-pixel-color sub-claim honestly reported BLOCKED
+(no computed-color introspection point exists in openMSX's Tcl debugger for this machine, verified via a
+live `debug list` query) rather than fabricated. QA (`docs/m21-qa-signoff.md`, RESP-M21-003) = PASS:
+independently re-derived the YJK rounding math by hand (three concrete cases), independently assessed the
+interlace-bug fix against the actual `getEvenOddMask()`/`SDLRasterizer.cc` call site, and independently
+confirmed the A/B raw dump files are genuine (read byte-for-byte, not the summarized doc). Ten milestones
+M11-M21 now tagged (v1.0.11..v1.0.21). Part of a pre-authorized three-milestone run (M21-M23); M22
+(sprites + command engine, D2/D3 + D7's remainder) next.
+
+Prior status: M20 CLOSED per DEC-0017/REQ-M20-004, tagged v1.0.20: **B4 → DONE (M20)**
 AND **B6 → DONE (M20)**, closed together per the human's explicit directive — `HalnoteRom`
 (`src/devices/halnote/halnote_rom.*`), a byte-exact port of `references/openmsx-21.0/src/memory/
 RomHalnote.{hh,cc}`: main 8-slot 8KB bank window (reusing the M19 `CartridgeRomWindow` primitive

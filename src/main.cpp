@@ -220,6 +220,112 @@ int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_
     return 0;
 }
 
+// M21-S7 VDP RENDER parity mode (backlog D1/D5/D6/D7-display-path). Runs a
+// flat RAM-only Z80 program (assembled by tools/gen-m21-vdp-render-probe.py)
+// that writes VRAM + registers/palette via the SAME #98/#99/#9A ports
+// run_vdp_parity uses, then emits: the R#0-R#27 control-register file, the
+// 16-entry palette (raw 9-bit GRB, matching openMSX's own "VDP palette"
+// SimpleDebuggable byte layout -- verified this cycle via a live WSL probe:
+// 2 bytes/entry, value = byte[2i] | (byte[2i+1]<<8)), a physical VRAM block
+// (the SAME cross-comparable raw-byte gate run_vdp_parity already uses), and
+// the renderer's OWN computed RGB555 pixel values for the first
+// <pixel_count> pixels of display line 0 (whatever mode the program left
+// active) -- a derived-value reference this project's own engine actually
+// produced, not a live cross-engine probe (openMSX exposes no
+// computed-pixel-color debuggable; `debug list` was checked this cycle and
+// no such debuggable exists -- see docs/m21-parity-trace-diff.md for the
+// full, honest disposition).
+int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
+                          std::uint32_t vram_bytes, std::uint32_t pixel_count, const std::string& out_path) {
+    std::ifstream in(bin_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "vdp-render-parity: cannot open program: " << bin_path << "\n";
+        return 2;
+    }
+    const std::vector<std::uint8_t> program((std::istreambuf_iterator<char>(in)),
+                                            std::istreambuf_iterator<char>());
+    if (program.empty()) {
+        std::cerr << "vdp-render-parity: empty program: " << bin_path << "\n";
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+    machine.map_flat_ram();
+    machine.load_memory(base, program.data(), static_cast<std::uint32_t>(program.size()));
+    machine.cpu().state().regs().pc = base;
+
+    std::uint32_t steps = 0;
+    while (steps < max_steps && !machine.cpu().state().halted()) {
+        machine.step_cpu_instruction();
+        ++steps;
+    }
+
+    auto hex2 = [](std::uint32_t v) {
+        static const char* d = "0123456789ABCDEF";
+        std::string s;
+        s.push_back(d[(v >> 4) & 0xF]);
+        s.push_back(d[v & 0xF]);
+        return s;
+    };
+    auto hex4 = [&](std::uint32_t v) { return hex2((v >> 8) & 0xFF) + hex2(v & 0xFF); };
+    auto dec2 = [](int v) {
+        std::string s;
+        s.push_back(static_cast<char>('0' + (v / 10) % 10));
+        s.push_back(static_cast<char>('0' + v % 10));
+        return s;
+    };
+
+    const auto& vdp = machine.vdp();
+    std::string out;
+    out += "[VDP-RENDER-PARITY]\n";
+    for (int r = 0; r <= 27; ++r) {
+        out += "REG" + dec2(r) + "=" + hex2(vdp.control_register(r)) + "\n";
+    }
+    out += "PALETTE\n";
+    for (int i = 0; i < 16; ++i) {
+        const std::uint16_t entry = vdp.palette_entry(i);
+        out += "PAL" + dec2(i) + "=" + hex2(entry & 0xFF) + hex2((entry >> 8) & 0xFF) + "\n";
+    }
+    out += "VRAM\n";
+    for (std::uint32_t off = 0; off < vram_bytes; off += 16) {
+        out += hex4(off);
+        for (std::uint32_t i = 0; i < 16 && off + i < vram_bytes; ++i) {
+            out += " " + hex2(vdp.vram().read(off + i));
+        }
+        out += "\n";
+    }
+    // A fixed extra 16-byte window at physical 0x10000 (the G6/G7 planar
+    // "bank1" region, A-M21-10) -- always emitted regardless of vram_bytes,
+    // so the D7 CPU-port planar-transform probe's odd-logical-address
+    // writes (which land here) are visible without requiring an enormous
+    // contiguous dump from address 0.
+    out += "VRAM_BANK1\n";
+    out += "10000";
+    for (std::uint32_t i = 0; i < 16; ++i) {
+        out += " " + hex2(vdp.vram().read(0x10000 + i));
+    }
+    out += "\n";
+
+    const auto frame = machine.render_frame();
+    out += "RENDER width=" + std::to_string(frame.width) + " height=" + std::to_string(frame.height) + "\n";
+    out += "BORDER=" + hex4(frame.border_color) + "\n";
+    out += "PIXELS\n";
+    for (std::uint32_t i = 0; i < pixel_count && static_cast<int>(i) < frame.width; ++i) {
+        out += "PX" + dec2(static_cast<int>(i)) + "=" + hex4(frame.at(static_cast<int>(i), 0)) + "\n";
+    }
+
+    std::ofstream out_file(out_path, std::ios::binary | std::ios::trunc);
+    if (!out_file) {
+        std::cerr << "vdp-render-parity: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out_file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    std::cerr << "vdp-render-parity: steps=" << steps
+              << " halted=" << (machine.cpu().state().halted() ? 1 : 0) << "\n";
+    return 0;
+}
+
 // M17-S5 YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
 // (the SAME `OUT (#7C),reg ; OUT (#7D),value` write sequence assembled by
 // tools/gen-m17-ym2413-probe.py) exactly as run_parity_trace does, then emits
@@ -443,6 +549,22 @@ int main(int argc, char** argv) {
         const auto vram_bytes = static_cast<std::uint32_t>(std::strtoul(argv[5], nullptr, 10));
         const std::string out_path = argv[6];
         return run_vdp_parity(bin_path, base, max_steps, vram_bytes, out_path);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--vdp-render-parity") {
+        if (argc < 8) {
+            std::cerr << "usage: " << argv[0]
+                      << " --vdp-render-parity <program.bin> <base_hex> <max_steps> <vram_bytes> "
+                         "<pixel_count> <out.txt>\n";
+            return 2;
+        }
+        const std::string bin_path = argv[2];
+        const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
+        const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
+        const auto vram_bytes = static_cast<std::uint32_t>(std::strtoul(argv[5], nullptr, 10));
+        const auto pixel_count = static_cast<std::uint32_t>(std::strtoul(argv[6], nullptr, 10));
+        const std::string out_path = argv[7];
+        return run_vdp_render_parity(bin_path, base, max_steps, vram_bytes, pixel_count, out_path);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--ym2413-parity") {

@@ -513,6 +513,10 @@ devices::video::V9958Vdp& Hbf1xvMachine::vdp() {
     return vdp_;
 }
 
+devices::video::FrameBuffer Hbf1xvMachine::render_frame(const devices::video::Field field) const {
+    return vdp_frame_renderer_.render_frame(field);
+}
+
 std::uint64_t Hbf1xvMachine::RtcClock::cpu_cycles() const {
     return scheduler_.total_cycles();
 }

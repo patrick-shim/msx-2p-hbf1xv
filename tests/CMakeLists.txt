@@ -614,3 +614,81 @@ target_compile_definitions(machine_hbf1xv_m20_halnote_integration_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m20_halnote_integration_test
     COMMAND machine_hbf1xv_m20_halnote_integration_test)
+
+# --- M21 VDP rendering depth: pixel pipeline, YJK/YAE, scroll/interlace/blink,
+#     G6/G7 planar interleave (backlog D1/D5/D6/D7-display-path) ------------
+add_executable(devices_vdp_palette_unit_test
+    unit/devices/video_vdp_palette_unit_test.cpp
+)
+target_link_libraries(devices_vdp_palette_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_palette_unit_test COMMAND devices_vdp_palette_unit_test)
+
+add_executable(devices_vdp_frame_renderer_text1_unit_test
+    unit/devices/video_vdp_frame_renderer_text1_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_text1_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_text1_unit_test
+    COMMAND devices_vdp_frame_renderer_text1_unit_test)
+
+add_executable(devices_vdp_frame_renderer_graphic1_unit_test
+    unit/devices/video_vdp_frame_renderer_graphic1_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_graphic1_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_graphic1_unit_test
+    COMMAND devices_vdp_frame_renderer_graphic1_unit_test)
+
+add_executable(devices_vdp_frame_renderer_text2_unit_test
+    unit/devices/video_vdp_frame_renderer_text2_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_text2_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_text2_unit_test
+    COMMAND devices_vdp_frame_renderer_text2_unit_test)
+
+add_executable(devices_vdp_frame_renderer_tile_modes_unit_test
+    unit/devices/video_vdp_frame_renderer_tile_modes_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_tile_modes_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_tile_modes_unit_test
+    COMMAND devices_vdp_frame_renderer_tile_modes_unit_test)
+
+add_executable(devices_vdp_frame_renderer_bitmap_modes_unit_test
+    unit/devices/video_vdp_frame_renderer_bitmap_modes_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_bitmap_modes_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_bitmap_modes_unit_test
+    COMMAND devices_vdp_frame_renderer_bitmap_modes_unit_test)
+
+add_executable(devices_vdp_planar_interleave_unit_test
+    unit/devices/video_vdp_planar_interleave_unit_test.cpp
+)
+target_link_libraries(devices_vdp_planar_interleave_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_planar_interleave_unit_test
+    COMMAND devices_vdp_planar_interleave_unit_test)
+
+add_executable(devices_vdp_frame_renderer_yjk_unit_test
+    unit/devices/video_vdp_frame_renderer_yjk_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_yjk_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_yjk_unit_test
+    COMMAND devices_vdp_frame_renderer_yjk_unit_test)
+
+add_executable(devices_vdp_frame_renderer_effects_unit_test
+    unit/devices/video_vdp_frame_renderer_effects_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_effects_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_effects_unit_test
+    COMMAND devices_vdp_frame_renderer_effects_unit_test)
+
+add_executable(machine_hbf1xv_m21_vdp_render_integration_test
+    integration/machine/hbf1xv_m21_vdp_render_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m21_vdp_render_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m21_vdp_render_integration_test
+    COMMAND machine_hbf1xv_m21_vdp_render_integration_test)
+
+add_executable(hbf1xv_m21_vdp_render_system_test
+    system/hbf1xv_m21_vdp_render_system_test.cpp
+)
+target_link_libraries(hbf1xv_m21_vdp_render_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m21_vdp_render_system_test
+    COMMAND hbf1xv_m21_vdp_render_system_test)

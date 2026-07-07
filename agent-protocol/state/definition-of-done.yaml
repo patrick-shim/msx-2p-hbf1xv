@@ -321,3 +321,24 @@ milestone_records:
     # Closed by human release decision (DEC-0017 / REQ-M20-004, 2026-07-07); git tag v1.0.20.
     overall_done: true
     notes: "CLOSED 2026-07-07 (DEC-0017 / REQ-M20-004), git tag v1.0.20. Closes backlog B4 AND B6 together. Halnote/MSX-JE firmware mapping at slot 0-3: HalnoteRom byte-exact per RomHalnote.{hh,cc}, reusing CartridgeRomWindow (M19) and BatteryBackedSram (M17) verbatim; wired at primary slot 0/secondary slot 3/all 4 pages, reading the real bios/f1xvfirm.rom; the real BatteryBackedSram wired as the mapper's actual 16KB SRAM with deterministic load/save persistence. ctest 95/95 (92 prior + 3 new), zero regression, independently reproduced by coordinator and QA. Real openMSX A/B: 11/14 PARITY, 3/14 disclosed non-blocking DIVERGENCE (sub-mapper-shadow read on the installed openMSX 19.1 runtime only -- QA independently traced this to reference-runtime behavior via raw byte-level analysis, not a defect in this project's code). QA PASS (docs/m20-qa-signoff.md). A genuine test bug found and fixed in the already-closed M17 suite along the way (DEC-0016, test-file-only, zero production risk)."
+  M21:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by human release decision (DEC-0018 / REQ-M21-004, 2026-07-07); git tag v1.0.21.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0018 / REQ-M21-004), git tag v1.0.21. Closes backlog D1/D5/D6 (DONE); D7 advances to IN-PROGRESS (M21 partial), command-engine piece carried to M22. First pixel-rendering output path: VdpFrameRenderer/FrameBuffer, deterministic pull-model RGB555 renderer over the existing M14 V9958Vdp contract, no SDL3 dependency. Every Target-Spec mode byte-exact (GRAPHIC7 GGGRRRBB layout, YJK truncating-division B-channel, MULTICOLOR's real 256-wide canvas); G6/G7 planar interleave (17-bit rotate-right-by-1) CPU-port + display-path pieces closed; scroll/blink/interlace/border-mask effects; superimpose correctly scoped N/A. ctest 106/106 (95 prior + 11 new), zero regression, independently reproduced by coordinator and QA, including confirming the M14 pointer-carry guard genuinely unmodified. Real openMSX A/B: 4/4 probes raw VRAM/palette/register ARCHITECTURAL PARITY incl. direct D7 planar-transform bank1 confirmation; computed-pixel-color sub-claim honestly BLOCKED (no introspection point exists in openMSX). QA PASS (docs/m21-qa-signoff.md), including independent hand-verification of the YJK rounding math and the interlace-bug fix."

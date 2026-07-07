@@ -32,8 +32,10 @@
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
 #include "devices/rtc/rp5c01.h"
+#include "devices/video/frame_buffer.h"
 #include "devices/video/irq_line.h"
 #include "devices/video/v9958_vdp.h"
+#include "devices/video/vdp_frame_renderer.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
@@ -149,6 +151,14 @@ public:
     // vdp().vram(); tests drive the register/status/interrupt contract here.
     [[nodiscard]] const devices::video::V9958Vdp& vdp() const;
     devices::video::V9958Vdp& vdp();
+
+    // Deterministic, pull-model VDP pixel renderer accessor (M21, backlog
+    // D1/D5/D6/D7-display-path). Additive only: the renderer is a pure,
+    // on-demand consumer of vdp_'s stored state (no elapsed_cycles()
+    // dependency, no new clock consumer), so no change to wire_bus() or
+    // cold_boot() is needed. Mirrors the existing vdp() accessor pattern.
+    [[nodiscard]] devices::video::FrameBuffer render_frame(
+        devices::video::Field field = devices::video::Field::Progressive) const;
 
     // M15 device integration accessors (PSG/RTC/PPI/keyboard/joystick). Tests
     // drive human input and inspect device state through these; the CPU reaches
@@ -443,6 +453,9 @@ private:
     // above) and is registered as the VDP's IRQ sink in wire_bus().
     devices::video::V9958Vdp vdp_;
     CpuIrqAdapter cpu_irq_adapter_{cpu_};
+    // M21 pixel renderer (additive; binds vdp_ by const reference at
+    // construction -- must be declared AFTER vdp_).
+    devices::video::VdpFrameRenderer vdp_frame_renderer_{vdp_};
 
     CpuTraceSink cpu_trace_sink_;
     DebugEventLog debug_event_log_;

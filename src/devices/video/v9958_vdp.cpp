@@ -47,6 +47,10 @@ void V9958Vdp::reset() {
     palette_ = kBootPalette;
     recompute_mode();
 
+    // Blink state (M21-S2): stable/off at reset (VDP.cc:278-279).
+    blink_countdown_ = 0;
+    blink_state_ = false;
+
     // Release the /INT line at reset (both IRQ helpers reset, VDP.cc:295-296).
     irq_level_ = false;
     if (irq_sink_ != nullptr) {
@@ -97,7 +101,25 @@ void V9958Vdp::io_write(const core::BusAddress port, const core::BusData value) 
 
 std::uint32_t V9958Vdp::effective_address() const {
     // 17-bit address = (R#14 A16..A14 << 14) | 14-bit pointer (VDP.cc:851).
-    return ((static_cast<std::uint32_t>(control_regs_[14]) << 14) | vram_pointer_) & 0x1FFFF;
+    std::uint32_t addr =
+        ((static_cast<std::uint32_t>(control_regs_[14]) << 14) | vram_pointer_) & 0x1FFFF;
+
+    // D7 CPU-port piece (M21-S4, backlog D7): in G6/G7 (and the YJK overlay
+    // modes, which share GRAPHIC7's base) planar VRAM is spread over two
+    // banks; the STORAGE address is a 17-bit rotate-right-by-1 (A-M21-10,
+    // independently re-derived from VDP.cc:849-857: `addr = ((addr << 16) |
+    // (addr >> 1)) & 0x1FFFF`, which for a 17-bit addr reduces exactly to
+    // `(addr >> 1) | ((addr & 1) << 16)` -- even logical addresses land in
+    // bank 0 (0x00000-0x0FFFF), odd in bank 1 (0x10000-0x1FFFF), same
+    // `addr >> 1` value in both banks). This is the ONLY line this edit
+    // touches (A-M21-13): `advance_vram_pointer()` below still operates on
+    // the ORIGINAL `vram_pointer_`/`control_regs_[14]`, never on this
+    // transformed value (A-M21-12) -- the existing M14 R#14-carry unit
+    // tests are unaffected.
+    if (vdp_base_is_planar(mode_.base)) {
+        addr = (addr >> 1) | ((addr & 1) << 16);
+    }
+    return addr;
 }
 
 void V9958Vdp::advance_vram_pointer() {
@@ -229,6 +251,19 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         // Writing R#16 aborts a half-finished palette load (VDP.cc:1135).
         palette_data_stored_ = false;
         break;
+    case 13: {
+        // Blink on/off timing (M21-S2, backlog D6). Writing R#13 resets blink
+        // state EVEN IF the value is unchanged (VDP.cc:1040-1057): force
+        // blink_state_ to the "ON" phase unless the ON period (bits 7-4) is
+        // zero, then re-arm the countdown from the newly-current phase's
+        // period (*10 frames) when BOTH nibbles are non-zero (alternating);
+        // otherwise freeze (blink_countdown_ = 0, a single stable color).
+        blink_state_ = (value & 0xF0) != 0;
+        blink_countdown_ = ((value & 0xF0) != 0 && (value & 0x0F) != 0)
+                                ? static_cast<int>(value >> 4) * 10
+                                : 0;
+        break;
+    }
     default:
         break;
     }
@@ -250,6 +285,20 @@ void V9958Vdp::on_vsync() {
     if (control_regs_[1] & 0x20) {                                   // IE0 (VDP.cc:404)
         irq_vertical_ = true;
     }
+
+    // Blink countdown (M21-S2, backlog D6; VDP.cc:600-608). Decrements once
+    // per frame boundary; on reaching 0, flips the phase and re-arms from
+    // the newly-current phase's R#13 nibble (*10 frames).
+    if (blink_countdown_ != 0) {
+        --blink_countdown_;
+        if (blink_countdown_ == 0) {
+            blink_state_ = !blink_state_;
+            const std::uint8_t r13 = control_regs_[13];
+            blink_countdown_ =
+                static_cast<int>(blink_state_ ? (r13 >> 4) : (r13 & 0x0F)) * 10;
+        }
+    }
+
     update_irq();
 }
 
@@ -341,6 +390,10 @@ std::uint16_t V9958Vdp::palette_entry(const int index) const {
 
 const VdpModeState& V9958Vdp::mode() const {
     return mode_;
+}
+
+bool V9958Vdp::blink_state() const {
+    return blink_state_;
 }
 
 }  // namespace sony_msx::devices::video
