@@ -58,6 +58,7 @@ add_library(sony_msx_core STATIC
     src/machine/rom_asset_loader.cpp
     src/machine/cartridge_cli.cpp
     src/machine/cpu_trace_sink.cpp
+    src/machine/cpm_bdos_harness.cpp
     src/machine/memory_region.cpp
     src/machine/debug_dump.cpp
     src/machine/debug_event_log.cpp

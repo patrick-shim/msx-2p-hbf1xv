@@ -26,7 +26,7 @@ Recommended level (unit/integration/system) · Regression tags.
 Also:
 
 - Include edge cases and failure modes.
-- Include asset-dependent cases with explicit `bios/` and `roms/` paths when applicable.
+- Include asset-dependent cases with explicit `bios/`, `roms/`, and `disks/` paths when applicable.
 - Include script-assisted execution notes with explicit `tools/` script paths.
 - Include openMSX-on-WSL A/B rows when parity is relevant, referencing `tools/openmsx-ab-smoke.ps1`.
 - Add a **Top Gaps** section (highest-risk missing tests).

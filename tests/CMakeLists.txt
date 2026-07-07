@@ -799,3 +799,50 @@ add_executable(machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test
 target_link_libraries(machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test PRIVATE sony_msx_core)
 add_test(NAME machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test
     COMMAND machine_hbf1xv_m23_vdp_access_timing_non_gating_integration_test)
+
+# --- M24 ZEXDOC/ZEXALL full parity sweep (backlog C3): generic CP/M/BDOS ----
+#     harness (src/machine/cpm_bdos_harness.*) + the real GPL exerciser
+#     system test. The harness's own unit tests use ONLY a hand-written
+#     synthetic fixture (never the real binaries, planner package SS1.5/
+#     Acceptance Criterion 2); the real references/zexall/*.com binaries are
+#     loaded ONLY by the dedicated system test below. -----------------------
+add_executable(machine_cpm_bdos_harness_unit_test
+    unit/machine/cpm_bdos_harness_unit_test.cpp
+)
+target_link_libraries(machine_cpm_bdos_harness_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_cpm_bdos_harness_unit_test COMMAND machine_cpm_bdos_harness_unit_test)
+
+add_executable(machine_hbf1xv_m24_cpm_run_integration_test
+    integration/machine/hbf1xv_m24_cpm_run_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m24_cpm_run_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m24_cpm_run_integration_test
+    COMMAND machine_hbf1xv_m24_cpm_run_integration_test)
+
+# Absolute path to the repo references/zexall/ directory (mirrors the
+# established SONY_MSX_BIOS_DIR_ABS pattern above, per DEC-0016's standing
+# watch-item: a test needing a real asset path MUST wire its own compile
+# definition or it silently 0xFF-fills/degrades under ctest's differing
+# working directory).
+set(SONY_MSX_ZEXALL_DIR_ABS "${CMAKE_SOURCE_DIR}/references/zexall")
+
+# NOTE (developer disclosure, M24-S3): this system test runs BOTH real GPL
+# exerciser binaries (references/zexall/zexall.com, zexdoc.com) to genuine
+# CP/M warm-boot completion, in-process, via CpmBdosHarness. Empirically
+# measured wall-clock cost is on the order of tens of minutes total (see
+# docs/m24-implementation-report.md for the actual measured figure) -- this
+# materially lengthens a full `ctest` invocation. This is a disclosed,
+# intentional consequence of Acceptance Criterion 3 (a genuine, non-truncated
+# full-suite run), not an oversight; see the implementation report's runtime
+# section for the full honest disclosure and the coordinator/QA escalation
+# this milestone's planner package anticipated (R-M24-3).
+add_executable(hbf1xv_m24_zexall_system_test
+    system/hbf1xv_m24_zexall_system_test.cpp
+)
+target_link_libraries(hbf1xv_m24_zexall_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m24_zexall_system_test
+    PRIVATE SONY_MSX_ZEXALL_DIR="${SONY_MSX_ZEXALL_DIR_ABS}")
+add_test(NAME hbf1xv_m24_zexall_system_test COMMAND hbf1xv_m24_zexall_system_test)
+set_tests_properties(hbf1xv_m24_zexall_system_test PROPERTIES
+    TIMEOUT 7200
+    LABELS "m24_slow_full_sweep")

@@ -33,7 +33,7 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# NOTE: bios/ and roms/ contain local, legally-sourced development assets that
-# are NOT redistributable. They are tracked here per the project owner's
-# explicit request for a fully-tracked local repository. Do NOT push this
-# repository to a public remote without first removing those assets.
+# NOTE: bios/, roms/, and disks/ contain local, legally-sourced development
+# assets that are NOT redistributable. They are tracked here per the project
+# owner's explicit request for a fully-tracked local repository. Do NOT push
+# this repository to a public remote without first removing those assets.

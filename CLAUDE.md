@@ -59,7 +59,7 @@ joystick); machine composition; SDL3 frontend; unit/integration/system tests; lo
 
 
 **Out of scope (unless a decision approves it):** multi-vendor models; netplay/rewind/TAS;
-mobile/web targets; redistribution of proprietary BIOS/ROM assets.
+mobile/web targets; redistribution of proprietary BIOS/ROM/disk assets.
 
 ## Reference materials (grounding sources)
 
@@ -164,7 +164,9 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
 - `agent-protocol/` — runtime coordination state, history, and templates.
 - `docs/` — design notes, milestone packages, implementation reports, QA sign-offs.
 - `tools/` — PowerShell/Python helper scripts (prefer these over ad-hoc command chains).
-- `bios/`, `roms/` — local development assets (legally sourced; not redistributable).
+- `bios/`, `roms/`, `disks/` — local development assets (legally sourced; not redistributable).
+  `disks/` holds MSX-DOS floppy disk images (e.g. `msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`)
+  used for FDC/boot testing.
 - `references/` — read-only grounding sources: openMSX 21.0 source (behavior reference), SDL3
   source (API reference), and `fact-sheets/` (hardware specs). Reference only; never copied into
   `src/`. See [Reference materials](#reference-materials-grounding-sources).

@@ -119,14 +119,16 @@ Notes:
 - On Windows Visual Studio generators (multi-config), use `-C Debug` (or `-C Release`) with `ctest`.
 - On single-config generators, configure with `-DCMAKE_BUILD_TYPE=Debug` and run `ctest --test-dir build --output-on-failure`.
 
-## BIOS and ROM directories
+## BIOS, ROM, and disk directories
 
 - `bios/`: local BIOS blobs used for development and validation.
 - `roms/`: local software/game/test ROM images used for emulator bring-up.
+- `disks/`: local MSX-DOS floppy disk images used for FDC/boot testing (e.g. `msxdos22.dsk`,
+  `msxdos23.dsk`, `msxdos24/`).
 
 Repository policy:
 
-- Keep BIOS/ROM files local and legally sourced.
+- Keep BIOS/ROM/disk files local and legally sourced.
 - Do not assume redistribution rights for proprietary files.
 - Agents must reference exact file paths and must not invent missing assets.
 

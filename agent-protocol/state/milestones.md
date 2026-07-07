@@ -443,3 +443,72 @@ Use one section per milestone.
 - Regression Scope: all M1-M22 suites remain green (deliberate full-system cross-check, per the human's explicit instruction, and the project's MOST safety-critical regression surface — the M9/M12 CPU-timing oracles); QA sign-off required before closure.
 - Status: Done. CLOSED by coordinator release decision on 2026-07-08 (DEC-0020 / REQ-M23-004); tagged git `v1.0.23`. Closes deferred-backlog row C2 (DONE, in full); C1 and D4 both advance to IN-PROGRESS (M23 partial). This is the THIRD AND FINAL milestone of the pre-authorized M21-M23 run. Planner package accepted (`docs/m23-planner-package.md`, RESP-M23-001/REQ-M23-002) resolved scope deliberately narrow (§2): C2 closes in full; C1/D4 advance to a real, tested, non-gating foundation with a precisely-named 5-item remainder carried forward as ONE tracked row each (mirrors the D7/C5 precedent), NOT the full slot-table/gating depth — a conservative, honestly-justified call given the demonstrated risk that naive real CPU-execution gating would break the M21/M22 back-to-back-`OUT (#98),A` system-test fixtures.
 - Details: Developer implementation (`docs/m23-implementation-report.md`) delivered: (S1) the ONE-line surgical fix to `Z80aCpu::step()`'s halted branch (`src/devices/cpu/z80a_cpu.cpp`) — calls the EXISTING `increment_refresh_register()`, keeping the CPU core's own returned datasheet T-state count the bare, unchanged `4` (A-M23-1's invariant); the machine-level `datasheet + m1_wait` formula (UNCHANGED) now reports 5T for a halted idle step. The ONE deliberately-affected golden (`tests/integration/machine/hbf1xv_cpu_step_integration_test.cpp`, t3 4→5, `elapsed_cycles()` 22→23) updated with cited grounding (`Z80.hh:19-21`, `CPUCore.cc:2508-2511`); a fresh `rg "\.halted\(\)" tests/` re-run confirmed the identical 22-file list the planner's own audit found, zero new sites, so no other existing test needed changing. New tests: `tests/unit/devices/z80a_halt_r_unit_test.cpp`, `tests/integration/machine/hbf1xv_m23_halt_r_integration_test.cpp` (the latter deliberately a NEW file rather than an edit to `hbf1xv_interrupt_ack_integration_test.cpp`, which is one of the planner's own NAMED zero-tolerance oracle files). (S2) new, additive, strictly non-gating `src/devices/video/vdp_access_timing.h` (15 named `VdpAccessDelta` offsets; raster-position derivation; the two deliberately-separate, cited latency facts, confirmed via a dedicated test to never be combined) plus additive-only `Hbf1xvMachine::cycles_since_last_vsync()`/`vdp_cycle_position()` accessors fed by exactly one new bookkeeping line inside the existing `run_frame()`. `git diff v1.0.22` confirms: `step_cpu_instruction()`/`run_cycles()`/`run_until_cycle()` byte-for-byte unchanged; `vdp_frame_renderer.*`/`vdp_command_engine.*`/`sprite_engine.*` untouched; the 10 named zero-tolerance M9/M12 CPU-timing-oracle suites show ZERO diff. A dedicated regression test (`tests/integration/machine/hbf1xv_m23_vdp_access_timing_non_gating_integration_test.cpp`) re-runs the EXACT M21/M22 system-test CPU-program fixtures (back-to-back `OUT (#98),A` writes, zero spacers) and proves their cumulative T-state totals are byte-identical to their pre-M23 values, captured as literal golden constants. Also a small, additive, backward-compatible extension to `src/main.cpp`'s existing `--parity-trace` CLI mode (a new, optional `halt_idle_extra_steps` trailing argument, default 0 = byte-identical pre-M23 behavior for every prior invocation — mirrors the M19 `--cart1`/`--cart2` precedent of extending this SAME mode for a new milestone's specific A/B need) to enable the C2 live-openMSX A/B probe. `ctest` 121/121 green (117 prior + 4 new), zero regression. Real openMSX 19.1/WSL A/B evidence (`tools/openmsx-m23-halt-r-parity.ps1` -> `docs/m23-parity-trace-diff.md`): the live `reg r` Tcl readback IS confirmed available; R and PC match exactly for the HALT opcode's own M1 fetch and the first two genuine halted-idle steps, then a large, reproducible, REAL-TIME-tracked (not step-count-tracked) divergence appears in the live openMSX session — traced, with a grounded hypothesis directly citing the SAME `CPUClock.hh:53-59` `advanceHalt` bulk-scheduling source this milestone's own C2 change is grounded in, to how openMSX's live Tcl `step()` command behaves while the CPU is halted (not a defect in either engine's R-register correctness); honestly reported as DIVERGENCE with root-cause analysis, not fabricated as a clean PASS. D4/C1's numeric VDP-access-wait-cost sub-claim stays explicitly BLOCKED/not-attempted, per the plan (no feasible technique exists; nothing gated on it this cycle). QA (`docs/m23-qa-signoff.md`, RESP-M23-003) = **PASS**, with an exceptional level of independent scrutiny: QA independently re-ran the FULL suite (121/121), independently confirmed via its OWN `git diff v1.0.22` that all 10 named zero-tolerance oracle suites AND all 6 M21/M22 device files show zero changes, independently re-derived the golden arithmetic and all 6 new non-gating fixture totals BY HAND, and — most notably — independently re-ran the C2 A/B harness against live WSL openMSX itself AND designed two of its OWN exploratory Tcl probes (an exact-reproducibility check and a boot-window-timing-sensitivity variant) to test the developer's divergence hypothesis, refining the causal explanation from "wall-clock time between Tcl round-trips" to the more precise "emulated time accumulated during the unthrottled pre-measurement boot window, per openMSX's own bulk `advanceHalt` scheduling" — confirming the divergence is a live-session scheduling artifact, not a code defect. QA also independently assessed the disclosed `src/main.cpp` CLI extension and judged it reasonable, recommending only a `decisions.md` ratification (folded into DEC-0020) as a non-blocking, procedural follow-up. Backlog: C2 -> DONE (M23), closing in full; C1/D4 -> IN-PROGRESS (M23 partial) with the precise 5-item remainder named (`agent-protocol/state/deferred-backlog.md`).
+
+## M24 (Kickoff 2026-07-08)
+
+- Milestone ID: M24
+- Title: ZEXDOC/ZEXALL Full Parity Sweep (closes C3)
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Implement deferred-backlog row **C3** (ZEXDOC/ZEXALL full parity sweep) using `references/zexall/` (present, uncommitted since M19) — a legally-sourced ZEXALL/ZEXDOC Z80 exerciser suite (YAZE-AG project, GPL-licensed, read-only validation reference) containing real, runnable CP/M-style `.com` binaries. Commit `references/zexall/`; design a genuine, minimal, honestly-scoped BDOS/CP/M shim grounded in the suite's own actual BDOS-call sites (not guessed); run the FULL ZEXALL and ZEXDOC suites to completion against this project's already-QA-verified Z80A CPU core, reporting real, unfabricated pass/fail results; capture real openMSX A/B evidence where feasible. Per the human's explicit, standing "zero license-sensitive future work" directive: running a third-party GPL test suite as a black-box validation tool (loading its pre-built `.com` binary as DATA, exactly as `bios/`/`roms/` assets already are) is fundamentally different from, and much lower-risk than, transcribing a GPL project's own data tables into `src/` — but nothing from the suite's own Z80 assembly source may be copied into `src/`. Second of an M24-M25 continuation of the established milestone cadence (2026-07-08 human directive) — own planner package, developer implementation, dedicated system integration test, QA sign-off, separate tag; proceeding through the release-decision/tag step without an extra pause on a clean QA PASS.
+- Acceptance Criteria (planner to detail): `references/zexall/` committed; a genuine BDOS/CP/M shim built and grounded in the suite's own actual call sites; FULL ZEXALL and ZEXDOC suites run to completion with real, captured results (100% pass expected against an already-QA-verified core, but report honestly whatever is actually observed); deterministic unit/integration/system tests; real openMSX A/B evidence where feasible; zero regression across the FULL M1-M23 suite (121 tests); full deferred-backlog review; QA sign-off before closure.
+- Unit/Integration Tests Required (planner to detail).
+- Regression Scope: all M1-M23 suites remain green; QA sign-off required before closure.
+- Status: Done. CLOSED by coordinator release decision on 2026-07-08 (DEC-0022 / REQ-M24-005); tagged git `v1.0.24`. Closes deferred-backlog row C3 in full.
+- Details: Planner package `docs/m24-planner-package.md`. Developer implementation
+  `docs/m24-implementation-report.md`: new, generic `CpmBdosHarness` (`src/machine/
+  cpm_bdos_harness.{h,cpp}`, zero zexall-specific knowledge -- implements only the standard,
+  third-party CP/M `.com` loading convention: `org 0x0100`, the top-of-memory word at `0x0006`,
+  `CALL 5` BDOS dispatch trap, `JP 0` warm-boot trap), proven first against a hand-written
+  synthetic fixture (13 unit cases, `tests/unit/machine/cpm_bdos_harness_unit_test.cpp`) and the
+  device-isolation invariant (`tests/integration/machine/hbf1xv_m24_cpm_run_integration_test.cpp`)
+  BEFORE the real GPL binaries were ever loaded. New `--cpm-run` CLI mode in `src/main.cpp`
+  (additive only, 67 lines, confirmed via `git diff v1.0.23`). The real, committed
+  `references/zexall/zexall.com` and `zexdoc.com` were then run to genuine CP/M warm-boot
+  completion via a dedicated system test (`tests/system/hbf1xv_m24_zexall_system_test.cpp`,
+  in-process, no subprocess): **134/134 group verdicts PASS** (67 named groups x 2 suites, real
+  captured "  OK" markers parsed via the new `tools/zexall-report.py` + its own self-check),
+  5,764,169,474 real instructions executed per suite (identical count, both suites), ~23m53s
+  combined measured wall-clock (12m28s zexall + 11m25s zexdoc) -- see the implementation report
+  for the full small-subset-measure -> extrapolate -> actually-run-full-sweep protocol. Mandatory
+  adversarial self-check PASSED: a deliberately corrupted IN-MEMORY-ONLY copy of the real
+  `zexall.com` (real file confirmed byte-identical before/after via SHA-256) correctly produced a
+  genuine FAIL verdict via the same, unmodified harness + report tool. Real openMSX A/B evidence
+  (`tools/openmsx-m24-zexall-parity.ps1` -> `docs/m24-parity-trace-diff.md`): a bounded
+  11-real-Z80-instruction prefix (live-verified at implementation time; the "complete 1-2 named
+  groups" bound the planner package originally suggested was found NOT live-Tcl-feasible, since
+  even the smallest group needs 10^5-10^8 real instructions) achieved genuine PARITY for BOTH
+  suites; the full-suite live-Tcl A/B and the MSX-DOS-disk-boot A/B are both explicitly, honestly
+  marked BLOCKED (the latter after actually checking `bios/`/`roms/` for an MSX-DOS asset --
+  confirmed absent, not assumed). `ctest` 124/124 (121 prior + 3 new), zero regression; `git diff
+  v1.0.23` confirms zero changes to `src/devices/`, `src/peripherals/`, `src/core/` -- only
+  `src/main.cpp` (additive) and the two new `src/machine/cpm_bdos_harness.*` files. The new system
+  test genuinely takes ~24 minutes (both real suites, sequentially, in one process) -- registered
+  with CTest LABEL `m24_slow_full_sweep` so the routine evidence-gate cadence can exclude it
+  explicitly (123/123 in ~3.4s via `ctest -LE m24_slow_full_sweep`), disclosed explicitly for
+  QA/coordinator review rather than silently resolved. `references/zexall/` staged (`git add`),
+  committed as part of this milestone's closure commit, ending 5 milestones (M19-M23) of it
+  sitting staged-but-uncommitted.
+
+  QA (`docs/m24-qa-signoff.md`, RESP-M24-003) independently reproduced the full 134/134 headline
+  claim from a genuinely clean rebuild (a THIRD from-scratch reproduction, matching the developer's
+  and coordinator's own independent reproductions byte-for-byte) plus every other substantive
+  claim (license isolation, device isolation, adversarial self-check, combinatorial-total
+  arithmetic, openMSX A/B PARITY re-run end-to-end), finding no CPU-core defect. QA returned a
+  **Conditional Pass**, not a clean PASS: `tests/system/hbf1xv_m24_zexall_system_test.cpp`'s
+  ctest-level gate checked marker COUNT (`ok_markers + error_markers == 67`) but never hard-
+  asserted `error_markers == 0` for either suite — a future genuine CPU-core regression that
+  flipped all 67 groups to FAIL could still leave this specific ctest reporting `Passed`. Per the
+  milestone's own standing directive ("STOP and consult the human" on anything short of a clean
+  PASS), the coordinator stopped and presented the human with QA's own two named paths; the human
+  chose **"Fix, re-confirm, then tag."** The developer added two hard assertions
+  (`Zexall_ZeroErrorMarkers`/`Zexdoc_ZeroErrorMarkers`) — purely additive, test-code-only — and
+  re-ran the full slow sweep to completion a FOURTH independent time this cycle (1638.22s),
+  landing on the identical 5,764,169,474-instruction/67-0-marker result yet again, with the new
+  hard gates genuinely exercised and passing. The coordinator independently re-verified the fix by
+  direct file read plus its own fast-subset re-run (123/123). QA also explicitly ruled (per
+  DEC-0021) that the disk-boot-A/B sub-claim stays BLOCKED-as-recorded — redoing it would require
+  solving backlog C5's own still-unsolved auto-boot-trigger problem, out of this milestone's
+  planned scope; `disks/` (added by the human mid-cycle) is reserved for a future, dedicated C5
+  investigation instead. Ledger status transition: backlog C3 -> DONE (M24).

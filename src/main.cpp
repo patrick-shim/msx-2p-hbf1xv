@@ -6,6 +6,7 @@
 #include <vector>
 
 #include "machine/cartridge_cli.h"
+#include "machine/cpm_bdos_harness.h"
 #include "machine/hbf1xv_machine.h"
 
 namespace {
@@ -655,6 +656,60 @@ int run_bios_boot_trace(const std::string& bios_dir, std::uint32_t max_steps,
     return 0;
 }
 
+// M24-S2 generic CP/M ".com" runner (backlog C3, ZEXDOC/ZEXALL full parity
+// sweep). Reads a flat CP/M-style ".com" file from disk, cold-boots a fresh
+// machine, loads it via the GENERIC CpmBdosHarness (src/machine/
+// cpm_bdos_harness.h -- zero zexall/zexdoc-specific knowledge), runs it to
+// either the CP/M warm-boot trap or <max_instructions> (whichever comes
+// first), writes the captured BDOS output bytes verbatim to <out_log_path>,
+// and prints a one-line diagnostic summary to stderr mirroring the existing
+// parity-trace/bios-boot-trace style. Exits 0 only on a genuine finished
+// completion; a distinct non-zero code on budget exhaustion or a load
+// failure -- never silently reports an incomplete run as success.
+int run_cpm(const std::string& com_path, std::uint64_t max_instructions, const std::string& out_path) {
+    std::ifstream in(com_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "cpm-run: cannot open program: " << com_path << "\n";
+        return 2;
+    }
+    const std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
+                                          std::istreambuf_iterator<char>());
+    if (image.empty()) {
+        std::cerr << "cpm-run: empty program: " << com_path << "\n";
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+    const auto load_result = sony_msx::machine::CpmBdosHarness::load_com(machine, image);
+    if (load_result != sony_msx::machine::CpmBdosHarness::LoadResult::Ok) {
+        std::cerr << "cpm-run: program too large to load (top-of-memory collision): " << com_path << "\n";
+        return 2;
+    }
+
+    const auto run_result = sony_msx::machine::CpmBdosHarness::run(machine, max_instructions);
+
+    std::ofstream out(out_path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        std::cerr << "cpm-run: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out.write(reinterpret_cast<const char*>(run_result.captured_output.data()),
+              static_cast<std::streamsize>(run_result.captured_output.size()));
+    if (!out) {
+        std::cerr << "cpm-run: write failed: " << out_path << "\n";
+        return 2;
+    }
+
+    std::cerr << "cpm-run: instructions_executed=" << run_result.instructions_executed
+              << " finished=" << (run_result.finished ? 1 : 0)
+              << " unexpected_bdos_calls=" << run_result.unexpected_bdos_calls.size()
+              << " captured_bytes=" << run_result.captured_output.size() << "\n";
+    // An honest, non-fabricated "ran out of budget" signal: exit 0 ONLY on a
+    // genuine CP/M warm-boot completion, never on budget exhaustion.
+    return run_result.finished ? 0 : 3;
+}
+
 int main(int argc, char** argv) {
     // Full argv (minus argv[0]) for the M19 cartridge CLI (--cart1/
     // --cart1-type/--cart2/--cart2-type), parsed order-independently
@@ -734,6 +789,18 @@ int main(int argc, char** argv) {
             return 2;
         }
         return run_halnote_parity(argv[2], argv[3]);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--cpm-run") {
+        if (argc < 5) {
+            std::cerr << "usage: " << argv[0]
+                      << " --cpm-run <program.com> <max_instructions> <out_log_path>\n";
+            return 2;
+        }
+        const std::string com_path = argv[2];
+        const auto max_instructions = static_cast<std::uint64_t>(std::strtoull(argv[3], nullptr, 10));
+        const std::string out_path = argv[4];
+        return run_cpm(com_path, max_instructions, out_path);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--parity-trace") {

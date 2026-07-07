@@ -24,7 +24,8 @@ Mandatory references before answering:
 - DO NOT skip required protocol artifacts.
 - ONLY advance a phase when its entry and exit criteria are satisfied by evidence-complete artifacts.
 - ONLY recommend delegation through `msx-planner`, `msx-developer`, and `msx-qa`.
-- VERIFY any asset/script-dependent handoff cites concrete paths under `docs/`, `bios/`, `roms/`, `tools/`.
+- VERIFY any asset/script-dependent handoff cites concrete paths under `docs/`, `bios/`, `roms/`,
+  `disks/`, `tools/`.
 - VERIFY behavior/spec claims in handoffs are grounded in `references/` with concrete file paths
   (openMSX source, SDL3 source, `fact-sheets/`) rather than unsupported assertions.
 - Enforce planner-first → developer-evidence → QA-signoff ordering. Never approve a jump.
