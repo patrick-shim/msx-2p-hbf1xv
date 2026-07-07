@@ -27,6 +27,7 @@
 #include "devices/fdc/fdc_clock_source.h"
 #include "devices/fdc/sony_fdc.h"
 #include "devices/fdc/wd2793.h"
+#include "devices/halnote/halnote_rom.h"
 #include "devices/kanji/kanji_font_rom.h"
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
@@ -219,6 +220,18 @@ public:
     [[nodiscard]] const std::filesystem::path& backup_ram_path() const;
     bool flush_backup_ram() const;
 
+    // Halnote-mapped MSX-JE firmware ROM at primary slot 0, secondary slot 3
+    // (M20, closes backlog B6 together with B4). Reads the real
+    // bios/f1xvfirm.rom; owns the real 16 KB BatteryBackedSram store gated by
+    // the mapper's own SRAM-enable bit. Persistence mirrors set_backup_ram_path/
+    // backup_ram_path/flush_backup_ram EXACTLY (no CLI flag, A-M20-12): set the
+    // path BEFORE cold_boot to load it (absent -> deterministic zero state).
+    [[nodiscard]] const devices::halnote::HalnoteRom& halnote() const;
+    devices::halnote::HalnoteRom& halnote();
+    void set_halnote_sram_path(std::filesystem::path path);
+    [[nodiscard]] const std::filesystem::path& halnote_sram_path() const;
+    bool flush_halnote_sram() const;
+
     // Full-state debug dump + execution-event logging (M10-S3).
     //
     // Determinism is guaranteed by construction: every serializer is hand-rolled
@@ -373,6 +386,7 @@ private:
     RtcClock rtc_clock_{scheduler_};
     devices::rtc::Rp5c01 rtc_;  // #B4/#B5
     std::filesystem::path backup_ram_path_;
+    std::filesystem::path halnote_sram_path_;  // M20, mirrors backup_ram_path_ exactly
 
     // CPU-addressable memory devices (M13). The mapper RAM consumes mapper_io_'s
     // live segments; the ROM devices are read-only windows over the loaded images.
@@ -387,6 +401,13 @@ private:
     // overlay, so this plain ROM window needs no wrapping device -- the YM2413
     // (ym2413_, above) is attached SEPARATELY, only on io_bus_ #7C/#7D.
     devices::memory::RomDevice fmmusic_rom_{0x4000, 0x4000};  // slot 3-3 p1 (FM-MUSIC presence)
+
+    // Halnote-mapped MSX-JE firmware ROM, slot 0-3, ALL 4 pages (M20, backlog
+    // B6, closes B4 together). Composes the M19 CartridgeRomWindow (main 8-slot
+    // window, default block mask, NO Konami-style override) + the M17
+    // BatteryBackedSram (real 16 KB SRAM store, A-M20-10/A-M20-11). Pure
+    // combinational device (A-M20-... determinism) -- no clock adapter needed.
+    devices::halnote::HalnoteRom halnote_;
 
     // Kanji font ROM I/O device (M18-S1, backlog B5), answering #D8-#DB
     // directly (A-M18-1: MSXKanji, NOT the switched-I/O MSXKanji12). Reads

@@ -282,6 +282,104 @@ int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint
     return 0;
 }
 
+// M20-S4 Halnote/MSX-JE firmware openMSX A/B parity mode (backlog B4+B6).
+// Cold-boots with real ROM assets from <bios_dir> (the real bios/f1xvfirm.rom,
+// unmodified -- no synthetic swap needed, planner §2.6/A-M20 grounding: this
+// local file's SHA1 was independently confirmed byte-identical to the real,
+// installed WSL openMSX system ROM, tools/openmsx-m20-halnote-parity.ps1),
+// routes the ENTIRE Halnote 64 KB window into view via the debug-harness
+// technique (no CPU driver program needed -- Halnote's mem_read/mem_write are
+// pure, combinational functions of the raw 16-bit address, planner §2.5), then
+// exercises the identical write/read protocol sequence the openMSX-side Tcl
+// script performs, dumping each read-back as a deterministic "LABEL=name
+// VALUE=hex" line for cross-emulator diffing.
+int run_halnote_parity(const std::string& bios_dir, const std::string& out_path) {
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.set_asset_root(bios_dir);
+    machine.cold_boot();
+    for (const std::string& note : machine.rom_diagnostics()) {
+        std::cerr << "halnote-parity: " << note << "\n";
+    }
+
+    // Force the authentic reset default (#A8=0, every page primary 0), then
+    // route ALL FOUR pages of primary 0 to secondary slot 3 (Halnote) via a
+    // single #FFFF write (SlotBus::write_ffff targets
+    // sub_slot_register_[primary_for_page(3)] == sub_slot_register_[0];
+    // 0xFF = 0b11_11_11_11 -> every 2-bit page field independently decodes to
+    // secondary 3).
+    machine.debug_io_write(0xA8, 0x00);
+    machine.debug_bus_write(0xFFFF, 0xFF);
+
+    auto hex2 = [](std::uint32_t v) {
+        static const char* d = "0123456789ABCDEF";
+        std::string s;
+        s.push_back(d[(v >> 4) & 0xF]);
+        s.push_back(d[v & 0xF]);
+        return s;
+    };
+
+    std::string out;
+    out += "[HALNOTE-PARITY]\n";
+    auto emit = [&](const char* label, const std::uint16_t address) {
+        out += std::string("LABEL=") + label + " VALUE=" + hex2(machine.debug_bus_read(address)) + "\n";
+    };
+    auto poke = [&](const std::uint16_t address, const std::uint8_t value) {
+        machine.debug_bus_write(address, value);
+    };
+
+    // Main bank-switch: bank(4) region 0x8000-0x9FFF, trigger 0x8FFF.
+    poke(0x8FFF, 0x03);
+    emit("BANK4_BASE", 0x8000);
+    emit("BANK4_LAST", 0x9FFF);
+
+    // bank(5) region 0xA000-0xBFFF, trigger 0xAFFF.
+    poke(0xAFFF, 0x04);
+    emit("BANK5_BASE", 0xA000);
+
+    // bank(2) double-duty: bit7 set both enables SRAM AND sets the bank via
+    // the mask fallback (0x85 & 0x7F = 5, since 0x85 >= 128 blocks).
+    poke(0x4FFF, 0x85);
+    emit("BANK2_BASE_DOUBLE_DUTY", 0x4000);
+
+    // SRAM read/write (now enabled), both region boundaries.
+    poke(0x0000, 0x5A);
+    emit("SRAM_FIRST", 0x0000);
+    poke(0x3FFF, 0xA5);
+    emit("SRAM_LAST", 0x3FFF);
+
+    // bank(3) double-duty: bit7 set enables the sub-mapper AND sets the bank.
+    // 0x6000-0x6FFF is NEVER shadowed (outside the narrower 0x7000-0x7FFF
+    // sub-mapper range), so both reads here must reflect the PLAIN window.
+    poke(0x6FFF, 0x87);
+    emit("BANK3_BASE_DOUBLE_DUTY", 0x6000);
+    emit("BANK3_LAST_BEFORE_SHADOW", 0x6FFF);
+
+    // Sub-bank registers: 0x77FF -> sub-bank 0 (shadows 0x7000-0x77FF);
+    // 0x7FFF -> sub-bank 1 (shadows 0x7800-0x7FFF).
+    poke(0x77FF, 0x05);
+    emit("SUBBANK0_SHADOW", 0x7000);
+    emit("SUBBANK0_SHADOW_LAST", 0x77FF);
+
+    poke(0x7FFF, 0x0A);
+    emit("SUBBANK1_SHADOW", 0x7800);
+    emit("SUBBANK1_SHADOW_LAST", 0x7FFF);
+
+    // Window-slots 6/7 (0xC000-0xFFFF) stay permanently 0xFF regardless of
+    // any bank-switch/SRAM/sub-bank traffic above, and a write never takes.
+    emit("UPPERQUARTER_BEFORE_WRITE", 0xC000);
+    poke(0xC000, 0x77);
+    emit("UPPERQUARTER_AFTER_WRITE", 0xC000);
+
+    std::ofstream out_file(out_path, std::ios::binary | std::ios::trunc);
+    if (!out_file) {
+        std::cerr << "halnote-parity: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out_file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    std::cerr << "halnote-parity: wrote " << out_path << "\n";
+    return 0;
+}
+
 }  // namespace
 
 // M13-S5 BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
@@ -358,6 +456,14 @@ int main(int argc, char** argv) {
         const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
         const std::string out_path = argv[5];
         return run_ym2413_parity(bin_path, base, max_steps, out_path);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--halnote-parity") {
+        if (argc < 4) {
+            std::cerr << "usage: " << argv[0] << " --halnote-parity <bios_dir> <out.txt>\n";
+            return 2;
+        }
+        return run_halnote_parity(argv[2], argv[3]);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--parity-trace") {

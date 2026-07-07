@@ -108,13 +108,35 @@ int main() {
     // --- Case 2: fmmusic_rom_ regression guard (A-M17-2). ---
     {
         Hbf1xvMachine machine;
+        // Real bios/f1xvmus.rom content, not cwd-dependent (ctest's default
+        // working directory is the test binary's own build dir, so the
+        // "bios" relative default silently 0xFF-fills otherwise -- matching
+        // every other test that needs real ROM content, e.g. M15/M16/M18
+        // boot-checkpoint tests).
+        machine.set_asset_root(SONY_MSX_BIOS_DIR);
         machine.cold_boot();
 
         auto read_fmmusic_rom = [&machine]() {
-            // Route page 1 -> primary slot 3, sub-slot 3 (MSX-MUSIC ROM), while
-            // page 3 stays primary slot 0 (untouched; no CPU program runs here).
-            machine.debug_io_write(0xA8, 0x0C);      // page1 field bits[3:2] = 11 (slot 3)
-            machine.debug_bus_write(0xFFFF, 0x0C);   // slot-3 sub-slot reg: page1 field = 11 (sub 3)
+            // Route page 1 -> primary slot 3, sub-slot 3 (MSX-MUSIC ROM). #FFFF
+            // always sets sub_slot_register_[primary_for_page(3)] -- the sub-slot
+            // register belonging to whichever primary currently occupies PAGE 3,
+            // never the page being logically addressed (SlotBus::write_ffff,
+            // mirrors real hardware / openMSX MSXCPUInterface.cc:757). So page 3's
+            // #A8 field must ALSO be primary 3 at the moment of the #FFFF write,
+            // or the write lands in the WRONG primary's sub-slot register and this
+            // guard silently reads RAM instead of the FM-MUSIC ROM (a routing bug
+            // found and fixed during M20 planning, A-M20-13 -- the prior 0x0C value
+            // only set page1's field, leaving page3 at primary 0, so the #FFFF
+            // write silently missed sub_slot_register_[3] entirely).
+            machine.debug_io_write(0xA8, 0xCC);      // page1 field bits[3:2] = 11 (slot 3); page3 field bits[7:6] = 11 (slot 3)
+            machine.debug_bus_write(0xFFFF, 0x0C);   // now correctly targets sub_slot_register_[3]: page1 field = 11 (sub 3)
+            // Explicit, self-documenting confirmation of the resolved routing
+            // (per the M20 planner's own recommended verification discipline for
+            // this exact class of bug): primary 3's sub-slot register must now
+            // read back with page1's field = sub 3.
+            expect(machine.slot_expanded(3), "FmMusicRomGuard_Slot3IsExpanded");
+            expect(((machine.debug_sub_slot_register(3) >> 2) & 0x03) == 3,
+                   "FmMusicRomGuard_ResolvedSubSlot3_Page1_IsSub3");
             std::array<std::uint8_t, 64> sample{};
             for (std::size_t i = 0; i < sample.size(); ++i) {
                 sample[i] = machine.debug_bus_read(static_cast<std::uint16_t>(0x4000 + i));
@@ -134,6 +156,17 @@ int main() {
 
         const std::array<std::uint8_t, 64> after = read_fmmusic_rom();
         expect(before == after, "FmMusicRom_Slot33Page1_UnchangedByYm2413Writes");
+        // Positive sanity check that this guard is genuinely reading ROM content
+        // (not a degenerate all-same-byte read that would trivially satisfy the
+        // before==after comparison regardless of which device answered).
+        bool all_same = true;
+        for (std::size_t i = 1; i < before.size(); ++i) {
+            if (before[i] != before[0]) {
+                all_same = false;
+                break;
+            }
+        }
+        expect(!all_same, "FmMusicRomGuard_SampleIsNonDegenerate");
     }
 
     // --- Case 3: IN A,(#7C) / IN A,(#7D) over the bus read 0xFF (A-M17-5). ---

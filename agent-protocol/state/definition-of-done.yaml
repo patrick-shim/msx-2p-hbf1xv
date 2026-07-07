@@ -300,3 +300,24 @@ milestone_records:
     overall_done: true
     # Closed by human release decision (DEC-0015 / REQ-M19-003, 2026-07-07); git tag v1.0.19.
     notes: "CLOSED 2026-07-07 (DEC-0015 / REQ-M19-003), git tag v1.0.19. Closes backlog B7. Cartridge loading (external primary slots 1 & 2): six MVP mapper types (Mirrored, Generic8kB, Generic16kB, Ascii8kB, Ascii16kB, Konami no-SCC) sharing a CartridgeRomWindow primitive grounded byte-exact in RomBlocks::setRom; CartridgeSlot wrapper (empty-slot open-bus regression guard); CLI via --cartN/--cartN-type. QA independently verified the bank-resolution mask fallback-only semantics and the Konami mirror-quirk (slots 0/2 permanently fixed, 1/3-4/6-5/7 live mirror pairs) against RomBlocks.cc/RomKonami.cc directly. roms/aleste.rom used as a non-identity-claiming Generic8kB mechanical smoke fixture; roms/metalgear.rom (added later, per human note) identified as a genuine Konami-mapper 'Metal Gear' (1987) dump via an exact SHA1 match to references/openmsx-21.0/share/softwaredb.xml, independently reproduced by both the coordinator and QA, plus live WSL openMSX corroboration. One non-blocking doc-comment staleness (cartridge_konami_rom.h) found by QA and fixed by the coordinator post-QA (comment-only, zero behavior/test impact, ctest re-confirmed 92/92 after the fix). Real openMSX 19.1 A/B: content-bearing empty diff with empirically-verified slot-lettering (R-M19-6). Full deferred-backlog review re-confirmed (all rows); B7 -> DONE; new Section F (G1-G4) added, OPEN. Zero regression, CPU-timing oracles untouched (no cartridge device is a clock consumer)."
+  M20:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by human release decision (DEC-0017 / REQ-M20-004, 2026-07-07); git tag v1.0.20.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0017 / REQ-M20-004), git tag v1.0.20. Closes backlog B4 AND B6 together. Halnote/MSX-JE firmware mapping at slot 0-3: HalnoteRom byte-exact per RomHalnote.{hh,cc}, reusing CartridgeRomWindow (M19) and BatteryBackedSram (M17) verbatim; wired at primary slot 0/secondary slot 3/all 4 pages, reading the real bios/f1xvfirm.rom; the real BatteryBackedSram wired as the mapper's actual 16KB SRAM with deterministic load/save persistence. ctest 95/95 (92 prior + 3 new), zero regression, independently reproduced by coordinator and QA. Real openMSX A/B: 11/14 PARITY, 3/14 disclosed non-blocking DIVERGENCE (sub-mapper-shadow read on the installed openMSX 19.1 runtime only -- QA independently traced this to reference-runtime behavior via raw byte-level analysis, not a defect in this project's code). QA PASS (docs/m20-qa-signoff.md). A genuine test bug found and fixed in the already-closed M17 suite along the way (DEC-0016, test-file-only, zero production risk)."

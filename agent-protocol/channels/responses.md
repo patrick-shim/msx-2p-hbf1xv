@@ -1565,3 +1565,49 @@ Use this format:
 - Re: REQ-M19-003 (release decision + tag)
 - Outcome: M19 CLOSED. `agent-protocol/state/milestones.md` M19 status -> Done; `definition-of-done.yaml` M19 overall_done -> true (regression_qa.signoff_decision_recorded already true from RESP-M19-004). Git tag `v1.0.19` at the closure commit. Backlog B7 -> DONE (M19); new rows G1 (KonamiSCC + SCC chip), G2 (auto-detection), G3 (runtime hot-plug), G4 (long-tail mapper types) remain OPEN under Section F. Nine milestones M11-M19 now tagged (v1.0.11..v1.0.19).
 - Responded At: 2026-07-07T14:25:00+09:00
+
+---
+
+- Response ID: RESP-M20-001
+- From: MSX Planner Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M20
+- Re: REQ-M20-001 (planning package)
+- Outcome: Delivered `docs/m20-planner-package.md` (722 lines). Confirms the `hb-f1xv.rom` (openMSX XML) vs. `f1xvfirm.rom` (this project's local asset name) question is the established naming-convention pattern, not a mismatch. Designs `HalnoteRom` reusing the M19 `CartridgeRomWindow` primitive (cross-family reuse) plus the M17 `BatteryBackedSram` primitive as its real SRAM, with byte-exact operational semantics grounded in `references/openmsx-21.0/src/memory/RomHalnote.cc`. 4-slice implementation plan: S1 (main window + 4 bank-switch registers + SRAM wiring), S2 (2KB sub-bank shadow mechanism gated by the sub-mapper-enable bit), S3 (machine wiring + SRAM load/save persistence + system integration -- closes B4 AND B6 together per the human's explicit directive), S4 (openMSX A/B + full 34-row deferred-backlog re-affirmation). Flags risk A-M20-5 (the bank-2/bank-3 write value's bit 0x80 does double duty: simultaneously the SRAM-enable/sub-mapper-enable flag AND part of the raw bank index passed unconditionally to `setRom()`) as the single most subtle correctness point. Also flags A-M20-13: a genuine test-harness bug in the already-closed, tagged M17 test suite (`FmMusicRom_Slot33Page1_UnchangedByYm2413Writes`'s `#A8`/`#FFFF` routing silently resolves to RAM, not the FM-MUSIC ROM), disclosed as non-blocking/out-of-M20-scope since a planning package cannot touch test code.
+- Coordinator review: read the full package; no blocking open questions raised by the planner. Independently verified A-M20-13 by direct source reading (`slot_bus.cpp`, the test file itself) before accepting the claim -- confirmed exactly as described, and additionally found a SECOND defect (this test target never had `SONY_MSX_BIOS_DIR` wired into `tests/CMakeLists.txt`, so it silently ran against a 0xFF-filled ROM under `ctest`'s build-dir working directory). Both fixed directly by the coordinator under DEC-0012 authority (test-file-only, zero production risk) and logged as DEC-0016; `ctest` reconfirmed 92/92 passing before M20 implementation dispatch.
+- Package approved for implementation dispatch (REQ-M20-002).
+- Responded At: 2026-07-07T15:00:00+09:00
+
+---
+
+- Response ID: RESP-M20-002
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M20
+- Re: REQ-M20-002 (implementation, slices S1-S4)
+- Outcome: Delivered `docs/m20-implementation-report.md`. New `src/devices/halnote/halnote_rom.{h,cpp}` (`HalnoteRom final : public core::MemoryDevice`), byte-exact per `RomHalnote.{hh,cc}`, composing `devices::cartridge::CartridgeRomWindow` (M19) and `devices::memory::BatteryBackedSram` (M17) verbatim, neither reimplemented. Machine wiring in `src/machine/hbf1xv_machine.{h,cpp}` (additive only): `halnote_` attached at primary 0/secondary 3/all 4 pages; `halnote()`/`set_halnote_sram_path()`/`halnote_sram_path()`/`flush_halnote_sram()` accessors mirroring the M15 S1985 backup-RAM precedent exactly, no new CLI flag. New tests: `tests/unit/devices/halnote/{halnote_rom,halnote_subbank}_unit_test.cpp`, `tests/integration/machine/hbf1xv_m20_halnote_integration_test.cpp` (correctly self-derives all `#A8`/`#FFFF` routing per A-M20-13's discipline, explicitly asserts the resolved (primary,sub,page) triple before relying on it). `ctest` 95/95 green (92 prior + 3 new), zero regression M1-M19. Real openMSX A/B (`docs/m20-parity-trace-diff.md`): used the REAL `bios/f1xvfirm.rom` on both sides after a live SHA1 cross-check confirmed it identical to the installed WSL system ROM (stronger than a synthetic swap; separately resolved the planner's SHA1-enforcement question by source read — advisory only, `Rom.cc:202-208`). Result: 11/14 labels PARITY (main bank-switch incl. bit-0x80 double duty; SRAM enable/read/write); 3/14 genuine, disclosed DIVERGENCE isolated to the sub-mapper-shadow-enable effect specifically on the installed openMSX 19.1 runtime (investigated live, CPU-halt independently confirmed via stable-PC check ruling out raciness; a 19.1-vs-21.0 version-skew hypothesis disclosed, not asserted as certain) — reported honestly, not swept into a false PARITY claim. Both B4 and B6 assessed READY to close together pending QA.
+- Coordinator independent verification (not just accepted at face value): rebuilt from clean reconfigure and re-ran the FULL suite myself — confirmed 95/95 passing, matching the claim exactly. Read `halnote_rom.{h,cpp}` in full: `mem_read`/`mem_write` match the planner's §2.2 pseudocode byte-for-byte, including the critical bit-0x80-passed-unmasked-to-`set_bank()` detail and the 0x7000-0x7FFF-only shadow scoping. Read the `hbf1xv_machine.{h,cpp}` diff: clean, additive, matches the S1985-precedent mirroring claim exactly. Read both new unit test files and the integration test in full: genuinely exercise the double-duty effect, the 0x6000-0x6FFF/0x7000-0x7FFF boundary with disjoint marker families ruling out coincidental matches, the permanently-unmapped-upper-quarter sweep, and SRAM persistence round-trip across two independent machine instances. Verified the A/B evidence is real, not fabricated: read the raw `build/m20_halnote_probe_A.txt`/`_B.txt` dump files directly — byte-for-byte match the reported table — and confirmed `tools/openmsx-m20-halnote-parity.ps1` genuinely drives WSL openMSX via real `debug break`/`debug write memory`/`debug read memory` Tcl commands (not a hardcoded/stubbed result). Ledger (`milestones.md`/`definition-of-done.yaml`) correctly left at "Ready for QA" / `overall_done: false` — not prematurely closed.
+- Recommendation to coordinator: proceed to QA dispatch (REQ-M20-003).
+- Responded At: 2026-07-07T16:00:00+09:00
+
+---
+
+- Response ID: RESP-M20-003
+- From: MSX QA Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M20
+- Re: REQ-M20-003 (regression assessment + sign-off)
+- Outcome: **PASS.** Delivered `docs/m20-qa-signoff.md`. Independently re-ran the full evidence-gate suite (own build + `ctest`, 95/95, zero regression vs. M19's 92/92). Independently cross-checked byte-exact semantics directly against `references/openmsx-21.0/src/memory/RomHalnote.{hh,cc}` line-by-line (not the developer's own citations) — confirmed the bit-0x80 double-duty ordering, the sub-bank shadow's exact 0x7000-0x7FFF range (never 0x6000), permanent window-slot 6/7 unmapping, unconditional sub-bank register writes, and no stray `setBlockMask` override. Confirmed genuine reuse of `CartridgeRomWindow`/`BatteryBackedSram` (no parallel bank-resolution or SRAM address-decode math inside `halnote_rom.cpp`). Confirmed the BIOS-ROM-at-slot-0-0 regression guard is non-vacuous (non-degenerate sample assertion present). Independently re-derived the new tests' `#A8`/`#FFFF` routing arithmetic from `slot_bus.cpp` directly and confirmed it is free of the DEC-0016-class bug (uses primary slot 0's default #A8=0 state plus 0xFF to set every page field at once — a different, correct mechanism from M17's mistake). Confirmed SRAM persistence genuinely round-trips across two SEPARATE `Hbf1xvMachine` instances (distinct brace scopes, not reused state). Confirmed determinism via direct grep (zero `elapsed_cycles`/`Scheduler`/clock references). Confirmed the full 34-row deferred-backlog review (9+10+7+2+2+4=34, independently recounted) with B4/B6 correctly disposed to close together. On the A/B divergence: QA independently re-ran the live WSL openMSX probe itself (reproduced the identical 11/14 PARITY, 3/14 DIVERGENCE result byte-for-byte), independently hashed both ROMs (confirmed identical SHA1 on both sides), and went further than the developer's own investigation by reading the raw firmware bytes at the "shadow not engaged, falls through to plain bank-3 window" hypothesis's predicted offset — a decisive, byte-for-byte match to all three divergent values, proving the divergence is the REFERENCE RUNTIME (openMSX 19.1) not engaging the shadow read for this access pattern, not a defect in this project's own `HalnoteRom`. QA's independent judgment: non-blocking, does not gate sign-off — on stronger evidentiary grounds than the developer's own "plausible, not certain" framing.
+- Recommendation: proceed to the separate human release decision for M20 closure (mark B4 and B6 `DONE (M20)` at that time); tag per the human's standard process.
+- Report: `docs/m20-qa-signoff.md`.
+- Responded At: 2026-07-07T17:00:00+09:00
+
+---
+
+- Response ID: RESP-M20-004
+- From: MSX Master Agent (coordinator)
+- To: Human (project owner)
+- Milestone ID: M20
+- Re: REQ-M20-004 (release decision + tag)
+- Outcome: M20 CLOSED. `agent-protocol/state/milestones.md` M20 status -> Done; `definition-of-done.yaml` M20 `overall_done` -> true (`regression_qa.signoff_decision_recorded` already true from QA PASS). `agent-protocol/state/deferred-backlog.md` B4 -> DONE (M20), B6 -> DONE (M20), closed together per the human's explicit directive; no new backlog rows required (M20's scope is the full committed scope named by both rows). Git tag `v1.0.20` at the closure commit. Ten milestones M11-M20 now tagged (v1.0.11..v1.0.20).
+- Responded At: 2026-07-07T17:35:00+09:00

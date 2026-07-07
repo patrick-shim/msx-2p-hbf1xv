@@ -43,8 +43,14 @@ void Hbf1xvMachine::wire_bus() {
     // (XML:87-98). Reset fetch origin once #A8=0.
     slot_bus_.attach(0, 0, 0, &bios_rom_);
     slot_bus_.attach(0, 0, 1, &bios_rom_);
-    // Slot 0-1 / 0-2 empty (XML:101,103); slot 0-3 MSX-JE Halnote (XML:106-114)
-    // is DEFERRED (D-3) -> reserved open-bus (unattached).
+    // Slot 0-1 / 0-2 empty (XML:101,103); slot 0-3 is the Halnote-mapped
+    // MSX-JE firmware ROM (XML:106-114, `<mem base="0x0000" size="0x10000">`
+    // -- ALL 4 pages of this sub-slot, A-M20-9, M20 backlog B6, closes B4
+    // together). HalnoteRom carries zero slot-routing knowledge of its own;
+    // it just answers the raw 16-bit CPU address handed to it.
+    for (int page = 0; page < devices::chipset::SlotBus::kPages; ++page) {
+        slot_bus_.attach(0, 3, page, &halnote_);
+    }
 
     // Slot 3-0: 64 KB main-RAM MemoryMapper, pages 0-3 (XML:125-130). The mapper
     // RAM consumes mapper_io_'s live #FC-#FF segments (fact-sheet §4/§9).
@@ -206,6 +212,7 @@ void Hbf1xvMachine::cold_boot() {
     ym2413_.reset();  // M17: zeroes all 64 registers + the address latch (A-M17-4)
     system_control_.reset();
     rtc_.reset();
+    halnote_.reset();  // M20: bank/flag state cleared + sram_ zeroed (A-M20-12)
 
     // M18 peripheral I/O devices (backlog B5/C7): Kanji font ROM address
     // counters, printer strobe/data/capture state, and the cassette
@@ -235,6 +242,13 @@ void Hbf1xvMachine::cold_boot() {
     // reset() above), preserving the M11 golden.
     if (!backup_ram_path_.empty()) {
         s1985_engine_.load_backup_ram(backup_ram_path_);
+    }
+
+    // Load the 16 KB Halnote/MSX-JE SRAM from its file when configured (M20,
+    // mirrors the S1985 backup-RAM precedent exactly, A-M20-12). Absent/short
+    // file -> the halnote_.reset() zeroing above stands (deterministic zero).
+    if (!halnote_sram_path_.empty()) {
+        halnote_.sram().load(halnote_sram_path_);
     }
 
     // Populate the ROM devices from the local bios/ assets (missing-asset policy
@@ -294,6 +308,8 @@ void Hbf1xvMachine::load_rom_assets() {
     disk_rom_.set_image(loader.load({"f1xvdisk.rom", 0x4000, "slot 3-2 page 1 (DISK presence)"}));
     fmmusic_rom_.set_image(loader.load({"f1xvmus.rom", 0x4000, "slot 3-3 page 1 (FM-MUSIC presence)"}));
     kanji_font_rom_.set_image(loader.load({"f1xvkfn.rom", 0x40000, "Kanji font ROM (I/O #D8-#DB)"}));
+    halnote_.set_image(
+        loader.load({"f1xvfirm.rom", 0x100000, "slot 0-3 pages 0-3 (Halnote/MSX-JE firmware)"}));
 
     // Diagnostics go to the machine diagnostics list only (rom_diagnostics()),
     // NOT the execution-event log: the event stream must stay byte-deterministic
@@ -661,6 +677,29 @@ bool Hbf1xvMachine::flush_backup_ram() const {
         return false;
     }
     return s1985_engine_.save_backup_ram(backup_ram_path_);
+}
+
+const devices::halnote::HalnoteRom& Hbf1xvMachine::halnote() const {
+    return halnote_;
+}
+
+devices::halnote::HalnoteRom& Hbf1xvMachine::halnote() {
+    return halnote_;
+}
+
+void Hbf1xvMachine::set_halnote_sram_path(std::filesystem::path path) {
+    halnote_sram_path_ = std::move(path);
+}
+
+const std::filesystem::path& Hbf1xvMachine::halnote_sram_path() const {
+    return halnote_sram_path_;
+}
+
+bool Hbf1xvMachine::flush_halnote_sram() const {
+    if (halnote_sram_path_.empty()) {
+        return false;
+    }
+    return halnote_.sram().save(halnote_sram_path_);
 }
 
 const MemoryRegion& Hbf1xvMachine::sram() const {

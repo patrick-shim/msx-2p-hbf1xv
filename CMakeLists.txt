@@ -42,6 +42,7 @@ add_library(sony_msx_core STATIC
     src/devices/cartridge/cartridge_ascii16kb_rom.cpp
     src/devices/cartridge/cartridge_konami_rom.cpp
     src/devices/cartridge/cartridge_slot.cpp
+    src/devices/halnote/halnote_rom.cpp
     src/devices/kanji/kanji_font_rom.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp

@@ -471,6 +471,8 @@ add_executable(machine_hbf1xv_m17_ym2413_integration_test
     integration/machine/hbf1xv_m17_ym2413_integration_test.cpp
 )
 target_link_libraries(machine_hbf1xv_m17_ym2413_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m17_ym2413_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m17_ym2413_integration_test COMMAND machine_hbf1xv_m17_ym2413_integration_test)
 
 # --- M18 peripheral I/O: Kanji-font ROM (#D8-#DB) + printer (#90-#97) + cassette ---
@@ -589,3 +591,26 @@ target_compile_definitions(machine_hbf1xv_m19_metalgear_smoke_integration_test
     PRIVATE SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m19_metalgear_smoke_integration_test
     COMMAND machine_hbf1xv_m19_metalgear_smoke_integration_test)
+
+# --- M20 Halnote / MSX-JE firmware mapping (slot 0-3) + real BatteryBackedSram
+#     consumer (backlog B4 + B6, closed together) ---------------------------
+add_executable(devices_halnote_rom_unit_test
+    unit/devices/halnote/halnote_rom_unit_test.cpp
+)
+target_link_libraries(devices_halnote_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_halnote_rom_unit_test COMMAND devices_halnote_rom_unit_test)
+
+add_executable(devices_halnote_subbank_unit_test
+    unit/devices/halnote/halnote_subbank_unit_test.cpp
+)
+target_link_libraries(devices_halnote_subbank_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_halnote_subbank_unit_test COMMAND devices_halnote_subbank_unit_test)
+
+add_executable(machine_hbf1xv_m20_halnote_integration_test
+    integration/machine/hbf1xv_m20_halnote_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m20_halnote_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m20_halnote_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m20_halnote_integration_test
+    COMMAND machine_hbf1xv_m20_halnote_integration_test)
