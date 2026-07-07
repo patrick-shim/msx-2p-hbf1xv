@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "devices/audio/psg_ym2149.h"
+#include "peripherals/rensha_turbo.h"
 
 namespace sony_msx::peripherals {
 
@@ -73,6 +74,12 @@ public:
     // unconditionally 1) -- a hard regression guard, unit-tested explicitly.
     void attach_cassette_input_source(CassetteInputSource* source);
 
+    // Inject the Ren-Sha Turbo autofire source backing R14 bit4/trigger-A
+    // (M25, backlog C8, openMSX sound/MSXPSG.cc:90-93, A-M25-7). nullptr
+    // (the default) reproduces the exact pre-M25 behavior byte-for-byte --
+    // a hard regression guard, unit-tested explicitly.
+    void attach_rensha_turbo(const RenshaTurbo* source);
+
     // devices::audio::PsgPortSource
     [[nodiscard]] std::uint8_t read_port_a() override;
     void write_port_b(std::uint8_t value) override;
@@ -84,6 +91,7 @@ private:
     int selected_ = 0;
     bool kana_off_ = false;
     CassetteInputSource* cassette_source_ = nullptr;
+    const RenshaTurbo* rensha_ = nullptr;
 };
 
 }  // namespace sony_msx::peripherals

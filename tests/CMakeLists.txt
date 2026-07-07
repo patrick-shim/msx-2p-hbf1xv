@@ -846,3 +846,43 @@ add_test(NAME hbf1xv_m24_zexall_system_test COMMAND hbf1xv_m24_zexall_system_tes
 set_tests_properties(hbf1xv_m24_zexall_system_test PROPERTIES
     TIMEOUT 7200
     LABELS "m24_slow_full_sweep")
+
+# --- M25 Sony speed-controller (MB670836) + hardware PAUSE + Ren-Sha Turbo --
+#     autofire (backlog C8) ---------------------------------------------------
+add_executable(devices_chipset_mb670836_pause_unit_test
+    unit/devices/chipset/mb670836_pause_unit_test.cpp
+)
+target_link_libraries(devices_chipset_mb670836_pause_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_mb670836_pause_unit_test COMMAND devices_chipset_mb670836_pause_unit_test)
+
+add_executable(peripherals_rensha_turbo_unit_test
+    unit/peripherals/rensha_turbo_unit_test.cpp
+)
+target_link_libraries(peripherals_rensha_turbo_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_rensha_turbo_unit_test COMMAND peripherals_rensha_turbo_unit_test)
+
+add_executable(peripherals_rensha_turbo_integration_test
+    integration/peripherals/rensha_turbo_integration_test.cpp
+)
+target_link_libraries(peripherals_rensha_turbo_integration_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_rensha_turbo_integration_test COMMAND peripherals_rensha_turbo_integration_test)
+
+add_executable(machine_hbf1xv_m25_pause_integration_test
+    integration/machine/hbf1xv_m25_pause_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m25_pause_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m25_pause_integration_test COMMAND machine_hbf1xv_m25_pause_integration_test)
+
+add_executable(machine_hbf1xv_m25_speed_controller_integration_test
+    integration/machine/hbf1xv_m25_speed_controller_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m25_speed_controller_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m25_speed_controller_integration_test
+    COMMAND machine_hbf1xv_m25_speed_controller_integration_test)
+
+add_executable(hbf1xv_m25_speed_pause_rensha_system_test
+    system/hbf1xv_m25_speed_pause_rensha_system_test.cpp
+)
+target_link_libraries(hbf1xv_m25_speed_pause_rensha_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m25_speed_pause_rensha_system_test
+    COMMAND hbf1xv_m25_speed_pause_rensha_system_test)

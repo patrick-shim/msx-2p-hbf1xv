@@ -12,6 +12,7 @@
 #include "devices/audio/ym2413_opll.h"
 #include "devices/chipset/io_bus.h"
 #include "devices/chipset/mapper_io.h"
+#include "devices/chipset/mb670836_pause.h"
 #include "devices/chipset/ppi_8255.h"
 #include "devices/chipset/s1985_engine.h"
 #include "devices/chipset/slot_bus.h"
@@ -45,6 +46,7 @@
 #include "peripherals/joystick.h"
 #include "peripherals/keyboard_matrix.h"
 #include "peripherals/printer_port.h"
+#include "peripherals/rensha_turbo.h"
 
 namespace sony_msx::machine {
 
@@ -210,6 +212,18 @@ public:
     [[nodiscard]] const peripherals::CassetteInterface& cassette() const;
     peripherals::CassetteInterface& cassette();
 
+    // M25 Sony MB670836 hardware PAUSE + Speed Controller, and Ren-Sha Turbo
+    // autofire (backlog C8). pause_controller() is the machine-level
+    // CPU-execution gate consulted at the top of step_cpu_instruction() and
+    // driven per-VBlank by run_frame() (§2.3/§2.4 of docs/m25-planner-
+    // package.md); rensha_turbo() is the autofire signal generator wired
+    // into keyboard_()/joystick_() via the M25-S3 OR-mask attach points.
+    // Both mirror the existing s1985()/ppi() accessor style.
+    [[nodiscard]] const devices::chipset::Mb670836PauseController& pause_controller() const;
+    devices::chipset::Mb670836PauseController& pause_controller();
+    [[nodiscard]] const peripherals::RenshaTurbo& rensha_turbo() const;
+    peripherals::RenshaTurbo& rensha_turbo();
+
     // FDC subsystem (M16). The WD2793 core answers the Sony register window
     // 0x7FF8-0x7FFF over the DISK ROM at slot 3-2 page 1; the drive mounts the
     // deterministic 720 KB image. Tests drive commands over the bus and inspect
@@ -370,6 +384,22 @@ private:
         const core::Scheduler& scheduler_;
     };
 
+    // Deterministic emulated-cycle clock source for Ren-Sha Turbo (M25,
+    // X-pattern of RtcClock/FdcClock/CassetteClock, backlog C8). Returns
+    // scheduler total cycles READ-ONLY; the autofire signal advances off
+    // this, never the host wall clock or CPU T-state accounting (protecting
+    // the M9/M12/M23 zero-tolerance CPU-timing oracles). Consulted
+    // pull-style only from KeyboardMatrix/JoystickPorts -- never wired into
+    // step_cpu_instruction()/run_cycles()/run_frame().
+    class RenshaTurboClock final : public peripherals::RenshaTurboClockSource {
+    public:
+        explicit RenshaTurboClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t cpu_cycles() const override;
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion sram_{kSramBytes};
@@ -395,6 +425,15 @@ private:
     // rule.
     CassetteClock cassette_clock_{scheduler_};
     peripherals::CassetteInterface cassette_{ppi_};
+
+    // Ren-Sha Turbo autofire (M25, backlog C8 sub-item): the signal
+    // generator + its X-pattern clock adapter, attached into keyboard_/
+    // joystick_ via wire_bus()'s additive OR-mask seams (M25-S3). Owned
+    // instance's own default post-reset() is speed_=0 (disabled) --
+    // regression-safe.
+    RenshaTurboClock rensha_clock_{scheduler_};
+    peripherals::RenshaTurbo rensha_turbo_;
+
     devices::chipset::MapperIo mapper_io_;      // #FC-#FF mapper readback (segment owner)
     devices::chipset::SwitchedIoController switched_io_;  // #40-#4F switched I/O
     devices::chipset::S1985Engine s1985_engine_;  // backup RAM ID 0xFE + M1 wait
@@ -484,6 +523,14 @@ private:
     // 0 (program start), matching the documented "no vsync yet" semantic of
     // cycles_since_last_vsync()/vdp_cycle_position() above.
     std::uint64_t last_vsync_cycle_ = 0;
+
+    // M25 Sony MB670836 hardware PAUSE + Speed Controller (backlog C8). A
+    // machine-level CPU-execution gate consulted at the very top of
+    // step_cpu_instruction() (docs/m25-planner-package.md §2.3/§2.4) -- NOT
+    // part of Z80aCpu (zero edit to src/devices/cpu/*). Its VBlank-synced
+    // duty-cycle window is advanced by exactly ONE added line inside
+    // run_frame(), alongside the existing vdp_.on_vsync() call.
+    devices::chipset::Mb670836PauseController pause_controller_;
 };
 
 }  // namespace sony_msx::machine

@@ -23,6 +23,7 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/s1985_engine.cpp
     src/devices/chipset/system_bus.cpp
     src/devices/chipset/system_control.cpp
+    src/devices/chipset/mb670836_pause.cpp
     src/devices/audio/psg_ym2149.cpp
     src/devices/audio/ym2413_opll.cpp
     src/devices/rtc/rp5c01.cpp
@@ -53,6 +54,7 @@ add_library(sony_msx_core STATIC
     src/peripherals/joystick.cpp
     src/peripherals/printer_port.cpp
     src/peripherals/cassette_interface.cpp
+    src/peripherals/rensha_turbo.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp

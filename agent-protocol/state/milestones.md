@@ -512,3 +512,94 @@ Use one section per milestone.
   solving backlog C5's own still-unsolved auto-boot-trigger problem, out of this milestone's
   planned scope; `disks/` (added by the human mid-cycle) is reserved for a future, dedicated C5
   investigation instead. Ledger status transition: backlog C3 -> DONE (M24).
+
+## M25 (Kickoff 2026-07-08)
+
+- Milestone ID: M25
+- Title: Sony Speed-Controller + Hardware PAUSE + Ren-Sha Turbo (closes C8)
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Implement deferred-backlog row **C8** (Sony speed-controller + hardware PAUSE (MB670836); Ren-Sha Turbo autofire — HB-F1XV-specific, never previously scoped). Grounded directly against `references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md` §9 and `references/fact-sheets/Zilog Z80A CPU.md` §6: a second Sony custom LSI (MB670836) handles DRAM address multiplexing plus the speed-controller (slow-motion) and hardware-PAUSE circuitry. The HB-F1XV has NO CPU turbo mode — the Speed Controller slider is NOT a clock-speed change, it is an autofire on the PAUSE button synced to VBlank, slowing games by pausing them intermittently. Hardware PAUSE physically halts the CPU and cannot be bypassed in software — a distinct mechanism from the Z80's own `HALT` instruction (already modeled, M9/M23/C2). Ren-Sha Turbo is a separate autofire feature whose real trigger/control mechanism the planner must determine from the fact sheets/references, not guess. Second and FINAL milestone of the M24-M25 continuation (2026-07-08 human directive) — own planner package, developer implementation, dedicated system integration test, QA sign-off, separate tag; proceeding through the release-decision/tag step without an extra pause on a clean QA PASS, UNLESS QA does not reach a clean PASS (this condition already fired once this run, for M24 — see DEC-0022), in which case STOP and consult the human.
+- Acceptance Criteria (planner to detail): a genuine, fact-sheet-grounded design for PAUSE/speed-controller/Ren-Sha Turbo (not guessed); deterministic unit/integration/system tests; real openMSX A/B evidence where feasible or honest BLOCKED; zero regression across the FULL M1-M24 suite (124 tests, `hbf1xv_m24_zexall_system_test` alone taking ~24-27 minutes); full deferred-backlog review; QA sign-off before closure.
+- Unit/Integration Tests Required: `tests/unit/devices/chipset/mb670836_pause_unit_test.cpp`,
+  `tests/unit/peripherals/rensha_turbo_unit_test.cpp`,
+  `tests/integration/peripherals/rensha_turbo_integration_test.cpp`,
+  `tests/integration/machine/hbf1xv_m25_pause_integration_test.cpp`,
+  `tests/integration/machine/hbf1xv_m25_speed_controller_integration_test.cpp`,
+  `tests/system/hbf1xv_m25_speed_pause_rensha_system_test.cpp`.
+- Regression Scope: all M1-M24 suites remain green; QA sign-off required before closure.
+- Status: Done. CLOSED by coordinator release decision on 2026-07-08 (DEC-0023/REQ-M25-004);
+  tagged git `v1.0.25`. Closes deferred-backlog row C8 in full. This is the SECOND AND FINAL
+  milestone of the M24-M25 continuation, which is now fully complete.
+- Details: Planner package `docs/m25-planner-package.md` (REQ-M25-001/RESP-M25-001). Developer
+  implementation `docs/m25-implementation-report.md`: new `Mb670836PauseController`
+  (`src/devices/chipset/mb670836_pause.{h,cpp}`) — a machine-level CPU-execution gate consulted at
+  the very top of `step_cpu_instruction()`, BEFORE any opcode decode, so PC/R/every register stay
+  completely frozen while engaged (architecturally distinct from the Z80's own CPU-internal `HALT`,
+  which keeps incrementing R — see the planner package §2.3 comparison table). The manual PAUSE
+  button (toggle semantics, A-M25-1) and the Speed Controller's own VBlank-synced duty cycle
+  (`kPeriodFrames=8`, driven by a single additive line in `run_frame()` alongside the existing
+  `vdp_.on_vsync()` call) OR into ONE combined `cpu_should_pause()` gate (A-M25-4). New `RenshaTurbo`
+  (`src/peripherals/rensha_turbo.{h,cpp}`) — a simpler, peripheral-level autofire signal generator
+  grounded in real openMSX behavior (`RenShaTurbo.{hh,cc}`/`Autofire.{hh,cc}`, the `MSXPPI.cc:90-93`/
+  `sound/MSXPSG.cc:90-93` OR-combine wiring, independently confirmed by direct source read) and the
+  real per-machine `Sony_HB-F1XV.xml:16-19` calibration (`min_ints=47`/`max_ints=221`), wired into
+  `KeyboardMatrix`/`JoystickPorts` via additive, default-nullptr OR-mask attach points (byte-for-byte
+  pre-M25 regression guard when unattached, M25-S3). Built in the planner's exact 5-slice order
+  (S1 PauseController isolated → S2 RenshaTurbo isolated → S3 peripheral wiring+regression guards →
+  S4 machine wiring → S5 dedicated system test + A/B evidence + backlog/documentation closure). 6 new
+  dedicated unit/integration/system tests prove: hardware PAUSE genuinely freezes PC/every
+  register/R/memory across multiple paused `step_cpu_instruction()` calls with `elapsed_cycles()`
+  still advancing exactly 1 T-state/call, and resumes correctly on release; PAUSE cannot be bypassed
+  via any CPU-visible API (a dedicated I/O-port+arithmetic probe program run 10 steps while paused
+  never advances PC); the Speed Controller's duty cycle is deterministic and hand-computable (a
+  counter-loop program driven through 16 simulated VBlank windows matches an independently
+  hand-computed growth total exactly); Ren-Sha Turbo never forces a spurious press (R-M25-6, an
+  exhaustive negative-control sweep across a full toggle period, both in isolation and through a real
+  `Hbf1xvMachine`). Real openMSX A/B evidence (`tools/openmsx-m25-rensha-parity.ps1` →
+  `docs/m25-parity-trace-diff.md`): Ren-Sha Turbo achieved genuine live **PARITY** against the real
+  `Sony_HB-F1XV` openMSX machine — driven via openMSX's own live Tcl `set renshaturbo <speed>`
+  setting + `debug write/read ioports` sampling (scheduled via `after time`, native continuous
+  emulation between samples, NOT per-instruction single-stepping, specifically because M23/M24 both
+  independently found live per-instruction Tcl stepping becomes slow/inconsistent past a small step
+  count): the not-held invariant (R-M25-6) confirmed ZERO observable effect at every sampled point
+  for BOTH the keyboard-row-8 and PSG-R14 paths, and the held case confirmed genuine bit0 alternation
+  live via openMSX's own `keymatrixdown 8 1` Tcl primitive for the keyboard path. The joystick-
+  trigger-A held-alternation sub-case is honestly disclosed as NOT attempted (no live "hold a
+  joystick button" Tcl primitive exists in openMSX 21.0's scripting layer). Hardware PAUSE / Speed
+  Controller is honestly reported **BLOCKED** for A/B — an exhaustive, cited search (independently
+  re-confirmed this cycle, not merely trusted from the planner package) established that openMSX
+  21.0 has ZERO Sony-specific PAUSE/speed-controller modeling anywhere: `SG1000Pause.hh` is a
+  different machine family/mechanism (NMI, not a WAIT-gate); `MSXTurboRPause.{hh,cc}` is a different
+  chipset (S1990, not S1985/MB670836) using an architecturally-incompatible whole-session
+  `getMotherBoard().pause()`; four of the five real Sony MSX machine XML definitions explicitly say
+  "speed controller (not emulated)" in their own `<description>` text, and the fifth (this project's
+  actual target, `Sony_HB-F1XV.xml`) does not even mention it. Per Acceptance Criterion 9, this
+  BLOCKED disposition does NOT gate C8's closure (mirrors the M21 computed-pixel-color and C3/M24
+  disk-boot-A/B precedents). `git diff v1.0.24` confirms zero changes to `src/devices/cpu/`,
+  `src/devices/video/`, `src/devices/audio/`, `src/devices/rtc/`, `src/devices/fdc/`,
+  `src/devices/cartridge/`, `src/devices/memory/`, `src/devices/halnote/`, `src/devices/kanji/`,
+  `src/core/`, and all 12 named zero-tolerance CPU-timing-oracle test files (byte-for-byte
+  unchanged, independently re-confirmed). Full regression: 130/130 (124 prior + 6 new), zero
+  regression, including the slow `hbf1xv_m24_zexall_system_test` re-run to completion at least once
+  before requesting QA. Full 34-row deferred-backlog review completed
+  (`agent-protocol/state/deferred-backlog.md`).
+
+  QA (`docs/m25-qa-signoff.md`, RESP-M25-003) independently reproduced everything from a genuinely
+  clean rebuild — full regression (130/130, including its own fresh 22m31s ZEXALL/ZEXDOC re-run),
+  the 12-file CPU-timing-oracle diff (empty), hardware PAUSE's non-bypassability (confirmed both by
+  test AND by static `grep` inspection that no I/O port dispatch touches the gate), and — critically
+  — the ONE piece of evidence the coordinator had explicitly left unreproduced: the live openMSX A/B
+  script itself, re-run end-to-end by QA against the real WSL `Sony_HB-F1XV` machine, reproducing
+  genuine Ren-Sha Turbo PARITY from scratch. QA returned a **clean, unconditional Pass** — the
+  standing "STOP if not a clean PASS" condition, which fired once for M24, did NOT fire here. QA's
+  sole finding (Low, non-blocking): its own fresh `find` sweep for every `Sony_HB-F1*.xml` file
+  turned up a SIXTH Sony machine (`Sony_HB-F1XDmk2.xml`, missed by every prior search this cycle) —
+  independently confirmed to also wire no Pause/SpeedController device, reinforcing rather than
+  undermining the BLOCKED disposition. Per QA's own explicit recommendation, the coordinator applied
+  this "five"→"six" documentation fix directly across all four affected artifacts (verifying the
+  PowerShell edit's backtick-escaping via a standalone parse-and-render check first, learning from
+  that same script's own earlier self-caught escaping bug) rather than routing back to the developer.
+  Ledger status transition: backlog C8 -> DONE (M25). **This closes the full M24-M25 continuation**
+  the human's 2026-07-08 directive requested.

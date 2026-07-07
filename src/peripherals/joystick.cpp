@@ -31,6 +31,10 @@ void JoystickPorts::attach_cassette_input_source(CassetteInputSource* source) {
     cassette_source_ = source;
 }
 
+void JoystickPorts::attach_rensha_turbo(const RenshaTurbo* source) {
+    rensha_ = source;
+}
+
 std::uint8_t JoystickPorts::encode(const PortState& state) const {
     // Active-low: start all-released (1) and clear the pressed bits (0 = pressed).
     std::uint8_t bits = 0x3F;  // bits 0-5 (directions + triggers) all released
@@ -68,6 +72,16 @@ std::uint8_t JoystickPorts::read_port_a() {
         } else {
             bits = static_cast<std::uint8_t>(bits & ~kCassetteInputBit);
         }
+    }
+    // Ren-Sha Turbo autofire (M25, A-M25-7): PSG R14 bit4 = trigger A,
+    // applied to the SELECTED port's already-computed value (matches
+    // openMSX's ports[selectedPort]-after-mux wiring). Unattached (the
+    // default) leaves bits exactly as computed above -- byte-for-byte
+    // identical to the pre-M25 behavior (regression guard, M25-S3). OR-only:
+    // this can only ever force a 0 bit (pressed) to 1 (a periodic release),
+    // never the reverse (R-M25-6).
+    if (rensha_ != nullptr) {
+        bits = static_cast<std::uint8_t>(bits | rensha_->joystick_trigger_a_or_mask());
     }
     return bits;
 }

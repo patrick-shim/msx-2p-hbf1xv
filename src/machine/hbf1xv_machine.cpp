@@ -122,6 +122,17 @@ void Hbf1xvMachine::wire_bus() {
     cassette_.attach_clock_source(&cassette_clock_);
     joystick_.attach_cassette_input_source(&cassette_);
 
+    // Ren-Sha Turbo autofire (M25, backlog C8 sub-item). Additive OR-mask
+    // attach points (M25-S3): keyboard row 8 bit0 (SPACE) and PSG R14 bit4
+    // (joystick trigger A), driven by the deterministic emulated-cycle
+    // rensha_clock_ adapter (X-pattern of rtc_clock_/fdc_clock_/
+    // cassette_clock_). speed_=0 (disabled) post-reset() is the regression-
+    // safe default -- this attach is unconditional, but produces zero
+    // observable effect until rensha_turbo().set_speed() is called.
+    rensha_turbo_.attach_clock_source(&rensha_clock_);
+    keyboard_.attach_rensha_turbo(&rensha_turbo_);
+    joystick_.attach_rensha_turbo(&rensha_turbo_);
+
     // Kanji font ROM on #D8-#DB (M18-S1, backlog B5). Direct-port dispatch
     // (A-M18-1: MSXKanji, NOT the switched-I/O MSXKanji12 used by other MSX
     // machines) -- the device itself decodes port & 0x03 internally.
@@ -221,6 +232,14 @@ void Hbf1xvMachine::cold_boot() {
     kanji_font_rom_.reset();
     printer_.reset();
     cassette_.reset();
+
+    // M25 hardware PAUSE + Speed Controller + Ren-Sha Turbo (backlog C8):
+    // deterministic power-on idle defaults -- disengaged/speed-level-0 gate
+    // (pause_controller_.cpu_should_pause() == false) and disabled autofire
+    // (rensha_turbo_.signal() == false), matching the pre-M25 behavior for
+    // any test/tool that does not explicitly engage either mechanism.
+    pause_controller_.reset();
+    rensha_turbo_.reset();
 
     // FDC (M16): reset the WD2793 core (TR=0xFF), the drive mechanism, and the
     // Sony glue latches; re-mount the deterministic default 720 KB medium so every
@@ -354,6 +373,13 @@ void Hbf1xvMachine::run_frame() {
     // (which level-samples the held line). Exact sub-frame raster position is
     // DEFERRED (backlog D4).
     vdp_.on_vsync();
+    // M25 Speed-Controller duty-cycle hook (backlog C8, planner §2.3 point
+    // 4): a single additive line, immediately alongside the existing
+    // vdp_.on_vsync() call above. Advances the PAUSE controller's internal
+    // VBlank-synced duty-cycle window; the Speed Controller's own numeric
+    // level defaults to 0 (never paused) post-reset(), so this is a no-op by
+    // default (regression guard).
+    pause_controller_.on_vsync();
     // M23-S2 bookkeeping (additive-only; the sole change to this function this
     // cycle): remember the cycle count at the most recent VSync so
     // cycles_since_last_vsync()/vdp_cycle_position() can report a raster
@@ -382,6 +408,30 @@ bool Hbf1xvMachine::run_until_cycle(const std::uint64_t target_cycle) {
 }
 
 std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
+    // M25 hardware PAUSE / Speed-Controller gate (backlog C8, planner
+    // §2.3/§2.4). Consulted FIRST, before any opcode decode. When engaged
+    // (button pressed, or the Speed Controller's own duty-cycle window),
+    // this skips cpu_.step() ENTIRELY -- no M1/opcode-fetch cycle occurs at
+    // all, so PC/R/every register stay completely frozen (A-M25-2's literal
+    // reading of the S1985 fact-sheet §9: "physically halts the CPU and
+    // cannot be bypassed in software"). Genuinely different from the Z80's
+    // own HALT instruction (CPU-internal, R keeps incrementing, released by
+    // any interrupt) -- see the planner package §2.3 comparison table. This
+    // is a small, additive, early-return-only insertion; everything below is
+    // otherwise byte-for-byte unchanged from pre-M25. VDP/RTC/FDC clock
+    // sources are UNAFFECTED (their crystal is not gated by the Z80 WAIT pin
+    // on real hardware) -- only CPU decode/execute is suppressed. The 1
+    // T-state idle charge is a documented MODELING CHOICE (R-M25-7), not a
+    // hardware-quantized fact (real hardware's WAIT-line hold is not
+    // naturally discretized) -- the finest-grained unit this whole-
+    // instruction-atomic engine can charge for an indefinitely-held external
+    // WAIT condition, with no overshoot risk.
+    if (pause_controller_.cpu_should_pause()) {
+        constexpr std::uint32_t kPausedIdleTStates = 1;
+        scheduler_.tick(kPausedIdleTStates);
+        return kPausedIdleTStates;
+    }
+
     // Level-sample the VDP's held /INT (M14-S4, R-1). The Z80A accept path
     // clears its internal pending flag on service, but real hardware holds /INT
     // until the S#0 status read releases it. Re-asserting the request from the
@@ -545,6 +595,10 @@ std::uint64_t Hbf1xvMachine::CassetteClock::cpu_cycles() const {
     return scheduler_.total_cycles();
 }
 
+std::uint64_t Hbf1xvMachine::RenshaTurboClock::cpu_cycles() const {
+    return scheduler_.total_cycles();
+}
+
 const devices::fdc::Wd2793& Hbf1xvMachine::fdc() const {
     return fdc_;
 }
@@ -682,6 +736,22 @@ const peripherals::CassetteInterface& Hbf1xvMachine::cassette() const {
 
 peripherals::CassetteInterface& Hbf1xvMachine::cassette() {
     return cassette_;
+}
+
+const devices::chipset::Mb670836PauseController& Hbf1xvMachine::pause_controller() const {
+    return pause_controller_;
+}
+
+devices::chipset::Mb670836PauseController& Hbf1xvMachine::pause_controller() {
+    return pause_controller_;
+}
+
+const peripherals::RenshaTurbo& Hbf1xvMachine::rensha_turbo() const {
+    return rensha_turbo_;
+}
+
+peripherals::RenshaTurbo& Hbf1xvMachine::rensha_turbo() {
+    return rensha_turbo_;
 }
 
 void Hbf1xvMachine::set_backup_ram_path(std::filesystem::path path) {

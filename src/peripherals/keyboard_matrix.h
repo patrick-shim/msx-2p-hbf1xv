@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "devices/chipset/ppi_8255.h"
+#include "peripherals/rensha_turbo.h"
 
 namespace sony_msx::peripherals {
 
@@ -31,12 +32,19 @@ public:
     void set_key(int row, int column, bool pressed);
     [[nodiscard]] bool key(int row, int column) const;
 
+    // Inject the Ren-Sha Turbo autofire source backing row 8 bit0 (M25,
+    // backlog C8, openMSX MSXPPI.cc:90-93 A-M25-7). nullptr (the default)
+    // reproduces the exact pre-M25 behavior byte-for-byte -- a hard
+    // regression guard, unit-tested explicitly.
+    void attach_rensha_turbo(const RenshaTurbo* source);
+
     // devices::chipset::KeyboardRowSource — inverted (0 = pressed), idle 0xFF.
     [[nodiscard]] std::uint8_t keyboard_row(int row) const override;
 
 private:
     // Stored INVERTED: bit = 0 means pressed. Idle = 0xFF.
     std::array<std::uint8_t, kRows> rows_{};
+    const RenshaTurbo* rensha_ = nullptr;
 };
 
 }  // namespace sony_msx::peripherals
