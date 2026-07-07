@@ -27,6 +27,10 @@ bool JoystickPorts::kana_led_off() const {
     return kana_off_;
 }
 
+void JoystickPorts::attach_cassette_input_source(CassetteInputSource* source) {
+    cassette_source_ = source;
+}
+
 std::uint8_t JoystickPorts::encode(const PortState& state) const {
     // Active-low: start all-released (1) and clear the pressed bits (0 = pressed).
     std::uint8_t bits = 0x3F;  // bits 0-5 (directions + triggers) all released
@@ -54,7 +58,18 @@ std::uint8_t JoystickPorts::encode(const PortState& state) const {
 }
 
 std::uint8_t JoystickPorts::read_port_a() {
-    return encode(ports_[static_cast<std::size_t>(selected_)]);
+    std::uint8_t bits = encode(ports_[static_cast<std::size_t>(selected_)]);
+    // M18-S3 (A-M18-10): unattached (nullptr) leaves bit7 exactly as encode()
+    // set it (unconditionally 1) -- byte-for-byte identical to the pre-M18
+    // behavior (regression guard). Attached, bit7 reflects the live source.
+    if (cassette_source_ != nullptr) {
+        if (cassette_source_->cassette_input_high()) {
+            bits = static_cast<std::uint8_t>(bits | kCassetteInputBit);
+        } else {
+            bits = static_cast<std::uint8_t>(bits & ~kCassetteInputBit);
+        }
+    }
+    return bits;
 }
 
 void JoystickPorts::write_port_b(const std::uint8_t value) {

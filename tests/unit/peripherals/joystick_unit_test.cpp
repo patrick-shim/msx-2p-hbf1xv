@@ -105,5 +105,74 @@ int main() {
         }
     }
 
+    // --- M18-S3 (A-M18-10) cassette-input injection: REGRESSION GUARD. The
+    // unattached path (cassette_source_ == nullptr, the default) must be
+    // byte-for-byte IDENTICAL to the pre-M18 behavior -- bit7 unconditionally
+    // 1, regardless of any joystick/direction state. ---
+    {
+        JoystickPorts joy;
+        joy.reset();
+        // Idle: bit7 still 1 exactly as before M18.
+        if (!expect_true(joy.read_port_a() == 0xFF, "Unattached_Idle_Bit7StillOne")) {
+            return 1;
+        }
+        // With other bits pressed, bit7 remains 1 (unaffected).
+        JoystickPorts::PortState s;
+        s.down = true;
+        joy.set_port(0, s);
+        const std::uint8_t r = joy.read_port_a();
+        if (!expect_true((r & JoystickPorts::kCassetteInputBit) != 0,
+                         "Unattached_WithOtherBitsPressed_Bit7StillOne")) {
+            return 1;
+        }
+        if (!expect_true(r == static_cast<std::uint8_t>(0xFF & ~0x02),
+                         "Unattached_WithOtherBitsPressed_RestUnchanged")) {
+            return 1;
+        }
+    }
+
+    // --- Attached cassette source: bit7 reflects the injected source's live
+    // value (M18-S3, A-M18-10). ---
+    {
+        class FakeCassetteSource final : public sony_msx::peripherals::CassetteInputSource {
+        public:
+            bool high = true;
+            [[nodiscard]] bool cassette_input_high() const override { return high; }
+        };
+
+        JoystickPorts joy;
+        joy.reset();
+        FakeCassetteSource source;
+        joy.attach_cassette_input_source(&source);
+
+        source.high = true;
+        if (!expect_true((joy.read_port_a() & JoystickPorts::kCassetteInputBit) != 0,
+                         "Attached_SourceHigh_Bit7Set")) {
+            return 1;
+        }
+        source.high = false;
+        if (!expect_true((joy.read_port_a() & JoystickPorts::kCassetteInputBit) == 0,
+                         "Attached_SourceLow_Bit7Clear")) {
+            return 1;
+        }
+        // Other bits are unaffected by the cassette-input override.
+        JoystickPorts::PortState s;
+        s.up = true;
+        joy.set_port(0, s);
+        source.high = false;
+        const std::uint8_t r = joy.read_port_a();
+        if (!expect_true(r == static_cast<std::uint8_t>(0xFF & ~0x01 & ~JoystickPorts::kCassetteInputBit),
+                         "Attached_OtherBitsUnaffectedByCassetteOverride")) {
+            std::cerr << "  got 0x" << std::hex << int(r) << "\n";
+            return 1;
+        }
+        // Detaching (nullptr) restores the unconditional-1 default.
+        joy.attach_cassette_input_source(nullptr);
+        if (!expect_true((joy.read_port_a() & JoystickPorts::kCassetteInputBit) != 0,
+                         "Detached_RevertsToUnconditionalOne")) {
+            return 1;
+        }
+    }
+
     return 0;
 }

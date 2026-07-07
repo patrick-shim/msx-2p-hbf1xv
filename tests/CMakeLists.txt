@@ -472,3 +472,31 @@ add_executable(machine_hbf1xv_m17_ym2413_integration_test
 )
 target_link_libraries(machine_hbf1xv_m17_ym2413_integration_test PRIVATE sony_msx_core)
 add_test(NAME machine_hbf1xv_m17_ym2413_integration_test COMMAND machine_hbf1xv_m17_ym2413_integration_test)
+
+# --- M18 peripheral I/O: Kanji-font ROM (#D8-#DB) + printer (#90-#97) + cassette ---
+add_executable(devices_kanji_font_rom_unit_test
+    unit/devices/kanji/kanji_font_rom_unit_test.cpp
+)
+target_link_libraries(devices_kanji_font_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_kanji_font_rom_unit_test COMMAND devices_kanji_font_rom_unit_test)
+
+add_executable(peripherals_printer_port_unit_test
+    unit/peripherals/printer_port_unit_test.cpp
+)
+target_link_libraries(peripherals_printer_port_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_printer_port_unit_test COMMAND peripherals_printer_port_unit_test)
+
+add_executable(peripherals_cassette_interface_unit_test
+    unit/peripherals/cassette_interface_unit_test.cpp
+)
+target_link_libraries(peripherals_cassette_interface_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_cassette_interface_unit_test COMMAND peripherals_cassette_interface_unit_test)
+
+add_executable(machine_hbf1xv_m18_peripheral_io_integration_test
+    integration/machine/hbf1xv_m18_peripheral_io_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m18_peripheral_io_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m18_peripheral_io_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m18_peripheral_io_integration_test
+    COMMAND machine_hbf1xv_m18_peripheral_io_integration_test)

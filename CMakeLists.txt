@@ -33,10 +33,13 @@ add_library(sony_msx_core STATIC
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
     src/devices/memory/battery_backed_sram.cpp
+    src/devices/kanji/kanji_font_rom.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp
     src/peripherals/keyboard_matrix.cpp
     src/peripherals/joystick.cpp
+    src/peripherals/printer_port.cpp
+    src/peripherals/cassette_interface.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp

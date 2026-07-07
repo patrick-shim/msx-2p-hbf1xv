@@ -95,6 +95,32 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.attach(0xA1, &psg_);
     io_bus_.attach(0xA2, &psg_);
 
+    // Cassette interface (M18-S3, backlog C7): read-only motor/output
+    // derivation from ppi_ (bound by reference at construction, cassette_
+    // {ppi_}); its deterministic synthetic-tape input model advances
+    // pull-style off cassette_clock_ (A-M18-12 -- never wired into the CPU
+    // stepping loop). Its output feeds joystick_'s PSG R14 bit7 seam via the
+    // CassetteInputSource contract (A-M18-10), replacing the M15 hardcoded
+    // idle-high stub with a nullptr-safe, regression-guarded injection.
+    cassette_.attach_clock_source(&cassette_clock_);
+    joystick_.attach_cassette_input_source(&cassette_);
+
+    // Kanji font ROM on #D8-#DB (M18-S1, backlog B5). Direct-port dispatch
+    // (A-M18-1: MSXKanji, NOT the switched-I/O MSXKanji12 used by other MSX
+    // machines) -- the device itself decodes port & 0x03 internally.
+    io_bus_.attach(0xD8, &kanji_font_rom_);
+    io_bus_.attach(0xD9, &kanji_font_rom_);
+    io_bus_.attach(0xDA, &kanji_font_rom_);
+    io_bus_.attach(0xDB, &kanji_font_rom_);
+
+    // Printer port on #90-#97 (M18-S2, A-M18-5 -- the XML claims the fuller
+    // 8-port window directly, wider than the backlog's "#90/#91" shorthand,
+    // §2.7 of docs/m18-planner-package.md). The device decodes port & 0x03
+    // (mod-4 aliasing) internally.
+    for (std::uint16_t port = 0x90; port <= 0x97; ++port) {
+        io_bus_.attach(static_cast<std::uint8_t>(port), &printer_);
+    }
+
     // YM2413 (OPLL) on #7C/#7D (M17-S3, backlog B3), the real MSX-MUSIC I/O
     // ports (A-M17-1; Sony_HB-F1XV.xml:194 `<io base="0x7C" num="2" type="O"/>`)
     // alongside the unmodified fmmusic_rom_ attach above (A-M17-2).
@@ -170,6 +196,14 @@ void Hbf1xvMachine::cold_boot() {
     system_control_.reset();
     rtc_.reset();
 
+    // M18 peripheral I/O devices (backlog B5/C7): Kanji font ROM address
+    // counters, printer strobe/data/capture state, and the cassette
+    // interface's tape/sample state all return to their deterministic
+    // power-on defaults.
+    kanji_font_rom_.reset();
+    printer_.reset();
+    cassette_.reset();
+
     // FDC (M16): reset the WD2793 core (TR=0xFF), the drive mechanism, and the
     // Sony glue latches; re-mount the deterministic default 720 KB medium so every
     // cold boot presents byte-identical disk content.
@@ -242,6 +276,7 @@ void Hbf1xvMachine::load_rom_assets() {
     kanji_rom_.set_image(loader.load({"f1xvkdr.rom", 0x8000, "slot 3-1 pages 1-2 (Kanji driver)"}));
     disk_rom_.set_image(loader.load({"f1xvdisk.rom", 0x4000, "slot 3-2 page 1 (DISK presence)"}));
     fmmusic_rom_.set_image(loader.load({"f1xvmus.rom", 0x4000, "slot 3-3 page 1 (FM-MUSIC presence)"}));
+    kanji_font_rom_.set_image(loader.load({"f1xvkfn.rom", 0x40000, "Kanji font ROM (I/O #D8-#DB)"}));
 
     // Diagnostics go to the machine diagnostics list only (rom_diagnostics()),
     // NOT the execution-event log: the event stream must stay byte-deterministic
@@ -453,6 +488,10 @@ std::uint64_t Hbf1xvMachine::FdcClock::cpu_cycles() const {
     return scheduler_.total_cycles();
 }
 
+std::uint64_t Hbf1xvMachine::CassetteClock::cpu_cycles() const {
+    return scheduler_.total_cycles();
+}
+
 const devices::fdc::Wd2793& Hbf1xvMachine::fdc() const {
     return fdc_;
 }
@@ -531,6 +570,30 @@ const devices::chipset::S1985Engine& Hbf1xvMachine::s1985() const {
 
 devices::chipset::S1985Engine& Hbf1xvMachine::s1985() {
     return s1985_engine_;
+}
+
+const devices::kanji::KanjiFontRom& Hbf1xvMachine::kanji() const {
+    return kanji_font_rom_;
+}
+
+devices::kanji::KanjiFontRom& Hbf1xvMachine::kanji() {
+    return kanji_font_rom_;
+}
+
+const peripherals::PrinterPort& Hbf1xvMachine::printer() const {
+    return printer_;
+}
+
+peripherals::PrinterPort& Hbf1xvMachine::printer() {
+    return printer_;
+}
+
+const peripherals::CassetteInterface& Hbf1xvMachine::cassette() const {
+    return cassette_;
+}
+
+peripherals::CassetteInterface& Hbf1xvMachine::cassette() {
+    return cassette_;
 }
 
 void Hbf1xvMachine::set_backup_ram_path(std::filesystem::path path) {

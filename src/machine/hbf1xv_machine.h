@@ -25,6 +25,7 @@
 #include "devices/fdc/fdc_clock_source.h"
 #include "devices/fdc/sony_fdc.h"
 #include "devices/fdc/wd2793.h"
+#include "devices/kanji/kanji_font_rom.h"
 #include "devices/memory/memory_mapper_ram.h"
 #include "devices/memory/rom_device.h"
 #include "devices/rtc/rp5c01.h"
@@ -34,8 +35,10 @@
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
 #include "machine/rom_asset_loader.h"
+#include "peripherals/cassette_interface.h"
 #include "peripherals/joystick.h"
 #include "peripherals/keyboard_matrix.h"
+#include "peripherals/printer_port.h"
 
 namespace sony_msx::machine {
 
@@ -167,6 +170,18 @@ public:
     [[nodiscard]] const devices::chipset::S1985Engine& s1985() const;
     devices::chipset::S1985Engine& s1985();
 
+    // M18 peripheral I/O device integration accessors (Kanji font ROM,
+    // printer port, cassette interface -- backlog B5/C7). The CPU reaches the
+    // Kanji device over #D8-#DB and the printer over #90-#97; the cassette
+    // interface has no dedicated CPU-visible port (A-M18-8) -- it is reached
+    // only through this accessor / the existing ppi()/joystick() seams.
+    [[nodiscard]] const devices::kanji::KanjiFontRom& kanji() const;
+    devices::kanji::KanjiFontRom& kanji();
+    [[nodiscard]] const peripherals::PrinterPort& printer() const;
+    peripherals::PrinterPort& printer();
+    [[nodiscard]] const peripherals::CassetteInterface& cassette() const;
+    peripherals::CassetteInterface& cassette();
+
     // FDC subsystem (M16). The WD2793 core answers the Sony register window
     // 0x7FF8-0x7FFF over the DISK ROM at slot 3-2 page 1; the drive mounts the
     // deterministic 720 KB image. Tests drive commands over the bus and inspect
@@ -283,6 +298,21 @@ private:
         const core::Scheduler& scheduler_;
     };
 
+    // Deterministic emulated-cycle clock source for the cassette interface
+    // (M18-S3/S4, X-pattern of RtcClock/FdcClock). Returns scheduler total
+    // cycles READ-ONLY; the synthetic-tape input model advances off this,
+    // never the host wall clock or CPU T-state accounting (A-M18-12).
+    // Consulted pull-style only from CassetteInterface -- never wired into
+    // step_cpu_instruction()/run_cycles()/run_frame().
+    class CassetteClock final : public peripherals::CassetteClockSource {
+    public:
+        explicit CassetteClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t cpu_cycles() const override;
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion sram_{kSramBytes};
@@ -295,7 +325,19 @@ private:
     // the keyboard matrix by reference at construction.
     peripherals::KeyboardMatrix keyboard_;
     peripherals::JoystickPorts joystick_;
+    // Centronics printer port peripheral (M18-S2, part of backlog C7),
+    // answering #90-#97 (A-M18-5). Purely combinational (A-M18-4's reasoning
+    // applies identically) -- no clock dependency.
+    peripherals::PrinterPort printer_;
     devices::chipset::Ppi8255 ppi_{slot_bus_, keyboard_};  // #A8-#AB (+#AC-AF mirror)
+    // Cassette interface (M18-S3, part of backlog C7): motor/output derived
+    // READ-ONLY from ppi_ (A-M18-9, zero edit to Ppi8255); cassette_clock_
+    // feeds its deterministic synthetic-tape input model, pull-style only
+    // (A-M18-11/A-M18-12). Declared after ppi_ (binds a const reference to
+    // it), mirroring the existing Ppi8255 ppi_{slot_bus_, keyboard_} ordering
+    // rule.
+    CassetteClock cassette_clock_{scheduler_};
+    peripherals::CassetteInterface cassette_{ppi_};
     devices::chipset::MapperIo mapper_io_;      // #FC-#FF mapper readback (segment owner)
     devices::chipset::SwitchedIoController switched_io_;  // #40-#4F switched I/O
     devices::chipset::S1985Engine s1985_engine_;  // backup RAM ID 0xFE + M1 wait
@@ -326,6 +368,12 @@ private:
     // overlay, so this plain ROM window needs no wrapping device -- the YM2413
     // (ym2413_, above) is attached SEPARATELY, only on io_bus_ #7C/#7D.
     devices::memory::RomDevice fmmusic_rom_{0x4000, 0x4000};  // slot 3-3 p1 (FM-MUSIC presence)
+
+    // Kanji font ROM I/O device (M18-S1, backlog B5), answering #D8-#DB
+    // directly (A-M18-1: MSXKanji, NOT the switched-I/O MSXKanji12). Reads
+    // the real 256 KB bios/f1xvkfn.rom (JIS1+JIS2). Pure combinational device
+    // (A-M18-4) -- no clock dependency, not slot-attached (I/O-only).
+    devices::kanji::KanjiFontRom kanji_font_rom_;
 
     // FDC (M16): WD2793 core + built-in 720 KB drive + deterministic image, and
     // the SonyFdc decode that wraps disk_rom_ and answers 0x7FF8-0x7FFF. Attached

@@ -870,3 +870,37 @@ Use this format:
 - Acceptance Criteria: M17 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.17; backlog B3 remains DONE (M17), B4 remains OPEN/re-owned to B6 (not force-closed).
 - Requested At: 2026-07-07T12:15:00+09:00
 
+---
+
+- Request ID: REQ-M18-001
+- From: Human (project owner) via /msx-master directive "go ahead and kick off M17 and M18 until QA sign-off. Ensure to review deferred items and have them properly addressed during the development."
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M18
+- Type: Milestone kickoff
+- Scope: Open M18 = peripheral I/O — Kanji-font ROM access via I/O `#D8-#DB` (backlog B5: 256KB JIS1+JIS2 font, `bios/f1xvkfn.rom`, present and confirmed; M13 mapped the Kanji driver at slot 3-1 but not the I/O-accessed font) + printer `#90/#91` (Centronics) and cassette interface (backlog C7, baseline scope, never built). Per the indicative follow-on order (DEC-0009, re-confirmed) and the human's bundled M17+M18 directive. Grounding: `references/openmsx-21.0/src/MSXKanji.{hh,cc}` + `MSXKanji12.{hh,cc}` (Kanji I/O device reference); `references/openmsx-21.0/src/{Printer,PrinterPortSimpl,MSXPrinterPort,PrinterPortDevice}.*` (printer reference); `references/openmsx-21.0/src/cassette/{CassetteDevice,CassettePort,CassettePlayer}.*` (cassette reference); `references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md` §8/§9; `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml` for exact port/device wiring on this machine. Normal human-release-decision gate (no auto-close per DEC-0003's M12-only scope).
+- Acceptance Criteria: M18 milestone entry present in milestones.md; planner-first; backlog B5 -> IN-PROGRESS (M18), C7 -> IN-PROGRESS (M18); explicit review of the FULL deferred-backlog (not just B5/C7) per the human's "review deferred items" directive, re-affirming the rest with justification — same discipline as M17's package.
+- Dependencies: M17 QA PASS (met, RESP-M17-003); M13 Kanji driver at slot 3-1; M11 io_bus; `bios/f1xvkfn.rom` asset (confirmed present); deferred-backlog B5/C7.
+- Requested At: 2026-07-07T03:15:00+09:00
+
+---
+
+- Request ID: REQ-M18-002
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent
+- Milestone ID: M18
+- Type: Implementation (slices S1..S5)
+- Scope: Implement `docs/m18-planner-package.md` end to end. S1: `src/devices/kanji/kanji_font_rom.{h,cpp}` — `KanjiFontRom` as a `core::IoDevice`: two address counters `adr1_`/`adr2_`, the exact six-behavior `#D8-#DB` protocol (write `#D8`/`#D9` build `adr1_`, write `#DA`/`#DB` build `adr2_` preserving bit 17, read `#D9`/`#DB` return the stored 256KB image with 32-byte-wrap auto-increment on the low 5 bits, `#D8`/`#DA` reads are open-bus `0xFF`), `reset()` restoring `adr1_=0x00000`/`adr2_=0x20000`. Ground every behavior in `references/openmsx-21.0/src/MSXKanji.cc` (NOT `MSXKanji12.cc` — this machine uses the direct-port variant, confirmed via the XML, not the switched-I/O `0xF7` variant). S2: `src/peripherals/printer_port.{h,cpp}` — `PrinterPort` as a `core::IoDevice` at the real `#90-#97` claim (8 ports, mod-4 dispatch): strobe/data write protocol, falling-edge byte capture into `captured_bytes()`, deterministic always-ready status (`0x00`), `#93`/`#97` PDIR unimplemented (matches openMSX's own scope limit). Ground in `references/openmsx-21.0/src/MSXPrinterPort.cc` and `Printer.cc`. S3: `src/peripherals/cassette_interface.{h,cpp}` — `CassetteInterface` (NOT a `core::IoDevice` — no CPU-visible port): `motor_on()`/`output_level()` derived read-only, on-demand, from the existing `Ppi8255` (`cassette_motor_off()`, `port_c_latch() & 0x20`) with zero edits to `ppi_8255.{h,cpp}`; a deterministic synthetic-tape input model (`load_synthetic_tape(bits, cycles_per_bit)`, cycle-driven via an injected `CassetteClockSource` mirroring `RtcClockSource`/`FdcClockSource`, no-tape default always idle-high). Additive edit to `src/peripherals/joystick.{h,cpp}`: new `CassetteInputSource` interface + `attach_cassette_input_source()`, replacing the hardcoded `kCassetteInputBit` idle-high stub at `joystick.h:41-42` with a nullptr-safe injected source (unattached path MUST remain byte-for-byte identical to current M15 behavior — hard regression guard). S4: machine wiring in `src/machine/hbf1xv_machine.{h,cpp}` — attach all three devices, add a `CassetteClock` nested class + member (X4 pattern), wire `cassette_.attach_clock_source(&cassette_clock_)` and `joystick_.attach_cassette_input_source(&cassette_)`, add to `cold_boot()` reset sequence, load `bios/f1xvkfn.rom` via the existing `RomAssetLoader`, add `kanji()`/`printer()`/`cassette()` accessors. NO edits to `step_cpu_instruction()`/`run_cycles()`/`run_frame()` or `ppi_8255.{h,cpp}` — cassette clock consultation is pull-only. System-integration test required (real CPU program drives all three devices over the M11 bus; regression guard re-runs M15 boot-checkpoint-class assertions). S5: openMSX A/B evidence — three subjects per planner §2.6 (Kanji content parity conditioned on a SHA1 identity check against the XML-cited `218d91eb...`, reporting the actual disposition honestly either way; printer write-path-only parity avoiding the known status-bit default divergence; cassette idle-state + write-path parity). If any mechanism cannot be verified against real WSL openMSX, report BLOCKED honestly for that subject.
+- Acceptance Criteria: All 10 acceptance criteria in `docs/m18-planner-package.md` §5. In particular: zero regression across M1-M17 (including the M15 `JoystickPorts`/`Ppi8255` goldens and untouched CPU-timing oracles); do NOT build a switched-I/O `MSXKanji12`-style dispatch; implement the printer at the accurate `#90-#97` claim, not the backlog's narrower `#90/#91` wording; evidence gates captured (`tools/validate-assets.ps1`, `tools/checksum-assets.ps1`, `cmake --build`, `ctest`, exact pass/fail); real A/B or honest BLOCKED in `docs/m18-parity-trace-diff.md`; `docs/m18-implementation-report.md` produced.
+- Dependencies: `docs/m18-planner-package.md`; `references/openmsx-21.0/src/MSXKanji.{hh,cc}`; `references/openmsx-21.0/src/{MSXPrinterPort,Printer,PrinterPortDevice}.*`; `references/openmsx-21.0/src/cassette/{CassettePort,CassetteDevice,DummyCassetteDevice}.*`; `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml`; M13 `RomAssetLoader`; M15 `Ppi8255`/`JoystickPorts`/`RtcClockSource` precedents; M17 `Ym2413Opll` no-clock-consumer precedent; `src/CLAUDE.md`.
+- Requested At: 2026-07-07T04:05:00+09:00
+
+---
+
+- Request ID: REQ-M18-003
+- From: Human (project owner, source of truth) via /msx-master directive "close M17 and M18. commit, and tag seperately."
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M18
+- Type: Human release decision (milestone closure)
+- Scope: Close M18 (Peripheral I/O — Kanji-font ROM, printer, cassette) on QA PASS (REQ-M18-002 / RESP-M18-003, docs/m18-qa-signoff.md). Tag v1.0.18. Commit separately from M17.
+- Acceptance Criteria: M18 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.18; backlog B5/C7 remain DONE (M18); F1/F2 remain OPEN.
+- Requested At: 2026-07-07T12:15:00+09:00

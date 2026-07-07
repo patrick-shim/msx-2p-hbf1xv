@@ -258,3 +258,24 @@ milestone_records:
     overall_done: true
     # Closed by human release decision (DEC-0013 / REQ-M17-003, 2026-07-07); git tag v1.0.17 (committed separately from M18).
     notes: "CLOSED 2026-07-07 (DEC-0013 / REQ-M17-003), git tag v1.0.17. Closes backlog B3. FM-PAC (YM2413 OPLL register-accurate device, MSXMusic-style) implemented per docs/m17-implementation-report.md. QA independently verified device identity (no MSXFmPac-style bank-register/SRAM/ID-string logic), register/latch semantics against YM2413Okazaki.cc, fmmusic_rom_ regression guard (byte-for-byte unchanged slot 3-3 attach), BatteryBackedSram confirmed NOT wired (per DEC-0012), and independently reproduced the full openMSX A/B harness end-to-end against real WSL openMSX 19.1 (Subject 1: 145/145 instructions empty diff; Subject 2: 36/36 register addresses empty diff, plus an extra spot-check beyond the developer's own). Full deferred-backlog review re-confirmed (all rows). ctest 75/75 QA-reproduced, zero regression, CPU-timing oracles untouched. B4 stays OPEN/re-owned to B6 (DEC-0012, not force-closed); E1/E2 remain OPEN."
+  M18:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 79/79 (75 M1-M17 + 4 M18 new), zero regression, QA-reproduced
+      impacted_areas_covered: true      # Kanji/printer/cassette unit+integration + real A/B (3 subjects)
+      blocker_risks_resolved_or_accepted: true   # all residuals Low, pre-disclosed, none blocking (printer status default, F1/F2 depth deferred, pre-existing M15 RTC #B6/#B7 gap noted as unrelated)
+      signoff_decision_recorded: true   # QA PASS (RESP-M18-003, docs/m18-qa-signoff.md), QA-executed ctest 79/79 fresh reproduction, A/B independently re-verified incl. live WSL openMSX Kanji read
+    overall_done: true
+    # Closed by human release decision (DEC-0014 / REQ-M18-003, 2026-07-07); git tag v1.0.18 (committed separately from M17).
+    notes: "CLOSED 2026-07-07 (DEC-0014 / REQ-M18-003), git tag v1.0.18. Closes backlog B5 and C7. Peripheral I/O -- KanjiFontRom (#D8-#DB, MSXKanji-style, confirmed NOT MSXKanji12), PrinterPort (#90-#97, falling-edge capture), CassetteInterface (no CPU-visible port, derives from existing Ppi8255/JoystickPorts, zero edits to ppi_8255.*) -- implemented per docs/m18-implementation-report.md. QA independently verified device identity against MSXKanji.cc/MSXPrinterPort.cc/Printer.cc, confirmed zero edits to ppi_8255.{h,cpp} and to step_cpu_instruction/run_cycles/run_frame, confirmed the JoystickPorts regression guard is genuine and additive, and independently reproduced the Kanji content-parity claim THREE ways (own SHA1 check, direct file byte spot-check, and a live WSL openMSX 19.1 Tcl probe reproducing an identical Kanji read) -- going beyond the developer's own verification. Full deferred-backlog review re-confirmed (all rows); new Section E (F1/F2) correctly added. ctest 79/79 QA-reproduced, zero regression, CPU-timing oracles untouched."
