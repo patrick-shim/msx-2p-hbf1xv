@@ -74,6 +74,30 @@ struct VdpModeState {
     return (base & 0x14) == 0x14;
 }
 
+// Sprite mode for this base (M22-S1, backlog D2; independently re-derived
+// from references/openmsx-21.0/src/video/DisplayMode.hh:158-174
+// `getSpriteMode()`, restricted to the V9958 case since this project's VDP
+// is never `isMSX1VDP()`): 0 = no sprites, 1 = sprite mode 1 (TMS9918-
+// compatible, max 4/line), 2 = sprite mode 2 (MSX2+, max 8/line). Shared by
+// `SpriteEngine`'s own per-line check/collision algorithm and
+// `VdpFrameRenderer`'s sprite-compositing gate so both stay byte-identical
+// without duplicating the table (a deliberate, low-risk anti-drift measure).
+[[nodiscard]] constexpr int vdp_sprite_mode(std::uint8_t base) {
+    switch (base) {
+    case 0x00: case 0x02: case 0x04:
+        // Graphic1, Multicolor, Graphic2.
+        return 1;
+    case 0x08: case 0x0C: case 0x10: case 0x14: case 0x1C:
+        // Graphic3, Graphic4, Graphic5, Graphic6, Graphic7 (+ YJK/YJK+YAE,
+        // which share GRAPHIC7's base).
+        return 2;
+    default:
+        // TEXT1/TEXT1Q/TEXT2/MulticolorQ/Unknown: never show sprites
+        // (verified on real V9958 per the reference's own comment).
+        return 0;
+    }
+}
+
 [[nodiscard]] constexpr VdpModeState decode_vdp_mode(std::uint8_t reg0, std::uint8_t reg1,
                                                      std::uint8_t reg25) {
     VdpModeState state;

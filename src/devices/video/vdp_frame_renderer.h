@@ -61,6 +61,16 @@ public:
 private:
     void dispatch_content(int line, Field field, std::span<std::uint16_t> out) const;
 
+    // Sprite pixel compositing (M22-S2, backlog D2), folded directly into
+    // the existing per-line pipeline: called from render_line() immediately
+    // after dispatch_content() populates the background row and BEFORE the
+    // existing border-mask step (mirrors the reference's own "background
+    // then sprite overdraw" order, planner package §1.4 Resolution 1).
+    // Queries vdp_->sprite_engine().visible_sprites(line) -- a read-only
+    // accessor onto state V9958Vdp::on_vsync() already computed -- so this
+    // remains a PURE, read-only consumer (no mutation of V9958Vdp state).
+    void composite_sprites(int line, Field field, std::span<std::uint16_t> out) const;
+
     // Table-base register formulas (VDP.hh:246-262, independently
     // re-derived): name/pattern/color table bases. Note: the "forced-1 low
     // bits" hardware mirroring-mask nuance openMSX's VRAMWindow machinery

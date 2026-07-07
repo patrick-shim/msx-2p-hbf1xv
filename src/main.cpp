@@ -326,6 +326,116 @@ int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::
     return 0;
 }
 
+// M22-S8 sprite/command-engine A/B parity mode (backlog D2/D3, closes D7).
+// Runs a flat RAM-only Z80 program (the SAME OUT (#98)/(#99)/(#9B) port
+// sequence a real CPU would use to set up sprites and/or drive the R#32-46
+// command engine, assembled by tools/gen-m22-sprite-cmd-probe.py) exactly as
+// run_vdp_render_parity does, then emits: the FULL R#0-R#46 control +
+// command-engine register file (openMSX's own "VDP regs" SimpleDebuggable is
+// size 64, confirmed this cycle via a live WSL `debug size` query, so R#32-46
+// are already part of the SAME debuggable range -- no separate probe point
+// needed), the S#0-S#9 status-register file read NON-destructively (the
+// CPU program's OWN `IN (#99)` instructions already exercised any real
+// destructive read side effects; this dump captures the settled state
+// afterward -- confirmed comparable via openMSX's "VDP status regs"
+// SimpleDebuggable, size 16, also confirmed this cycle), and a physical VRAM
+// window (matching run_vdp_render_parity's own vram_bytes + fixed 0x10000
+// "bank1" window precedent, since the SAME "physical VRAM" SimpleDebuggable
+// is reused unchanged).
+int run_sprite_cmd_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
+                          std::uint32_t vram_bytes, const std::string& out_path) {
+    std::ifstream in(bin_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "sprite-cmd-parity: cannot open program: " << bin_path << "\n";
+        return 2;
+    }
+    const std::vector<std::uint8_t> program((std::istreambuf_iterator<char>(in)),
+                                            std::istreambuf_iterator<char>());
+    if (program.empty()) {
+        std::cerr << "sprite-cmd-parity: empty program: " << bin_path << "\n";
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+    machine.map_flat_ram();
+    machine.load_memory(base, program.data(), static_cast<std::uint32_t>(program.size()));
+    machine.cpu().state().regs().pc = base;
+
+    std::uint32_t steps = 0;
+    while (steps < max_steps && !machine.cpu().state().halted()) {
+        machine.step_cpu_instruction();
+        ++steps;
+    }
+
+    // Trigger the sprite-check recompute (S#0/S#3-S#6) explicitly: this
+    // project's SpriteEngine is driven ONLY by the on_vsync() frame-boundary
+    // hook (no CPU-visible port triggers it, deliberately -- no new clock
+    // consumer, planner package §1.4 Resolution 1), unlike openMSX's own
+    // raster-time-driven SpriteChecker::checkUntil(), which advances "for
+    // free" as real emulated time elapses. The companion PS1 script
+    // correspondingly waits enough real emulated time (`after time`) after
+    // the CPU program's writes for openMSX's OWN check to complete
+    // naturally -- this call is this engine's architectural equivalent, not
+    // a workaround.
+    machine.vdp().on_vsync();
+
+    auto hex2 = [](std::uint32_t v) {
+        static const char* d = "0123456789ABCDEF";
+        std::string s;
+        s.push_back(d[(v >> 4) & 0xF]);
+        s.push_back(d[v & 0xF]);
+        return s;
+    };
+    auto hex4 = [&](std::uint32_t v) { return hex2((v >> 8) & 0xFF) + hex2(v & 0xFF); };
+    auto dec2 = [](int v) {
+        std::string s;
+        s.push_back(static_cast<char>('0' + (v / 10) % 10));
+        s.push_back(static_cast<char>('0' + v % 10));
+        return s;
+    };
+
+    const auto& vdp = machine.vdp();
+    std::string out;
+    out += "[SPRITE-CMD-PARITY]\n";
+    for (int r = 0; r <= 27; ++r) {
+        out += "REG" + dec2(r) + "=" + hex2(vdp.control_register(r)) + "\n";
+    }
+    for (int r = 0; r < 15; ++r) {
+        out += "REG" + dec2(32 + r) + "=" + hex2(vdp.cmd_engine().read_register(r)) + "\n";
+    }
+    out += "STATUS\n";
+    for (int s = 0; s <= 9; ++s) {
+        out += "S" + dec2(s) + "=" + hex2(vdp.peek_status_register(s)) + "\n";
+    }
+    out += "VRAM\n";
+    for (std::uint32_t off = 0; off < vram_bytes; off += 16) {
+        out += hex4(off);
+        for (std::uint32_t i = 0; i < 16 && off + i < vram_bytes; ++i) {
+            out += " " + hex2(vdp.vram().read(off + i));
+        }
+        out += "\n";
+    }
+    // Fixed extra window at physical 0x10000 (the G6/G7 planar "bank1"
+    // region), matching run_vdp_render_parity's own precedent.
+    out += "VRAM_BANK1\n";
+    out += "10000";
+    for (std::uint32_t i = 0; i < 16; ++i) {
+        out += " " + hex2(vdp.vram().read(0x10000 + i));
+    }
+    out += "\n";
+
+    std::ofstream out_file(out_path, std::ios::binary | std::ios::trunc);
+    if (!out_file) {
+        std::cerr << "sprite-cmd-parity: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out_file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    std::cerr << "sprite-cmd-parity: steps=" << steps
+              << " halted=" << (machine.cpu().state().halted() ? 1 : 0) << "\n";
+    return 0;
+}
+
 // M17-S5 YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
 // (the SAME `OUT (#7C),reg ; OUT (#7D),value` write sequence assembled by
 // tools/gen-m17-ym2413-probe.py) exactly as run_parity_trace does, then emits
@@ -565,6 +675,20 @@ int main(int argc, char** argv) {
         const auto pixel_count = static_cast<std::uint32_t>(std::strtoul(argv[6], nullptr, 10));
         const std::string out_path = argv[7];
         return run_vdp_render_parity(bin_path, base, max_steps, vram_bytes, pixel_count, out_path);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--sprite-cmd-parity") {
+        if (argc < 7) {
+            std::cerr << "usage: " << argv[0]
+                      << " --sprite-cmd-parity <program.bin> <base_hex> <max_steps> <vram_bytes> <out.txt>\n";
+            return 2;
+        }
+        const std::string bin_path = argv[2];
+        const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
+        const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
+        const auto vram_bytes = static_cast<std::uint32_t>(std::strtoul(argv[5], nullptr, 10));
+        const std::string out_path = argv[6];
+        return run_sprite_cmd_parity(bin_path, base, max_steps, vram_bytes, out_path);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--ym2413-parity") {

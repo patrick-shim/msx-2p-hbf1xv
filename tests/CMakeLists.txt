@@ -692,3 +692,81 @@ add_executable(hbf1xv_m21_vdp_render_system_test
 target_link_libraries(hbf1xv_m21_vdp_render_system_test PRIVATE sony_msx_core)
 add_test(NAME hbf1xv_m21_vdp_render_system_test
     COMMAND hbf1xv_m21_vdp_render_system_test)
+
+# --- M22 sprites (D2) + VDP command engine (D3), closes D7 in full --------
+add_executable(devices_sprite_engine_mode1_unit_test
+    unit/devices/video_sprite_engine_mode1_unit_test.cpp
+)
+target_link_libraries(devices_sprite_engine_mode1_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_sprite_engine_mode1_unit_test
+    COMMAND devices_sprite_engine_mode1_unit_test)
+
+add_executable(devices_sprite_engine_mode2_unit_test
+    unit/devices/video_sprite_engine_mode2_unit_test.cpp
+)
+target_link_libraries(devices_sprite_engine_mode2_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_sprite_engine_mode2_unit_test
+    COMMAND devices_sprite_engine_mode2_unit_test)
+
+add_executable(devices_vdp_frame_renderer_sprites_unit_test
+    unit/devices/video_vdp_frame_renderer_sprites_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_sprites_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_sprites_unit_test
+    COMMAND devices_vdp_frame_renderer_sprites_unit_test)
+
+add_executable(devices_vdp_command_engine_registers_unit_test
+    unit/devices/video_vdp_command_engine_registers_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_registers_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_registers_unit_test
+    COMMAND devices_vdp_command_engine_registers_unit_test)
+
+add_executable(devices_vdp_command_engine_atomic_unit_test
+    unit/devices/video_vdp_command_engine_atomic_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_atomic_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_atomic_unit_test
+    COMMAND devices_vdp_command_engine_atomic_unit_test)
+
+add_executable(devices_vdp_command_engine_logic_ops_unit_test
+    unit/devices/video_vdp_command_engine_logic_ops_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_logic_ops_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_logic_ops_unit_test
+    COMMAND devices_vdp_command_engine_logic_ops_unit_test)
+
+add_executable(devices_vdp_command_engine_transfer_unit_test
+    unit/devices/video_vdp_command_engine_transfer_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_transfer_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_transfer_unit_test
+    COMMAND devices_vdp_command_engine_transfer_unit_test)
+
+add_executable(devices_vdp_command_engine_nonbitmap_unit_test
+    unit/devices/video_vdp_command_engine_nonbitmap_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_nonbitmap_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_nonbitmap_unit_test
+    COMMAND devices_vdp_command_engine_nonbitmap_unit_test)
+
+add_executable(machine_hbf1xv_m22_sprites_integration_test
+    integration/machine/hbf1xv_m22_sprites_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m22_sprites_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m22_sprites_integration_test
+    COMMAND machine_hbf1xv_m22_sprites_integration_test)
+
+add_executable(machine_hbf1xv_m22_command_engine_integration_test
+    integration/machine/hbf1xv_m22_command_engine_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m22_command_engine_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m22_command_engine_integration_test
+    COMMAND machine_hbf1xv_m22_command_engine_integration_test)
+
+add_executable(hbf1xv_m22_sprites_command_engine_system_test
+    system/hbf1xv_m22_sprites_command_engine_system_test.cpp
+)
+target_link_libraries(hbf1xv_m22_sprites_command_engine_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m22_sprites_command_engine_system_test
+    COMMAND hbf1xv_m22_sprites_command_engine_system_test)

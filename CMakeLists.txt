@@ -46,6 +46,8 @@ add_library(sony_msx_core STATIC
     src/devices/kanji/kanji_font_rom.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp
+    src/devices/video/sprite_engine.cpp
+    src/devices/video/vdp_command_engine.cpp
     src/devices/video/vdp_frame_renderer.cpp
     src/peripherals/keyboard_matrix.cpp
     src/peripherals/joystick.cpp

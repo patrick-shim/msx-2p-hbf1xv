@@ -342,3 +342,24 @@ milestone_records:
     # Closed by human release decision (DEC-0018 / REQ-M21-004, 2026-07-07); git tag v1.0.21.
     overall_done: true
     notes: "CLOSED 2026-07-07 (DEC-0018 / REQ-M21-004), git tag v1.0.21. Closes backlog D1/D5/D6 (DONE); D7 advances to IN-PROGRESS (M21 partial), command-engine piece carried to M22. First pixel-rendering output path: VdpFrameRenderer/FrameBuffer, deterministic pull-model RGB555 renderer over the existing M14 V9958Vdp contract, no SDL3 dependency. Every Target-Spec mode byte-exact (GRAPHIC7 GGGRRRBB layout, YJK truncating-division B-channel, MULTICOLOR's real 256-wide canvas); G6/G7 planar interleave (17-bit rotate-right-by-1) CPU-port + display-path pieces closed; scroll/blink/interlace/border-mask effects; superimpose correctly scoped N/A. ctest 106/106 (95 prior + 11 new), zero regression, independently reproduced by coordinator and QA, including confirming the M14 pointer-carry guard genuinely unmodified. Real openMSX A/B: 4/4 probes raw VRAM/palette/register ARCHITECTURAL PARITY incl. direct D7 planar-transform bank1 confirmation; computed-pixel-color sub-claim honestly BLOCKED (no introspection point exists in openMSX). QA PASS (docs/m21-qa-signoff.md), including independent hand-verification of the YJK rounding math and the interlace-bug fix."
+  M22:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by coordinator release decision (DEC-0019 / REQ-M22-004, 2026-07-07); git tag v1.0.22.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0019 / REQ-M22-004), git tag v1.0.22. Closes backlog D2/D3 (DONE); D7 closes IN FULL (no longer partial). SpriteEngine (D2) and VdpCommandEngine (D3) owned inside V9958Vdp; sprite compositing folds into VdpFrameRenderer::render_frame() (no new output type); command engine uses a hybrid execution model (10 atomic commands, 3 event-driven transfer commands mirroring the M16 FDC DRQ/INTRQ precedent); D7 closes via 5 new coordinate-address functions, confirmed byte-exact against the reference and confirmed NOT to reference R#2 (a genuinely new finding). effective_address() confirmed genuinely unchanged. ctest 117/117 (106 prior + 11 new), zero regression, independently reproduced by coordinator and QA. A self-caught sprite-enable-gate regression was found and fixed during implementation. QA PASS (docs/m22-qa-signoff.md) via genuinely independent, adversarial scrutiny of the A/B evidence -- QA hand-verified the raw divergence numbers itself, corrected the developer's causal narrative to a more defensible one, and confirmed via algorithm comparison + full test suite that the divergences are a harness artifact, not a code defect. Two non-blocking documentation-precision findings surfaced independently by QA."

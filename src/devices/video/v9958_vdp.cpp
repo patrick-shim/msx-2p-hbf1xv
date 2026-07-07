@@ -1,5 +1,7 @@
 #include "devices/video/v9958_vdp.h"
 
+#include <span>
+
 namespace sony_msx::devices::video {
 
 namespace {
@@ -14,13 +16,19 @@ constexpr std::array<std::uint16_t, 16> kBootPalette = {
 
 }  // namespace
 
-V9958Vdp::V9958Vdp() {
+V9958Vdp::V9958Vdp() : cmd_engine_(vram_) {
     reset();
 }
 
 void V9958Vdp::reset() {
     vram_.clear();
     control_regs_.fill(0);
+
+    // M22: reset the sprite/command engines before recompute_mode() below
+    // (re-)notifies the freshly-reset command engine of the reset display
+    // mode (GRAPHIC1, no commands legal -> scrMode = -1).
+    cmd_engine_.reset();
+    sprite_engine_.reset();
 
     data_latch_ = 0;
     register_data_stored_ = false;
@@ -175,13 +183,24 @@ void V9958Vdp::port1_write(const std::uint8_t value) {
 }
 
 std::uint8_t V9958Vdp::read_status(const int reg) {
+    // S#7 (COL) must compute/advance the pending LMCM pixel BEFORE the value
+    // is fetched (mirrors readColor()'s internal sync(), which runs before
+    // peekStatusReg returns; VDP.cc:950-951/978-979). All other registers'
+    // peek value is unaffected by their own read-side effect, so the
+    // existing peek-then-mutate order is kept for them.
+    if (reg == 7) {
+        cmd_engine_.on_color_register_read();
+    }
     const std::uint8_t ret = peek_status_register(reg);
     switch (reg) {
     case 0:
         // Reading S#0 clears the VBlank flag and releases the vertical IRQ line
-        // (VDP.cc:967-968).
+        // (VDP.cc:967-968), and clears ONLY the sprite engine's 5S/C bits
+        // (A-M22-14; SpriteChecker.hh:104-110's `& 0x1F`), leaving the
+        // sprite-number field stale until the next frame's recompute.
         status_reg0_ = static_cast<std::uint8_t>(status_reg0_ & ~0x80);
         irq_vertical_ = false;
+        sprite_engine_.reset_status();
         update_irq();
         break;
     case 1:
@@ -192,9 +211,16 @@ std::uint8_t V9958Vdp::read_status(const int reg) {
             update_irq();
         }
         break;
+    case 5:
+        // Reading S#5 (collision-Y low) zeroes BOTH collision X and Y
+        // (VDP.cc:975-977; SpriteChecker::resetCollision()).
+        sprite_engine_.reset_collision();
+        break;
+    case 9:
+        // Reading S#9 (border-X high) clears BD (VDP.cc:981-982; resetBD()).
+        cmd_engine_.on_border_x_register_read();
+        break;
     default:
-        // S#5/S#7/S#9 read-side resets are inert until the sprite/command engines
-        // exist (DEFERRED D2/D3).
         break;
     }
     return ret;
@@ -236,7 +262,14 @@ void V9958Vdp::indirect_write(const std::uint8_t value) {
 
 void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value) {
     if (reg >= kNumControlRegs) {
-        // Command-engine registers R#32..R#46 are DEFERRED (backlog D3).
+        // R#32..R#46 = the command engine's own register file (A-M22-1,
+        // grounded 1:1 against VDP.cc:1020-1033's own changeRegister()).
+        // Works identically whether reached via the #99 two-write latch
+        // protocol or the #9B indirect-register path -- both already route
+        // through this function.
+        if (reg < 47) {
+            cmd_engine_.write_register(static_cast<int>(reg) - 32, value);
+        }
         return;
     }
     control_regs_[reg] = value;
@@ -271,6 +304,10 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
 
 void V9958Vdp::recompute_mode() {
     mode_ = decode_vdp_mode(control_regs_[0], control_regs_[1], control_regs_[25]);
+    // scrMode recompute (A-M22-6): governs BOTH command legality and which
+    // command-engine address formula applies. R#25 bit6 = CMD (V9958-only,
+    // "commands possible in non-bitmap modes", VDP.hh:544-549).
+    cmd_engine_.notify_mode_change(mode_, (control_regs_[25] & 0x40) != 0);
 }
 
 bool V9958Vdp::is_v9938_mode() const {
@@ -298,6 +335,28 @@ void V9958Vdp::on_vsync() {
                 static_cast<int>(blink_state_ ? (r13 >> 4) : (r13 & 0x0F)) * 10;
         }
     }
+
+    // Sprite check/collision/5th-sprite recompute (M22-S1/S2, backlog D2).
+    // Once per frame boundary, mirrors the blink-countdown precedent exactly
+    // -- no new clock consumer. `height` duplicates
+    // VdpFrameRenderer::height()'s own formula deliberately: V9958Vdp (core)
+    // has no dependency on VdpFrameRenderer (presentation), keeping the
+    // existing one-directional layering intact.
+    int height = 192;
+    switch (mode_.mode) {
+    case VdpMode::Text1:
+    case VdpMode::Text2:
+    case VdpMode::Text1Q:
+    case VdpMode::MulticolorQ:
+    case VdpMode::Unknown:
+        height = 192;
+        break;
+    default:
+        height = (control_regs_[9] & 0x80) ? 212 : 192;
+        break;
+    }
+    sprite_engine_.recompute_frame(vram_, std::span<const std::uint8_t, kNumControlRegs>(control_regs_), mode_,
+                                    height);
 
     update_irq();
 }
@@ -343,7 +402,9 @@ std::uint8_t V9958Vdp::control_register(const int index) const {
 std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
     switch (reg) {
     case 0:
-        return status_reg0_;  // bit7 F; 5S/C + fifth-sprite number idle 0 (D2)
+        // bit7 F (owned by V9958Vdp); bits6-0 = 5S/C/sprite-number, live
+        // from the sprite engine (M22-S1, backlog D2).
+        return static_cast<std::uint8_t>(status_reg0_ | sprite_engine_.status_bits());
     case 1: {
         // Reset base 0x04 (ID#=2); FH (bit0) reflects the held line only when
         // line interrupts are enabled; LPS/FL (bits 6/7) dead -> 0 on V9958.
@@ -353,24 +414,31 @@ std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
         }
         return base;
     }
-    case 2:
-        // Undocumented bits 3,2 = 1 (0x0C); EO field toggle in bit1. TR/CE/HR/
-        // VR/BD are live command/raster bits -> idle 0 (DEFERRED D3/D4).
-        return static_cast<std::uint8_t>(kStatusReg2Base | (eo_field_ ? 0x02 : 0x00));
+    case 2: {
+        // Undocumented bits 3,2 = 1 (0x0C); EO field toggle in bit1; bit7 TR,
+        // bit4 BD, bit0 CE live from the command engine (M22-S3..S6, backlog
+        // D3). Bits5/6 (HR/VR, raster-timing-derived) remain idle 0,
+        // correctly deferred to D4/M23 (unchanged M14 disposition).
+        std::uint8_t s2 = static_cast<std::uint8_t>(kStatusReg2Base | (eo_field_ ? 0x02 : 0x00));
+        if (cmd_engine_.tr()) s2 = static_cast<std::uint8_t>(s2 | 0x80);
+        if (cmd_engine_.bd()) s2 = static_cast<std::uint8_t>(s2 | 0x10);
+        if (cmd_engine_.ce()) s2 = static_cast<std::uint8_t>(s2 | 0x01);
+        return s2;
+    }
     case 3:
-        return 0x00;  // collision-X low (idle; live -> D2)
+        return static_cast<std::uint8_t>(sprite_engine_.collision_x() & 0xFF);  // collision-X low
     case 4:
-        return 0xFE;  // collision-X high, bits7..1 = 1 (idle mask)
+        return static_cast<std::uint8_t>((sprite_engine_.collision_x() >> 8) | 0xFE);  // collision-X high
     case 5:
-        return 0x00;  // collision-Y low (idle; live -> D2)
+        return static_cast<std::uint8_t>(sprite_engine_.collision_y() & 0xFF);  // collision-Y low
     case 6:
-        return 0xFC;  // collision-Y high, bits7..2 = 1 (idle mask)
+        return static_cast<std::uint8_t>((sprite_engine_.collision_y() >> 8) | 0xFC);  // collision-Y high
     case 7:
-        return 0x00;  // color register POINT/LMCM (idle; live -> D3)
+        return cmd_engine_.color();  // POINT/LMCM color result
     case 8:
-        return 0x00;  // border-X low (idle; live -> D3)
+        return static_cast<std::uint8_t>(cmd_engine_.border_x() & 0xFF);  // border-X (ASX) low
     case 9:
-        return 0xFE;  // border-X high, bits7..1 = 1 (idle mask)
+        return static_cast<std::uint8_t>((cmd_engine_.border_x() >> 8) | 0xFE);  // border-X (ASX) high
     default:
         return 0xFF;  // non-existent status register
     }
@@ -394,6 +462,14 @@ const VdpModeState& V9958Vdp::mode() const {
 
 bool V9958Vdp::blink_state() const {
     return blink_state_;
+}
+
+const SpriteEngine& V9958Vdp::sprite_engine() const {
+    return sprite_engine_;
+}
+
+const VdpCommandEngine& V9958Vdp::cmd_engine() const {
+    return cmd_engine_;
 }
 
 }  // namespace sony_msx::devices::video

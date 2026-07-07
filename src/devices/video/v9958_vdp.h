@@ -5,6 +5,8 @@
 
 #include "core/device_contracts.h"
 #include "devices/video/irq_line.h"
+#include "devices/video/sprite_engine.h"
+#include "devices/video/vdp_command_engine.h"
 #include "devices/video/vdp_mode.h"
 #include "devices/video/vdp_vram.h"
 
@@ -92,6 +94,14 @@ public:
     // existing on_vsync() hook.
     [[nodiscard]] bool blink_state() const;
 
+    // --- Sprite engine + VDP command engine (M22, backlog D2/D3, closes
+    //     D7's remaining command-engine-path piece). Owned INSIDE V9958Vdp
+    //     (mirrors the blink_countdown_/blink_state_ ownership style),
+    //     exposed read-only for VdpFrameRenderer's sprite compositing pass
+    //     and for tests/debug. ---
+    [[nodiscard]] const SpriteEngine& sprite_engine() const;
+    [[nodiscard]] const VdpCommandEngine& cmd_engine() const;
+
 private:
     // #98 VRAM data path.
     void vram_data_write(std::uint8_t value);
@@ -147,6 +157,12 @@ private:
     // toggling) until R#13 is next written with both nibbles non-zero.
     int blink_countdown_ = 0;
     bool blink_state_ = false;
+
+    // Sprite engine + command engine (M22). cmd_engine_ is constructed with
+    // a reference to the SAME vram_ this device owns (declared above), so
+    // command-engine writes land directly in the shared VRAM store.
+    VdpCommandEngine cmd_engine_;
+    SpriteEngine sprite_engine_;
 };
 
 }  // namespace sony_msx::devices::video

@@ -257,8 +257,102 @@ void VdpFrameRenderer::dispatch_content(const int line, const Field field, std::
     }
 }
 
+void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, std::span<std::uint16_t> out) const {
+    // Sprite mode determination shared with SpriteEngine::recompute_frame()
+    // (vdp_sprite_mode(), vdp_mode.h) -- a deliberate anti-drift measure.
+    const VdpModeState& m = vdp_->mode();
+    const int sprite_mode = vdp_sprite_mode(m.base);
+    if (sprite_mode == 0) {
+        return;
+    }
+    const std::span<const SpriteEngine::VisibleSprite> visible = vdp_->sprite_engine().visible_sprites(line);
+    if (visible.empty()) {
+        return;
+    }
+
+    // Color-0 transparency is conditioned on R#8 TP (A-M22-12, a genuine
+    // fact-sheet-vs-source discrepancy resolved in favor of the read
+    // source): TP bit CLEAR -> transparency ON (skip color-0 pixels).
+    const bool tp_enabled = (vdp_->control_register(8) & 0x20) == 0;
+    const int w = width();
+
+    if (sprite_mode == 1) {
+        // Mode 1: reverse-priority overdraw -- draw the highest sprite index
+        // FIRST, sprite 0 LAST, so sprite 0 visually wins overlaps
+        // (SpriteConverter.hh:99-132 drawMode1).
+        for (std::size_t idx = visible.size(); idx-- > 0;) {
+            const SpriteEngine::VisibleSprite& s = visible[idx];
+            const std::uint8_t color_index = static_cast<std::uint8_t>(s.color_attrib & 0x0F);
+            if (color_index == 0 && tp_enabled) continue;
+            const std::uint16_t color = pal16(color_index);
+            int x = s.x;
+            std::uint32_t pattern = s.pattern;
+            if (x < 0) {
+                if (x <= -32) continue;
+                pattern <<= static_cast<unsigned>(-x);
+                x = 0;
+            }
+            for (; pattern != 0 && x < w; pattern <<= 1, ++x) {
+                if (pattern & 0x8000'0000u) {
+                    out[static_cast<std::size_t>(x)] = color;
+                }
+            }
+        }
+        return;
+    }
+
+    // Mode 2: find the first (lowest index) sprite with CC=0
+    // (SpriteConverter.hh:144-205 drawMode2); sprites before it (all CC=1,
+    // with no preceding CC=0 sprite) are never drawn at all.
+    std::size_t first = 0;
+    while (first < visible.size() && (visible[first].color_attrib & 0x40) != 0) {
+        ++first;
+    }
+    for (std::size_t idx = visible.size(); idx-- > first;) {
+        const SpriteEngine::VisibleSprite& s = visible[idx];
+        int x = s.x;
+        std::uint32_t pattern = s.pattern;
+        if (x < 0) {
+            if (x <= -32) continue;
+            pattern <<= static_cast<unsigned>(-x);
+            x = 0;
+        }
+        const std::uint8_t base_color = static_cast<std::uint8_t>(s.color_attrib & 0x0F);
+        if (base_color == 0 && tp_enabled) continue;
+        for (; pattern != 0 && x < w; pattern <<= 1, ++x) {
+            if (!(pattern & 0x8000'0000u)) continue;
+            std::uint8_t color = base_color;
+            // OR-merge any immediately-following (higher index, contiguous)
+            // CC=1 sprites' color bits into this drawn pixel (A-M22-10).
+            for (std::size_t j = idx + 1; j < visible.size(); ++j) {
+                const SpriteEngine::VisibleSprite& s2 = visible[j];
+                if ((s2.color_attrib & 0x40) == 0) break;
+                const int shift2 = x - s2.x;
+                if (shift2 >= 0 && shift2 < 32 && ((s2.pattern << static_cast<unsigned>(shift2)) & 0x8000'0000u)) {
+                    color = static_cast<std::uint8_t>(color | (s2.color_attrib & 0x0F));
+                }
+            }
+            if (m.mode == VdpMode::Graphic5) {
+                // GRAPHIC5 (SCREEN6): split the 4-bit merged color into two
+                // 2-bit half-pixel palette lookups (SpriteConverter.hh:186-190).
+                out[static_cast<std::size_t>(x) * 2 + 0] = pal16(color >> 2);
+                out[static_cast<std::size_t>(x) * 2 + 1] = pal16(color & 0x03);
+            } else if (m.mode == VdpMode::Graphic6) {
+                // GRAPHIC6 (SCREEN7): the same pixel written twice (512-wide
+                // canvas, 256-wide sprite coordinate space).
+                const std::uint16_t pix = pal16(color);
+                out[static_cast<std::size_t>(x) * 2 + 0] = pix;
+                out[static_cast<std::size_t>(x) * 2 + 1] = pix;
+            } else {
+                out[static_cast<std::size_t>(x)] = pal16(color);
+            }
+        }
+    }
+}
+
 void VdpFrameRenderer::render_line(const int line, const Field field, std::span<std::uint16_t> out) const {
     dispatch_content(line, field, out);
+    composite_sprites(line, field, out);
 
     // Border mask (R#25 bit1 MSK, VDP.hh:353-360): "extends the left border
     // by 8 pixels." Since this renderer models border as a single color (not
