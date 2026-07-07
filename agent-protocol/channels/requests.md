@@ -834,3 +834,39 @@ Use this format:
 - Scope: Close M16 (FDC Drive Mechanics — Fujitsu MB89311/WD2793, Sony connection style) on QA PASS (REQ-M16-004 / RESP-M16-004, docs/m16-qa-signoff.md). Tag v1.0.16.
 - Acceptance Criteria: M16 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.16; backlog B8 remains DONE (M16), C5 remains honestly IN-PROGRESS (not force-closed).
 - Requested At: 2026-07-07T01:10:00+09:00
+
+---
+
+- Request ID: REQ-M17-001
+- From: Human (project owner) via /msx-master directive "go ahead and kick off M17 and M18 until QA sign-off. Ensure to review deferred items and have them properly addressed during the development."
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M17
+- Type: Milestone kickoff
+- Scope: Open M17 = FM-PAC (Yamaha YM2413 OPLL, 9-channel FM synthesizer) device internals + backlog B4 (MSX-JE 16 KB battery-backed SRAM). Per the indicative follow-on order (DEC-0009) and `agent-protocol/state/deferred-backlog.md` row B3 (FM-PAC internals, OPEN since M13) and B4 (MSX-JE SRAM, OPEN since M13). M13 already mapped the FM-MUSIC ROM presence at slot 3-3; the sound-generation device itself and its battery-backed SRAM store are unbuilt. Grounding: `references/fact-sheets/Yamaha YM2413 FM Chip.md` (exists — B3's original grounding note "OPLL sheet when added" is now satisfied) and openMSX `references/openmsx-21.0/src/sound/YM2413*.{cc,hh}` + `references/openmsx-21.0/src/sound/YM2413Core.hh`. Normal human-release-decision gate (no auto-close) — per DEC-0003, the M12 auto-close grant does not extend to M17.
+- Acceptance Criteria: M17 milestone entry present in milestones.md; planner-first; backlog B3 -> IN-PROGRESS (M17), B4 -> IN-PROGRESS (M17); explicit review of ALL deferred-backlog rows per the human's "review deferred items" directive, not just B3/B4, re-affirming the rest OPEN/IN-PROGRESS with justification.
+- Dependencies: M16 Done (v1.0.16, tag confirmed); M13 FM-MUSIC ROM slot 3-3 mapping; S1985 fact-sheet §9 (MSX-JE SRAM reference); deferred-backlog B3/B4.
+- Requested At: 2026-07-07T02:00:00+09:00
+
+---
+
+- Request ID: REQ-M17-002
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent
+- Milestone ID: M17
+- Type: Implementation (slices S1..S5)
+- Scope: Implement `docs/m17-planner-package.md` end to end, per DEC-0012's approved scope correction. S1: `src/devices/audio/ym2413_opll.{h,cpp}` — 64-register file, two-port `#7C`(address-latch)/`#7D`(data, masked `&0x3F`) write protocol, `reset()` zeroing all registers, debug-only `register_value(addr)` readback, `io_read` returns open-bus `0xFF`. S2: per-channel decode (F-Number/Block/Key-on/Sustain/Instrument/Volume/patch for channels 0-8), rhythm decode (`$0E`, `$36-$38` volumes), the 15-melody + 3-rhythm ROM instrument patch table (verbatim from the fact-sheet) with a `rom_patch(n)` accessor, live user-patch decode from `$00-$07` when `instrument==0`. S3: machine wiring in `src/machine/hbf1xv_machine.{h,cpp}` — attach the device at `io_bus_` ports `#7C`/`#7D` (mirroring the PSG attachment style), add to the `cold_boot()` reset sequence, add a `ym2413()` accessor; the existing `slot_bus_.attach(3,3,1,&fmmusic_rom_)` at slot 3-3 MUST remain completely unchanged (regression guard, A-M17-2) — system-integration test required. S4: `src/devices/memory/battery_backed_sram.{h,cpp}` — a reusable, parametric-size, deterministic battery-backed byte-store generalizing `S1985Engine::load_backup_ram`/`save_backup_ram`; unit-tested standalone at 16KB matching `RomHalnote.cc`'s SRAM size; per DEC-0012, this is explicitly NOT instantiated in `Hbf1xvMachine` and NOT wired to any slot this milestone (no real consumer yet — that's the future Halnote/B6 milestone's job). S5: openMSX A/B evidence — CPU-visible architectural parity across a register-write instruction sequence (extend the existing `tools/openmsx-io-parity.ps1`-style comparator), plus a new register-introspection comparison (`register_value()` vs openMSX's `"MSX Music regs"` SimpleDebuggable via WSL Tcl `debug read`) that MUST be verified against a real WSL openMSX run before being claimed — if it doesn't work, report BLOCKED honestly for that subject and still deliver the first subject. Finalize the full deferred-backlog review at closure (mark B3 DONE, update B4's row text per DEC-0012 — do NOT mark B4 done, add E1/E2 if not already reflected).
+- Acceptance Criteria: All 9 acceptance criteria in `docs/m17-planner-package.md` §5. In particular: zero regression across M1-M16 (including the `fmmusic_rom_` slot-3-3 read-path guard and untouched CPU-timing oracles); do NOT build any bank-register/SRAM-handshake/ID-string logic for the sound device (that's the external `MSXFmPac` cartridge pattern, not what this machine has); do NOT wire `BatteryBackedSram` into any slot; evidence gates captured (`tools/validate-assets.ps1`, `tools/checksum-assets.ps1`, `cmake --build`, `ctest`, exact pass/fail); real A/B or honest BLOCKED in `docs/m17-parity-trace-diff.md`; `docs/m17-implementation-report.md` produced.
+- Dependencies: `docs/m17-planner-package.md`; DEC-0012; `references/fact-sheets/Yamaha YM2413 FM Chip.md`; `references/openmsx-21.0/src/sound/YM2413Okazaki.cc` (register/latch semantics), `YM2413.hh` (debuggable pattern), `MSXMusic.hh/cc` (device shape); `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:179-197`; M13 `fmmusic_rom_` slot 3-3 wiring; M15 `S1985Engine::load_backup_ram`/`save_backup_ram` + `psg_ym2149.h` precedents; `src/CLAUDE.md`.
+- Requested At: 2026-07-07T02:25:00+09:00
+
+---
+
+- Request ID: REQ-M17-003
+- From: Human (project owner, source of truth) via /msx-master directive "close M17 and M18. commit, and tag seperately."
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M17
+- Type: Human release decision (milestone closure)
+- Scope: Close M17 (FM-PAC — YM2413 OPLL register-accurate device) on QA PASS (REQ-M17-002 / RESP-M17-003, docs/m17-qa-signoff.md). Tag v1.0.17. Commit separately from M18.
+- Acceptance Criteria: M17 Done in milestones.md + definition-of-done.yaml (overall_done: true); annotated tag v1.0.17; backlog B3 remains DONE (M17), B4 remains OPEN/re-owned to B6 (not force-closed).
+- Requested At: 2026-07-07T12:15:00+09:00
+

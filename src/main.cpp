@@ -145,6 +145,68 @@ int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_
     return 0;
 }
 
+// M17-S5 YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
+// (the SAME `OUT (#7C),reg ; OUT (#7D),value` write sequence assembled by
+// tools/gen-m17-ym2413-probe.py) exactly as run_parity_trace does, then emits
+// a deterministic dump of the resulting YM2413 register file (all 64 bytes,
+// $00-$3F) via the debug-only `register_value(addr)` accessor (A-M17-6). The
+// SAME program runs on openMSX's genuine YM2413 (tools/openmsx-ym2413-parity.
+// ps1), which reads the equivalent bytes via its "MSX Music regs"
+// SimpleDebuggable (references/openmsx-21.0/src/sound/YM2413.hh:40-44); the
+// two dumps are diffed per-address.
+int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
+                      const std::string& out_path) {
+    std::ifstream in(bin_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "ym2413-parity: cannot open program: " << bin_path << "\n";
+        return 2;
+    }
+    const std::vector<std::uint8_t> program((std::istreambuf_iterator<char>(in)),
+                                            std::istreambuf_iterator<char>());
+    if (program.empty()) {
+        std::cerr << "ym2413-parity: empty program: " << bin_path << "\n";
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+    machine.map_flat_ram();
+    machine.load_memory(base, program.data(), static_cast<std::uint32_t>(program.size()));
+    machine.cpu().state().regs().pc = base;
+
+    std::uint32_t steps = 0;
+    while (steps < max_steps && !machine.cpu().state().halted()) {
+        machine.step_cpu_instruction();
+        ++steps;
+    }
+
+    auto hex2 = [](std::uint32_t v) {
+        static const char* d = "0123456789ABCDEF";
+        std::string s;
+        s.push_back(d[(v >> 4) & 0xF]);
+        s.push_back(d[v & 0xF]);
+        return s;
+    };
+
+    const auto& ym = machine.ym2413();
+    std::string out;
+    out += "[YM2413-PARITY]\n";
+    for (int addr = 0; addr < 0x40; ++addr) {
+        out += "REG addr=" + hex2(static_cast<std::uint32_t>(addr)) +
+               " value=" + hex2(ym.register_value(static_cast<std::uint8_t>(addr))) + "\n";
+    }
+
+    std::ofstream out_file(out_path, std::ios::binary | std::ios::trunc);
+    if (!out_file) {
+        std::cerr << "ym2413-parity: cannot write output: " << out_path << "\n";
+        return 2;
+    }
+    out_file.write(out.data(), static_cast<std::streamsize>(out.size()));
+    std::cerr << "ym2413-parity: steps=" << steps
+              << " halted=" << (machine.cpu().state().halted() ? 1 : 0) << "\n";
+    return 0;
+}
+
 }  // namespace
 
 // M13-S5 BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
@@ -203,6 +265,19 @@ int main(int argc, char** argv) {
         const auto vram_bytes = static_cast<std::uint32_t>(std::strtoul(argv[5], nullptr, 10));
         const std::string out_path = argv[6];
         return run_vdp_parity(bin_path, base, max_steps, vram_bytes, out_path);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--ym2413-parity") {
+        if (argc < 6) {
+            std::cerr << "usage: " << argv[0]
+                      << " --ym2413-parity <program.bin> <base_hex> <max_steps> <out.txt>\n";
+            return 2;
+        }
+        const std::string bin_path = argv[2];
+        const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
+        const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
+        const std::string out_path = argv[5];
+        return run_ym2413_parity(bin_path, base, max_steps, out_path);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--parity-trace") {

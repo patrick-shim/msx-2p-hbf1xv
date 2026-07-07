@@ -24,6 +24,7 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/system_bus.cpp
     src/devices/chipset/system_control.cpp
     src/devices/audio/psg_ym2149.cpp
+    src/devices/audio/ym2413_opll.cpp
     src/devices/rtc/rp5c01.cpp
     src/devices/fdc/disk_image.cpp
     src/devices/fdc/disk_drive.cpp
@@ -31,6 +32,7 @@ add_library(sony_msx_core STATIC
     src/devices/fdc/sony_fdc.cpp
     src/devices/memory/rom_device.cpp
     src/devices/memory/memory_mapper_ram.cpp
+    src/devices/memory/battery_backed_sram.cpp
     src/devices/video/vdp_vram.cpp
     src/devices/video/v9958_vdp.cpp
     src/peripherals/keyboard_matrix.cpp

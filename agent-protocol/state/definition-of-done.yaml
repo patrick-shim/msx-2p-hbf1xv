@@ -237,3 +237,24 @@ milestone_records:
     overall_done: true
     # Closed by human release decision (DEC-0011 / REQ-M16-005, 2026-07-07); git tag v1.0.16.
     notes: "CLOSED 2026-07-07 (DEC-0011 / REQ-M16-005), git tag v1.0.16. Closes backlog B8. Implementation (REQ-M16-003) complete per docs/m16-implementation-report.md. WD2793 core (Type I/II/III/IV, context-sensitive status/INTRQ/DRQ, HLD) under src/devices/fdc/, Sony connection-style decode wrapping the M13 DISK ROM at slot 3-2, deterministic 720KB image, ~4s motor-off, DSKCHG. A genuine HEAD_LOADED divergence vs openMSX was found via A/B probing and fixed (grounded in WD2793.cc:420-433/522-533/820-834/1062-1073). ctest 72/72 green, zero regression M1-M15 (M9/M12 timing oracles untouched). Real openMSX 19.1 A/B: architectural parity over a 3000-instruction real-boot window, and a dedicated FDC register/command probe (identical disk image) matching functionally down to the transferred 512 bytes (docs/m16-parity-trace-diff.md). Backlog B8 -> DONE (M16); C5 advanced (real-boot max PC 0x7D6F, was 0x488) but HONESTLY still IN-PROGRESS -- the automatic disk-boot handshake is not reached within an unattended cold boot (residual, not fabricated, judged non-blocking by QA and pre-authorized as a fallback in the planner package, carried forward as a condition for whichever future milestone claims C5 fully closed). QA PASS (RESP-M16-004, docs/m16-qa-signoff.md): QA independently reproduced the 72/72 ctest run, verified both bug-fix citations directly against WD2793.cc, confirmed no test was weakened, and independently diffed the raw openMSX trace files. Awaiting human directive to kick off M17."
+  M17:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 75/75 (72 M1-M16 + 3 M17 new), zero regression, QA-reproduced
+      impacted_areas_covered: true      # YM2413 device unit/integration + real A/B (both subjects)
+      blocker_risks_resolved_or_accepted: true   # all residuals Low, pre-disclosed, none blocking (ROM patch provenance caveat, BatteryBackedSram unwired-by-design, E1 DSP depth deferred)
+      signoff_decision_recorded: true   # QA PASS (RESP-M17-003, docs/m17-qa-signoff.md), QA-executed ctest 75/75 fresh reproduction, A/B independently re-verified against real WSL openMSX
+    overall_done: true
+    # Closed by human release decision (DEC-0013 / REQ-M17-003, 2026-07-07); git tag v1.0.17 (committed separately from M18).
+    notes: "CLOSED 2026-07-07 (DEC-0013 / REQ-M17-003), git tag v1.0.17. Closes backlog B3. FM-PAC (YM2413 OPLL register-accurate device, MSXMusic-style) implemented per docs/m17-implementation-report.md. QA independently verified device identity (no MSXFmPac-style bank-register/SRAM/ID-string logic), register/latch semantics against YM2413Okazaki.cc, fmmusic_rom_ regression guard (byte-for-byte unchanged slot 3-3 attach), BatteryBackedSram confirmed NOT wired (per DEC-0012), and independently reproduced the full openMSX A/B harness end-to-end against real WSL openMSX 19.1 (Subject 1: 145/145 instructions empty diff; Subject 2: 36/36 register addresses empty diff, plus an extra spot-check beyond the developer's own). Full deferred-backlog review re-confirmed (all rows). ctest 75/75 QA-reproduced, zero regression, CPU-timing oracles untouched. B4 stays OPEN/re-owned to B6 (DEC-0012, not force-closed); E1/E2 remain OPEN."

@@ -28,10 +28,10 @@ milestone reference so "no one misses a bit":
 |---|------|--------|--------|-----------------|-----------|
 | B1 | **PSG / YM2149 device internals** (tone/noise/envelope/mixer, R0–R15, stereo A=C/B=L/C=R, joystick port A/B via R14/R15) — M11 S1985 provides only the I/O seam (`#A0-#A2`) | DONE (M15) | M11 (DEC-0002) | M15 (`src/devices/audio/psg_ym2149.*`) — numeric/register-accurate model per DEC-0009 Q4; A/B empty diff on R0/R7 vs genuine HB-F1XV | `references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md` §2 |
 | B2 | **RTC / RP5C01 device internals** (4 blocks × 13 regs, mode reg 13, BCD clock, alarm/timer, CMOS block-2 boot config) — M11 provides only the `#B4/#B5` seam gated by `#F5` bit7 | DONE (M15) | M11 (DEC-0002) | M15 (`src/devices/rtc/rp5c01.*`) — in-memory deterministic epoch per DEC-0009 Q2; `#F5` bit7 gate | S1985 fact-sheet §5 |
-| B3 | **FM-PAC (OPLL YM2413) device internals** — 9-ch FM synth. M13 maps only the FM-MUSIC ROM presence (slot 3-3); the sound-generation device is unbuilt | OPEN | M13 | Audio/FM-PAC milestone | Target Machine Spec (SOUND); `references/fact-sheets/` (OPLL sheet when added) |
-| B4 | **MSX-JE 16 KB SRAM** (battery-backed) — FM-PAC/MSX-JE SRAM store; M13 mapped no SRAM device | OPEN | M13 | FM-PAC/SRAM milestone | S1985 fact-sheet §9; Target Machine Spec |
+| B3 | **FM-PAC (OPLL YM2413) device internals** — 9-ch FM synth. M13 maps only the FM-MUSIC ROM presence (slot 3-3); the sound-generation device is unbuilt | DONE (M17) | M13 | M17 (`src/devices/audio/ym2413_opll.*`) — register-accurate `MSXMusic`-style device: 64-register file, two-port `#7C/#7D` write protocol (address-latch masked at use-time), per-channel decode (F-Num/Block/Key-on/Sustain/Instrument/Volume/Patch), rhythm decode (`$0E`,`$36-$38`), 15+3-entry ROM instrument patch table, `reset()`, debug `register_value()`; wired into `io_bus_` alongside the UNCHANGED M13 `fmmusic_rom_` (A-M17-2 regression guard held); real openMSX A/B evidence — both subjects PASS (Subject 1 architectural parity 145/145 instructions; Subject 2 register-file parity, all 36 written addresses) — `docs/m17-parity-trace-diff.md`. NOT the external `MSXFmPac` cartridge pattern the fact-sheet mostly describes (no bank register/SRAM/ID-string logic built, per DEC-0012). DSP/audio-synthesis depth split out as new row E1. | Target Machine Spec (SOUND); `references/fact-sheets/Yamaha YM2413 FM Chip.md`; `references/openmsx-21.0/src/sound/YM2413*` |
+| B4 | **MSX-JE 16 KB SRAM** (battery-backed) | OPEN — **re-grounded + re-owned to B6 (DEC-0012)** | M13 | B6 (Halnote milestone, indicative M20) — NOT M17/B3. Concrete grounding (`Sony_HB-F1XV.xml:105-115`, `RomHalnote.cc:37-46`) shows this SRAM belongs to the Halnote-mapped MSX-JE firmware ROM at slot 0-3, not the YM2413/MSX-MUSIC device at slot 3-3 (which the XML shows has no `<sramname>` at all). M17 builds a reusable, standalone, deterministic `BatteryBackedSram` primitive (`src/devices/memory/battery_backed_sram.*`, 16KB, generalizing the M15 S1985 `.sram` pattern) ready for B6 to wire directly — but does NOT instantiate/wire it to any slot this milestone (no real consumer yet; wiring it into slot 3-3 would fabricate hardware this machine does not have). | S1985 fact-sheet §9; `references/openmsx-21.0/src/memory/RomHalnote.cc:37-46`; Sony_HB-F1XV.xml:105-115 |
 | B5 | **Kanji font ROM access via I/O `#D8-#DB`** — 256 KB JIS1+JIS2 font (`bios/f1xvkfn.rom`); M13 mapped the Kanji *driver* (slot 3-1) but not the I/O-accessed font | OPEN | M13 | Kanji/peripheral milestone | `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml` (kanji I/O `#D8-DB`); S1985 fact-sheet §9 |
-| B6 | **Halnote / MSX-JE firmware mapping** — slot 0-3, 1 MB `bios/f1xvfirm.rom`, `mappertype=Halnote` + SRAM; M13 left it reserved open-bus | OPEN | M13 | Halnote/firmware milestone | Sony_HB-F1XV.xml (slot 0-3 Halnote) |
+| B6 | **Halnote / MSX-JE firmware mapping** — slot 0-3, 1 MB `bios/f1xvfirm.rom`, `mappertype=Halnote` + 16KB SRAM; M13 left it reserved open-bus | OPEN — **confirmed true owner of B4's 16KB SRAM (DEC-0012)** | M13 | Halnote/firmware milestone (indicative M20) | Sony_HB-F1XV.xml (slot 0-3 Halnote); `references/openmsx-21.0/src/memory/RomHalnote.cc:37-46` (`sram = make_unique<SRAM>(..., 0x4000, ...)` = 16KB, grounds the exact size) |
 | B7 | **Cartridge loading** — external primary slots 1 & 2 (`roms/aleste.rom` sample); M13 left them empty | OPEN | M13 | Cartridge/slot-manager milestone | Sony_HB-F1XV.xml (slots 1,2); Target Machine Spec (2 cartridge slots) |
 | B8 | **FDC drive mechanics** — Fujitsu MB89311 controller + 720 KB 3.5" drive behavior; M13 mapped only the DISK ROM presence (slot 3-2) | DONE (M16) | M13 | M16 (`src/devices/fdc/{wd2793,disk_drive,disk_image,sony_fdc,fdc_clock_source}.*`) — WD2793 core (Type I/II/III/IV, context-sensitive status, INTRQ/DRQ, HLD per openMSX WD2793.cc grounding), Sony connection-style decode wrapping the M13 DISK ROM, deterministic 720 KB image, ~4 s delayed motor-off, DSKCHG; unit + integration tests green; real openMSX A/B evidence (register/command sequence + functional Read-Sector completion + 512-byte content match) — `docs/m16-parity-trace-diff.md` | `references/fact-sheets/FDC for Sony HB-F1XV.md`; `references/openmsx-21.0/src/fdc/`; Target Machine Spec (BUILT-IN MEDIA) |
 | B9 | **VRAM / V9958 VDP** — 128 KB VRAM owned by the VDP; the display processor (register/VRAM/status/interrupt CONTRACT; rendering DEPTH split to D1-D7) | DONE (M14) | DEC-0002 / M13 | M14 (closed, v1.0.14) | `references/fact-sheets/Yamaha V9958 VDP.md`; `references/openmsx-21.0/src/video/` |
@@ -69,9 +69,39 @@ waiver). Grounded in `references/fact-sheets/Yamaha V9958 VDP.md` and
 | D6 | **Horizontal scroll visual effect (R#25/26/27) + interlace/EO fields, blink timing, superimpose/digitize, external video** — M14 stores the register bits; the display consequences are rendering-time | OPEN | M14 | Video-rendering milestone (with D1) | fact-sheet §1/§3/§7/§9 |
 | D7 | **G6/G7 VRAM address interleave in the display/command path** — `physical=(logical>>1)|(logical<<16)` for planar modes. M14 keeps a flat 128 KB store and models the CPU-port auto-increment addressing; the planar display/command interleave is only observable once D1/D3 exist | OPEN | M14 | Video-rendering / command milestone | fact-sheet §2; `references/openmsx-21.0/src/video/VDP.cc:851-857` (`executeCpuVramAccess` planar path) |
 
+## D. M17 YM2413 DSP/timing deferrals (recorded by the M17 planner, REQ-M17-001; approved DEC-0012)
+
+M17 delivers the YM2413 register/channel/rhythm CONTRACT (device-level, unit- + A/B-verifiable) —
+mirrors the M14 VDP contract/depth split. The following synthesis/timing DEPTH is explicitly
+sequenced out of M17 (committed scope, not a waiver).
+
+| # | Item | Status | Origin | Candidate owner | Grounding |
+|---|------|--------|--------|-----------------|-----------|
+| E1 | **YM2413 FM-synthesis DSP/audio depth** — 18-slot TDM pipeline @ 49716 Hz, log-sin(256,12b)+exp(256,10b) operator, 128-level EG with global-counter rate mechanism, 2-deep feedback averaging, AM/VIB LFOs, rhythm noise generator + double-output quirk, DAC/output-level nonlinearity. M17 delivers the register/channel/rhythm contract only; zero waveform synthesis | OPEN | M17 | Future audio-rendering milestone, paired with C9 (SDL3 frontend) | YM2413 fact-sheet §4/§5/§7/§9; `references/openmsx-21.0/src/sound/YM2413NukeYKT.{hh,cc}` (recommended DSP-accuracy reference — matches the XML's `ym2413-core=NukeYKT` selection) |
+| E2 | **YM2413 register-write timing constraint** — ≥12 master-cycle address-write / ≥84 master-cycle data-write minimum spacing; violating writes corrupt/drop on real hardware | OPEN | M17 | Timing-fidelity milestone (with C1/C2/D4) | YM2413 fact-sheet §8 ("openMSX currently has the too-fast-access-timing emulation disabled") |
+
 ---
 
-Last updated: 2026-07-07 (M16 CLOSED per DEC-0011/REQ-M16-005, tagged v1.0.16: **B8 → DONE
+Last updated: 2026-07-07 (M17 CLOSED per DEC-0013/REQ-M17-003: **B3 → DONE (M17)** —
+`Ym2413Opll` register-accurate device (64-register file, two-port `#7C/#7D` write protocol,
+per-channel/rhythm decode, 15+3-entry ROM instrument patch table) wired into `io_bus_`
+alongside the UNCHANGED M13 `fmmusic_rom_` (A-M17-2 regression guard held by a dedicated
+integration-test case); `BatteryBackedSram` primitive (`src/devices/memory/
+battery_backed_sram.*`) built standalone and unit-tested at 16 KB, confirmed NOT instantiated
+in `Hbf1xvMachine` and NOT wired to any slot (B4 stays OPEN/re-owned to B6 per DEC-0012 — no
+disposition change this cycle). ctest 75/75 green (72 prior + 3 new), zero regression M1-M16.
+Real openMSX A/B evidence captured for BOTH subjects (not one BLOCKED): Subject 1 (CPU-visible
+architectural parity across the write sequence) empty diff over 145/145 instructions; Subject 2
+(internal register-file comparison via `debug read {MSX Music regs} <addr>`, mechanism verified
+against real WSL openMSX before use, per R-M17-6) empty diff over all 36 written addresses —
+`docs/m17-parity-trace-diff.md`. Adversarial comparator self-check passed for both subjects
+(empty-side → BLOCKED, corrupted-field → DIVERGENCE). QA PASS (RESP-M17-003,
+`docs/m17-qa-signoff.md`) independently reproduced ctest 75/75, verified device identity is
+genuinely `MSXMusic`-pattern (no `MSXFmPac`-style code), and re-ran the full A/B harness with an
+extra spot-check beyond the developer's own. Tagged git v1.0.17. Next: M18 (peripheral I/O),
+closed separately.
+
+Prior status: M16 CLOSED per DEC-0011/REQ-M16-005, tagged v1.0.16: **B8 → DONE
 (M16)** — WD2793 core (Type I/II/III/IV, context-sensitive status/INTRQ/DRQ, HLD fixed
 against a genuine openMSX A/B divergence found this cycle), Sony connection-style decode,
 deterministic 720 KB image, motor-off, DSKCHG, all under `src/devices/fdc/`; C10 (flux/DMK

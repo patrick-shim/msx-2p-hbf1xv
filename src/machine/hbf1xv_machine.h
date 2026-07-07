@@ -9,6 +9,7 @@
 #include "core/bus.h"
 #include "core/scheduler.h"
 #include "devices/audio/psg_ym2149.h"
+#include "devices/audio/ym2413_opll.h"
 #include "devices/chipset/io_bus.h"
 #include "devices/chipset/mapper_io.h"
 #include "devices/chipset/ppi_8255.h"
@@ -148,6 +149,13 @@ public:
     // them over the M11 IoBus at #A0-A2 / #B4/B5 / #A8-AB / #F5.
     [[nodiscard]] const devices::audio::PsgYm2149& psg() const;
     devices::audio::PsgYm2149& psg();
+    // YM2413 (OPLL) register-accurate device (M17), answering the real
+    // MSX-MUSIC I/O ports #7C/#7D alongside the unmodified M13 fmmusic_rom_
+    // at slot 3-3 page 1 (A-M17-1/A-M17-2 -- no memory-space register overlay,
+    // no SRAM/bank register: this machine's slot-3-3 sound device is the
+    // internal MSXMusic pattern, not the external FM-PAC cartridge).
+    [[nodiscard]] const devices::audio::Ym2413Opll& ym2413() const;
+    devices::audio::Ym2413Opll& ym2413();
     [[nodiscard]] const devices::rtc::Rp5c01& rtc() const;
     devices::rtc::Rp5c01& rtc();
     [[nodiscard]] const devices::chipset::Ppi8255& ppi() const;
@@ -296,6 +304,10 @@ private:
     // answered by real devices (M15). The #F5 system-control register gates the
     // RTC CLOCK-IC. rtc_clock_ feeds the RTC deterministic emulated time.
     devices::audio::PsgYm2149 psg_;
+    // YM2413 (OPLL) register-accurate device (M17, backlog B3) on #7C/#7D --
+    // an IoDevice attached alongside the unmodified M13 fmmusic_rom_ (below).
+    // No time-dependent state (§2.4): needs no elapsed_cycles() clock adapter.
+    devices::audio::Ym2413Opll ym2413_;
     devices::chipset::SystemControlF5 system_control_;  // #F5 (RTC clock gate)
     RtcClock rtc_clock_{scheduler_};
     devices::rtc::Rp5c01 rtc_;  // #B4/#B5
@@ -309,6 +321,10 @@ private:
     devices::memory::RomDevice sub_rom_{0x0000, 0x4000};    // slot 3-1 p0   (SUB)
     devices::memory::RomDevice kanji_rom_{0x4000, 0x8000};  // slot 3-1 p1-2 (Kanji driver)
     devices::memory::RomDevice disk_rom_{0x4000, 0x4000};   // slot 3-2 p1   (DISK ROM window)
+    // FM-MUSIC ROM presence, slot 3-3 page 1 (M13). Unchanged by M17 (A-M17-2,
+    // regression guard): the real MSXMusic device has NO memory-space register
+    // overlay, so this plain ROM window needs no wrapping device -- the YM2413
+    // (ym2413_, above) is attached SEPARATELY, only on io_bus_ #7C/#7D.
     devices::memory::RomDevice fmmusic_rom_{0x4000, 0x4000};  // slot 3-3 p1 (FM-MUSIC presence)
 
     // FDC (M16): WD2793 core + built-in 720 KB drive + deterministic image, and

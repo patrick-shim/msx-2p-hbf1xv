@@ -453,3 +453,22 @@ target_compile_definitions(machine_hbf1xv_m16_boot_checkpoint_integration_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME machine_hbf1xv_m16_boot_checkpoint_integration_test
     COMMAND machine_hbf1xv_m16_boot_checkpoint_integration_test)
+
+# --- M17 YM2413 (OPLL) register-accurate device + battery-backed SRAM primitive ---
+add_executable(devices_audio_ym2413_opll_unit_test
+    unit/devices/audio_ym2413_opll_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_opll_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_opll_unit_test COMMAND devices_audio_ym2413_opll_unit_test)
+
+add_executable(devices_memory_battery_backed_sram_unit_test
+    unit/devices/memory_battery_backed_sram_unit_test.cpp
+)
+target_link_libraries(devices_memory_battery_backed_sram_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_memory_battery_backed_sram_unit_test COMMAND devices_memory_battery_backed_sram_unit_test)
+
+add_executable(machine_hbf1xv_m17_ym2413_integration_test
+    integration/machine/hbf1xv_m17_ym2413_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m17_ym2413_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m17_ym2413_integration_test COMMAND machine_hbf1xv_m17_ym2413_integration_test)

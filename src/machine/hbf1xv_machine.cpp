@@ -66,8 +66,12 @@ void Hbf1xvMachine::wire_bus() {
     fdc_.attach_drive(&disk_drive_);
     disk_drive_.attach_image(&disk_image_);
     slot_bus_.attach(3, 2, 1, &sony_fdc_);
-    // Slot 3-3: MSX-MUSIC (FM-PAC) ROM PRESENCE only, page 1 (<mem 0x4000/0x4000>,
-    // XML:180-196). OPLL synthesis + #7C/#7D I/O are OUT of M13.
+    // Slot 3-3: MSX-MUSIC ROM PRESENCE, page 1 (<mem 0x4000/0x4000>, XML:180-196).
+    // A-M17-2 (hard regression guard): this attachment is UNCHANGED by M17 --
+    // the real MSXMusic device has no memory-space register overlay (unlike
+    // M16's SonyFdc, which had to wrap disk_rom_), so fmmusic_rom_ stays a
+    // plain ROM window. The YM2413 OPLL device is attached separately below,
+    // only on io_bus_ #7C/#7D.
     slot_bus_.attach(3, 3, 1, &fmmusic_rom_);
 
     // --- I/O fabric (IoBus) ---
@@ -90,6 +94,12 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.attach(0xA0, &psg_);
     io_bus_.attach(0xA1, &psg_);
     io_bus_.attach(0xA2, &psg_);
+
+    // YM2413 (OPLL) on #7C/#7D (M17-S3, backlog B3), the real MSX-MUSIC I/O
+    // ports (A-M17-1; Sony_HB-F1XV.xml:194 `<io base="0x7C" num="2" type="O"/>`)
+    // alongside the unmodified fmmusic_rom_ attach above (A-M17-2).
+    io_bus_.attach(0x7C, &ym2413_);
+    io_bus_.attach(0x7D, &ym2413_);
 
     // RTC (RP5C01) on #B4/#B5 (M15-S3), replacing the M11 open-bus seam. The RTC
     // advances its time READ-ONLY off the deterministic scheduler clock, and its
@@ -156,6 +166,7 @@ void Hbf1xvMachine::cold_boot() {
     joystick_.reset();
     ppi_.reset();
     psg_.reset();
+    ym2413_.reset();  // M17: zeroes all 64 registers + the address latch (A-M17-4)
     system_control_.reset();
     rtc_.reset();
 
@@ -472,6 +483,14 @@ const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {
 
 devices::audio::PsgYm2149& Hbf1xvMachine::psg() {
     return psg_;
+}
+
+const devices::audio::Ym2413Opll& Hbf1xvMachine::ym2413() const {
+    return ym2413_;
+}
+
+devices::audio::Ym2413Opll& Hbf1xvMachine::ym2413() {
+    return ym2413_;
 }
 
 const devices::rtc::Rp5c01& Hbf1xvMachine::rtc() const {
