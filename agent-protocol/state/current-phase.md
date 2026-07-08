@@ -243,7 +243,7 @@
 16. NEW from M25: PAUSE's idle T-state charge (1 T-state per paused `step_cpu_instruction()` call) is a documented MODELING CHOICE (R-M25-7), not a hardware-quantized fact — real hardware's WAIT-line hold is not naturally discretized. Revisit only if real Sony MB670836 measurement data ever surfaces.
 17. NEW from M25: the PAUSE-button toggle-vs-hold semantics (A-M25-1) and the Speed-Controller's `kPeriodFrames=8` duty-cycle range (A-M25-3) are first-principles design defaults, independently judged reasonable by QA, but explicitly revisable if a genuine Sony service-manual/community measurement ever becomes available.
 18. NEW from M28/DEC-0026: `V9958Vdp` status register S#2 bits VR/HR are now LIVE (raster-position-derived via a new `VdpClockSource`), not a fixed constant — any future test/tool that assumes a frozen S#2 value across a time-advancing operation must mask those two bits out (0x60) explicitly, exactly as `tests/integration/machine/hbf1xv_m24_cpm_run_integration_test.cpp` now does.
-19. NEW from M28/DEC-0026: a real, precisely-located, NOT-yet-investigated second finding exists downstream of the VR/HR fix — a real openMSX A/B instruction trace found the exact FIRST divergence at instruction #145,503 (a single-byte memory-mapper-segment content mismatch, `0xFF` vs `0x00`, at physical RAM offset `0x4001`), fully documented in `docs/vdp-vr-hr-boot-hang-fix-report.md` §4. NOT related to C1/D4 or any license-sensitive data — likely a memory-mapper segment-register write-history question, a candidate for a future dedicated investigation comparable in shape to C5's own work. No milestone number assigned.
+19. SUPERSEDED (DEC-0028, 2026-07-08): the M28/DEC-0026 "instruction #145,503 memory-mapper content divergence" finding was investigated (`docs/memory-mapper-segment-divergence-investigation.md`) and proven a FALSE POSITIVE — an artifact of the live-Tcl comparison methodology (a bare openMSX Tcl `reset` does not clear RAM; only a genuine power-cycle does; the harness's pre-script free-run had contaminated the compared byte). Under the corrected power-cycle methodology, both emulators are byte-identical (write history included) over a 300,000-instruction window. The memory-mapper/RAM subsystem is positively confirmed correct. **Standing methodology rule from this finding: any future memory-CONTENT A/B against live openMSX MUST use `set power off/on`, never a bare `reset`** (CPU-register-only comparisons are unaffected). One genuinely open remainder: the separate "~2.8-2.9M instruction dead-end" observation (RST 38 stack corruption → permanent HALT), whose causal framing was anchored to the now-refuted mismatch — its real cause/AB-status is an open question for a future check using the corrected methodology.
 20. NEW from M28: the Conditional-Pass-stop-and-consult rule has now fired TWICE this session (M24, M28), both resolved via the identical human choice ("fix, re-confirm, then tag") — this is now a well-established, low-friction pattern, not a one-off.
 
 ## Indicative follow-on order (per `agent-protocol/state/deferred-backlog.md`)
@@ -255,10 +255,14 @@ SCC audio chip, least risky of the deferred items, needs a new fact-sheet first)
 FM-synthesis DSP depth, scoped to the formulaically-derivable subset only), **M31** (FDC flux-level/
 DMK disk fidelity, sequenced after C5), **M32** (cassette tape image-format/signal fidelity, needs
 an independent MSX-kernel baud-rate source), **M33** (printer image/ESC-sequence rendering depth,
-blocked on font-asset provenance) — plus two still-unscheduled items pending a new fact/source: the
-C1/D4 VDP cycle-accurate-timing remainder (license-sensitive, needs an independent numeric source),
-and the new `docs/vdp-vr-hr-boot-hang-fix-report.md` §4 finding (memory-mapper segment-content
-divergence at instruction #145,503, not license-sensitive, needs its own dedicated trace-back).
+blocked on font-asset provenance) — plus two still-unscheduled items: the C1/D4 VDP
+cycle-accurate-timing remainder (license-sensitive, needs an independent numeric source), and the
+"~2.8-2.9M instruction boot dead-end" open question (RST 38 stack corruption → permanent HALT —
+its previously-assumed cause, the #145,503 content mismatch, was proven a false positive by
+DEC-0028; a fresh A/B check with the corrected power-cycle methodology is needed to determine
+whether it is a real divergence at all). The #145,503 memory-mapper divergence itself is RESOLVED
+— no bug, methodology artifact (DEC-0028, `docs/memory-mapper-segment-divergence-investigation.md`).
 
-- Updated At: 2026-07-08T17:15:00+09:00 (M28 CLOSED, tagged v1.0.28, DEC-0027 — QA Conditional Pass,
-  fixed and reconfirmed; DEC-0026 folded into the same closure; awaiting next human directive)
+- Updated At: 2026-07-08T17:50:00+09:00 (DEC-0028 — #145,503 divergence investigation closed as a
+  false positive, zero code change, mapper/RAM subsystem positively confirmed correct; awaiting
+  next human directive)

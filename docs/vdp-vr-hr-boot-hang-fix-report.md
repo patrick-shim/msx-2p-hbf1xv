@@ -141,6 +141,32 @@ two emulators' segment-assignment timelines first differ. This is NOT related to
 license-sensitive data involved) — it is a memory-mapper/RAM-segment-history question, likely
 scoped as its own investigation similar in shape to C5's own auto-boot-trigger work.
 
+> **CORRECTION (added post-hoc, 2026-07-08, per the dedicated follow-up investigation
+> `docs/memory-mapper-segment-divergence-investigation.md`; original paragraph above kept intact,
+> not rewritten, for audit trail):** the recommendation above was followed, and the underlying
+> "physical RAM content mismatch" claim in this paragraph is **SUPERSEDED — it was a false
+> positive**, not a genuine emulator defect. The dedicated investigation independently reproduced
+> `A=0xFF` at instruction #145,503 on this emulator, then found real openMSX's mapper segment for
+> page 2 is `1` on BOTH sides (disconfirming any segment-selection divergence), and finally traced
+> the root cause to the openMSX-side comparison technique itself: the live-Tcl harness's `reset`
+> command (correctly, per real MSX/Z80 hardware semantics — see
+> `references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:47-52` vs. `:41-45`) does **not**
+> clear RAM content (only a genuine power-cycle does), so the openMSX-side `0x00` reading was
+> leftover contamination from the harness's own uncontrolled multi-second pre-script free-run, not
+> a deterministic post-reset value. Using a genuine power-cycle (`set power off`/`set power on`)
+> before the reset, real openMSX reads **`A=0xFF`** at instruction #145,503 — an EXACT match with
+> this emulator — and the two emulators' physical-memory write histories remain byte-identical for
+> a further 300,000-instruction window beyond it. **No code defect exists in
+> `src/devices/memory/memory_mapper_ram.cpp`, `src/devices/chipset/mapper_io.cpp`, or their
+> wiring; no code change was made.** The separate "downstream ~2.8-2.9M-instruction dead end"
+> observation two sentences above this correction was framed as following from the now-refuted
+> content mismatch; its own status (genuine divergence vs. artifact, and whether it was ever
+> independently A/B-checked against openMSX at all) is consequently now an **open question**, not
+> confirmed either way — see the dedicated investigation's §5 for the honest, unresolved framing.
+> Backlog/ledger disposition below is intentionally left as originally recorded; updating
+> `agent-protocol/channels/decisions.md` / `current-phase.md` / `deferred-backlog.md`'s
+> cross-references to this now-superseded finding is a coordinator-owned follow-up.
+
 ## 5. Ledger disposition
 
 This fix is NOT part of M28's approved scope (E2, C5, health audit) — it is a self-contained bug
