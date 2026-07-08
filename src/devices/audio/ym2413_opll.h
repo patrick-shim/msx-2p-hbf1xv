@@ -8,6 +8,22 @@
 
 namespace sony_msx::devices::audio {
 
+// Deterministic emulated-cycle clock source for the YM2413 register-write
+// timing gate (E2, M28-S1/§2.1b, backlog E2). X-pattern of
+// rtc::RtcClockSource/fdc::FdcClockSource/peripherals::CassetteClockSource/
+// peripherals::RenshaTurboClockSource (src/devices/rtc/rp5c01.h:14-18,
+// src/devices/fdc/fdc_clock_source.h): the gate advances READ-ONLY off the
+// machine cycle clock (Hbf1xvMachine::elapsed_cycles() == scheduler total
+// cycles), never the host wall clock. Consulted PULL-STYLE ONLY from
+// write_address()/write_data()/io_write() -- never wired into
+// step_cpu_instruction()/run_cycles()/run_frame(), so it cannot perturb the
+// M9/M12/M23 zero-tolerance CPU-timing oracles.
+class Ym2413ClockSource {
+public:
+    virtual ~Ym2413ClockSource() = default;
+    [[nodiscard]] virtual std::uint64_t cpu_cycles() const = 0;
+};
+
 // YM2413 (OPLL) register-accurate model (M17-S1/S2, backlog B3).
 //
 // CRITICAL DEVICE-IDENTITY GROUNDING (A-M17-1/A-M17-2, DEC-0012): the HB-F1XV's
@@ -61,11 +77,43 @@ public:
     static constexpr std::size_t kRegisterCount = 0x40;  // 64 registers, $00-$3F
     static constexpr int kChannelCount = 9;               // channels 0-8
 
+    // E2 (M28-S1, backlog E2) register-write minimum-spacing constants,
+    // grounded in references/fact-sheets/Yamaha YM2413 FM Chip.md §8
+    // ("Register write timing (real hardware constraint): after an address
+    // write, wait >=12 master cycles (~3.36 us); after a data write, wait
+    // >=84 master cycles (~23.52 us) before the next write ... Violating the
+    // 84-cycle rule causes dropped/wrong register writes on real hardware.")
+    // -- independently sourced from the Yamaha Application Manual + andete's
+    // hardware measurements (fact-sheet §2), NOT transcribed from any
+    // openMSX table (there is no numeric-table risk here, only two scalar
+    // constants; see docs/m28-planner-package.md §2.1b).
+    static constexpr std::uint32_t kAddressWriteMinCycles = 12;
+    static constexpr std::uint32_t kDataWriteMinCycles = 84;
+
     void reset();
 
     // Bus-independent register access mirroring the two-port protocol.
     void write_address(std::uint8_t value);  // #7C: latch (unmasked at write time)
     void write_data(std::uint8_t value);      // #7D: regs_[latch & 0x3F] = value
+
+    // E2 write-timing gate (M28-S1). attach_clock_source() supplies the
+    // read-only cycle source (mirrors Rp5c01::attach_clock_source,
+    // src/devices/rtc/rp5c01.h:58); set_write_timing_enforced() toggles the
+    // gate. DEFAULT OFF: matches openMSX's own documented default-disabled
+    // stance (fact-sheet §8, "openMSX (Nuked-OPLL core) currently has the
+    // too-fast-access-timing emulation disabled") AND the M28-S1 mandatory
+    // regression pre-check finding -- the EXISTING M17 tests
+    // (tests/unit/devices/audio_ym2413_opll_unit_test.cpp,
+    // tests/integration/machine/hbf1xv_m17_ym2413_integration_test.cpp) issue
+    // back-to-back register writes with zero/near-zero cycle spacing (the
+    // unit test never attaches a clock source, so it is unaffected either
+    // way; the integration test's Hbf1xvMachine::debug_io_write() helper is a
+    // zero-cycle-advance raw bus poke that WOULD spuriously drop writes if
+    // this gate defaulted on -- see docs/m28-implementation-report.md for the
+    // full pre-check trace). A caller must opt in explicitly.
+    void attach_clock_source(Ym2413ClockSource* source);
+    void set_write_timing_enforced(bool enforced);
+    [[nodiscard]] bool write_timing_enforced() const;
 
     // core::IoDevice on #7C/#7D (keyed on port & 1: 0 = address, 1 = data).
     // io_read always returns open-bus 0xFF (A-M17-5) regardless of prior writes.
@@ -145,8 +193,22 @@ private:
     // bit4, modulator waveform bit3, modulator feedback bits2-0).
     [[nodiscard]] static Patch decode_patch(const std::array<std::uint8_t, 8>& raw);
 
+    // E2 gate check (M28-S1): returns true (and records this write as the
+    // new "last write") when the write is allowed to land; returns false
+    // (state left untouched, mirroring real-hardware "busy window ignores
+    // the write" behaviour -- the drop does NOT reset the timing reference)
+    // when a too-fast write must be dropped. A no-op passthrough (always
+    // true) when disabled or no clock source is attached.
+    [[nodiscard]] bool gate_allows_write(bool is_address_write);
+
     std::array<std::uint8_t, kRegisterCount> regs_{};
     std::uint8_t latch_ = 0;
+
+    Ym2413ClockSource* clock_source_ = nullptr;
+    bool write_timing_enforced_ = false;
+    bool has_last_write_ = false;
+    bool last_write_was_address_ = false;
+    std::uint64_t last_write_cycle_ = 0;
 };
 
 }  // namespace sony_msx::devices::audio

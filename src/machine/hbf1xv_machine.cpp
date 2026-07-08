@@ -152,7 +152,11 @@ void Hbf1xvMachine::wire_bus() {
 
     // YM2413 (OPLL) on #7C/#7D (M17-S3, backlog B3), the real MSX-MUSIC I/O
     // ports (A-M17-1; Sony_HB-F1XV.xml:194 `<io base="0x7C" num="2" type="O"/>`)
-    // alongside the unmodified fmmusic_rom_ attach above (A-M17-2).
+    // alongside the unmodified fmmusic_rom_ attach above (A-M17-2). The M28-S1
+    // (E2) write-timing gate's clock source is wired unconditionally, but the
+    // gate itself defaults OFF (Ym2413Opll::write_timing_enforced() ==
+    // false), so this attach changes no existing behaviour by itself.
+    ym2413_.attach_clock_source(&ym2413_clock_);
     io_bus_.attach(0x7C, &ym2413_);
     io_bus_.attach(0x7D, &ym2413_);
 
@@ -182,6 +186,10 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.attach(0x9B, &vdp_);
     // The VDP owns its /INT line and drives the CPU through the adapter (M14-S4).
     vdp_.set_irq_line(&cpu_irq_adapter_);
+    // S#2 VR/HR raster-position clock (bug fix, post-M28): read-only,
+    // pull-style, consulted only from peek_status_register(2) -- never wired
+    // into step_cpu_instruction()/run_cycles()/run_frame().
+    vdp_.attach_clock_source(&vdp_raster_clock_);
 
     // Mapper I/O readback on #FC-#FF (fact-sheet §4), pattern configured by S1985.
     s1985_engine_.configure_mapper(mapper_io_);
@@ -608,6 +616,10 @@ std::uint64_t Hbf1xvMachine::CassetteClock::cpu_cycles() const {
 }
 
 std::uint64_t Hbf1xvMachine::RenshaTurboClock::cpu_cycles() const {
+    return scheduler_.total_cycles();
+}
+
+std::uint64_t Hbf1xvMachine::Ym2413Clock::cpu_cycles() const {
     return scheduler_.total_cycles();
 }
 

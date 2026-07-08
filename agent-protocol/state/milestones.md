@@ -824,3 +824,134 @@ Use one section per milestone.
   now available to a future C5 investigation) — its status remains IN-PROGRESS (M16 partial); backlog
   E1 (YM2413 DSP/synthesis depth) remains OPEN, untouched this cycle. Full evidence in
   `docs/m27-implementation-report.md` / `docs/m27-qa-signoff.md`.
+
+## M28 (Kickoff 2026-07-08)
+
+- Milestone ID: M28
+- Title: Release Candidate — Backlog Closure Sweep + Full-Project Health Audit
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Per the human's directive (2026-07-08): "it's time to deliver all the backlogged items to complete the project... roll it into M28... call it a release-candidate... review the source code and see 1) all the components are in good shape, integration without a flow, features are in, and all the backlogs are clearly implemented in." Two combined objectives: (A) close as much of the remaining deferred backlog as legitimately, honestly achievable — `agent-protocol/state/deferred-backlog.md` currently carries 11 remaining OPEN/IN-PROGRESS rows (~10 distinct bodies of work): C1/D4 (twin references, IN-PROGRESS M23 partial, cycle-accurate VDP access-slot/command timing — remaining depth HARD-GATED by the standing `feedback_license_sensitive_scope.md` directive, no known independent non-GPL source for the ~340-entry slot tables), C5 (IN-PROGRESS M16 partial, full-boot/auto-disk-boot-trigger investigation), C10 (OPEN, FDC flux-level/DMK disk fidelity), E1 (OPEN, YM2413 FM-synthesis DSP/audio depth), E2 (OPEN, YM2413 register-write timing constraint), F1 (OPEN, cassette tape image-format/signal fidelity), F2 (OPEN, printer image/ESC-sequence rendering depth), G1 (OPEN, KonamiSCC mapper + embedded SCC audio chip), G2 (OPEN, ROM-database/SHA1 auto-mappertype-detection), G3 (OPEN, dynamic runtime cartridge hot-plug), G4 (OPEN, long tail of ~80 other cartridge mapper types); (B) a comprehensive release-candidate health audit — component-by-component source-code health review, integration-flow coherence (machine composition/bus wiring/CLI/SDL3/headless), Target Machine Specification feature-completeness cross-check, and a full backlog-accuracy audit. Per the standing M15 precedent, the planner is tasked to recommend IN vs DEFERRED (with justification) per remaining backlog row and propose a deterministic decomposition if "everything" is too large for one milestone (several rows are individually milestone-sized). Standing directives apply: `feedback_license_sensitive_scope.md` (zero license-sensitive future work — hard-gates C1/D4's table-reproduction risk) and `feedback_slow_test_cadence.md` (skip the slow ZEXALL/ZEXDOC sweep unless a real change touches CPU/core, confirmed via `git diff`).
+- Acceptance Criteria (planner to detail): full 34-row backlog re-review with an explicit IN/DEFERRED recommendation and justification for every remaining row; genuine, working implementation of every IN item with deterministic unit/integration/system tests and evidence gates; any row judged unbuildable without violating the license-sensitive-scope directive is explicitly, honestly documented as such (not attempted, not fabricated) rather than force-closed; a concrete release-candidate health-audit artifact (`docs/m28-release-candidate-audit.md` or planner's named equivalent) covering source-code health, integration-flow coherence, and Target-Spec feature-completeness; zero regression across the full M1-M27 suite via the fast-subset-by-default evidence discipline; QA sign-off before closure.
+- Unit/Integration Tests Required (planner to detail per IN item).
+- Regression Scope: all M1-M27 suites remain green (fast-subset-by-default per the standing cadence guidance; slow sweep only if git-diff shows a genuine CPU/core touch); QA sign-off required before closure.
+- Status: Done
+- Details: Planner triaged all 11 remaining OPEN/IN-PROGRESS backlog rows. IN-M28: E2 (YM2413
+  register-write timing constraint, small/independently-grounded) and C5 (full-boot/auto-disk-
+  boot-trigger investigation, dual-outcome honest acceptance — full close OR evidenced advancement,
+  not force-closed), plus the mandatory release-candidate health audit
+  (`docs/m28-release-candidate-audit.md`, four parts: source-code health, integration-flow
+  coherence, Target-Spec feature-completeness, backlog-accuracy). DEFERRED with named follow-on
+  milestones: **G1→M29** (KonamiSCC + SCC chip, least risky, needs a new fact-sheet first),
+  **E1→M30** (YM2413 DSP depth, scoped to the formulaically-derivable subset only — logsin/exp
+  tables and the decay/release formula are independently re-derivable; the attack-curve EG data is
+  named as a further carried-forward remainder since it lives only in a pre-generated,
+  GPL-adjacent table with no independent source), **C10→M31** (FDC flux/DMK fidelity, not
+  license-blocked, sequenced after C5), **F1→M32** (cassette tape fidelity, needs an independent
+  MSX-kernel baud-rate source rather than openMSX's own disclosed empirically-tuned
+  `BAUDRATE=3744`), **F2→M33** (printer rendering, blocked on dot-matrix font asset provenance, not
+  size). G2/G3/G4 re-affirmed indefinite/on-demand, unchanged. **C1/D4 ruled
+  UNBUILDABLE-WITHOUT-FABRICATION this cycle**: per the standing `feedback_license_sensitive_scope.md`
+  directive, no independent, non-GPL source exists anywhere in this repo for the VDP access-slot
+  timing tables (~340 `int16_t` entries) — the only place they exist is
+  `references/openmsx-21.0/src/video/VDPAccessSlots.cc`. C1/D4 stays OPEN/carried-forward with NO
+  milestone number assigned (a sourcing blocker, not a scheduling one) until a genuine independent
+  source appears. The same license/asset-provenance scrutiny was applied to every other candidate
+  row (E1, E2, C10, F1, F2, G1), each finding a distinct risk category — see
+  `docs/m28-planner-package.md` §2.3. Coordinator independently re-verified the highest-stakes
+  citations directly against source (VDPAccessSlots.cc's genuine large tables, the YM2413
+  fact-sheet's 12/84-master-cycle timing constants, NukeYKT's formula-vs-pre-generated-table split,
+  SCC.cc's genuine third-party forum citations, DMKDiskImage.hh's independent format-spec citation,
+  CasImage.cc's disclosed empirically-tuned `BAUDRATE`, and the two orphaned placeholder files) —
+  all confirmed accurate except one self-report bookkeeping error (backlog-file line count, 843
+  claimed vs. 491 actual — corrected directly, mirroring the M14/M19/M25 precedent). Package
+  APPROVED (RESP-M28-001); proceeding to developer dispatch for slices S1 (E2) / S2 (C5) / S3
+  (health audit) / S4 (backlog/ledger closure). `feedback_slow_test_cadence.md`'s mechanical gate
+  fires this cycle since E2/C5 both touch existing `src/devices/` files — the full, unfiltered
+  `ctest` must run at least once before QA dispatch.
+- Developer Implementation (REQ-M28-002, complete): **S1 (E2)** — `src/devices/audio/
+  ym2413_opll.{h,cpp}` gained a `Ym2413ClockSource` X-pattern write-timing gate (mirrors
+  `RtcClockSource`/`FdcClockSource`/`CassetteClockSource`/`RenshaTurboClockSource`), consulted
+  READ-ONLY against the cited 12/84-master-cycle constants (YM2413 fact-sheet §8), never touching
+  `step_cpu_instruction()`'s CPU-timing formula. The mandatory R-M28-1 regression pre-check (`rg`
+  against the existing M17 test files) found back-to-back/zero-cycle-spacing `#7C`/`#7D` writes in
+  both the unit test (which never attaches a clock source, so unaffected either way) and the
+  integration test's `debug_io_write()`-based `FmMusicRomGuard` case (a zero-cycle-advance raw bus
+  poke, which WOULD spuriously drop writes if the gate defaulted on) — resolution (b) chosen: the
+  gate **DEFAULTS OFF**, exposed via `set_write_timing_enforced(bool)`, every existing M17 test file
+  left byte-for-byte unmodified. New tests: `devices_audio_ym2413_write_timing_unit_test` (FakeClock
+  12/11 and 84/83-cycle boundaries, drop-does-not-reset-reference, `reset()` semantics, determinism)
+  and `machine_hbf1xv_m28_ym2413_write_timing_integration_test` (real CPU `OUT (#7C)`/`OUT (#7D)`
+  sequences over the M11 bus at varying NOP-padded spacing — gate-off tight sequence reproduces the
+  exact M17 baseline; gate-on tight sequence empirically drops strictly more writes than a
+  generously-padded sequence, real Z80 execution, `tight=2 landed=4` measured). A/B disposition
+  honestly N/A for the drop-behaviour comparison (openMSX disables this by design) — the gate
+  MECHANISM is proven via the cited constants instead. **S2 (C5)** — outcome (b), not force-closed:
+  a new `tests/system/hbf1xv_m28_c5_disk_boot_investigation_system_test.cpp` cold-boots with a REAL
+  bootable `disks/msxdos22.dsk` mounted (with/without a scripted `SPACE` keypress) and finds, on
+  every one of 20,000,000 instruction boundaries, that the disk-ROM window (primary 3, sub 2) is
+  NEVER paged into page 1 — extending M16's own honest residual (no Read-Sector command observed)
+  to the stronger, earlier "the window is never even mapped in," now against a genuinely bootable
+  disk, not just the FDC's default synthesized medium. A new `tools/openmsx-m28-c5-boot-parity.ps1`
+  A/B harness independently confirms this emulator's boot trajectory is ARCHITECTURAL PARITY (empty
+  diff) against real openMSX 19.1 with the SAME real disk mounted, over both a 3000-instruction
+  canonical window and an extended 100,000-instruction window (`docs/m28-parity-trace-diff.md`) —
+  the gap is not attributable to a defect in this emulator's boot path. C5 stays **IN-PROGRESS (M28
+  partial)**. **S3 (health audit)** — `docs/m28-release-candidate-audit.md` (four parts): every
+  `src/` file confirmed exercised by a test (directly or via a verified composing-device test); the
+  seeded placeholder-file finding resolved (`src/devices/device_placeholder.h`/`src/peripherals/
+  peripheral_placeholder.h` removed after the R-M28-7 pre-check confirmed zero CMake-glob dependency
+  and zero consumers); both `sony_msx_headless` and `sony_msx_sdl3` actually launched with real
+  assets (`--bios-dir`/`--disk`/`--cart1`/`--cart2`/`--debug-session`/`--input-script`, both carts
+  simultaneously); a Target-Spec cross-check found zero new untracked Gaps; a full 34-row
+  backlog-citation sweep found and fixed one stale path (`CassettePort.hh/.cc` missing its
+  `cassette/` subdirectory segment) plus two minor, NOT-fixed-ad-hoc historical findings (a stale
+  `definition-of-done.yaml` M10 `status:` field; a missing M27 trailer-block narrative summary in
+  `deferred-backlog.md`). **S4 (ledger closure)** — every touched backlog row (E2, C5, C1, D4, E1,
+  C10, F1, F2, G1) updated in `deferred-backlog.md` with its M28 disposition and (where applicable)
+  the required verbatim scoping-caveat text from `docs/m28-planner-package.md` §2.2/§2.3; G2/G3/G4
+  rows left byte-for-byte unchanged (re-affirmed indefinite). `git diff v1.0.27 --name-only --
+  src/devices/ src/peripherals/ src/core/` confirmed a touch to the existing
+  `src/devices/audio/ym2413_opll.{h,cpp}`, mechanically firing the slow-sweep rule — the full,
+  unfiltered `ctest` ran to completion this cycle (exact counts and wall-clock time in
+  `docs/m28-implementation-report.md`); SDL3-ON fast-subset independently reproduced green
+  (152/152). Full evidence in `docs/m28-implementation-report.md`.
+
+  **CLOSURE (DEC-0027, tagged `v1.0.28`):** Mid-cycle, between developer-implementation-complete and
+  QA dispatch, a SEPARATE bug fix landed in the same working tree — **DEC-0026**
+  (`docs/vdp-vr-hr-boot-hang-fix-report.md`), discovered via direct human interactive use (the real
+  SDL3 boot showed a permanent black screen). Root cause: `V9958Vdp`'s status register S#2 bits
+  VR/HR were hardcoded to 0 (a disclosed M23 simplification), on which the real BIOS's very first
+  VDP-init step polls in a wait-for-toggle loop before writing a single VDP register — hence the
+  permanent black screen. Fixed via a new, optional `VdpClockSource` (X-pattern of the project's
+  existing clock adapters), computing VR/HR live from real elapsed raster time, grounded in the
+  V9958 fact-sheet's own NTSC timing tables — zero license-sensitive data, C1/D4's actual remainder
+  untouched. A genuine regression was found and correctly fixed same-cycle
+  (`hbf1xv_m24_cpm_run_integration_test`'s device-isolation snapshot needed VR/HR masked out, since
+  they're now legitimately time-dependent — narrowly scoped, every other byte still exact). A
+  second, deeper finding (an exact, precisely-located memory-mapper segment-content divergence, via
+  a real openMSX A/B instruction trace) was intentionally left OPEN per the human's own explicit
+  direction not to investigate further this cycle. Since DEC-0026 landed in the same tree ahead of
+  M28's own QA dispatch, the coordinator folded it into the SAME QA cycle and closure commit/tag,
+  per the established precedent for developer/coordinator self-caught bugs (M16, M20).
+
+  **QA (`docs/m28-qa-signoff.md`, RESP-M28-003) returned a Conditional Pass** covering BOTH M28 and
+  DEC-0026 together — every substantive technical claim independently reproduced from a completely
+  fresh build (146/146 full unfiltered `ctest`, ZEXALL/ZEXDOC clean, zero CPU/core touch across both
+  changesets), including a direct, independently-authored, controlled before/after reproduction of
+  DEC-0026's headline claim (a real `git worktree` checkout of the pre-fix `v1.0.27` tree confirmed
+  the VDP genuinely stays all-zero forever there; the post-fix tree configures it by frame 74). Two
+  documentation/ledger-only findings gated the Conditional Pass, neither a code defect: (1) Medium —
+  `docs/m28-parity-trace-diff.md`'s C5 trace figures were captured pre-DEC-0026 and were stale (the
+  original interpretation of the terminal state as "legitimate BASIC-ready idle behaviour" was
+  itself incorrect, not merely a stale number); (2) Low — the ledger state files hadn't yet been
+  refreshed to reference DEC-0026. Per the standing "STOP and consult the human if QA does not reach
+  a clean PASS" directive (which fired for the SECOND time this session, after M24), the coordinator
+  presented this to the human, who chose "Fix, re-confirm, then tag" — the identical M24 resolution.
+  Both fixes applied directly: the C5 trace document and the backlog's C5 row both received an
+  honest, explicit stale-figure caveat (the pre-fix figures kept, clearly marked superseded, not
+  silently renumbered); `current-phase.md`/`milestones.md`/`definition-of-done.yaml`/the backlog's
+  own trailer all refreshed to reference DEC-0026 and the 146/146 count. Milestone closed clean on
+  the second pass. Tag `v1.0.28`, covering both M28's own approved scope and DEC-0026 together.
+  Closes backlog **E2** in full.

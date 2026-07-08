@@ -12,6 +12,20 @@
 
 namespace sony_msx::devices::video {
 
+// Deterministic emulated-cycle clock source for the S#2 VR/HR raster-position
+// status bits (bug fix, post-M28). X-pattern of rtc::RtcClockSource/
+// fdc::FdcClockSource/peripherals::CassetteClockSource/RenshaTurboClockSource/
+// audio::Ym2413ClockSource: returns CPU T-states elapsed since the most
+// recent on_vsync() call, READ-ONLY, consulted PULL-STYLE only from
+// peek_status_register(2) -- never wired into step_cpu_instruction()/
+// run_cycles()/run_frame(), so it cannot perturb the M9/M12/M23
+// zero-tolerance CPU-timing oracles.
+class VdpClockSource {
+public:
+    virtual ~VdpClockSource() = default;
+    [[nodiscard]] virtual std::uint64_t cpu_tstates_since_vsync() const = 0;
+};
+
 // Yamaha V9958 VDP — register / VRAM / status / interrupt CONTRACT (M14).
 //
 // This device delivers the externally observable behavior a program drives
@@ -52,6 +66,12 @@ public:
 
     // Wire the /INT sink (the machine's CPU adapter). Nullptr detaches.
     void set_irq_line(IrqLine* sink);
+
+    // Wire the S#2 VR/HR raster-position clock source (bug fix, post-M28).
+    // Nullptr (the default) means VR/HR read as their prior hardcoded-0
+    // fallback (no clock attached, e.g. unit tests constructing a bare
+    // V9958Vdp with no machine).
+    void attach_clock_source(VdpClockSource* source);
 
     // --- core::IoDevice (dispatch on port & 0x03; the S1985 mirror #9C-#9F
     //     collapses to the same 0..3, A-2). ---
@@ -151,6 +171,10 @@ private:
 
     IrqLine* irq_sink_ = nullptr;
     VdpModeState mode_{};
+
+    // S#2 VR/HR raster-position clock source (bug fix, post-M28). Nullptr by
+    // default; attached by the machine in wire_bus().
+    VdpClockSource* clock_source_ = nullptr;
 
     // Blink countdown state (M21-S2, backlog D6; VDP.cc:600-608/1040-1057).
     // Frames remaining at the current blink phase; 0 = stable (no further

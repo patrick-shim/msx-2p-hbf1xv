@@ -56,12 +56,9 @@ This repository now includes a working initial scaffold with:
 |   |   |-- scheduler.h
 |   |   `-- scheduler.cpp
 |   |-- devices
-|   |   |-- device_placeholder.h
 |   |   `-- cpu
 |   |       |-- cpu_bus_client.h
 |   |       `-- cpu_bus_client.cpp
-|   |-- peripherals
-|   |   `-- peripheral_placeholder.h
 |   |-- machine
 |   |   |-- hbf1xv_machine.h
 |   |   `-- hbf1xv_machine.cpp

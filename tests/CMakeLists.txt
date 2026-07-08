@@ -343,11 +343,23 @@ add_executable(devices_v9958_status_irq_unit_test
 target_link_libraries(devices_v9958_status_irq_unit_test PRIVATE sony_msx_core)
 add_test(NAME devices_v9958_status_irq_unit_test COMMAND devices_v9958_status_irq_unit_test)
 
+add_executable(devices_vdp_vr_hr_raster_status_unit_test
+    unit/devices/video_vdp_vr_hr_raster_status_unit_test.cpp
+)
+target_link_libraries(devices_vdp_vr_hr_raster_status_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_vr_hr_raster_status_unit_test COMMAND devices_vdp_vr_hr_raster_status_unit_test)
+
 add_executable(machine_hbf1xv_vdp_io_integration_test
     integration/machine/hbf1xv_vdp_io_integration_test.cpp
 )
 target_link_libraries(machine_hbf1xv_vdp_io_integration_test PRIVATE sony_msx_core)
 add_test(NAME machine_hbf1xv_vdp_io_integration_test COMMAND machine_hbf1xv_vdp_io_integration_test)
+
+add_executable(machine_hbf1xv_vdp_vr_hr_raster_integration_test
+    integration/machine/hbf1xv_vdp_vr_hr_raster_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_vdp_vr_hr_raster_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_vdp_vr_hr_raster_integration_test COMMAND machine_hbf1xv_vdp_vr_hr_raster_integration_test)
 
 # --- M15 device integration (PSG/RTC/PPI+keyboard/joystick/backup-RAM) --------
 add_executable(devices_audio_psg_ym2149_unit_test
@@ -975,6 +987,39 @@ target_link_libraries(hbf1xv_m27_debug_tooling_system_test PRIVATE sony_msx_core
 target_compile_definitions(hbf1xv_m27_debug_tooling_system_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME hbf1xv_m27_debug_tooling_system_test COMMAND hbf1xv_m27_debug_tooling_system_test)
+
+# --- M28-S1 YM2413 register-write timing constraint (backlog E2): E2 gate
+#     unit tests (FakeClock, 12/84-cycle boundaries, determinism) + a machine-
+#     level integration test driving real CPU OUT (#7C)/OUT (#7D) sequences
+#     over the M11 bus at varying spacing (docs/m28-planner-package.md §2.1b).
+add_executable(devices_audio_ym2413_write_timing_unit_test
+    unit/devices/audio_ym2413_write_timing_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_write_timing_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_write_timing_unit_test
+    COMMAND devices_audio_ym2413_write_timing_unit_test)
+
+add_executable(machine_hbf1xv_m28_ym2413_write_timing_integration_test
+    integration/machine/hbf1xv_m28_ym2413_write_timing_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m28_ym2413_write_timing_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m28_ym2413_write_timing_integration_test
+    COMMAND machine_hbf1xv_m28_ym2413_write_timing_integration_test)
+
+# --- M28-S2 C5 full-boot / auto-disk-boot-trigger investigation: cold-boots
+#     the real BIOS with a REAL MSX-DOS system disk (disks/msxdos22.dsk)
+#     mounted, with and without a scripted keypress sequence, tracking
+#     whether the disk-ROM window is ever paged into page 1 at all
+#     (docs/m28-planner-package.md §2.1a).
+add_executable(hbf1xv_m28_c5_disk_boot_investigation_system_test
+    system/hbf1xv_m28_c5_disk_boot_investigation_system_test.cpp
+)
+target_link_libraries(hbf1xv_m28_c5_disk_boot_investigation_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m28_c5_disk_boot_investigation_system_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_DISKS_DIR="${CMAKE_SOURCE_DIR}/disks")
+add_test(NAME hbf1xv_m28_c5_disk_boot_investigation_system_test
+    COMMAND hbf1xv_m28_c5_disk_boot_investigation_system_test)
 
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The

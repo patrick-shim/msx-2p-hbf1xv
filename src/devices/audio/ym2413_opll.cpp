@@ -51,16 +51,68 @@ void Ym2413Opll::reset() {
     // zeroes every register ($00-$3F) and the address latch on reset().
     regs_.fill(0);
     latch_ = 0;
+    // E2 (M28-S1): reset the write-timing tracker's DEVICE STATE (the last-
+    // write bookkeeping), but NOT the clock_source_ pointer or the
+    // write_timing_enforced_ toggle -- those are wiring/config, mirroring
+    // Rp5c01::reset() leaving clock_source_/clock_gate_ untouched
+    // (src/devices/rtc/rp5c01.h/.cpp).
+    has_last_write_ = false;
+    last_write_was_address_ = false;
+    last_write_cycle_ = 0;
+}
+
+void Ym2413Opll::attach_clock_source(Ym2413ClockSource* const source) {
+    clock_source_ = source;
+}
+
+void Ym2413Opll::set_write_timing_enforced(const bool enforced) {
+    write_timing_enforced_ = enforced;
+}
+
+bool Ym2413Opll::write_timing_enforced() const {
+    return write_timing_enforced_;
+}
+
+bool Ym2413Opll::gate_allows_write(const bool is_address_write) {
+    if (!write_timing_enforced_ || clock_source_ == nullptr) {
+        return true;
+    }
+    const std::uint64_t now = clock_source_->cpu_cycles();
+    if (has_last_write_) {
+        // Fact-sheet §8: the required minimum spacing is keyed on what the
+        // PREVIOUS write was (address write -> next write needs >=12
+        // cycles; data write -> next write needs >=84 cycles), regardless
+        // of which port the CURRENT write targets.
+        const std::uint32_t required =
+            last_write_was_address_ ? kAddressWriteMinCycles : kDataWriteMinCycles;
+        const std::uint64_t elapsed = now - last_write_cycle_;
+        if (elapsed < required) {
+            // Too-fast write: dropped per real-hardware behaviour. The
+            // timing reference is left UNCHANGED (real hardware's busy
+            // window is not restarted by an ignored write).
+            return false;
+        }
+    }
+    has_last_write_ = true;
+    last_write_was_address_ = is_address_write;
+    last_write_cycle_ = now;
+    return true;
 }
 
 void Ym2413Opll::write_address(const std::uint8_t value) {
     // A-M17-3: the latch stores the value UNMASKED (YM2413Okazaki.cc:1370-1371).
+    if (!gate_allows_write(/*is_address_write=*/true)) {
+        return;  // E2: dropped, insufficient spacing since the prior write.
+    }
     latch_ = value;
 }
 
 void Ym2413Opll::write_data(const std::uint8_t value) {
     // A-M17-3: the 0x3F mask applies at USE time, on the data write
     // (YM2413Okazaki.cc:1372-1373: `writeReg(registerLatch & 0x3f, value)`).
+    if (!gate_allows_write(/*is_address_write=*/false)) {
+        return;  // E2: dropped, insufficient spacing since the prior write.
+    }
     regs_[latch_ & 0x3F] = value;
 }
 

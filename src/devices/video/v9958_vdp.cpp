@@ -2,6 +2,8 @@
 
 #include <span>
 
+#include "devices/video/vdp_access_timing.h"
+
 namespace sony_msx::devices::video {
 
 namespace {
@@ -68,6 +70,10 @@ void V9958Vdp::reset() {
 
 void V9958Vdp::set_irq_line(IrqLine* const sink) {
     irq_sink_ = sink;
+}
+
+void V9958Vdp::attach_clock_source(VdpClockSource* const source) {
+    clock_source_ = source;
 }
 
 // --- core::IoDevice ---------------------------------------------------------
@@ -417,9 +423,40 @@ std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
     case 2: {
         // Undocumented bits 3,2 = 1 (0x0C); EO field toggle in bit1; bit7 TR,
         // bit4 BD, bit0 CE live from the command engine (M22-S3..S6, backlog
-        // D3). Bits5/6 (HR/VR, raster-timing-derived) remain idle 0,
-        // correctly deferred to D4/M23 (unchanged M14 disposition).
+        // D3). Bits5/6 (HR/VR) are LIVE, raster-position-derived (bug fix,
+        // post-M28 -- discovered via a real, CPU-driven BIOS boot: the BIOS
+        // polls S#2 bit6 (VR) waiting for it to toggle before ever writing a
+        // single VDP register, and hangs forever if VR is a hardcoded
+        // constant of either polarity; empirically confirmed by forcing
+        // VR=1 and observing the SAME hang on the opposite edge).
         std::uint8_t s2 = static_cast<std::uint8_t>(kStatusReg2Base | (eo_field_ ? 0x02 : 0x00));
+        if (clock_source_ != nullptr) {
+            const std::uint64_t tstates = clock_source_->cpu_tstates_since_vsync();
+            // fact-sheet §7: on_vsync() fires "at the start of the lower
+            // border" -- i.e. tstates==0 is the FIRST line of the bottom
+            // border, not the top of the frame. Relative to that origin,
+            // the 262-line frame runs: [0, non_active_lines) = bottom-
+            // border+bottom-erase+vsync+top-erase+top-border, then
+            // [non_active_lines, 262) = active display (fact-sheet §7 NTSC
+            // breakdown: LN=0 13+26+192+25+3+3=262; LN=1 13+16+212+15+3+3=
+            // 262; the erase/vsync line counts, 13/3/3, are IDENTICAL
+            // between LN modes -- only the border sizes differ).
+            const int line_since_vsync = static_cast<int>(
+                (tstates / static_cast<std::uint64_t>(vdp_access_timing::kCpuTstatesPerLine)) % 262);
+            const bool ln212 = (control_regs_[9] & 0x80) != 0;
+            const int non_active_lines = ln212 ? 50 : 70;  // 262-212 / 262-192
+            if (line_since_vsync < non_active_lines) {
+                s2 = static_cast<std::uint8_t>(s2 | 0x40);  // VR
+            }
+            // fact-sheet §7 per-line breakdown: sync[0,100) + left-erase
+            // [100,202) + left-border[202,258) + DISPLAY[258,1282)=1024 +
+            // right-border[1282,1341) + right-erase[1341,1368). HR is
+            // outside the display window, independent of LN.
+            const int vdp_cycle = vdp_access_timing::vdp_cycle_within_line(tstates);
+            if (vdp_cycle < 258 || vdp_cycle >= 1282) {
+                s2 = static_cast<std::uint8_t>(s2 | 0x20);  // HR
+            }
+        }
         if (cmd_engine_.tr()) s2 = static_cast<std::uint8_t>(s2 | 0x80);
         if (cmd_engine_.bd()) s2 = static_cast<std::uint8_t>(s2 | 0x10);
         if (cmd_engine_.ce()) s2 = static_cast<std::uint8_t>(s2 | 0x01);

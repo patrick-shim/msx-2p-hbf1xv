@@ -81,7 +81,24 @@ std::vector<std::uint8_t> capture_device_snapshot(const Hbf1xvMachine& machine) 
         snapshot.push_back(vdp.cmd_engine().read_register(r));
     }
     for (int s = 0; s < sony_msx::devices::video::V9958Vdp::kNumStatusRegs; ++s) {
-        snapshot.push_back(vdp.peek_status_register(s));
+        std::uint8_t value = vdp.peek_status_register(s);
+        if (s == 2) {
+            // Bug fix (post-M28): S#2 bits 6/5 (VR/HR) are now LIVE,
+            // genuinely elapsed-cycles-since-vsync-derived (previously
+            // hardcoded 0 -- the fix for a real BIOS boot hang). This test
+            // runs 10,000 real CPU instructions between the two snapshots
+            // via a flat-RAM driver program that never calls
+            // on_vsync_boundary(), so elapsed time genuinely advances and
+            // VR/HR MAY legitimately differ between "before" and "after" --
+            // that is correct, intended behavior, not a device-isolation
+            // violation (the CP/M harness never issues a single VDP I/O
+            // instruction, still verified by every OTHER bit/register/VRAM
+            // byte in this snapshot). Masked out here so this invariant
+            // continues to test what it actually means to test: no
+            // CROSS-DEVICE STATE LEAKAGE from the CP/M harness itself.
+            value = static_cast<std::uint8_t>(value & ~0x60);
+        }
+        snapshot.push_back(value);
     }
     for (int i = 0; i < sony_msx::devices::video::V9958Vdp::kNumPaletteEntries; ++i) {
         const std::uint16_t entry = vdp.palette_entry(i);

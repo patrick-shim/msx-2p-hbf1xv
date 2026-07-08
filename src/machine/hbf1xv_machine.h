@@ -429,6 +429,50 @@ private:
         const core::Scheduler& scheduler_;
     };
 
+    // Deterministic emulated-cycle clock source for the YM2413 E2
+    // write-timing gate (M28-S1, X-pattern of RtcClock/FdcClock/
+    // CassetteClock/RenshaTurboClock, backlog E2). Returns scheduler total
+    // cycles READ-ONLY; the gate's spacing check advances off this, never
+    // the host wall clock or CPU T-state accounting (protecting the
+    // M9/M12/M23 zero-tolerance CPU-timing oracles). Consulted pull-style
+    // only from Ym2413Opll::write_address()/write_data() -- never wired
+    // into step_cpu_instruction()/run_cycles()/run_frame(). Wiring this
+    // clock source does NOT by itself change behaviour: the gate defaults
+    // to OFF (Ym2413Opll::write_timing_enforced() == false) until a caller
+    // explicitly opts in via set_write_timing_enforced(true) (docs/
+    // m28-implementation-report.md's regression pre-check).
+    class Ym2413Clock final : public devices::audio::Ym2413ClockSource {
+    public:
+        explicit Ym2413Clock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t cpu_cycles() const override;
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
+    // Deterministic clock source for the VDP's S#2 VR/HR raster-position
+    // status bits (bug fix, post-M28 -- see docs/ for the finding: the real
+    // BIOS hangs forever polling VR/HR during early boot when they are a
+    // hardcoded constant, because real hardware's VR/HR genuinely toggle
+    // every frame/line). Unlike the other X-pattern clocks above, this one
+    // needs BOTH the scheduler AND last_vsync_cycle_ (declared further below)
+    // -- it is declared as a DATA MEMBER after last_vsync_cycle_ so
+    // reference-member initialization order is correct; this nested TYPE
+    // definition may appear anywhere relative to that, since attaching it to
+    // vdp_ happens in wire_bus() (constructor body), after all members exist.
+    class VdpRasterClock final : public devices::video::VdpClockSource {
+    public:
+        VdpRasterClock(const core::Scheduler& scheduler, const std::uint64_t& last_vsync_cycle)
+            : scheduler_(scheduler), last_vsync_cycle_(last_vsync_cycle) {}
+        [[nodiscard]] std::uint64_t cpu_tstates_since_vsync() const override {
+            return scheduler_.total_cycles() - last_vsync_cycle_;
+        }
+
+    private:
+        const core::Scheduler& scheduler_;
+        const std::uint64_t& last_vsync_cycle_;
+    };
+
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
     MemoryRegion sram_{kSramBytes};
@@ -473,7 +517,10 @@ private:
     devices::audio::PsgYm2149 psg_;
     // YM2413 (OPLL) register-accurate device (M17, backlog B3) on #7C/#7D --
     // an IoDevice attached alongside the unmodified M13 fmmusic_rom_ (below).
-    // No time-dependent state (§2.4): needs no elapsed_cycles() clock adapter.
+    // ym2413_clock_ feeds the M28-S1 (E2) write-timing gate READ-ONLY; the
+    // gate itself defaults OFF, so wiring this clock source is a no-op
+    // unless a caller explicitly enables it.
+    Ym2413Clock ym2413_clock_{scheduler_};
     devices::audio::Ym2413Opll ym2413_;
     devices::chipset::SystemControlF5 system_control_;  // #F5 (RTC clock gate)
     RtcClock rtc_clock_{scheduler_};
@@ -552,6 +599,11 @@ private:
     // 0 (program start), matching the documented "no vsync yet" semantic of
     // cycles_since_last_vsync()/vdp_cycle_position() above.
     std::uint64_t last_vsync_cycle_ = 0;
+
+    // VDP raster-position clock (bug fix, post-M28). Declared AFTER
+    // last_vsync_cycle_ (initialization-order requirement, see the class
+    // comment above); attached to vdp_ in wire_bus().
+    VdpRasterClock vdp_raster_clock_{scheduler_, last_vsync_cycle_};
 
     // M25 Sony MB670836 hardware PAUSE + Speed Controller (backlog C8). A
     // machine-level CPU-execution gate consulted at the very top of
