@@ -108,11 +108,13 @@ public:
     // repeatedly callable from a ctest integration test.
     void run_one_frame();
 
-    // The real-time outer loop: run_one_frame() + SDL_Delay-based pacing
-    // toward ~16.69 ms/frame (kFrameCycles/kSystemClockHz, the same
-    // pre-existing frame-cadence arithmetic docs/m26-planner-package.md
-    // §2.3 computes from hbf1xv_machine.cpp's own kFrameCycles) +
-    // SDL_PollEvent-driven SDL_EVENT_QUIT handling. NEVER called from ctest.
+    // The real-time outer loop: run_one_frame() + exact-nanosecond
+    // absolute-deadline pacing toward the true 16.688154 ms/frame cadence
+    // (kFrameCycles/kSystemClockHz via AudioPacer::scale_cycles -- the
+    // audio-latency fix, docs/audio-latency-investigation.md; the previous
+    // ms-truncated SDL_Delay pacing ran ~3-4% fast and accumulated unbounded
+    // audio latency) + SDL_PollEvent-driven SDL_EVENT_QUIT handling. NEVER
+    // called from ctest.
     // Honors config.max_frames when set (a bounded, non-interactive run for
     // headless/manual-verification use). Returns a process exit code.
     int run_interactive();

@@ -70,6 +70,7 @@ add_library(sony_msx_core STATIC
     src/machine/input_script.cpp
     src/frontend/sdl3_cli.cpp
     src/frontend/border_composer.cpp
+    src/frontend/audio_pacer.cpp
     src/frontend/psg_audio_pump.cpp
     src/frontend/psg_audio_dump.cpp
 )

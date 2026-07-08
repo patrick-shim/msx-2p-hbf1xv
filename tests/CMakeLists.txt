@@ -934,6 +934,15 @@ add_executable(frontend_psg_audio_pump_unit_test
 target_link_libraries(frontend_psg_audio_pump_unit_test PRIVATE sony_msx_core)
 add_test(NAME frontend_psg_audio_pump_unit_test COMMAND frontend_psg_audio_pump_unit_test)
 
+# Audio-latency fix (docs/audio-latency-investigation.md): SDL-free exact-
+# accounting + backpressure pacing policy -- headlessly provable, mirrors the
+# PsgAudioPump SDL3-independence precedent.
+add_executable(frontend_audio_pacer_unit_test
+    unit/frontend/audio_pacer_unit_test.cpp
+)
+target_link_libraries(frontend_audio_pacer_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_audio_pacer_unit_test COMMAND frontend_audio_pacer_unit_test)
+
 add_executable(frontend_sdl3_cli_unit_test
     unit/frontend/sdl3_cli_unit_test.cpp
 )

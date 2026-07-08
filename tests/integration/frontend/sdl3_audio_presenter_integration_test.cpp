@@ -82,6 +82,72 @@ int main() {
         }
     }  // ~Sdl3AudioPresenter() calls shutdown(), destroying the stream cleanly.
 
+    // --- Paced path (audio-latency fix, docs/audio-latency-investigation.md):
+    // pump_and_push_paced() derives production from CUMULATIVE emulated
+    // cycles via AudioPacer and caps the real host-stream queue. Deterministic
+    // oracles asserted here are host-queue-state-INDEPENDENT invariants:
+    // exact cumulative production accounting (a pure function of cycles) and
+    // the hard queue cap in bytes (holds whether or not the dummy device
+    // drains concurrently). ---
+    {
+        sony_msx::frontend::Sdl3AudioPresenter presenter;
+        const bool init_ok = presenter.init();
+        expect(init_ok, "PacedInit_OpenAudioDeviceStream_And_Resume_Succeed");
+        if (init_ok) {
+            sony_msx::devices::audio::PsgYm2149 psg;
+            psg.reset();
+            psg.write_address(0);
+            psg.write_data(1);
+            psg.write_address(1);
+            psg.write_data(0);
+            psg.write_address(8);
+            psg.write_data(15);
+            psg.write_address(7);
+            psg.write_data(0x3E);
+
+            constexpr std::uint64_t kFrameCycles = 228 * 262;  // 59736
+            constexpr std::uint64_t kMaxQueuedBytes =
+                sony_msx::frontend::Sdl3AudioPresenter::kMaxQueuedSamples *
+                sony_msx::frontend::Sdl3AudioPresenter::kBytesPerSampleFrame;
+
+            // 120 frames (~2 emulated seconds) of paced production in a tight
+            // loop -- far faster than real time, so without the backpressure
+            // cap the queue would hold ~88,200 samples here (the pre-fix
+            // unbounded-growth failure shape).
+            bool cap_never_exceeded = true;
+            bool no_put_error = true;
+            for (std::uint64_t frame = 1; frame <= 120; ++frame) {
+                presenter.pump_and_push_paced(psg, frame * kFrameCycles);
+                no_put_error = no_put_error && presenter.last_error().empty();
+                const int queued = SDL_GetAudioStreamQueued(presenter.stream());
+                cap_never_exceeded =
+                    cap_never_exceeded && queued >= 0 && static_cast<std::uint64_t>(queued) <= kMaxQueuedBytes;
+            }
+            expect(no_put_error, "PacedPumpAndPush_120Frames_NoPutAudioStreamDataError");
+            expect(cap_never_exceeded, "PacedPumpAndPush_QueueDepth_NeverExceedsMaxQueuedBytes");
+
+            // Exact accounting: cumulative generator production is the exact
+            // floor(cycles * 44100 / 3579545) -- independent of what the host
+            // queue did (samples_to_pump is a pure function of cycles).
+            const auto& pacer = presenter.pacer();
+            expect(pacer.samples_produced() == pacer.cycles_to_samples(120 * kFrameCycles),
+                   "PacedPumpAndPush_CumulativeProduction_ExactFloorOfCyclesTimesRateOverClock");
+
+            // Conservation: every produced sample was either pushed or
+            // deliberately dropped by the cap -- none silently lost.
+            expect(pacer.samples_produced() >= pacer.samples_dropped(),
+                   "PacedPumpAndPush_DropAccounting_NeverExceedsProduction");
+
+            // A stale/repeated cycle count pumps nothing (monotonic guard).
+            const std::uint64_t produced_before = pacer.samples_produced();
+            presenter.pump_and_push_paced(psg, 120 * kFrameCycles);
+            expect(presenter.pacer().samples_produced() == produced_before,
+                   "PacedPumpAndPush_RepeatedCycleCount_ProducesNothing");
+        } else {
+            std::cerr << "  " << presenter.last_error() << "\n";
+        }
+    }
+
     SDL_Quit();
 
     if (g_failures != 0) {

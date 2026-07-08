@@ -8,6 +8,7 @@
 
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/fdc/disk_image.h"
+#include "frontend/audio_pacer.h"
 
 namespace sony_msx::frontend {
 
@@ -219,12 +220,19 @@ void Sdl3App::run_one_frame() {
     }
 
     if (audio_presenter_) {
-        // One frame's worth of audio samples, paced independently of the
-        // video/CPU cadence (§2.6 point 3: sample-rate-paced, not
-        // frame-paced -- this batch size is simply "however many samples
-        // elapse during one frame's worth of emulated time").
-        const std::uint64_t sample_count = target / Sdl3AudioPresenter::kCyclesPerSample;
-        audio_presenter_->pump_and_push(machine_.psg(), static_cast<std::size_t>(sample_count));
+        // Exact-accounting audio production (audio-latency fix, docs/audio-
+        // latency-investigation.md): this batch's sample count is derived
+        // from the machine's CUMULATIVE elapsed cycles (floor(cycles * 44100
+        // / 3579545), integer math), never from a per-frame rounded count.
+        // The old `target / kCyclesPerSample` = floor(59736/81) = 737
+        // samples/frame overproduced vs the exact 735.948 samples/frame and
+        // -- with no backpressure on SDL_PutAudioStreamData's unbounded
+        // queue -- accumulated audio latency without limit (measured +29.7
+        // ms of lag per second of play, combined with the run_interactive()
+        // ms-truncation below). samples_to_pump is a pure function of
+        // elapsed cycles, so the deterministic ctest path is unaffected by
+        // host-queue state.
+        audio_presenter_->pump_and_push_paced(machine_.psg(), machine_.elapsed_cycles());
     }
 
     ++frames_run_;
@@ -235,23 +243,42 @@ int Sdl3App::run_interactive() {
         return 1;
     }
 
-    // ~16.6869 ms/frame (docs/m26-planner-package.md §2.3's own computed
-    // frame-cadence arithmetic: kFrameCycles / kSystemClockHz).
-    const double frame_ms = 1000.0 * static_cast<double>(kFrameCycles) / static_cast<double>(kSystemClockHz);
-    const auto target_ms = static_cast<Uint64>(frame_ms);
+    // Exact-nanosecond absolute-deadline frame pacing (audio-latency fix,
+    // docs/audio-latency-investigation.md). The previous per-frame
+    // SDL_GetTicks()/SDL_Delay() arithmetic TRUNCATED the exact 16.688154 ms
+    // frame period (kFrameCycles / kSystemClockHz) to a 16 ms integer target,
+    // running the whole session ~3-4% fast (measured 61.61 fps vs the real
+    // 59.9227 Hz cadence) and overproducing audio by ~1,300 samples/s. Here
+    // the deadline for frame N is derived from CUMULATIVE emulated cycles via
+    // the same exact integer scaling the audio path uses
+    // (AudioPacer::scale_cycles, numerator 1e9) -- no per-frame rounding, no
+    // drift over any session length. SDL_GetTicksNS()/SDL_DelayNS() per
+    // references/sdl3/include/SDL3/SDL_timer.h:213,281.
+    //
+    // Stall handling: if the host falls behind, frames run without delay so
+    // emulated time catches back up to wall time (the audio queue re-fills,
+    // bounded by the presenter's backpressure cap). A backlog larger than
+    // kMaxBacklogNs (a debugger pause, laptop sleep, ...) is forgiven by
+    // sliding the baseline instead of fast-forwarding the machine.
+    constexpr Uint64 kMaxBacklogNs = 100'000'000;  // 100 ms
+    std::uint64_t paced_cycles = 0;
+    Uint64 base_ns = SDL_GetTicksNS();
 
     while (!quit_requested_) {
-        const Uint64 frame_begin = SDL_GetTicks();
-
         run_one_frame();
 
         if (config_.max_frames.has_value() && frames_run_ >= *config_.max_frames) {
             break;
         }
 
-        const Uint64 elapsed = SDL_GetTicks() - frame_begin;
-        if (elapsed < target_ms) {
-            SDL_Delay(static_cast<Uint32>(target_ms - elapsed));
+        paced_cycles += machine_.frame_cycles_per_frame();
+        const Uint64 deadline_ns =
+            base_ns + AudioPacer::scale_cycles(paced_cycles, 1'000'000'000ull, kSystemClockHz);
+        const Uint64 now_ns = SDL_GetTicksNS();
+        if (now_ns < deadline_ns) {
+            SDL_DelayNS(deadline_ns - now_ns);
+        } else if (now_ns - deadline_ns > kMaxBacklogNs) {
+            base_ns += now_ns - deadline_ns;  // Forgive the backlog; never fast-forward through it.
         }
     }
 
