@@ -61,6 +61,13 @@ CMakeUserPresets.json
 !/debug/frames/border-openmsx-reference-basic-t15s.png
 !/debug/frames/border-openmsx-reference-screen0-text.png
 
+# Konami-splash color-0 backdrop fix: before/after/reference evidence
+# (docs/konami-splash-regression-investigation.md).
+!/debug/frames/konami-splash-before-f0750-black-background.png
+!/debug/frames/konami-splash-after-f0750-white-background.png
+!/debug/frames/konami-splash-openmsx-reference-t12s.png
+!/debug/frames/boot-logo-post-colorfix-f0210-mainram64k.png
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

@@ -12,7 +12,7 @@ void print_usage(const char* argv0) {
     std::cout << "usage: " << argv0
               << " [--bios-dir <path>] [--disk <path>] [--cart1 <path>] [--cart1-type <name>]"
                  " [--cart2 <path>] [--cart2-type <name>] [--max-frames <N>] [--hidden-window]"
-                 " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
+                 " [--border] [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
                  " [--input-script <path>]\n"
                  "\n"
                  "Sony HB-F1XV MSX2+ emulator -- SDL3 frontend (backlog C9). Opens a real\n"
@@ -53,6 +53,7 @@ int main(int argc, char** argv) {
     config.disk_path = parsed.disk_path;
     config.max_frames = parsed.max_frames;
     config.hidden_window = parsed.hidden_window;
+    config.border_enabled = parsed.border_enabled;
     config.dump_state_filename = parsed.dump_state_filename;
     config.trace_cpu_filename = parsed.trace_cpu_filename;
     config.event_log_filename = parsed.event_log_filename;

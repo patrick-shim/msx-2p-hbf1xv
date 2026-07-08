@@ -24,6 +24,11 @@ struct ParsedSdl3Cli {
     std::optional<std::string> disk_path;
     std::optional<std::uint32_t> max_frames;
     bool hidden_window = false;  // --hidden-window (test/CI convenience; never SDL3-dependent to parse)
+    // --border: opt-in border-box composition around the active area
+    // (border_composer.h). Default OFF -- the bare active area is presented
+    // edge-to-edge (human-decided presentation preference, docs/konami-
+    // splash-regression-investigation.md).
+    bool border_enabled = false;
     machine::ParsedCartridgeCli cartridges;
     // M27-S4/S7 additive debug/scripted-input flags (docs/m27-planner-
     // package.md §2.2/§2.4, items 1/3/4): `--dump-state`/`--trace-cpu`/

@@ -55,6 +55,7 @@ int main() {
         expect(!parsed.disk_path.has_value(), "NoFlags_DiskPathAbsent");
         expect(!parsed.bios_dir.has_value(), "NoFlags_BiosDirAbsent");
         expect(!parsed.hidden_window, "NoFlags_HiddenWindowDefaultsFalse");
+        expect(!parsed.border_enabled, "NoFlags_BorderDefaultsFalse_BareActiveAreaPresentation");
     }
 
     // --- Case 3: a flag missing its required value argument is a loud,
@@ -80,6 +81,22 @@ int main() {
         const auto parsed = parse_sdl3_cli({"--hidden-window"});
         expect(parsed.errors.empty(), "HiddenWindowFlag_NoErrors");
         expect(parsed.hidden_window, "HiddenWindowFlag_SetsTrue");
+    }
+
+    // --- Case 6: --border is a bare boolean flag enabling the opt-in
+    // border-box presentation (default OFF -- docs/konami-splash-regression-
+    // investigation.md); order-independent alongside other flags. ---
+    {
+        const auto parsed = parse_sdl3_cli({"--border"});
+        expect(parsed.errors.empty(), "BorderFlag_NoErrors");
+        expect(parsed.border_enabled, "BorderFlag_SetsTrue");
+    }
+    {
+        const auto parsed = parse_sdl3_cli({"--max-frames", "5", "--border", "--hidden-window"});
+        expect(parsed.errors.empty(), "BorderFlag_WithOtherFlags_NoErrors");
+        expect(parsed.border_enabled && parsed.hidden_window && parsed.max_frames.has_value() &&
+                   *parsed.max_frames == 5,
+               "BorderFlag_OrderIndependent_AlongsideOtherFlags");
     }
 
     if (g_failures != 0) {

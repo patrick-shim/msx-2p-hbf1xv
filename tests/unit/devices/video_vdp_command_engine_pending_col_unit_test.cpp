@@ -138,6 +138,47 @@ int main() {
         expect(vdp.vram().read(1) == 0xCD, "Hmmc_SecondByteValue");
     }
 
+    // --- STALE-arm/old-protocol scenario (Konami-splash investigation,
+    //     docs/konami-splash-regression-investigation.md): a COL value
+    //     written earlier for a NON-transfer command (here an HMMV fill
+    //     color) stays armed across that command, and a later HMMC started
+    //     WITHOUT a fresh pre-load consumes it as byte 0. This is the
+    //     REFERENCE behavior in BOTH grounding sources -- openMSX never
+    //     clears `transfer` at non-transfer-command start/completion (the
+    //     only clears are the three execute* consumption sites,
+    //     VDPCmdEngine.cc:1279/1338/1759), and fMSX's equivalent TR bit
+    //     stays "byte pending" across HmmvEngine the same way
+    //     (V9938.c:852-857 VDPWrite clears TR, only the transfer engines
+    //     re-set it). Pinned here so a future "fix" that clears the flag at
+    //     command start (which would break the boot-logo pre-load protocol)
+    //     or at atomic-command completion (which would diverge from both
+    //     references) trips loudly. Konami-splash forensics confirmed this
+    //     path does NOT alter Metal Gear's rendered content (byte-identical
+    //     frames pre/post DEC-0031). ---
+    {
+        V9958Vdp vdp;
+        select_graphic4(vdp);
+        // HMMV: fill 4 pixels (2 bytes) at DY=0 with color byte 0x55.
+        set_pair(vdp, 4, 0);
+        set_pair(vdp, 6, 0);
+        set_pair(vdp, 8, 4);
+        set_pair(vdp, 10, 1);
+        set_cmd_reg(vdp, 12, 0x55);  // fill color -- ALSO arms one unit (stale)
+        set_cmd_reg(vdp, 14, 0xC0);  // HMMV (atomic) -- does not consume it
+        expect(vdp.cmd_engine().ce() == false, "StaleArm_HmmvCompletesAtomically");
+        expect(vdp.vram().read(0) == 0x55 && vdp.vram().read(1) == 0x55, "StaleArm_HmmvFillLanded");
+
+        // HMMC at DY=8, NO fresh pre-load: the stale 0x55 becomes byte 0.
+        set_pair(vdp, 6, 8);
+        set_cmd_reg(vdp, 14, 0xF0);  // HMMC
+        expect(vdp.cmd_engine().ce() == true, "StaleArm_HmmcStarts");
+        expect(vdp.vram().read(8 * 128) == 0x55,
+               "StaleArm_HmmcConsumesStaleColAsByte0_MatchesBothReferences");
+        set_cmd_reg(vdp, 12, 0x66);  // byte 1 -- completes the 2-byte row
+        expect(vdp.cmd_engine().ce() == false, "StaleArm_HmmcCompletesAfterNMinus1FreshWrites");
+        expect(vdp.vram().read(8 * 128 + 1) == 0x66, "StaleArm_HmmcSecondByteValue");
+    }
+
     // --- Determinism oracle: two identically-driven runs leave identical
     //     VRAM bytes and status. ---
     {

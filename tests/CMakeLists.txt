@@ -1064,6 +1064,13 @@ target_link_libraries(devices_vdp_frame_renderer_sprite_edge_clip_unit_test PRIV
 add_test(NAME devices_vdp_frame_renderer_sprite_edge_clip_unit_test
     COMMAND devices_vdp_frame_renderer_sprite_edge_clip_unit_test)
 
+add_executable(devices_vdp_frame_renderer_color0_backdrop_unit_test
+    unit/devices/video_vdp_frame_renderer_color0_backdrop_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_color0_backdrop_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_color0_backdrop_unit_test
+    COMMAND devices_vdp_frame_renderer_color0_backdrop_unit_test)
+
 add_executable(frontend_border_composer_unit_test
     unit/frontend/border_composer_unit_test.cpp
 )

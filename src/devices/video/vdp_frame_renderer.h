@@ -85,6 +85,32 @@ private:
     [[nodiscard]] std::uint8_t vram_read(std::uint32_t addr) const;
     [[nodiscard]] std::uint16_t pal16(int index) const;
 
+    // Color-0 backdrop substitution for CONTENT pixels (the Konami-splash
+    // fix). Real V99x8 behavior: when R#8's TP bit is CLEAR, color 0 is
+    // TRANSPARENT -- a color-0 content pixel displays the BACKDROP color
+    // (R#7 low nibble through the palette), not palette entry 0. Grounded:
+    //   * fact-sheet: references/fact-sheets/Yamaha V9958 VDP.md:72 ("TP
+    //     colour0 transparent");
+    //   * openMSX: VDP.hh:189-191 getTransparency() == (R#8 & 0x20) == 0;
+    //     SDLRasterizer.cc:346-373 precalcColorIndex0() -- palFg[0] =
+    //     palBg[tpIndex] with tpIndex = transparency ? bgColor : 0; the
+    //     palFg table feeds EVERY content path (SDLRasterizer.cc:99-100:
+    //     characterConverter gets subspan<16>(palFg), bitmapConverter gets
+    //     palFg), while sprites (palBg, :101) and the border (palBg) read
+    //     the RAW palette;
+    //   * fMSX independently corroborates (Common.h:76 / Wide.h:44:
+    //     `XPal[0]=(!BGColor||SolidColor0)? XPal0:XPal[BGColor]`), though
+    //     unconditionally (it does not model the TP bit; openMSX's
+    //     TP-conditioned model matches the data book and is followed).
+    // GRAPHIC7 never substitutes (transparency forced off,
+    // SDLRasterizer.cc:349-352); GRAPHIC5 splits the backdrop nibble into
+    // even/odd 2-bit halves (SDLRasterizer.cc:364-372, palFg[0]=
+    // palBg[tpIndex>>2] even / palFg[16]=palBg[tpIndex&3] odd, matching
+    // BitmapConverter.cc:145-157's palette16[0..3]/palette16[16..19] split).
+    [[nodiscard]] bool color0_transparent() const;
+    [[nodiscard]] std::uint16_t content_pal16(int index) const;
+    [[nodiscard]] std::uint16_t content_pal16_g5(int two_bit_index, bool odd_pixel) const;
+
     // Vertical scroll (R#23). Non-text/bitmap modes wrap the ENTIRE line
     // index by 256 (PixelRenderer.cc:44-49's `displayY += getVerticalScroll()`
     // applied before the per-mode converter is invoked); TEXT modes instead

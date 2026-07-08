@@ -91,7 +91,7 @@ bool Sdl3App::init() {
         return false;
     }
 
-    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_);
+    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_, config_.border_enabled);
 
     audio_presenter_ = std::make_unique<Sdl3AudioPresenter>();
     if (!audio_presenter_->init()) {

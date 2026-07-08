@@ -14,12 +14,18 @@ namespace sony_msx::frontend {
 // documented RGB555 layout (A-M26-3, independently confirmed by reading both
 // `devices/video/frame_buffer.h` and `references/sdl3/include/SDL3/
 // SDL_pixels.h`: bits 14-10=R, 9-5=G, 4-0=B, bit15/X unused, both plain
-// host-native uint16_t values in memory). `blit_frame()` first composes the
-// frame into its border-colored presentation canvas (frontend/
-// border_composer.h, the border-box fix), then uploads that canvas's raw
-// uint16_t pixel buffer via `SDL_UpdateTexture` with ZERO per-pixel
-// conversion in this project's own code (composition copies pixel values,
-// never converts them).
+// host-native uint16_t values in memory).
+//
+// Border composition is OPT-IN (`border_enabled`, default false -- a
+// human-decided presentation preference recorded in docs/konami-splash-
+// regression-investigation.md): by default `blit_frame()` uploads the BARE
+// active-area FrameBuffer edge-to-edge (the pre-border behavior,
+// byte-for-byte); with `border_enabled` it first composes the frame into
+// its border-colored presentation canvas (frontend/border_composer.h,
+// raster-true geometry, live per-frame R#7 border color) and uploads that
+// instead. Either way the uploaded buffer is raw uint16_t pixels via
+// `SDL_UpdateTexture` with ZERO per-pixel conversion in this project's own
+// code (composition copies pixel values, never converts them).
 //
 // `blit_frame()`/`present()` are split (rather than one combined call) so a
 // test can read back the texture's presented pixel data via
@@ -29,21 +35,21 @@ namespace sony_msx::frontend {
 // genuinely true (S3 pixel-exact test), not merely plausible.
 class Sdl3VideoPresenter {
 public:
-    explicit Sdl3VideoPresenter(SDL_Renderer* renderer);
+    explicit Sdl3VideoPresenter(SDL_Renderer* renderer, bool border_enabled = false);
     ~Sdl3VideoPresenter();
 
     Sdl3VideoPresenter(const Sdl3VideoPresenter&) = delete;
     Sdl3VideoPresenter& operator=(const Sdl3VideoPresenter&) = delete;
 
-    // Composes `frame` into its border-colored presentation canvas
-    // (frontend/border_composer.h -- active area at its raster-true position
-    // inside a live-per-frame R#7 border surround, 320x240 or 640x240),
-    // uploads the canvas to the (recreated-on-mode-switch) texture and draws
-    // it to the renderer's current target (SDL_UpdateTexture +
-    // SDL_RenderClear + SDL_RenderTexture) -- does NOT call
-    // SDL_RenderPresent(). Returns false (and records last_error()) on any
-    // SDL3 call failure.
+    // Uploads `frame` (bare active area by default; composed border canvas
+    // when border_enabled -- see the class doc comment) to the
+    // (recreated-on-mode-switch) texture and draws it to the renderer's
+    // current target (SDL_UpdateTexture + SDL_RenderClear +
+    // SDL_RenderTexture) -- does NOT call SDL_RenderPresent(). Returns
+    // false (and records last_error()) on any SDL3 call failure.
     bool blit_frame(const devices::video::FrameBuffer& frame);
+
+    [[nodiscard]] bool border_enabled() const { return border_enabled_; }
 
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept
     // separate from blit_frame() (see class doc comment).
@@ -56,6 +62,7 @@ private:
     bool ensure_texture(int width, int height);
 
     SDL_Renderer* renderer_;
+    bool border_enabled_ = false;
     SDL_Texture* texture_ = nullptr;
     int texture_width_ = 0;
     int texture_height_ = 0;

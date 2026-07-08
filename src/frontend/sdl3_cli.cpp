@@ -49,6 +49,8 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--hidden-window") {
             parsed.hidden_window = true;
+        } else if (arg == "--border") {
+            parsed.border_enabled = true;
         } else if (arg == "--dump-state") {
             if (auto value = take_value(args, i, "--dump-state", parsed.errors)) {
                 parsed.dump_state_filename = *value;

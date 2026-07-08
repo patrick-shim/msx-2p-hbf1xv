@@ -4,7 +4,8 @@
 
 namespace sony_msx::frontend {
 
-Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer) : renderer_(renderer) {}
+Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border_enabled)
+    : renderer_(renderer), border_enabled_(border_enabled) {}
 
 Sdl3VideoPresenter::~Sdl3VideoPresenter() {
     if (texture_ != nullptr) {
@@ -36,21 +37,26 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
 }
 
 bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
-    // Border-box composition (border fix): a real display shows the active
-    // area surrounded by the R#7 border color, so the presented texture is
-    // the composed 320x240 / 640x240 canvas (border_composer.h documents the
-    // raster-true geometry), not the bare active area stretched edge to
-    // edge. The border color is live per frame (frame.border_color).
-    const devices::video::FrameBuffer canvas = compose_border_canvas(frame);
-    if (!ensure_texture(canvas.width, canvas.height)) {
+    // Default: the BARE active area, edge to edge (the human-preferred
+    // presentation; byte-for-byte the pre-border behavior). Opt-in
+    // (border_enabled_, the --border flag): compose the frame into the
+    // border-colored 320x240 / 640x240 canvas first (border_composer.h
+    // documents the raster-true geometry; border color live per frame).
+    devices::video::FrameBuffer composed;
+    const devices::video::FrameBuffer* source = &frame;
+    if (border_enabled_) {
+        composed = compose_border_canvas(frame);
+        source = &composed;
+    }
+    if (!ensure_texture(source->width, source->height)) {
         return false;
     }
 
-    // Zero per-pixel conversion (A-M26-3): the composed canvas's pixels are
-    // handed to SDL3 as-is, a raw uint16_t buffer, pitch = width *
+    // Zero per-pixel conversion (A-M26-3): the source's pixels are handed
+    // to SDL3 as-is, a raw uint16_t buffer, pitch = width *
     // sizeof(uint16_t). (Composition copies pixels but never converts them.)
-    const int pitch = canvas.width * static_cast<int>(sizeof(std::uint16_t));
-    if (!SDL_UpdateTexture(texture_, nullptr, canvas.pixels.data(), pitch)) {
+    const int pitch = source->width * static_cast<int>(sizeof(std::uint16_t));
+    if (!SDL_UpdateTexture(texture_, nullptr, source->pixels.data(), pitch)) {
         last_error_ = SDL_GetError();
         return false;
     }

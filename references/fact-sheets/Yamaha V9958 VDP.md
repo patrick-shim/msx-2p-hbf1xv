@@ -109,7 +109,7 @@ S#0 and S#1 auto-reset their interrupt flags on read; the BIOS reads S#0 every V
   `B = clamp(floor((5·Y − 2·J − K + 2) / 4), 0, 31)`
   The +2 models the VDP's rounding; the clamp models out-of-gamut clipping. Per Grauw, "There are 16384 (2^14) un-clipped colours, and due to the clamping to the 0-31 range you get an additional 2884 unique colours totalling 19268." An emulator that omits rounding/clipping will produce visibly wrong colours on gradient/photographic images.
 - **RGB→YJK (encode):** `Y = (4B + 2R + G)/8, J = R − Y, K = G − Y`. Note this weights Y toward blue (unlike Y′UV which weights green) — a documented Yamaha idiosyncrasy, not a bug to "fix."
-- **Superimpose interaction:** in pure YJK (SCREEN 12) you cannot superimpose external video except the borders; in YJK+YAE you can, by setting A=1 with palette colour 0 in the Y bits (and R#0 TP must be 0).
+- **Superimpose interaction:** in pure YJK (SCREEN 12) you cannot superimpose external video except the borders; in YJK+YAE you can, by setting A=1 with palette colour 0 in the Y bits (and R#8 TP must be 0; register number corrected 2026-07-08 -- TP is R#8 bit5 per line 72 of this sheet, "R#0" was a typo).
 
 ### 6. Sprites
 
@@ -166,7 +166,7 @@ Rewritten (openMSX's model): the command engine effectively runs at 1/8 the mast
 
 - **DAC:** V9958 outputs linear analog RGB from a 15-bit (5:5:5) DAC; R/G/B swing ≈ 0.9 Vpp (black level ≈2.2 V, max ≈3.1 V), rise/fall ≈60 ns. This is the improvement over the V9938 (whose palette DAC was effectively 3 bits/component); the extra resolution is only reachable through YJK modes since the palette itself is still 9-bit.
 - **Composite deleted on-chip:** unlike V9938, the V9958 has NO composite video output pin. `*HSYNC` and `*CSYNC` are outputs only (`*CSYNC` = composite sync). Machines regenerate composite/S-video externally (Sony CXA1145/CXA1645-class encoders). On HB-F1XV this and the RGBS→composite conversion happen on the HIC-1 hybrid board; the machine provides RGB (21-pin) and composite RCA, no S-Video.
-- **Superimpose/digitize:** the `*YS` pin (transparency switch) and the C0–C7 colour bus support external video superimposition and digitizing. When R#0 TP=0 (colour 0 transparent) and an external sync is fed to `*VRESET`/`*HRESET`, external video shows through colour-0 pixels. YJK-mode superimpose is restricted as noted in §5. HB-F1XV is not a digitizer/superimpose model, so these are typically unused there.
+- **Superimpose/digitize:** the `*YS` pin (transparency switch) and the C0–C7 colour bus support external video superimposition and digitizing. When R#8 TP=0 (colour 0 transparent; register number corrected 2026-07-08, was a "R#0" typo -- TP is R#8 bit5 per the register map above) and an external sync is fed to `*VRESET`/`*HRESET`, external video shows through colour-0 pixels. YJK-mode superimpose is restricted as noted in §5. HB-F1XV is not a digitizer/superimpose model, so these are typically unused there.
 
 ### 10. Known quirks, undocumented behaviour & emulation pitfalls
 

@@ -32,6 +32,12 @@ struct Sdl3AppConfig {
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
     // interactive session.
     bool hidden_window = false;
+    // Opt-in border-box composition (--border): when true the video
+    // presenter composes the active area inside the live R#7-colored border
+    // canvas (frontend/border_composer.h); default false presents the bare
+    // active area edge-to-edge (human-decided presentation preference,
+    // docs/konami-splash-regression-investigation.md).
+    bool border_enabled = false;
     // A bounded, non-interactive run length for headless/manual-verification
     // use (§2.3). std::nullopt (the default) means run_interactive() only
     // stops on SDL_EVENT_QUIT.

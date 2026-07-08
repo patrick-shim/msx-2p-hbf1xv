@@ -82,6 +82,37 @@ std::uint16_t VdpFrameRenderer::pal16(const int index) const {
     return palette_entry_to_rgb555(vdp_->palette_entry(index & 0x0F));
 }
 
+bool VdpFrameRenderer::color0_transparent() const {
+    // VDP.hh:189-191 getTransparency(): TP bit (R#8 bit 5) CLEAR ->
+    // transparency ON (fact-sheet: "TP colour0 transparent").
+    return (vdp_->control_register(8) & 0x20) == 0;
+}
+
+std::uint16_t VdpFrameRenderer::content_pal16(const int index) const {
+    // palFg-equivalent lookup (see the header doc comment): content color 0
+    // resolves to the backdrop color (R#7 low nibble) when transparent.
+    // When transparency is OFF the substitution index is 0 itself
+    // (SDLRasterizer.cc:354 `tpIndex = transparency ? bgColorIndex : 0`),
+    // i.e. the raw palette entry 0 -- so only the transparent case differs.
+    if ((index & 0x0F) == 0 && color0_transparent()) {
+        return pal16(vdp_->control_register(7) & 0x0F);
+    }
+    return pal16(index);
+}
+
+std::uint16_t VdpFrameRenderer::content_pal16_g5(const int two_bit_index, const bool odd_pixel) const {
+    // GRAPHIC5 variant (SDLRasterizer.cc:364-372): the 4-bit backdrop nibble
+    // splits into a 2-bit even-pixel half (bits 3-2) and a 2-bit odd-pixel
+    // half (bits 1-0), mirroring BitmapConverter.cc:145-157's
+    // palette16[0..3] (even) / palette16[16..19] (odd) banks.
+    const int index = two_bit_index & 0x03;
+    if (index == 0 && color0_transparent()) {
+        const int backdrop = vdp_->control_register(7) & 0x0F;
+        return pal16(odd_pixel ? (backdrop & 0x03) : ((backdrop >> 2) & 0x03));
+    }
+    return pal16(index);
+}
+
 std::uint32_t VdpFrameRenderer::name_table_base() const {
     return static_cast<std::uint32_t>(vdp_->control_register(2)) << 10;  // VDP.hh:255-257
 }
@@ -398,9 +429,9 @@ FrameBuffer VdpFrameRenderer::render_frame(const Field field) const {
 // --- character/tile modes ----------------------------------------------
 
 void VdpFrameRenderer::render_text1(const int line, std::span<std::uint16_t> out) const {
-    // CharacterConverter.cc:142-160.
-    const std::uint16_t fg = pal16(vdp_->control_register(7) >> 4);
-    const std::uint16_t bg = pal16(vdp_->control_register(7) & 0x0F);
+    // CharacterConverter.cc:142-160 (fg/bg via palFg, :144-145 -> content_pal16).
+    const std::uint16_t fg = content_pal16(vdp_->control_register(7) >> 4);
+    const std::uint16_t bg = content_pal16(vdp_->control_register(7) & 0x0F);
     const std::uint32_t name_base = name_table_base();
     const std::uint32_t pattern_base = pattern_table_base();
     const int row_in_cell = (line + vdp_->control_register(23)) & 0x07;
@@ -415,8 +446,11 @@ void VdpFrameRenderer::render_text1(const int line, std::span<std::uint16_t> out
 
 void VdpFrameRenderer::render_text2(const int line, std::span<std::uint16_t> out) const {
     // CharacterConverter.cc:183-231, incl. the blink color-flip (:184-190).
-    const std::uint16_t plain_fg = pal16(vdp_->control_register(7) >> 4);
-    const std::uint16_t plain_bg = pal16(vdp_->control_register(7) & 0x0F);
+    // Plain colors go through palFg (:189-190 -> content_pal16); the blink
+    // colors go through palBg (:194-195), the RAW palette -- deliberately
+    // NOT substituted.
+    const std::uint16_t plain_fg = content_pal16(vdp_->control_register(7) >> 4);
+    const std::uint16_t plain_bg = content_pal16(vdp_->control_register(7) & 0x0F);
     std::uint16_t blink_fg = plain_fg;
     std::uint16_t blink_bg = plain_bg;
     if (vdp_->blink_state()) {
@@ -457,7 +491,7 @@ void VdpFrameRenderer::render_graphic1(const int line, std::span<std::uint16_t> 
         const std::uint8_t pattern =
             vram_read(pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(l));
         const std::uint8_t color = vram_read(color_base + static_cast<std::uint32_t>(char_code) / 8);
-        draw8(out.data() + col * 8, pal16(color >> 4), pal16(color & 0x0F), pattern);
+        draw8(out.data() + col * 8, content_pal16(color >> 4), content_pal16(color & 0x0F), pattern);
     }
 }
 
@@ -477,7 +511,7 @@ void VdpFrameRenderer::render_graphic2_or_3(const int line, std::span<std::uint1
         const std::uint32_t offset = quarter + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(l7);
         const std::uint8_t pattern = vram_read(pattern_base + offset);
         const std::uint8_t color = vram_read(color_base + offset);
-        draw8(out.data() + col * 8, pal16(color >> 4), pal16(color & 0x0F), pattern);
+        draw8(out.data() + col * 8, content_pal16(color >> 4), content_pal16(color & 0x0F), pattern);
     }
 }
 
@@ -494,8 +528,8 @@ void VdpFrameRenderer::render_multicolor(const int line, std::span<std::uint16_t
         const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + src_col));
         const std::uint8_t color = vram_read(
             pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(pattern_sub));
-        const std::uint16_t cl = pal16(color >> 4);
-        const std::uint16_t cr = pal16(color & 0x0F);
+        const std::uint16_t cl = content_pal16(color >> 4);
+        const std::uint16_t cr = content_pal16(color & 0x0F);
         std::uint16_t* p = out.data() + col * 8;
         p[0] = p[1] = p[2] = p[3] = cl;
         p[4] = p[5] = p[6] = p[7] = cr;
@@ -522,8 +556,8 @@ void VdpFrameRenderer::render_graphic4(const int line, std::span<std::uint16_t> 
     std::array<std::uint16_t, 256> temp{};
     for (int i = 0; i < 128; ++i) {
         const std::uint8_t b = vram_read(row_base + static_cast<std::uint32_t>(i));
-        temp[static_cast<std::size_t>(2 * i + 0)] = pal16(b >> 4);
-        temp[static_cast<std::size_t>(2 * i + 1)] = pal16(b & 0x0F);
+        temp[static_cast<std::size_t>(2 * i + 0)] = content_pal16(b >> 4);
+        temp[static_cast<std::size_t>(2 * i + 1)] = content_pal16(b & 0x0F);
     }
     apply_bitmap_scroll(out, temp.data(), 256);
 }
@@ -539,10 +573,10 @@ void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> 
     std::array<std::uint16_t, 512> temp{};
     for (int i = 0; i < 128; ++i) {
         const std::uint8_t b = vram_read(row_base + static_cast<std::uint32_t>(i));
-        temp[static_cast<std::size_t>(4 * i + 0)] = pal16((b >> 6) & 0x03);
-        temp[static_cast<std::size_t>(4 * i + 1)] = pal16((b >> 4) & 0x03);
-        temp[static_cast<std::size_t>(4 * i + 2)] = pal16((b >> 2) & 0x03);
-        temp[static_cast<std::size_t>(4 * i + 3)] = pal16(b & 0x03);
+        temp[static_cast<std::size_t>(4 * i + 0)] = content_pal16_g5((b >> 6) & 0x03, false);
+        temp[static_cast<std::size_t>(4 * i + 1)] = content_pal16_g5((b >> 4) & 0x03, true);
+        temp[static_cast<std::size_t>(4 * i + 2)] = content_pal16_g5((b >> 2) & 0x03, false);
+        temp[static_cast<std::size_t>(4 * i + 3)] = content_pal16_g5(b & 0x03, true);
     }
     apply_bitmap_scroll(out, temp.data(), 512);
 }
@@ -558,10 +592,10 @@ void VdpFrameRenderer::render_graphic6(const int line, const Field field, std::s
     for (std::size_t i = 0; i < spans.half_length; ++i) {
         const std::uint8_t d0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(i));
         const std::uint8_t d1 = vram_read(spans.bank1_base + static_cast<std::uint32_t>(i));
-        temp[4 * i + 0] = pal16(d0 >> 4);
-        temp[4 * i + 1] = pal16(d0 & 0x0F);
-        temp[4 * i + 2] = pal16(d1 >> 4);
-        temp[4 * i + 3] = pal16(d1 & 0x0F);
+        temp[4 * i + 0] = content_pal16(d0 >> 4);
+        temp[4 * i + 1] = content_pal16(d0 & 0x0F);
+        temp[4 * i + 2] = content_pal16(d1 >> 4);
+        temp[4 * i + 3] = content_pal16(d1 & 0x0F);
     }
     apply_bitmap_scroll(out, temp.data(), 512);
 }
@@ -640,7 +674,9 @@ void VdpFrameRenderer::render_yjk_yae(const int line, const Field field, std::sp
             const std::uint8_t pn = group.p[static_cast<std::size_t>(n)];
             std::uint16_t pixel;
             if (pn & 0x08) {
-                pixel = pal16(pn >> 4);
+                // The YAE palette branch reads palette16 == palFg
+                // (BitmapConverter.cc:271-275) -> content_pal16.
+                pixel = content_pal16(pn >> 4);
             } else {
                 const int y = pn >> 3;
                 const YjkRgb rgb = yjk_to_rgb(y, group.j, group.k);
