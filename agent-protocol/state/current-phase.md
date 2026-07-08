@@ -1,11 +1,67 @@
 # Current Phase
 
-- Objective: The pre-authorized M21-M23 run is COMPLETE (v1.0.21/22/23). Now driving a NEW, similarly-scoped continuation per the human directive (2026-07-08) "let's advance to all M25, milestone by milestone, fully developed, and fully qa" — M24 (ZEXDOC/ZEXALL full parity sweep, C3) then M25 (Sony speed-controller + hardware PAUSE + Ren-Sha Turbo, C8), each with its own planner package, developer implementation, dedicated system integration test, QA sign-off, and separate tag, proceeding through the release-decision/tag step without an extra pause on a clean QA PASS (mirroring the M21-M23 cadence) — UNLESS QA does not reach a clean PASS, in which case: STOP and consult the human. The human ALSO stated (2026-07-08) "I confirm that there should be zero license-sensitive future work" (recorded as a standing project memory: never reproduce openMSX's own large data tables/arrays under `src/`, even framed as independent re-derivation — applies to any future C1/D4 VDP-timing-depth milestone) and flagged a forward request (NOT yet active — to be raised explicitly after M25 completes): debug/-folder test-artifact generation (e.g. rendered frames as PNGs) before M26 (SDL3 frontend) is tackled.
-- Active Phase: M25 CLOSED (v1.0.25). **The full M24-M25 continuation the human requested on
-  2026-07-08 is now COMPLETE.** No further milestone has been kicked off yet — awaiting the next
-  human directive (indicative order: M26 SDL3 frontend, C9; or the debug/-folder PNG-artifact
-  request the human flagged as forward-only, to be raised after M25 — which has now happened).
+- Objective: The M21-M25 continuation is COMPLETE (v1.0.21..v1.0.25). The human's earlier-deferred
+  debug/-folder artifact request was raised (2026-07-08) after M25 completed, as promised; the
+  human then directed (2026-07-08) "let's do SDL3 in M26 first. You can plan debug features as you
+  go or define M27 as PRODUCTION and do thorough testing and its needed tools and features there.
+  your call." Coordinator's scope-boundary decision (delegated authority exercised): M26 = SDL3
+  frontend (C9) with ONLY a minimal, new decoded-`FrameBuffer`-to-PNG capture capability folded in
+  (a genuine testability necessity — nothing else can visually verify SDL3 renders correctly);
+  everything else from the debug/-tooling request (audio capture, full CPU/memory/VRAM dump CLI
+  wiring, keystroke-sequencing automation, production/stress testing) is explicitly deferred
+  whole-cloth to a new **M27 "Production Hardening + Debug/Test Tooling"** milestone, not designed
+  in detail yet. Same established cadence continues: planner → developer → QA → release decision,
+  proceeding through tag without an extra pause on a clean QA PASS, STOP and consult the human
+  otherwise. Standing "zero license-sensitive future work" directive remains in force (project
+  memory `feedback_license_sensitive_scope.md`).
+- Active Phase: M26 CLOSED (v1.0.26). **The SDL3 frontend is complete.** No further milestone has
+  been kicked off yet — M27 ("Production Hardening + Debug/Test Tooling") is named as the next
+  indicative milestone but not yet designed or kicked off; awaiting the next human directive.
 - Phase Owner: MSX Master Agent (coordinator)
+- Phase Status (M26): closed by coordinator release decision (2026-07-08, DEC-0024/REQ-M26-004).
+  First frontend/presentation-layer milestone, and the largest/most architecturally novel to date.
+  `Hbf1xvMachine::on_vsync_boundary()` — a pure,
+  mechanical extraction of `run_frame()`'s pre-M26 body (the ONLY behavior-affecting change to
+  `src/machine/`; `git diff --stat src/devices src/peripherals src/core` confirmed EMPTY) — lets a
+  real-time SDL3 loop drive the CPU via `step_cpu_instruction()` without the `run_frame()`
+  double-count hazard (A-M26-5). New `src/frontend/` (`Sdl3App`, `Sdl3VideoPresenter`,
+  `Sdl3AudioPresenter`+`PsgAudioPump`, `Sdl3InputMapper`, `sdl3_cli`): a genuine, working SDL3
+  application — window/renderer/audio-stream lifecycle, zero-conversion `SDL_PIXELFORMAT_XRGB1555`
+  video blit (independently pixel-readback-proven bit-for-bit), real PSG/YM2149 audio synthesis
+  wired from the frontend layer for the FIRST time (`advance_cycles()` had zero call sites in this
+  project before M26), a 71-entry keyboard-matrix mapping table + joystick + PAUSE/Speed-Controller/
+  Ren-Sha-Turbo bindings (all exhaustively `SDL_PushEvent`-injection tested), and CLI/asset wiring
+  including a new `--disk` flag (A-M26-6). YM2413/FM-PAC honestly, deliberately left SILENT —
+  backlog **E1** stays OPEN, zero waveform/DSP-shaped code added anywhere (R-M26-5, independently
+  grep-verified). The ONE new debug/testing capability the coordinator authorized — decoded-
+  `FrameBuffer`→real color PNG capture (`src/machine/frame_dump.*` + `tools/frame-to-png.py`) —
+  ships with a real, committed example (`debug/frames/m26-example-boot.png`, a 256×192 16-color-bar
+  GRAPHIC4 test scene). A real, empirically-confirmed environment finding: SDL3 was NOT
+  pre-installed in this execution environment, but the vendored `references/sdl3/` tree (zlib-
+  licensed) was built and locally installed once (`build/_sdl3_install/`, gitignored) to obtain a
+  real `SDL3Config.cmake` — resolving the environment risk without copying any SDL3 source into
+  `src/`; the "dummy" video/audio driver mechanism was then independently, empirically confirmed to
+  work end to end via a real `sony_msx_sdl3.exe --hidden-window --max-frames N` session. Headless
+  suite: 134/134 (130 prior + 4 new). SDL3-ON suite (a second, dedicated build directory): 140/140
+  (134 shared + 6 new SDL3-gated), all under `SDL_VIDEO_DRIVER=dummy`/`SDL_AUDIO_DRIVER=dummy`,
+  zero `SDL_Delay` anywhere in the `ctest` execution path. Full details, including the slow-sweep
+  re-run figure, in `docs/m26-implementation-report.md`; the honest A/B/human-observed disposition
+  (mostly BLOCKED/N-A, does not gate closure per Acceptance Criterion 10) is in
+  `docs/m26-frontend-evidence.md`.
+
+  **QA (`docs/m26-qa-signoff.md`, RESP-M26-003) returned a clean, unconditional Pass with ZERO
+  findings of any severity** — the cleanest QA cycle of this entire session. From two clean,
+  from-scratch rebuilds PLUS a third, fully independent rebuild of the vendored SDL3 source to a
+  brand-new install directory (confirming the environment finding is genuinely reproducible, not a
+  fluke): headless 134/134 (a fresh 30.8-min ZEXALL/ZEXDOC re-run, byte-identical to every prior
+  run); SDL3-ON 139/139, dummy drivers set externally. Cross-checked every one of 20 new files'
+  line counts against the implementation report (exact match on all), every cited SDL3 API against
+  the actual vendored headers, launched the real `sony_msx_sdl3.exe` itself three times (all exit
+  0), and regenerated the committed PNG from its dump (byte-identical SHA-256). One trivial,
+  non-gating doc-comment imprecision noted for completeness only (`run_frame_dump_demo()` says
+  "256×212," actual evidence is 256×192 — harmless). Per the milestone's own standing directive (a
+  clean PASS is the bar, given the novel territory), the coordinator proceeded through the
+  release-decision/tag step without an additional human pause. Tagged `v1.0.26`.
 - Phase Status (M25): closed by coordinator release decision (2026-07-08, DEC-0023/REQ-M25-004).
   `Mb670836PauseController` (`src/devices/chipset/mb670836_pause.{h,cpp}`) — a machine-level
   CPU-execution gate consulted at the very top of `step_cpu_instruction()`, before any opcode
@@ -64,24 +120,28 @@
   milestones (M19-M23) of sitting staged-but-uncommitted. Fourteen milestones M11-M24 now tagged
   (v1.0.11..v1.0.24) at the time M24 closed; FIFTEEN now tagged (v1.0.11..v1.0.25) with M25's
   closure.
-- Current full suite: 130/130 (`ctest`, 124 prior + 6 new: `devices_chipset_mb670836_pause_unit_test`,
-  `peripherals_rensha_turbo_unit_test`, `peripherals_rensha_turbo_integration_test`,
-  `machine_hbf1xv_m25_pause_integration_test`, `machine_hbf1xv_m25_speed_controller_integration_test`,
-  `hbf1xv_m25_speed_pause_rensha_system_test`), zero regression through M25. NOTE:
-  `hbf1xv_m24_zexall_system_test` (pre-existing since M24) genuinely takes ~22-27 minutes to run
+- Current full suite (headless, `-DSONY_MSX_ENABLE_SDL3=OFF`, the default): 134/134 (130 prior +
+  4 new: `machine_hbf1xv_m26_vsync_boundary_integration_test`, `machine_frame_dump_unit_test`,
+  `frontend_psg_audio_pump_unit_test`, `frontend_sdl3_cli_unit_test`), zero regression through M26.
+  A SECOND, dedicated build directory with `-DSONY_MSX_ENABLE_SDL3=ON` (+
+  `-DCMAKE_PREFIX_PATH=<repo>/build/_sdl3_install` if SDL3 is not otherwise installed — see M26
+  Phase Status above for the reproducible build sequence) runs 140/140 (134 shared + 6 new
+  SDL3-gated), entirely headlessly under `SDL_VIDEO_DRIVER=dummy`/`SDL_AUDIO_DRIVER=dummy`. NOTE:
+  `hbf1xv_m24_zexall_system_test` (pre-existing since M24) genuinely takes ~25-35 minutes to run
   (both real ZEXALL/ZEXDOC suites to completion) — registered with the CTest LABEL
   `m24_slow_full_sweep` so the routine evidence-gate cadence can exclude it explicitly via
-  `ctest -LE m24_slow_full_sweep` (129/129 in ~3.5-7s) while the default, unfiltered `ctest`
-  invocation still includes it for real. All 6 new M25 tests are fast (no new slow-sweep-class
-  test was added this cycle).
+  `ctest -LE m24_slow_full_sweep` (133/133 in ~4-7s) while the default, unfiltered `ctest`
+  invocation still includes it for real. All 4 new M26 headless tests and all 6 new M26 SDL3-gated
+  tests are fast (no new slow-sweep-class test was added this cycle).
 
-## M21-M25 run summary
+## M21-M26 run summary
 
 - **M21 (VDP rendering depth, v1.0.21)**: First pixel-rendering output path. `VdpFrameRenderer`/`FrameBuffer` — deterministic, pull-model, frozen-register-snapshot renderer, RGB555 pixels, zero new clock consumer. Every Target-Spec mode byte-exact (GRAPHIC7 GGGRRRBB byte layout; MULTICOLOR's real 256-wide canvas). YJK/YJK+YAE decode byte-exact, incl. an independently-verified floor-vs-truncation finding. G6/G7 planar interleave's CPU-port + display-path pieces closed (command-engine piece carried to M22). `ctest` 106/106. Closes D1/D5/D6; D7 IN-PROGRESS (M21 partial). QA PASS (`docs/m21-qa-signoff.md`).
 - **M22 (sprites + VDP command engine, v1.0.22)**: `SpriteEngine` (D2) and `VdpCommandEngine` (D3), both owned inside `V9958Vdp`. Sprite Mode 1/2 byte-exact per `SpriteChecker.cc/.hh` (EC/CC/IC bits; color-0/TP transparency — a fact-sheet-vs-source discrepancy resolved in favor of source). Full R#32-46 register file, all 13 commands via a hybrid execution model (10 atomic; LMCM/LMMC/HMMC event-driven, mirroring the M16 FDC DRQ/INTRQ precedent). D7 closes IN FULL via 5 new coordinate-address functions (confirmed to bypass R#2 entirely — a genuinely new finding). `ctest` 117/117. Closes D2/D3; D7 DONE in full. QA PASS (`docs/m22-qa-signoff.md`) via genuinely independent, adversarial scrutiny — QA hand-verified the raw A/B divergence numbers itself and corrected the developer's causal narrative.
 - **M23 (exact cycle timing, v1.0.23)**: Deliberately conservative scope, given this touches the highest-risk surface in the project (CPU-visible timing, adjacent to the zero-tolerance M9/M12 CPU-timing oracles). Closes C2 (Z80 HALT-R) in full: `Z80aCpu::step()`'s halted branch now calls `increment_refresh_register()`, and the already-existing machine-level formula automatically bills the correct 5T. Exactly one golden test deliberately updated (t3 4→5, elapsed_cycles 22→23). C1/D4 advance to IN-PROGRESS (M23 partial) with a real, tested, non-gating VDP access-timing foundation — the full slot tables and any actual CPU-execution gating explicitly declined this cycle, since the M21/M22 system tests already contain back-to-back `OUT (#98),A` writes that real gating could silently corrupt. `ctest` 121/121; all 10 named oracle suites plus all 6 M21/M22 device files confirmed genuinely untouched. QA PASS (`docs/m23-qa-signoff.md`) via exceptional scrutiny — QA independently re-ran the C2 A/B harness and designed its own exploratory probes to refine the developer's divergence hypothesis into a more precise, still-honest explanation.
 - **M24 (ZEXDOC/ZEXALL full parity sweep, v1.0.24)**: CPU-validation milestone — a genuine, generic `CpmBdosHarness` (zero zexall-specific knowledge) ran the real, GPL-licensed ZEXALL/ZEXDOC Z80 exerciser suite against the already-QA-verified Z80A CPU core to genuine CP/M warm-boot completion. **134/134 group verdicts PASS**, independently reproduced FOUR separate times from clean rebuilds (developer, coordinator, QA, post-fix confirmation), every time byte-for-byte identical (5,764,169,474 instructions/suite, 67/0 marker split). Adversarial self-check PASSED; openMSX A/B bounded-prefix PARITY independently re-run twice (developer, QA). `ctest` 124/124; zero changes to `src/devices/`/`src/peripherals/`/`src/core/`. QA's first-ever Conditional Pass this run (a real, if narrow, regression-harness gap — see Phase Status above) was fixed and reconfirmed per the human's explicit choice before tagging. Closes C3 in full.
 - **M25 (Sony speed-controller + hardware PAUSE + Ren-Sha Turbo, v1.0.25)**: First milestone implementing genuinely new, never-previously-scoped HB-F1XV-specific hardware. New `Mb670836PauseController` — a machine-level CPU-execution gate at the very top of `step_cpu_instruction()`, freezing PC/R/every register while engaged (distinct from the Z80's own `HALT`). New `RenshaTurbo` autofire, wired into `KeyboardMatrix`/`JoystickPorts` via additive OR-mask attach points. Zero changes to any CPU/device-core file; all 12 named zero-tolerance CPU-timing-oracle files confirmed byte-for-byte unchanged, independently reproduced three times (developer, coordinator, QA). `ctest` 130/130, including three separate from-scratch re-runs of the M24 ZEXALL/ZEXDOC sweep. Real, live openMSX A/B PARITY for Ren-Sha Turbo against the actual `Sony_HB-F1XV` machine (reproduced twice, developer and QA); Hardware PAUSE/Speed Controller honestly BLOCKED (openMSX models none of this Sony-specific hardware anywhere, independently confirmed three times). QA returned a **clean, unconditional Pass** — the Conditional-Pass stop condition did NOT fire this time. QA's sole finding (a "five"→"six" Sony-machine-XML citation undercount, Low/non-blocking) was fixed directly by the coordinator per QA's own recommendation. Closes C8 in full. **This closes the full M24-M25 continuation.**
+- **M26 (SDL3 Frontend, v1.0.26)**: The largest, most architecturally novel milestone to date — first frontend/presentation-layer code, first real-time loop, first real audio wiring. New `Hbf1xvMachine::on_vsync_boundary()` (a pure, mechanical `run_frame()`-body extraction, the ONLY behavior-affecting `src/machine/` change) lets a real-time SDL3 loop drive the CPU via `step_cpu_instruction()` without the `run_frame()` double-count hazard. Zero changes to any CPU/device/peripheral/core file, independently confirmed three times (developer, coordinator, QA), including all 12 CPU-timing-oracle files and `ym2413_opll.*` specifically. New `src/frontend/` (`Sdl3App`, `Sdl3VideoPresenter`, `Sdl3AudioPresenter`+`PsgAudioPump`, `Sdl3InputMapper`, `sdl3_cli`): zero-conversion `SDL_PIXELFORMAT_XRGB1555` video blit (pixel-readback-proven); real PSG audio wired for the first time in this project's history; a 71-entry keyboard mapping table plus joystick/PAUSE/Speed-Controller/Ren-Sha-Turbo bindings, exhaustively `SDL_PushEvent`-tested. YM2413/FM-PAC honestly, deliberately left silent — backlog E1 stays OPEN. The one authorized new debug capability — decoded-`FrameBuffer`→PNG capture — ships with a real, committed, independently-byte-reproduced example. A real environment finding (SDL3 not pre-installed, resolved by building the vendored source) was independently reproduced end-to-end THREE times (developer, coordinator, QA's own brand-new install). `ctest` 134/134 headless + 139-140/140 SDL3-ON, both under the real "dummy" video/audio drivers. QA returned a **clean, unconditional Pass with ZERO findings of any severity** — the cleanest QA cycle of this session. Closes C9 in full. Names a future **M27 "Production Hardening + Debug/Test Tooling"** milestone for everything else from the human's original debug/-tooling request.
 
 ## Standing watch-items (carried forward, none blocking)
 
@@ -113,13 +173,14 @@
 
 ## Indicative follow-on order (per `agent-protocol/state/deferred-backlog.md`)
 
-**The full M24-M25 continuation is now COMPLETE.** No milestone kicked off yet — awaiting the next
-human directive. Candidates: M26 SDL3 frontend (C9, now with a ready PAUSE/Speed-Controller/
-Ren-Sha-Turbo API surface to bind) · a future VDP-timing-depth milestone (C1/D4 remainder) · a
-future dedicated C5 real-disk-boot-trigger investigation (now unblocked on assets via `disks/`,
-DEC-0021) · the human's forward-flagged (2026-07-08) debug/-folder test-artifact request (e.g.
-rendered frames as PNGs) — explicitly deferred by the human until "after we complete M25," which
-has now happened; not yet raised/actioned.
+**M26 (SDL3 frontend) is now CLOSED.** No further milestone kicked off yet — awaiting the next
+human directive. Candidates: **M27 "Production Hardening + Debug/Test Tooling"** (named, not yet
+designed — audio capture to file, full CPU/memory/VRAM state-dump CLI wiring, keystroke-sequencing/
+scripted-input automation, broader production/stress testing) · a future VDP-timing-depth milestone
+(C1/D4 remainder) · a future dedicated C5 real-disk-boot-trigger investigation (now unblocked on
+assets via `disks/`, DEC-0021) · a future audio-rendering milestone for E1 (YM2413 DSP/synthesis
+depth, still OPEN, "paired with C9" per M17's own note — C9 is now done, so this pairing is
+unblocked whenever prioritized).
 
-- Updated At: 2026-07-08T11:15:00+09:00 (M25 CLOSED, tagged v1.0.25, DEC-0023 — the full M24-M25
-  continuation is complete; awaiting next human directive)
+- Updated At: 2026-07-08T16:20:00+09:00 (M26 CLOSED, tagged v1.0.26, DEC-0024 — QA zero findings;
+  awaiting next human directive)

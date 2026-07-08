@@ -886,3 +886,98 @@ add_executable(hbf1xv_m25_speed_pause_rensha_system_test
 target_link_libraries(hbf1xv_m25_speed_pause_rensha_system_test PRIVATE sony_msx_core)
 add_test(NAME hbf1xv_m25_speed_pause_rensha_system_test
     COMMAND hbf1xv_m25_speed_pause_rensha_system_test)
+
+# --- M26 SDL3 frontend (backlog C9): windowing/real-time loop, video/audio
+#     presentation, input mapping, decoded-FrameBuffer PNG capture --------
+# S1 (on_vsync_boundary() seam) and S4 (frame-dump capability) are headless-
+# buildable and registered here, OUTSIDE the SONY_MSX_ENABLE_SDL3 guard below
+# (docs/m26-planner-package.md §3, M26-S1/S4) -- the default headless ctest
+# suite gains exactly these two new cases; every other M26 test requires a
+# real SDL3 build and lives in the guarded block further down.
+add_executable(machine_hbf1xv_m26_vsync_boundary_integration_test
+    integration/machine/hbf1xv_m26_vsync_boundary_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m26_vsync_boundary_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m26_vsync_boundary_integration_test
+    COMMAND machine_hbf1xv_m26_vsync_boundary_integration_test)
+
+add_executable(machine_frame_dump_unit_test
+    unit/machine/frame_dump_unit_test.cpp
+)
+target_link_libraries(machine_frame_dump_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_frame_dump_unit_test COMMAND machine_frame_dump_unit_test)
+
+add_executable(frontend_psg_audio_pump_unit_test
+    unit/frontend/psg_audio_pump_unit_test.cpp
+)
+target_link_libraries(frontend_psg_audio_pump_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_psg_audio_pump_unit_test COMMAND frontend_psg_audio_pump_unit_test)
+
+add_executable(frontend_sdl3_cli_unit_test
+    unit/frontend/sdl3_cli_unit_test.cpp
+)
+target_link_libraries(frontend_sdl3_cli_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_sdl3_cli_unit_test COMMAND frontend_sdl3_cli_unit_test)
+
+# --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
+#     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The
+#     default headless (-DSONY_MSX_ENABLE_SDL3=OFF) ctest suite is completely
+#     unaffected by this block -- confirmed by construction (CMake never
+#     evaluates it when the option is OFF). Every test here runs entirely
+#     under SDL_VIDEO_DRIVER=dummy/SDL_AUDIO_DRIVER=dummy (A-M26-2), with NO
+#     real display/audio hardware required, and NO SDL_Delay-based pacing
+#     anywhere in the ctest execution path (A-M26-8) -- every test calls
+#     Sdl3App::run_one_frame() directly, a bounded number of times, never
+#     run_interactive().
+if(SONY_MSX_ENABLE_SDL3)
+    add_executable(frontend_sdl3_app_headless_integration_test
+        integration/frontend/sdl3_app_headless_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_headless_integration_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(frontend_sdl3_app_headless_integration_test
+        PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+    add_test(NAME frontend_sdl3_app_headless_integration_test
+        COMMAND frontend_sdl3_app_headless_integration_test)
+
+    add_executable(frontend_sdl3_video_presenter_pixel_integration_test
+        integration/frontend/sdl3_video_presenter_pixel_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_video_presenter_pixel_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_video_presenter_pixel_integration_test
+        COMMAND frontend_sdl3_video_presenter_pixel_integration_test)
+
+    add_executable(frontend_sdl3_audio_presenter_integration_test
+        integration/frontend/sdl3_audio_presenter_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_audio_presenter_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_audio_presenter_integration_test
+        COMMAND frontend_sdl3_audio_presenter_integration_test)
+
+    add_executable(frontend_sdl3_input_mapper_integration_test
+        integration/frontend/sdl3_input_mapper_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_input_mapper_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_input_mapper_integration_test
+        COMMAND frontend_sdl3_input_mapper_integration_test)
+
+    set(SONY_MSX_DISKS_DIR_ABS "${CMAKE_SOURCE_DIR}/disks")
+
+    add_executable(frontend_sdl3_cli_session_integration_test
+        integration/frontend/sdl3_cli_session_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_cli_session_integration_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(frontend_sdl3_cli_session_integration_test PRIVATE
+        SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+        SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}"
+        SONY_MSX_DISKS_DIR="${SONY_MSX_DISKS_DIR_ABS}")
+    add_test(NAME frontend_sdl3_cli_session_integration_test
+        COMMAND frontend_sdl3_cli_session_integration_test)
+
+    add_executable(hbf1xv_m26_sdl3_system_test
+        system/hbf1xv_m26_sdl3_system_test.cpp
+    )
+    target_link_libraries(hbf1xv_m26_sdl3_system_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(hbf1xv_m26_sdl3_system_test
+        PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+    add_test(NAME hbf1xv_m26_sdl3_system_test COMMAND hbf1xv_m26_sdl3_system_test)
+endif()

@@ -603,3 +603,151 @@ Use one section per milestone.
   that same script's own earlier self-caught escaping bug) rather than routing back to the developer.
   Ledger status transition: backlog C8 -> DONE (M25). **This closes the full M24-M25 continuation**
   the human's 2026-07-08 directive requested.
+
+## M26 (Kickoff 2026-07-08)
+
+- Milestone ID: M26
+- Title: SDL3 Frontend (closes C9)
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Implement deferred-backlog row **C9** (SDL3 frontend — video/audio/input presentation, in baseline scope, not yet built). A real-time SDL3 application layer: window + main loop driving the existing `run_frame()`/`step_cpu_instruction()` core, video presentation of the M21 `VdpFrameRenderer`/`FrameBuffer` RGB555 output, audio from the existing PSG/YM2413 devices, and keyboard/joystick input mapped into the M15 `KeyboardMatrix`/`JoystickPorts` APIs (including the M25 PAUSE/Speed-Controller/Ren-Sha-Turbo surfaces built for exactly this). Coordinator's explicit scope-boundary decision (human delegated this call): M26 includes ONLY a minimal, new decoded-`FrameBuffer`-to-real-color-PNG capture capability (under `debug/frames/`) as a testability necessity — NOT the broader debug/-tooling request (audio capture, full CPU/memory/VRAM dump CLI wiring, keystroke-sequencing automation, production/stress testing), which is deferred whole-cloth to a new **M27 "Production Hardening + Debug/Test Tooling"** milestone. Planner must resolve how M26's own tests run headlessly in `ctest` without a real display/audio device (SDL3's dummy/null driver support, grounded in `references/sdl3/`, not assumed).
+- Acceptance Criteria (planner to detail): genuine SDL3 frontend that builds and runs (`-DSONY_MSX_ENABLE_SDL3=ON`); deterministic unit/integration/system tests running headlessly in `ctest`; the new PNG frame-capture capability with at least one real committed PNG under `debug/frames/`; full deferred-backlog review; M27's scope named as a forward-looking note only, not designed here; QA sign-off before closure.
+- Unit/Integration Tests Required (planner to detail).
+- Regression Scope: all M1-M25 suites remain green; QA sign-off required before closure.
+- Status: Done. CLOSED by coordinator release decision on 2026-07-08 (DEC-0024/REQ-M26-004);
+  tagged git `v1.0.26`. Closes deferred-backlog row C9 in full. Largest, most architecturally
+  novel milestone to date; QA returned zero findings of any severity.
+- Details: `docs/m26-planner-package.md` accepted (RESP-M26-001). Implementation delivered per
+  `docs/m26-implementation-report.md` + `docs/m26-frontend-evidence.md`.
+
+  **`Hbf1xvMachine::on_vsync_boundary()`** — a pure, mechanical extraction of `run_frame()`'s
+  pre-M26 body (frame counter, `vdp_.on_vsync()`, `pause_controller_.on_vsync()`,
+  `last_vsync_cycle_` bookkeeping), EXCLUDING the `scheduler_.tick(kFrameCycles)` call; `run_frame()`
+  itself becomes `scheduler_.tick(kFrameCycles); on_vsync_boundary();` — textually different,
+  behaviorally IDENTICAL for every pre-M26 caller (confirmed both by direct inspection and by a new
+  regression-guard test). This is the ONLY behavior-affecting change to `src/machine/` this
+  milestone makes (`git diff --stat src/devices src/peripherals src/core` confirmed EMPTY,
+  immediately after this edit, before proceeding to anything else, per the dispatch's explicit
+  instruction). It exists so a real-time SDL3 loop can drive the CPU purely via
+  `step_cpu_instruction()` in a sub-loop to the frame boundary, then call `on_vsync_boundary()`
+  directly — never `run_frame()` in the same session (A-M26-5, the exact double-count hazard M25's
+  own R-M25-5 already named at the test level).
+
+  **New `src/frontend/`** (SDL3-gated, compiled only under `-DSONY_MSX_ENABLE_SDL3=ON`): `Sdl3App`
+  (window/renderer/audio-stream lifecycle, machine ownership + asset loading, the deterministic
+  `run_one_frame()` core step vs. the real-time `run_interactive()` wrapper — `SDL_Delay`-paced,
+  NEVER exercised by `ctest`); `Sdl3VideoPresenter` (owns an `SDL_PIXELFORMAT_XRGB1555` texture —
+  bit-for-bit identical to `FrameBuffer`'s own documented RGB555 layout, A-M26-3 — uploaded via
+  `SDL_UpdateTexture` with ZERO per-pixel conversion in this project's own code, independently
+  PROVEN via a real `SDL_RenderReadPixels` pixel-readback test, not merely assumed);
+  `Sdl3AudioPresenter` (real `SDL_OpenAudioDeviceStream`/`SDL_PutAudioStreamData` wiring around a
+  new, SDL3-INDEPENDENT `PsgAudioPump` — the actual PSG/YM2149 generator-advance WIRING, headlessly
+  `ctest`-provable against a hand-computed square-wave oracle, discharging R-M26-4's
+  "untested-in-anger" risk); `Sdl3InputMapper` (a new, disclosed, first-principles 71-entry
+  `SDL_Scancode`→11×8-keyboard-matrix table for rows 0-8, independently cross-checked against this
+  project's own already-established ground truth — `RenshaTurbo`'s M25 doc comment citing "keyboard
+  row 8 bit 0 (SPACE)" matches the table's own row=8/column=0/`SDL_SCANCODE_SPACE` entry exactly —
+  plus joystick digital button/axis mapping and PAUSE/Speed-Controller/Ren-Sha-Turbo PC-keybindings,
+  A-M26-7); `sdl3_cli.h` (`--bios-dir`/`--disk`(A-M26-6)/`--cart1`/`--cart1-type`/`--cart2`/
+  `--cart2-type`/`--max-frames`, reusing the existing, unmodified M19 `cartridge_cli` parser
+  verbatim, never reimplemented).
+
+  **YM2413/FM-PAC is honestly, deliberately left SILENT** in the audio mix — a hard, non-negotiable
+  constraint (R-M26-5). It has real register-file/channel/rhythm-decode fidelity (M17, backlog B3)
+  but ZERO waveform-synthesis capability (backlog **E1**, still OPEN); inventing a DSP pipeline
+  (log-sin/exp operator tables, the 128-level EG rate mechanism, etc.) would be exactly the kind of
+  unfounded shortcut this project's culture explicitly disallows. Independently re-verified this
+  cycle: `git diff --stat -- src/devices/audio/ym2413_opll.{h,cpp}` is EMPTY, and `find src -iname
+  "*ym2413*"` shows only the two pre-existing M17 files — no new parallel YM2413-audio file exists
+  anywhere. `Sdl3AudioPresenter`'s own doc comment and the SDL3 app's startup message both disclose
+  this explicitly to a human user.
+
+  **The ONE new debug/testing capability the coordinator authorized** — decoded-`FrameBuffer`→real
+  color PNG capture (NOT raw VRAM bytes, unlike the pre-existing `tools/mem-to-png.py`) — new
+  `src/machine/frame_dump.h`/`.cpp` (headless-buildable, reusing the existing, already-proven
+  `debug_dump::serialize_region()` folded-hex routine — genuine reuse, not a parallel
+  reimplementation) + new `tools/frame-to-png.py` (mirroring `tools/mem-to-png.py`'s exact
+  determinism discipline: DEFLATE stored blocks only, a hermetic `--self-check` with a golden
+  SHA-256). Ships with a real, committed example: `debug/frames/m26-example-boot.png` (256×192,
+  24-bit truecolor, 16 vertical color bars spanning all 16 palette entries of a GRAPHIC4/SCREEN5
+  test scene) + its source `debug/frames/m26-example-boot.frame` dump, produced via a new
+  `sony_msx_headless --frame-dump-demo` evidence-generation CLI mode that drives the VDP directly
+  through the real `#98`/`#99`/`#9A` port protocol via the existing, non-perturbing
+  `debug_io_write()` seam (M13) — zero CPU driver program/Z80 assembly needed. Both files are
+  exempted from the pre-existing `/debug/**/*.png` blanket-ignore rule via two new, explicit `!`
+  `.gitignore` exceptions.
+
+  **A real, empirically-confirmed environment finding (A-M26-1/R-M26-1), reported honestly as
+  instructed rather than assumed either way**: SDL3 was NOT pre-installed in this execution
+  environment — a bare `cmake -S . -B build_probe -DSONY_MSX_ENABLE_SDL3=ON` genuinely failed with
+  `Could not find a package configuration file provided by "SDL3"`. However, the project's own
+  vendored `references/sdl3/` tree is a complete, buildable SDL3 3.5.0 source distribution
+  (zlib-licensed — permissive, categorically different from the openMSX GPL-isolation concern,
+  since building/linking against it as a binary dependency is the normal, intended use of a
+  zlib-licensed library and does not copy any of its source into `src/`). Built and installed once,
+  locally, to `build/_sdl3_install/` (gitignored, not committed, fully reproducible via a documented
+  `cmake`/`cmake --build`/`cmake --install` sequence against `references/sdl3/`, recorded in
+  `docs/m26-implementation-report.md` §2). With `-DCMAKE_PREFIX_PATH=<repo>/build/_sdl3_install`,
+  `-DSONY_MSX_ENABLE_SDL3=ON` now configures and builds `sony_msx_sdl3.exe` cleanly. The "dummy"
+  video/audio driver mechanism (A-M26-2, grounded by directly reading
+  `references/sdl3/src/video/dummy/SDL_nullvideo.c` and `.../audio/dummy/SDL_dummyaudio.c`) was then
+  independently, empirically confirmed to work end to end — NOT merely assumed from the source
+  read — via a real `sony_msx_sdl3.exe --hidden-window --max-frames 5 --bios-dir bios` invocation
+  under `SDL_VIDEO_DRIVER=dummy SDL_AUDIO_DRIVER=dummy`: real `SDL_Init`/window/renderer/
+  audio-stream creation, 5 real emulated frames, clean exit code 0.
+
+  Headless suite (`-DSONY_MSX_ENABLE_SDL3=OFF`, the default): **134/134** (130 prior M1-M25 + 4 new
+  headless-buildable M26 tests: `machine_hbf1xv_m26_vsync_boundary_integration_test`,
+  `machine_frame_dump_unit_test`, `frontend_psg_audio_pump_unit_test`, `frontend_sdl3_cli_unit_test`),
+  including the slow `hbf1xv_m24_zexall_system_test` re-run to completion, run directly/
+  synchronously (not abandoned behind a background wait, per the dispatch's explicit instruction —
+  the actual `ctest` invocation genuinely exceeds this environment's single-foreground-call time
+  budget, a real platform constraint; the developer stayed on the task, independently monitored the
+  background process's live CPU usage as a sanity check, and captured its real, completed output).
+  SDL3-ON suite (a SECOND, dedicated build directory): **140/140** (134 shared, re-verified in this
+  configuration too + 6 new SDL3-gated: `frontend_sdl3_app_headless_integration_test`,
+  `frontend_sdl3_video_presenter_pixel_integration_test`,
+  `frontend_sdl3_audio_presenter_integration_test`,
+  `frontend_sdl3_input_mapper_integration_test` (71/71 mapped keys exhaustively `SDL_PushEvent`-
+  injection tested, plus PAUSE/Speed-Controller/Ren-Sha-Turbo bindings and an unmapped-scancode
+  regression guard), `frontend_sdl3_cli_session_integration_test` (real `roms/aleste.rom` +
+  `disks/msxdos22.dsk` assets), `hbf1xv_m26_sdl3_system_test`), all entirely under
+  `SDL_VIDEO_DRIVER=dummy`/`SDL_AUDIO_DRIVER=dummy`, zero `SDL_Delay` calls anywhere in any `ctest`
+  execution path (grep-confirmed).
+
+  Real openMSX A/B evidence (`docs/m26-frontend-evidence.md`): honestly, mostly **BLOCKED (N/A)** —
+  neither engine's SDL/audio-hardware presentation output has a comparable introspection point
+  (mirrors the established M21-computed-pixel-color and M25-PAUSE-Speed-Controller BLOCKED-
+  sub-claim precedent). The one genuinely comparable sub-claim — input-mapping TABLE row/column
+  correctness — is fully discharged WITHOUT a new A/B technique by the existing, already-verified
+  M15 `KeyboardMatrix`/`JoystickPorts` contract tests plus M26's own exhaustive `SDL_PushEvent`-
+  injection tests. Per Acceptance Criterion 10, this disposition does NOT gate closure. An explicit,
+  honest, non-fabricated human-observed-only verification checklist (§4 of the evidence doc) is
+  named for whichever human next launches the real, non-dummy-driver `sony_msx_sdl3.exe`.
+
+  Full 34-row deferred-backlog review completed (`agent-protocol/state/deferred-backlog.md`) — C9 →
+  IN-PROGRESS (M26 implementation complete, pending QA), target closes IN FULL at coordinator
+  closure; E1 re-affirmed OPEN with an honest cross-reference note (confirms E1's own "paired with
+  C9" candidate-owner note was prescient); all other 32 rows re-affirmed unchanged. Ledger status
+  transition to DONE (M26) and any `v1.0.26` tag are reserved for the coordinator at closure.
+
+  **QA (`docs/m26-qa-signoff.md`, RESP-M26-003) independently reproduced everything from TWO
+  genuinely clean, from-scratch rebuilds, plus a THIRD, fully independent rebuild of the vendored
+  SDL3 source to a brand-new install directory neither the developer nor coordinator had touched**
+  — confirming the environment finding is genuinely reproducible, not a one-off fluke. Headless
+  134/134 (including a fresh 30.8-minute ZEXALL/ZEXDOC re-run, byte-identical to every prior
+  recorded run); SDL3-ON 139/139, dummy drivers set externally at the shell level. Cross-checked
+  every one of the 20 new files' line counts against the implementation report's own tables (exact
+  match on all), every cited SDL3 API/doc-comment against the actual vendored headers, and
+  independently re-traced the developer's self-discovered `SDL_PollEvent` poll-batching sentinel
+  finding to `SDL_events.c` directly. Launched the real `sony_msx_sdl3.exe` itself three times
+  (cartridge, disk, `--help`) — all exit 0. Regenerated the committed PNG from the committed dump
+  and confirmed a byte-identical SHA-256 match. **QA found zero findings of any severity** — the
+  cleanest QA cycle of this entire session (every prior milestone's QA cycle found at least one
+  Low-severity documentation-precision nit; this one, despite deliberately searching for exactly
+  that class of issue, found none beyond one trivial, non-gating doc-comment imprecision
+  (`run_frame_dump_demo()` says "256×212," the actual committed evidence is 256×192 — harmless,
+  not tracked as actionable). **Sign-off: Pass** (clean, unconditional). Per the milestone's own
+  standing directive, the coordinator proceeded through the release-decision/tag step without an
+  additional human pause.

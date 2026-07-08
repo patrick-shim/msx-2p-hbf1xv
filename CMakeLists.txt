@@ -64,6 +64,9 @@ add_library(sony_msx_core STATIC
     src/machine/memory_region.cpp
     src/machine/debug_dump.cpp
     src/machine/debug_event_log.cpp
+    src/machine/frame_dump.cpp
+    src/frontend/sdl3_cli.cpp
+    src/frontend/psg_audio_pump.cpp
 )
 
 target_include_directories(sony_msx_core PUBLIC src)
@@ -74,8 +77,16 @@ target_link_libraries(sony_msx_headless PRIVATE sony_msx_core)
 if(SONY_MSX_ENABLE_SDL3)
     find_package(SDL3 CONFIG REQUIRED)
 
+    add_library(sony_msx_sdl3_frontend STATIC
+        src/frontend/sdl3_app.cpp
+        src/frontend/sdl3_video_presenter.cpp
+        src/frontend/sdl3_audio_presenter.cpp
+        src/frontend/sdl3_input_mapper.cpp
+    )
+    target_link_libraries(sony_msx_sdl3_frontend PUBLIC sony_msx_core SDL3::SDL3)
+
     add_executable(sony_msx_sdl3 src/frontend/sdl3_main.cpp)
-    target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_core SDL3::SDL3)
+    target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_sdl3_frontend)
 endif()
 
 add_subdirectory(tests)

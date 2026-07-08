@@ -78,6 +78,23 @@ public:
     void map_flat_ram();
 
     void run_frame();
+    // Frame-boundary bookkeeping for a REAL-TIME driver (the M26 SDL3
+    // frontend) that steps the CPU itself via step_cpu_instruction() in a
+    // sub-loop until elapsed_cycles() reaches a frame_cycles_per_frame()
+    // boundary, rather than using the coarse run_frame() tick (which does
+    // NOT drive the CPU at all -- see run_frame()'s own body/definition).
+    // Performs EXACTLY run_frame()'s non-scheduler-tick side effects (frame
+    // counter, VDP on_vsync(), pause-controller on_vsync(), last-vsync
+    // bookkeeping) but explicitly does NOT call scheduler_.tick(kFrameCycles)
+    // -- the caller's own step_cpu_instruction() loop has ALREADY advanced
+    // the scheduler by that amount. Calling this AND run_frame() for the
+    // same frame boundary in the same session would double-count elapsed
+    // cycles (the same class of hazard already documented at the test level,
+    // R-M25-5) -- a session must pick ONE driving model and never mix them.
+    // A pure, behavior-preserving extraction of run_frame()'s existing body
+    // (docs/m26-planner-package.md §2.3, M26-S1): run_frame() itself is
+    // unchanged in observable behavior for every pre-M26 caller.
+    void on_vsync_boundary();
     void run_frames(std::uint32_t frames);
     void run_cycles(std::uint64_t cycles);
     bool run_until_cycle(std::uint64_t target_cycle);
@@ -313,6 +330,18 @@ public:
 
     // Write the execution-event log to <root>/logs/<filename>.
     bool write_event_log(const std::string& filename) const;
+
+    // Decoded-FrameBuffer -> dump capture (M26-S4, the ONE new debug/testing
+    // capability this milestone authorizes -- docs/m26-planner-package.md
+    // §2.5). Mirrors write_state_dump()/write_cpu_trace()/write_event_log()
+    // exactly (same directory-creation/error-handling pattern, same
+    // debug_root_-relative convention); writes to <root>/frames/<filename>.
+    // Pure/const, non-perturbing to CPU/memory/clock state -- render_frame()
+    // is itself already a pure, on-demand VRAM/register snapshot (M21).
+    [[nodiscard]] std::string serialize_frame_dump(
+        devices::video::Field field = devices::video::Field::Progressive) const;
+    bool write_frame_dump(const std::string& filename,
+                          devices::video::Field field = devices::video::Field::Progressive);
 
 private:
     static bool write_text_file(const std::filesystem::path& directory, const std::string& filename,

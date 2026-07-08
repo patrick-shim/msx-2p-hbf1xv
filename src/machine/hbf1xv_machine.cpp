@@ -7,6 +7,7 @@
 
 #include "machine/debug_dump.h"
 #include "machine/debug_format.h"
+#include "machine/frame_dump.h"
 
 namespace sony_msx::machine {
 
@@ -362,8 +363,14 @@ const std::vector<std::string>& Hbf1xvMachine::rom_diagnostics() const {
     return rom_diagnostics_;
 }
 
-void Hbf1xvMachine::run_frame() {
-    scheduler_.tick(kFrameCycles);
+void Hbf1xvMachine::on_vsync_boundary() {
+    // M26-S1 (docs/m26-planner-package.md §2.3): a pure, mechanical extraction
+    // of run_frame()'s pre-M26 body, EXCLUDING the scheduler_.tick(kFrameCycles)
+    // call -- a real-time driver's own step_cpu_instruction() sub-loop has
+    // already advanced the scheduler by an equivalent amount before calling
+    // this. Same four operations, same order as before: frame counter, VDP
+    // VBlank delivery, the M25 Speed-Controller duty-cycle hook, and the M23-S2
+    // last-vsync bookkeeping.
     ++frame_count_;
 
     // Deterministic per-frame VBlank delivery (M14-S5). run_frame advances the
@@ -385,6 +392,11 @@ void Hbf1xvMachine::run_frame() {
     // cycles_since_last_vsync()/vdp_cycle_position() can report a raster
     // position relative to it. Does not affect scheduling/CPU timing.
     last_vsync_cycle_ = elapsed_cycles();
+}
+
+void Hbf1xvMachine::run_frame() {
+    scheduler_.tick(kFrameCycles);
+    on_vsync_boundary();
 }
 
 void Hbf1xvMachine::run_frames(const std::uint32_t frames) {
@@ -873,6 +885,14 @@ bool Hbf1xvMachine::write_cpu_trace(const std::string& filename) const {
 
 bool Hbf1xvMachine::write_event_log(const std::string& filename) const {
     return write_text_file(debug_root_ / "logs", filename, debug_event_log_.serialize());
+}
+
+std::string Hbf1xvMachine::serialize_frame_dump(const devices::video::Field field) const {
+    return frame_dump::serialize_frame_dump(render_frame(field));
+}
+
+bool Hbf1xvMachine::write_frame_dump(const std::string& filename, const devices::video::Field field) {
+    return write_text_file(debug_root_ / "frames", filename, serialize_frame_dump(field));
 }
 
 }  // namespace sony_msx::machine

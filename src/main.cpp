@@ -523,6 +523,73 @@ int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint
     return 0;
 }
 
+// M26-S4 decoded-FrameBuffer-dump evidence generator (backlog C9, the ONE new
+// debug/testing capability this milestone authorizes -- docs/m26-planner-
+// package.md §2.5 point 3). Drives a colorful, deterministic GRAPHIC4
+// (SCREEN5) test scene directly through the real #98/#99/#9A VDP port
+// protocol via the existing, non-perturbing debug_io_write() seam (M13) --
+// NO CPU driver program needed (mirrors tools/gen-m21-vdp-render-probe.py's
+// own port-write sequences, independently re-expressed here in C++ rather
+// than assembled Z80). Vertical color bars spanning all 16 palette entries,
+// with a vivid, hand-chosen 16-entry palette -- a real, recognizable,
+// deterministic picture, not a blank/near-blank boot screen. Calls
+// machine.write_frame_dump() to produce the committed evidence pipeline's
+// raw dump; tools/frame-to-png.py converts it to the final committed PNG.
+int run_frame_dump_demo(const std::string& out_path) {
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+
+    auto set_register = [&](const int reg, const std::uint8_t value) {
+        machine.debug_io_write(0x99, value);
+        machine.debug_io_write(0x99, static_cast<std::uint8_t>(0x80 | (reg & 0x3F)));
+    };
+    auto set_write_address = [&](const std::uint16_t addr) {
+        machine.debug_io_write(0x99, static_cast<std::uint8_t>(addr & 0xFF));
+        machine.debug_io_write(0x99, static_cast<std::uint8_t>(0x40 | ((addr >> 8) & 0x3F)));
+    };
+    auto vram_write = [&](const std::uint8_t value) { machine.debug_io_write(0x98, value); };
+    auto palette_write = [&](const int r3, const int g3, const int b3) {
+        machine.debug_io_write(0x9A, static_cast<std::uint8_t>(((r3 & 7) << 4) | (b3 & 7)));
+        machine.debug_io_write(0x9A, static_cast<std::uint8_t>(g3 & 7));
+    };
+
+    // GRAPHIC4 mode bits (M3=1,M4=1; R#1 stays 0 from cold_boot's reset, so
+    // M1=M2=0 -> mode base 0x0C, VdpMode::Graphic4 -- devices/video/
+    // vdp_mode.h's independently re-derived base-byte formula).
+    set_register(0, 0x06);
+
+    // A vivid, hand-chosen 16-entry palette (3-bit R/G/B each), entry 0 kept
+    // black (the conventional MSX2 background index).
+    const int palette_rgb[16][3] = {
+        {0, 0, 0}, {7, 0, 0}, {0, 7, 0}, {0, 0, 7}, {7, 7, 0}, {7, 0, 7}, {0, 7, 7}, {7, 7, 7},
+        {7, 3, 0}, {3, 7, 0}, {0, 7, 3}, {0, 3, 7}, {3, 0, 7}, {7, 0, 3}, {4, 4, 4}, {2, 2, 2},
+    };
+    set_register(16, 0x00);  // R#16 palette pointer -> entry 0
+    for (const auto& c : palette_rgb) {
+        palette_write(c[0], c[1], c[2]);
+    }
+
+    // 256x212 GRAPHIC4 canvas: 128 bytes/row (4bpp packed, 2px/byte, high
+    // nibble first -- render_graphic4()'s own documented convention),
+    // 16 vertical color bars of 16px each (8 bytes/bar; 8*16=128 matches the
+    // row length exactly), identical on every row.
+    set_write_address(0x0000);
+    for (int row = 0; row < 212; ++row) {
+        for (int byte_index = 0; byte_index < 128; ++byte_index) {
+            const std::uint8_t bar = static_cast<std::uint8_t>((byte_index / 8) & 0x0F);
+            vram_write(static_cast<std::uint8_t>((bar << 4) | bar));
+        }
+    }
+
+    const bool ok = machine.write_frame_dump(out_path);
+    if (!ok) {
+        std::cerr << "frame-dump-demo: failed to write " << out_path << "\n";
+        return 2;
+    }
+    std::cerr << "frame-dump-demo: wrote " << machine.debug_root().string() << "/frames/" << out_path << "\n";
+    return 0;
+}
+
 // M20-S4 Halnote/MSX-JE firmware openMSX A/B parity mode (backlog B4+B6).
 // Cold-boots with real ROM assets from <bios_dir> (the real bios/f1xvfirm.rom,
 // unmodified -- no synthetic swap needed, planner §2.6/A-M20 grounding: this
@@ -781,6 +848,14 @@ int main(int argc, char** argv) {
         const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
         const std::string out_path = argv[5];
         return run_ym2413_parity(bin_path, base, max_steps, out_path);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--frame-dump-demo") {
+        if (argc < 3) {
+            std::cerr << "usage: " << argv[0] << " --frame-dump-demo <out_filename_under_debug/frames/>\n";
+            return 2;
+        }
+        return run_frame_dump_demo(argv[2]);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--halnote-parity") {
