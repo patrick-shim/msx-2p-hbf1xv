@@ -1,23 +1,55 @@
 # Current Phase
 
-- Objective: The M21-M25 continuation is COMPLETE (v1.0.21..v1.0.25). The human's earlier-deferred
-  debug/-folder artifact request was raised (2026-07-08) after M25 completed, as promised; the
-  human then directed (2026-07-08) "let's do SDL3 in M26 first. You can plan debug features as you
-  go or define M27 as PRODUCTION and do thorough testing and its needed tools and features there.
-  your call." Coordinator's scope-boundary decision (delegated authority exercised): M26 = SDL3
-  frontend (C9) with ONLY a minimal, new decoded-`FrameBuffer`-to-PNG capture capability folded in
-  (a genuine testability necessity — nothing else can visually verify SDL3 renders correctly);
-  everything else from the debug/-tooling request (audio capture, full CPU/memory/VRAM dump CLI
-  wiring, keystroke-sequencing automation, production/stress testing) is explicitly deferred
-  whole-cloth to a new **M27 "Production Hardening + Debug/Test Tooling"** milestone, not designed
-  in detail yet. Same established cadence continues: planner → developer → QA → release decision,
-  proceeding through tag without an extra pause on a clean QA PASS, STOP and consult the human
-  otherwise. Standing "zero license-sensitive future work" directive remains in force (project
-  memory `feedback_license_sensitive_scope.md`).
-- Active Phase: M26 CLOSED (v1.0.26). **The SDL3 frontend is complete.** No further milestone has
-  been kicked off yet — M27 ("Production Hardening + Debug/Test Tooling") is named as the next
-  indicative milestone but not yet designed or kicked off; awaiting the next human directive.
+- Objective: The M21-M27 continuation is COMPLETE (v1.0.21..v1.0.27). The human's earlier-deferred
+  debug/-folder artifact request (raised 2026-07-08 after M25 completed) was fully discharged
+  across two milestones per the human's own delegated scope-boundary call: M26 = SDL3 frontend (C9)
+  with ONLY a minimal, new decoded-`FrameBuffer`-to-PNG capture capability folded in; everything
+  else (audio capture, full CPU/memory/VRAM dump CLI wiring, keystroke-sequencing automation,
+  production/stress testing) went to M27 "Production Hardening + Debug/Test Tooling", now also
+  closed. Same established cadence continued throughout: planner → developer → QA → release
+  decision, proceeding through tag without an extra pause on a clean QA PASS, STOP and consult the
+  human otherwise (this fired once, for M24). Standing "zero license-sensitive future work" and
+  "don't run the slow test unless necessary" directives remain in force (project memories
+  `feedback_license_sensitive_scope.md` / `feedback_slow_test_cadence.md`). No further milestone has
+  been requested by the human yet.
+- Active Phase: M27 ("Production Hardening + Debug/Test Tooling") — CLOSED (2026-07-08,
+  DEC-0025/REQ-M27-004, git tag v1.0.27). Planner package accepted (`docs/m27-planner-package.md`,
+  RESP-M27-001), developer implementation complete (`docs/m27-implementation-report.md`,
+  RESP-M27-002), QA returned a clean, unconditional Pass (`docs/m27-qa-signoff.md`, RESP-M27-003).
+  M26 (SDL3 frontend, v1.0.26) and M27 both CLOSED. No further milestone kicked off yet — awaiting
+  the next human directive.
 - Phase Owner: MSX Master Agent (coordinator)
+- Phase Status (M27, closed): implementation complete for all four named items — (1) full
+  CPU/memory/VRAM state-dump CLI wiring via a new headless `--debug-session` mode + additive SDL3
+  `Sdl3AppConfig`/`sdl3_cli` fields; (2) real, decoded PSG audio capture (`src/frontend/
+  psg_audio_dump.*` + `tools/audio-dump-to-wav.py`, genuinely reusing M26's `PsgAudioPump`), a real,
+  committed, non-silent example WAV (`debug/sounds/m27-example-tone.wav`); (3) keystroke-sequencing/
+  scripted-input automation (`src/peripherals/msx_key_names.*` + `src/machine/input_script.*`,
+  `--input-script` on both executables, a hard SDL3-gated cross-consistency test proving the new
+  headless key-name table agrees with `Sdl3InputMapper::scancode_map()` exactly); (4) event-log CLI
+  wiring + a genuine, adversarially-validated, byte-for-byte replay-determinism system test (two
+  independent machines byte-identical event logs; a third, deliberately-diverged machine produces a
+  genuinely different one). Zero changes to any pre-existing file under `src/devices/`,
+  `src/peripherals/`, or `src/core/` (confirmed via `git diff v1.0.26` at 3 separate gates); zero new
+  `Hbf1xvMachine` method needed. Headless fast-subset 140/140; SDL3-ON fast-subset 149/149; the slow
+  `hbf1xv_m24_zexall_system_test` not run this cycle per the standing `feedback_slow_test_cadence.md`
+  directive (git-diff-confirmed genuinely unnecessary at every gate, by developer, coordinator, AND
+  QA independently). This milestone closes zero backlog rows (infrastructure/tooling scope); C5's
+  row gained a factual, non-status-changing cross-reference note only; backlog E1 remains OPEN,
+  untouched.
+
+  **QA (`docs/m27-qa-signoff.md`, RESP-M27-003) returned a clean, unconditional Pass** — zero
+  blocker/high/medium-severity findings; two Low-severity, non-blocking notes, neither requiring a
+  fix (a narrative-vs-acceptance-criterion non-discrepancy on which backlog row gets a
+  cross-reference note; the audio demo's single-channel design covering half the documented PCM
+  range). QA independently rebuilt both configurations from clean, reproduced both fast-subset
+  counts exactly, independently launched the real `sony_msx_headless.exe --debug-session` binary
+  itself twice (byte-identical event logs/SHA-256), independently decoded the committed WAV via raw
+  PCM read, independently confirmed the 71/71 key-name cross-consistency table's completeness, and
+  independently judged the flat-RAM-driver negative-control design correction genuinely sound.
+  Per the standing continuation cadence and this milestone's own clean PASS, the coordinator
+  proceeded to close M27 and tag `v1.0.27` without an additional human pause. Full details in
+  `docs/m27-implementation-report.md` / `docs/m27-qa-signoff.md`.
 - Phase Status (M26): closed by coordinator release decision (2026-07-08, DEC-0024/REQ-M26-004).
   First frontend/presentation-layer milestone, and the largest/most architecturally novel to date.
   `Hbf1xvMachine::on_vsync_boundary()` — a pure,
@@ -134,7 +166,7 @@
   invocation still includes it for real. All 4 new M26 headless tests and all 6 new M26 SDL3-gated
   tests are fast (no new slow-sweep-class test was added this cycle).
 
-## M21-M26 run summary
+## M21-M27 run summary
 
 - **M21 (VDP rendering depth, v1.0.21)**: First pixel-rendering output path. `VdpFrameRenderer`/`FrameBuffer` — deterministic, pull-model, frozen-register-snapshot renderer, RGB555 pixels, zero new clock consumer. Every Target-Spec mode byte-exact (GRAPHIC7 GGGRRRBB byte layout; MULTICOLOR's real 256-wide canvas). YJK/YJK+YAE decode byte-exact, incl. an independently-verified floor-vs-truncation finding. G6/G7 planar interleave's CPU-port + display-path pieces closed (command-engine piece carried to M22). `ctest` 106/106. Closes D1/D5/D6; D7 IN-PROGRESS (M21 partial). QA PASS (`docs/m21-qa-signoff.md`).
 - **M22 (sprites + VDP command engine, v1.0.22)**: `SpriteEngine` (D2) and `VdpCommandEngine` (D3), both owned inside `V9958Vdp`. Sprite Mode 1/2 byte-exact per `SpriteChecker.cc/.hh` (EC/CC/IC bits; color-0/TP transparency — a fact-sheet-vs-source discrepancy resolved in favor of source). Full R#32-46 register file, all 13 commands via a hybrid execution model (10 atomic; LMCM/LMMC/HMMC event-driven, mirroring the M16 FDC DRQ/INTRQ precedent). D7 closes IN FULL via 5 new coordinate-address functions (confirmed to bypass R#2 entirely — a genuinely new finding). `ctest` 117/117. Closes D2/D3; D7 DONE in full. QA PASS (`docs/m22-qa-signoff.md`) via genuinely independent, adversarial scrutiny — QA hand-verified the raw A/B divergence numbers itself and corrected the developer's causal narrative.
@@ -142,6 +174,7 @@
 - **M24 (ZEXDOC/ZEXALL full parity sweep, v1.0.24)**: CPU-validation milestone — a genuine, generic `CpmBdosHarness` (zero zexall-specific knowledge) ran the real, GPL-licensed ZEXALL/ZEXDOC Z80 exerciser suite against the already-QA-verified Z80A CPU core to genuine CP/M warm-boot completion. **134/134 group verdicts PASS**, independently reproduced FOUR separate times from clean rebuilds (developer, coordinator, QA, post-fix confirmation), every time byte-for-byte identical (5,764,169,474 instructions/suite, 67/0 marker split). Adversarial self-check PASSED; openMSX A/B bounded-prefix PARITY independently re-run twice (developer, QA). `ctest` 124/124; zero changes to `src/devices/`/`src/peripherals/`/`src/core/`. QA's first-ever Conditional Pass this run (a real, if narrow, regression-harness gap — see Phase Status above) was fixed and reconfirmed per the human's explicit choice before tagging. Closes C3 in full.
 - **M25 (Sony speed-controller + hardware PAUSE + Ren-Sha Turbo, v1.0.25)**: First milestone implementing genuinely new, never-previously-scoped HB-F1XV-specific hardware. New `Mb670836PauseController` — a machine-level CPU-execution gate at the very top of `step_cpu_instruction()`, freezing PC/R/every register while engaged (distinct from the Z80's own `HALT`). New `RenshaTurbo` autofire, wired into `KeyboardMatrix`/`JoystickPorts` via additive OR-mask attach points. Zero changes to any CPU/device-core file; all 12 named zero-tolerance CPU-timing-oracle files confirmed byte-for-byte unchanged, independently reproduced three times (developer, coordinator, QA). `ctest` 130/130, including three separate from-scratch re-runs of the M24 ZEXALL/ZEXDOC sweep. Real, live openMSX A/B PARITY for Ren-Sha Turbo against the actual `Sony_HB-F1XV` machine (reproduced twice, developer and QA); Hardware PAUSE/Speed Controller honestly BLOCKED (openMSX models none of this Sony-specific hardware anywhere, independently confirmed three times). QA returned a **clean, unconditional Pass** — the Conditional-Pass stop condition did NOT fire this time. QA's sole finding (a "five"→"six" Sony-machine-XML citation undercount, Low/non-blocking) was fixed directly by the coordinator per QA's own recommendation. Closes C8 in full. **This closes the full M24-M25 continuation.**
 - **M26 (SDL3 Frontend, v1.0.26)**: The largest, most architecturally novel milestone to date — first frontend/presentation-layer code, first real-time loop, first real audio wiring. New `Hbf1xvMachine::on_vsync_boundary()` (a pure, mechanical `run_frame()`-body extraction, the ONLY behavior-affecting `src/machine/` change) lets a real-time SDL3 loop drive the CPU via `step_cpu_instruction()` without the `run_frame()` double-count hazard. Zero changes to any CPU/device/peripheral/core file, independently confirmed three times (developer, coordinator, QA), including all 12 CPU-timing-oracle files and `ym2413_opll.*` specifically. New `src/frontend/` (`Sdl3App`, `Sdl3VideoPresenter`, `Sdl3AudioPresenter`+`PsgAudioPump`, `Sdl3InputMapper`, `sdl3_cli`): zero-conversion `SDL_PIXELFORMAT_XRGB1555` video blit (pixel-readback-proven); real PSG audio wired for the first time in this project's history; a 71-entry keyboard mapping table plus joystick/PAUSE/Speed-Controller/Ren-Sha-Turbo bindings, exhaustively `SDL_PushEvent`-tested. YM2413/FM-PAC honestly, deliberately left silent — backlog E1 stays OPEN. The one authorized new debug capability — decoded-`FrameBuffer`→PNG capture — ships with a real, committed, independently-byte-reproduced example. A real environment finding (SDL3 not pre-installed, resolved by building the vendored source) was independently reproduced end-to-end THREE times (developer, coordinator, QA's own brand-new install). `ctest` 134/134 headless + 139-140/140 SDL3-ON, both under the real "dummy" video/audio drivers. QA returned a **clean, unconditional Pass with ZERO findings of any severity** — the cleanest QA cycle of this session. Closes C9 in full. Names a future **M27 "Production Hardening + Debug/Test Tooling"** milestone for everything else from the human's original debug/-tooling request.
+- **M27 (Production Hardening + Debug/Test Tooling, v1.0.27)**: Infrastructure/tooling milestone — closes zero backlog rows outright. Four named items: (1) new headless `--debug-session` mode (`src/main.cpp`, wholly additive) + additive SDL3 fields wiring the pre-existing `write_state_dump()`/`write_cpu_trace()`/`write_event_log()`, a new `--disk` flag, and `--input-script` — zero new `Hbf1xvMachine` method needed; (2) real, decoded PSG audio capture to file (`src/frontend/psg_audio_dump.*`, genuinely reusing M26's `PsgAudioPump`) + `tools/audio-dump-to-wav.py`, shipping a real, committed, non-silent example WAV independently decoded three times; (3) a general-purpose, deterministic keystroke-sequencing/scripted-input mechanism (`src/peripherals/msx_key_names.*` + `src/machine/input_script.*`, 71-entry table cross-consistency-tested against `Sdl3InputMapper`); (4) event-log CLI wiring + an adversarially-validated, byte-for-byte replay-determinism system test (two independent machines identical logs; a third, deliberately-diverged machine — via a genuine, self-caught flat-RAM-driver design correction — produces a different one). A self-caught finding: `PsgYm2149::write_register()` is actually private; the demo correctly uses the public `write_address()`/`write_data()` ports. Zero changes to any pre-existing file under `src/devices/`, `src/peripherals/`, or `src/core/`, confirmed via `git diff v1.0.26` at THREE separate gates (developer, coordinator, QA). Per the human's standing `feedback_slow_test_cadence.md` directive, the slow `hbf1xv_m24_zexall_system_test` was not run at any gate this cycle — confirmed genuinely unnecessary by all three parties independently. Headless fast-subset 140/140; SDL3-ON fast-subset 149/149; every pre-existing M26 SDL3 test remains green. QA returned a **clean, unconditional Pass** — zero blocker/high/medium findings, two Low non-blocking notes. Backlog C5 gains a factual cross-reference note only (status unchanged); E1 remains OPEN, untouched.
 
 ## Standing watch-items (carried forward, none blocking)
 
@@ -173,14 +206,13 @@
 
 ## Indicative follow-on order (per `agent-protocol/state/deferred-backlog.md`)
 
-**M26 (SDL3 frontend) is now CLOSED.** No further milestone kicked off yet — awaiting the next
-human directive. Candidates: **M27 "Production Hardening + Debug/Test Tooling"** (named, not yet
-designed — audio capture to file, full CPU/memory/VRAM state-dump CLI wiring, keystroke-sequencing/
-scripted-input automation, broader production/stress testing) · a future VDP-timing-depth milestone
-(C1/D4 remainder) · a future dedicated C5 real-disk-boot-trigger investigation (now unblocked on
-assets via `disks/`, DEC-0021) · a future audio-rendering milestone for E1 (YM2413 DSP/synthesis
-depth, still OPEN, "paired with C9" per M17's own note — C9 is now done, so this pairing is
-unblocked whenever prioritized).
+**M26 (SDL3 frontend) and M27 (Production Hardening + Debug/Test Tooling) are both now CLOSED.** No
+further milestone kicked off yet — awaiting the next human directive. Candidates: a future
+VDP-timing-depth milestone (C1/D4 remainder) · a future dedicated C5 real-disk-boot-trigger
+investigation (now unblocked on assets via `disks/`, DEC-0021, and equipped with M27's new
+`--disk`/scripted-input tooling) · a future audio-rendering milestone for E1 (YM2413 DSP/synthesis
+depth, still OPEN, "paired with C9" per M17's own note — both C9 (M26) and the audio-capture
+tooling (M27) are now done, so this pairing is unblocked whenever prioritized).
 
-- Updated At: 2026-07-08T16:20:00+09:00 (M26 CLOSED, tagged v1.0.26, DEC-0024 — QA zero findings;
+- Updated At: 2026-07-08T20:10:00+09:00 (M27 CLOSED, tagged v1.0.27, DEC-0025 — QA clean PASS;
   awaiting next human directive)

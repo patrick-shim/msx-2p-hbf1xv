@@ -2,12 +2,17 @@
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "devices/fdc/disk_image.h"
+#include "frontend/psg_audio_dump.h"
 #include "machine/cartridge_cli.h"
 #include "machine/cpm_bdos_harness.h"
 #include "machine/hbf1xv_machine.h"
+#include "machine/input_script.h"
 
 namespace {
 
@@ -688,6 +693,213 @@ int run_halnote_parity(const std::string& bios_dir, const std::string& out_path)
     return 0;
 }
 
+// M27-S1..S3/S7 "--debug-session" mode (docs/m27-planner-package.md §2.2,
+// items 1/3/4). A wholly additive new mode -- never touching the
+// pre-existing default run path below main()'s own "sony-msx-hbf1xv headless
+// scaffold" block, unchanged byte-for-byte (R-M27-1). Resolves A-M27-1/
+// A-M27-2 (the default path never drives the CPU nor loads real BIOS
+// assets): this mode loads real ROM assets from <bios_dir> AND drives the
+// CPU for a bounded, real, halt-respecting step_cpu_instruction() loop --
+// mirroring run_bios_boot_trace's own "stop stepping exactly at the halt
+// boundary" loop shape exactly (tests/CLAUDE.md's established convention),
+// zero new CPU-stepping semantics invented.
+struct DebugSessionOptions {
+    std::optional<std::string> disk_path;
+    std::optional<std::string> debug_root;
+    std::optional<std::string> dump_state_name;
+    std::optional<std::string> trace_cpu_name;
+    std::optional<std::string> event_log_name;
+    std::optional<std::string> input_script_path;
+};
+
+std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
+                                                     const char* flag_name, std::vector<std::string>& errors) {
+    if (i + 1 >= args.size()) {
+        errors.push_back(std::string("debug-session: ") + flag_name + " requires a value argument");
+        return std::nullopt;
+    }
+    return args[i + 1];
+}
+
+// Pure argv parser for --debug-session's OWN optional flags (order-
+// independent scanning, mirrors sdl3_cli.cpp's parse_sdl3_cli() precedent
+// exactly). Cartridge flags (--cart1/--cart1-type/--cart2/--cart2-type) are
+// intentionally NOT recognized here -- they fall through untouched, for
+// load_cartridges_from_args()'s own delegated parser (never reimplemented).
+DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& args,
+                                                std::vector<std::string>& errors) {
+    DebugSessionOptions opts;
+    for (std::size_t i = 0; i < args.size(); ++i) {
+        const std::string& arg = args[i];
+        if (arg == "--disk") {
+            if (auto v = take_debug_session_value(args, i, "--disk", errors)) {
+                opts.disk_path = *v;
+                ++i;
+            }
+        } else if (arg == "--debug-root") {
+            if (auto v = take_debug_session_value(args, i, "--debug-root", errors)) {
+                opts.debug_root = *v;
+                ++i;
+            }
+        } else if (arg == "--dump-state") {
+            if (auto v = take_debug_session_value(args, i, "--dump-state", errors)) {
+                opts.dump_state_name = *v;
+                ++i;
+            }
+        } else if (arg == "--trace-cpu") {
+            if (auto v = take_debug_session_value(args, i, "--trace-cpu", errors)) {
+                opts.trace_cpu_name = *v;
+                ++i;
+            }
+        } else if (arg == "--event-log") {
+            if (auto v = take_debug_session_value(args, i, "--event-log", errors)) {
+                opts.event_log_name = *v;
+                ++i;
+            }
+        } else if (arg == "--input-script") {
+            if (auto v = take_debug_session_value(args, i, "--input-script", errors)) {
+                opts.input_script_path = *v;
+                ++i;
+            }
+        }
+        // Any other argument (--cart1/--cart1-type/--cart2/--cart2-type) is
+        // left untouched for load_cartridges_from_args()'s own delegated
+        // parser below.
+    }
+    return opts;
+}
+
+int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps,
+                      const std::vector<std::string>& cli_args) {
+    std::vector<std::string> errors;
+    const DebugSessionOptions opts = parse_debug_session_options(cli_args, errors);
+    for (const std::string& err : errors) {
+        std::cerr << "debug-session: " << err << "\n";
+    }
+    if (!errors.empty()) {
+        return 2;
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine;
+    if (opts.debug_root.has_value()) {
+        machine.set_debug_root(*opts.debug_root);
+    }
+    // R-M27-2 (a real, easy-to-get-wrong sequencing constraint): event
+    // logging MUST be enabled BEFORE cold_boot() to capture the Reset event
+    // (hbf1xv_machine.h:306-309's own documented ordering requirement).
+    if (opts.event_log_name.has_value()) {
+        machine.set_event_logging_enabled(true);
+    }
+    machine.set_asset_root(bios_dir);
+    machine.cold_boot();
+    for (const std::string& note : machine.rom_diagnostics()) {
+        std::cerr << "debug-session: " << note << "\n";
+    }
+
+    if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
+        return rc;
+    }
+
+    // A-M27-3 (headless previously had no --disk flag; SDL3 has one, M26):
+    // mirrors A-M26-6's Sdl3App::load_configured_assets() sequence verbatim.
+    if (opts.disk_path.has_value()) {
+        std::ifstream in(*opts.disk_path, std::ios::binary);
+        if (!in) {
+            std::cerr << "debug-session: cannot open --disk file: " << *opts.disk_path << "\n";
+            return 2;
+        }
+        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        machine.disk_image() = sony_msx::devices::fdc::DiskImage(std::move(bytes));
+        machine.disk_drive().attach_image(&machine.disk_image());
+    }
+
+    if (opts.trace_cpu_name.has_value()) {
+        machine.set_cpu_trace_enabled(true);
+    }
+
+    sony_msx::machine::InputScriptPlayer script_player;
+    if (opts.input_script_path.has_value()) {
+        std::ifstream in(*opts.input_script_path, std::ios::binary);
+        if (!in) {
+            std::cerr << "debug-session: cannot open --input-script file: " << *opts.input_script_path << "\n";
+            return 2;
+        }
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        try {
+            script_player = sony_msx::machine::InputScriptPlayer(sony_msx::machine::parse_input_script(text));
+        } catch (const std::exception& e) {
+            std::cerr << "debug-session: malformed --input-script: " << e.what() << "\n";
+            return 2;
+        }
+    }
+
+    std::uint32_t steps = 0;
+    while (steps < max_steps && !machine.cpu().state().halted()) {
+        machine.step_cpu_instruction();
+        script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
+        ++steps;
+    }
+
+    if (opts.dump_state_name.has_value() && !machine.write_state_dump(*opts.dump_state_name)) {
+        std::cerr << "debug-session: failed to write --dump-state " << *opts.dump_state_name << "\n";
+        return 2;
+    }
+    if (opts.trace_cpu_name.has_value() && !machine.write_cpu_trace(*opts.trace_cpu_name)) {
+        std::cerr << "debug-session: failed to write --trace-cpu " << *opts.trace_cpu_name << "\n";
+        return 2;
+    }
+    if (opts.event_log_name.has_value() && !machine.write_event_log(*opts.event_log_name)) {
+        std::cerr << "debug-session: failed to write --event-log " << *opts.event_log_name << "\n";
+        return 2;
+    }
+
+    std::cerr << "debug-session: steps=" << steps << " halted=" << (machine.cpu().state().halted() ? 1 : 0)
+              << " final_pc=" << std::hex << machine.cpu().state().regs().pc << std::dec
+              << " elapsed_cycles=" << machine.elapsed_cycles() << "\n";
+    return 0;
+}
+
+// M27-S5 headless PSG audio-dump demo (docs/m27-planner-package.md §2.3
+// point 3, mirrors --frame-dump-demo's exact precedent). Programs a known,
+// fixed tone on PSG channel A via the REAL public register-write API
+// (write_address()/write_data() -- #A0/#A1, the exact ports the CPU/IoBus
+// itself uses; PsgYm2149::write_register() is a PRIVATE implementation
+// detail, psg_ym2149.h, NOT directly callable here), then dumps a fixed
+// sample count via write_psg_audio_dump() (genuine PsgAudioPump/PsgYm2149
+// reuse, §2.3).
+int run_audio_dump_demo(const std::string& out_path) {
+    sony_msx::machine::Hbf1xvMachine machine;
+    machine.cold_boot();
+
+    sony_msx::devices::audio::PsgYm2149& psg = machine.psg();
+    // R0/R1: channel A tone period = 16 (fine=16, coarse=0).
+    psg.write_address(0);
+    psg.write_data(16);
+    psg.write_address(1);
+    psg.write_data(0);
+    // R7: mixer -- channel A tone enabled (bit0=0), channels B/C tone
+    // disabled (bits1-2=1), ALL noise disabled (bits3-5=1). Bits 6/7 (I/O
+    // direction) are forced by the device itself regardless of what is
+    // written here (PsgYm2149::write_register()'s own R_ENABLE handling).
+    psg.write_address(7);
+    psg.write_data(0x3E);
+    // R8: channel A volume -- fixed level 15 (max), resolved_amplitude() ==
+    // 2*15+1 == 31 (A-M27-4's documented maximum).
+    psg.write_address(8);
+    psg.write_data(15);
+
+    constexpr std::uint64_t kSampleRateHz = 44100;  // A-M27-5.
+    constexpr std::size_t kSampleCount = 44100;     // 1 second, a real, audibly-non-trivial length.
+    const bool ok = sony_msx::frontend::write_psg_audio_dump(machine.debug_root(), out_path, psg, kSampleRateHz,
+                                                             kSampleCount);
+    if (!ok) {
+        std::cerr << "audio-dump-demo: failed to write " << out_path << "\n";
+        return 2;
+    }
+    std::cerr << "audio-dump-demo: wrote " << machine.debug_root().string() << "/sounds/" << out_path << "\n";
+    return 0;
+}
+
 }  // namespace
 
 // M13-S5 BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
@@ -864,6 +1076,32 @@ int main(int argc, char** argv) {
             return 2;
         }
         return run_halnote_parity(argv[2], argv[3]);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--debug-session") {
+        if (argc < 4) {
+            std::cerr << "usage: " << argv[0]
+                      << " --debug-session <bios_dir> <max_steps> [--disk <path>] [--cart1 <path>]"
+                         " [--cart1-type <T>] [--cart2 <path>] [--cart2-type <T>] [--debug-root <path>]"
+                         " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
+                         " [--input-script <path>]\n";
+            return 2;
+        }
+        const std::string bios_dir = argv[2];
+        const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[3], nullptr, 10));
+        // `args` (built above as argv[1..]) sliced to skip "--debug-session",
+        // <bios_dir>, <max_steps> -- the remaining entries are this mode's
+        // own optional flags plus the reused cartridge-cli flags.
+        const std::vector<std::string> mode_args(args.begin() + 3, args.end());
+        return run_debug_session(bios_dir, max_steps, mode_args);
+    }
+
+    if (argc >= 2 && std::string(argv[1]) == "--audio-dump-demo") {
+        if (argc < 3) {
+            std::cerr << "usage: " << argv[0] << " --audio-dump-demo <out_filename_under_debug/sounds/>\n";
+            return 2;
+        }
+        return run_audio_dump_demo(argv[2]);
     }
 
     if (argc >= 2 && std::string(argv[1]) == "--cpm-run") {

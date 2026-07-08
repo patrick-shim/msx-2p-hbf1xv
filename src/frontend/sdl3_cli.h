@@ -25,6 +25,17 @@ struct ParsedSdl3Cli {
     std::optional<std::uint32_t> max_frames;
     bool hidden_window = false;  // --hidden-window (test/CI convenience; never SDL3-dependent to parse)
     machine::ParsedCartridgeCli cartridges;
+    // M27-S4/S7 additive debug/scripted-input flags (docs/m27-planner-
+    // package.md §2.2/§2.4, items 1/3/4): `--dump-state`/`--trace-cpu`/
+    // `--event-log` mirror the headless `--debug-session` mode's own flags
+    // of the same name; `--input-script` mirrors its own flag too. All four
+    // are std::nullopt by default -- a hard regression guard (§4 Acceptance
+    // Criterion 10): every pre-existing M26 parse_sdl3_cli() case remains
+    // green unmodified.
+    std::optional<std::string> dump_state_filename;
+    std::optional<std::string> trace_cpu_filename;
+    std::optional<std::string> event_log_filename;
+    std::optional<std::string> input_script_path;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).

@@ -49,6 +49,26 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--hidden-window") {
             parsed.hidden_window = true;
+        } else if (arg == "--dump-state") {
+            if (auto value = take_value(args, i, "--dump-state", parsed.errors)) {
+                parsed.dump_state_filename = *value;
+                ++i;
+            }
+        } else if (arg == "--trace-cpu") {
+            if (auto value = take_value(args, i, "--trace-cpu", parsed.errors)) {
+                parsed.trace_cpu_filename = *value;
+                ++i;
+            }
+        } else if (arg == "--event-log") {
+            if (auto value = take_value(args, i, "--event-log", parsed.errors)) {
+                parsed.event_log_filename = *value;
+                ++i;
+            }
+        } else if (arg == "--input-script") {
+            if (auto value = take_value(args, i, "--input-script", parsed.errors)) {
+                parsed.input_script_path = *value;
+                ++i;
+            }
         }
         // Any other argument is not this parser's concern -- left untouched
         // for the cartridge-flag delegation below (order-independent

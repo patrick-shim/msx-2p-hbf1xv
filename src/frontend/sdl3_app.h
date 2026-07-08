@@ -12,6 +12,7 @@
 #include "frontend/sdl3_input_mapper.h"
 #include "frontend/sdl3_video_presenter.h"
 #include "machine/hbf1xv_machine.h"
+#include "machine/input_script.h"
 
 namespace sony_msx::frontend {
 
@@ -35,6 +36,31 @@ struct Sdl3AppConfig {
     // use (§2.3). std::nullopt (the default) means run_interactive() only
     // stops on SDL_EVENT_QUIT.
     std::optional<std::uint32_t> max_frames;
+
+    // M27-S4/S7 additive debug/scripted-input session fields (docs/m27-
+    // planner-package.md §2.2/§2.4, items 1/3/4). All std::nullopt by
+    // default -- a hard regression guard (§4 Acceptance Criterion 10): every
+    // pre-existing M26 Sdl3App/Sdl3AppConfig test remains green unmodified
+    // when these are left unset.
+    //
+    // dump_state_filename/trace_cpu_filename/event_log_filename mirror the
+    // headless `--debug-session` mode's own flags of the same name
+    // (write_state_dump()/write_cpu_trace()/write_event_log() -- already
+    // existing, already-tested Hbf1xvMachine APIs, M10-S3). Written once, at
+    // the end of run_interactive()'s bounded loop (max_frames reached) or on
+    // SDL_EVENT_QUIT -- whichever comes first -- via
+    // flush_debug_session_outputs() (also directly, publicly callable after
+    // a bounded run_one_frame() loop, for ctest use, since run_interactive()
+    // itself is NEVER exercised by ctest, A-M26-8).
+    std::optional<std::string> dump_state_filename;
+    std::optional<std::string> trace_cpu_filename;
+    std::optional<std::string> event_log_filename;
+
+    // input_script_path mirrors the headless `--debug-session` mode's own
+    // `--input-script` flag: a machine::InputScriptPlayer is loaded at
+    // init() time and driven once per step_cpu_instruction() call inside
+    // run_one_frame()'s existing CPU sub-loop (item 3, §2.4).
+    std::optional<std::string> input_script_path;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real
@@ -85,6 +111,16 @@ public:
     // headless/manual-verification use). Returns a process exit code.
     int run_interactive();
 
+    // M27-S4 (docs/m27-planner-package.md §2.2, items 1/4): writes whichever
+    // of dump_state_filename/trace_cpu_filename/event_log_filename are
+    // configured, via the SAME already-existing Hbf1xvMachine APIs the
+    // headless `--debug-session` mode's own end-of-run write-out uses. A
+    // genuine no-op when all three are unset (the default) -- callable
+    // directly after a bounded run_one_frame() loop (ctest use, since
+    // run_interactive() itself is never exercised by ctest); ALSO called
+    // automatically once at run_interactive()'s own loop-exit point.
+    void flush_debug_session_outputs();
+
     [[nodiscard]] machine::Hbf1xvMachine& machine() { return machine_; }
     [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return machine_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
@@ -113,6 +149,12 @@ private:
     std::unique_ptr<Sdl3VideoPresenter> video_presenter_;
     std::unique_ptr<Sdl3AudioPresenter> audio_presenter_;
     Sdl3InputMapper input_mapper_;
+
+    // M27-S7 (item 3, §2.4): default-constructed = empty = a genuine no-op
+    // (the cursor never advances because events_ is empty) -- zero
+    // observable effect on any pre-existing M26 run_one_frame() caller when
+    // config_.input_script_path is unset.
+    machine::InputScriptPlayer input_script_player_;
 
     std::uint64_t frames_run_ = 0;
 };

@@ -1,5 +1,6 @@
 #include "frontend/sdl3_app.h"
 
+#include <exception>
 #include <fstream>
 #include <iterator>
 #include <utility>
@@ -99,6 +100,15 @@ bool Sdl3App::init() {
         return false;
     }
 
+    // M27-S4, R-M27-2 (a real, easy-to-get-wrong sequencing constraint):
+    // event logging MUST be enabled BEFORE cold_boot() to capture the Reset
+    // event (hbf1xv_machine.h:306-309's own documented ordering
+    // requirement) -- mirrors the headless --debug-session mode's identical
+    // ordering exactly.
+    if (config_.event_log_filename.has_value()) {
+        machine_.set_event_logging_enabled(true);
+    }
+
     machine_.set_asset_root(config_.bios_dir);
     machine_.cold_boot();
     if (!load_configured_assets()) {
@@ -106,8 +116,49 @@ bool Sdl3App::init() {
         return false;
     }
 
+    if (config_.trace_cpu_filename.has_value()) {
+        machine_.set_cpu_trace_enabled(true);
+    }
+
+    // M27-S7 (item 3, §2.4): load the scripted-input mechanism, if
+    // configured. A malformed script is a real init() failure (mirrors
+    // load_configured_assets()'s own "never partially initialize" contract),
+    // never a silent no-op.
+    if (config_.input_script_path.has_value()) {
+        std::ifstream in(*config_.input_script_path, std::ios::binary);
+        if (!in) {
+            last_error_ = "cannot open --input-script file: " + *config_.input_script_path;
+            shutdown();
+            return false;
+        }
+        const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        try {
+            input_script_player_ = machine::InputScriptPlayer(machine::parse_input_script(text));
+        } catch (const std::exception& e) {
+            last_error_ = std::string("malformed --input-script: ") + e.what();
+            shutdown();
+            return false;
+        }
+    }
+
     initialized_ = true;
     return true;
+}
+
+void Sdl3App::flush_debug_session_outputs() {
+    // M27-S4 (docs/m27-planner-package.md §2.2, items 1/4): mirrors the
+    // headless --debug-session mode's own end-of-run write-out exactly, via
+    // the SAME already-existing Hbf1xvMachine APIs (M10-S3) -- zero new
+    // machine-level method needed.
+    if (config_.dump_state_filename.has_value()) {
+        machine_.write_state_dump(*config_.dump_state_filename);
+    }
+    if (config_.trace_cpu_filename.has_value()) {
+        machine_.write_cpu_trace(*config_.trace_cpu_filename);
+    }
+    if (config_.event_log_filename.has_value()) {
+        machine_.write_event_log(*config_.event_log_filename);
+    }
 }
 
 void Sdl3App::shutdown() {
@@ -151,6 +202,10 @@ void Sdl3App::run_one_frame() {
     const std::uint64_t target = machine_.frame_cycles_per_frame();
     while (machine_.elapsed_cycles() - frame_start_cycle < target) {
         machine_.step_cpu_instruction();
+        // M27-S7 (item 3, §2.4): driven through the EXACT same CPU sub-loop
+        // the headless --debug-session mode's own loop uses. A genuine
+        // no-op when input_script_player_ is empty (the default).
+        input_script_player_.apply_due(machine_.elapsed_cycles(), machine_.keyboard());
     }
     machine_.on_vsync_boundary();
 
@@ -199,6 +254,12 @@ int Sdl3App::run_interactive() {
             SDL_Delay(static_cast<Uint32>(target_ms - elapsed));
         }
     }
+
+    // M27-S4 (docs/m27-planner-package.md §2.2): the three write_* calls
+    // happen once, at the end of run_interactive()'s bounded loop (max_frames
+    // reached) or on SDL_EVENT_QUIT -- whichever comes first -- added to the
+    // EXISTING loop-exit path, not a new one.
+    flush_debug_session_outputs();
 
     return 0;
 }

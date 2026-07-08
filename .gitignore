@@ -23,12 +23,19 @@ CMakeUserPresets.json
 /debug/**/*.png
 /debug/**/*.wav
 /debug/**/*.bin
+/debug/**/*.dump
 
 # M26 exception: one real, committed decoded-FrameBuffer-capture example
 # (backlog C9's authorized debug/testing capability, docs/m26-planner-
 # package.md §2.5) -- genuine evidence, not a regenerable runtime artifact.
 !/debug/frames/m26-example-boot.png
 !/debug/frames/m26-example-boot.frame
+
+# M27 exception: one real, committed decoded-PSG-audio-capture example
+# (item 2, docs/m27-planner-package.md §2.3) -- genuine evidence, not a
+# regenerable runtime artifact.
+!/debug/sounds/m27-example-tone.wav
+!/debug/sounds/m27-example-tone.dump
 
 # --- Editor / IDE / OS cruft ---
 .vs/

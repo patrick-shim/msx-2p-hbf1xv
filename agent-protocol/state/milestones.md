@@ -751,3 +751,76 @@ Use one section per milestone.
   not tracked as actionable). **Sign-off: Pass** (clean, unconditional). Per the milestone's own
   standing directive, the coordinator proceeded through the release-decision/tag step without an
   additional human pause.
+
+## M27 (Kickoff 2026-07-08)
+
+- Milestone ID: M27
+- Title: Production Hardening + Debug/Test Tooling
+- Spec Owner: MSX Planner Agent
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Everything explicitly deferred out of M26's scope-boundary decision (DEC-0024), grounded in `CLAUDE.md`'s own baseline text on debug capabilities and tooling. Four named work items: (1) full CPU/memory/VRAM state-dump CLI wiring — `write_state_dump()`/`write_cpu_trace()`/`write_event_log()` (M10-S3) have zero CLI flag anywhere today; (2) real, decoded audio capture to file — `tools/mem-to-audio.py` (M10-S5) is confirmed the same class of insufficient raw-bytes tool as pre-M26 `tools/mem-to-png.py` (its own doc comment: "does NOT synthesize PSG... models no sound chip at all"); mirror M26's `frame_dump`→`frame-to-png.py` precedent with a NEW dump+convert pair reusing M26's real `PsgAudioPump` wiring; (3) keystroke-sequencing/scripted-input automation — does not exist anywhere in this project; (4) debug event-log CLI wiring + a genuine replay-determinism proof (two identical runs produce byte-identical event logs). Standing evidence-gate guidance this cycle (human directive 2026-07-08, now a persistent project memory `feedback_slow_test_cadence.md`): do NOT run the slow `hbf1xv_m24_zexall_system_test` at every gate by default — use the fast subset, confirming via `git diff v1.0.26 --name-only -- src/devices/ src/peripherals/ src/core/` that the slow test is genuinely not needed each time it's skipped.
+- Acceptance Criteria (planner to detail): genuine, working implementation of items 1-4 (or an honestly-scoped subset with deferral justified); deterministic unit/integration/system tests; zero regression across the full M1-M26 suite via the fast-subset-by-default evidence discipline; full deferred-backlog review; QA sign-off before closure.
+- Unit/Integration Tests Required (planner to detail).
+- Regression Scope: all M1-M26 suites remain green (fast-subset-by-default per the standing cadence guidance); QA sign-off required before closure.
+- Status: Done
+- Details: CLOSED 2026-07-08 (DEC-0025/REQ-M27-004), tagged git `v1.0.27`. Planner package accepted
+  (`docs/m27-planner-package.md`, RESP-M27-001); developer implementation COMPLETE
+  (REQ-M27-002, `docs/m27-implementation-report.md`); QA sign-off (`docs/m27-qa-signoff.md`,
+  RESP-M27-003) returned a **clean, unconditional Pass** — zero blocker/high/medium-severity
+  findings; two Low-severity, non-blocking notes (neither requiring a fix): (1) the planner's own
+  narrative loosely suggested E1 might also get a cross-reference note, but the delivered backlog
+  file matches Acceptance Criterion 12's exact wording (C5 only) — not a real discrepancy; (2) the
+  audio demo's single-channel design naturally exercises only half the documented `[0,62]` PCM
+  range, already disclosed in the implementation report, doesn't affect the unit test's own
+  full-range coverage. QA independently rebuilt both configurations from clean and reproduced the
+  fast-subset counts exactly (140/140 headless, 149/149 SDL3-ON), independently launched the real
+  `sony_msx_headless.exe --debug-session` binary itself twice (byte-identical event logs/SHA-256),
+  independently decoded the committed WAV via raw PCM read, independently confirmed the 71/71
+  key-name cross-consistency table's completeness via three sources, and independently judged the
+  flat-RAM-driver negative-control design correction genuinely sound via direct PPI-port grounding
+  and hand-derived oracle math. Coordinator proceeded to close M27 and tag `v1.0.27` without an
+  additional human pause, per the standing continuation cadence and this milestone's own clean PASS.
+
+  All four named items implemented per the accepted planner package's 8-slice build order
+  (S1-S8). (1) New headless `--debug-session <bios_dir> <max_steps> [--disk] [--cart1/2(-type)]
+  [--debug-root] [--dump-state] [--trace-cpu] [--event-log] [--input-script]` mode in `src/main.cpp`
+  (a wholly additive new `if` branch; the pre-existing default run path is byte-for-byte unchanged)
+  plus additive `Sdl3AppConfig`/`sdl3_cli` fields (`dump_state_filename`/`trace_cpu_filename`/
+  `event_log_filename`/`input_script_path`, all `std::nullopt` default) and a new public
+  `Sdl3App::flush_debug_session_outputs()` — zero new `Hbf1xvMachine` method needed (`git diff
+  v1.0.26 --stat -- src/machine/hbf1xv_machine.{h,cpp}` empty, Acceptance Criterion 2). (2) New
+  headless-buildable `src/frontend/psg_audio_dump.{h,cpp}` genuinely reusing M26's
+  `frontend::PsgAudioPump`/`devices::audio::PsgYm2149` (never a parallel synthesis), a documented
+  linear `psg_raw_sum_to_pcm16()` scale grounded in the real `[0,62]` `PsgYm2149::sample()` range, a
+  new `tools/audio-dump-to-wav.py` (sibling of `frame-to-png.py`, `tools/mem-to-audio.py` genuinely
+  untouched — `git diff` empty), and a real, committed, non-silent example WAV
+  (`debug/sounds/m27-example-tone.wav`, 44,100 stereo 16-bit samples alternating between the
+  documented `-32768`/`-1` oracle values, 13,953 toggles/second, ~7 kHz). (3) New
+  `src/peripherals/msx_key_names.{h,cpp}` (71-entry key-name table, every entry copied verbatim from
+  `Sdl3InputMapper::scancode_map()`'s own array literal, R-M27-4) + `src/machine/input_script.{h,cpp}`
+  (deterministic `HBF1XV-INPUT-SCRIPT v1` format, parse/serialize + a monotonic-cursor
+  `InputScriptPlayer`), `--input-script` wired into both executables via the SAME CPU sub-loop each
+  already runs. (4) `--event-log` shares mechanism (1); the item-4 headline claim is a dedicated
+  `tests/system/hbf1xv_m27_replay_determinism_system_test.cpp`: two independent `Hbf1xvMachine`
+  instances (real BIOS root, real `roms/aleste.rom` cartridge, `set_event_logging_enabled(true)`
+  BEFORE `cold_boot()`, R-M27-2) produce byte-for-byte identical event logs (18 hand-computed lines);
+  a third, deliberately-diverged machine (one extra `keyboard().set_key()` call, injected via a
+  small flat-RAM keyboard-probe driver program after a genuine, in-cycle finding that the real,
+  unmodified BIOS never reads the keyboard matrix within any practical bounded window — see
+  `docs/m27-implementation-report.md` §3 for the full disclosure) produces a genuinely different
+  13-line log, proving the equality check discriminates, not vacuously passes. Also independently
+  verified via a real, manual two-process launch of the compiled `sony_msx_headless.exe` (byte-
+  identical SHA-256). Cross-consistency (item 3, R-M27-4) and cross-executable-equivalence
+  (Acceptance Criterion 7) both independently `ctest`-verified. Headless fast-subset 140/140
+  (133 prior + 7 new); SDL3-ON fast-subset 149/149 (139 prior + 10 new); every pre-existing M26 SDL3
+  test remains green unmodified. `git diff v1.0.26` verified at 3 separate gates: zero tracked-file
+  modification under `src/devices/`/`src/peripherals/`/`src/core/`, `src/devices/cpu/`/`src/core/`
+  show zero changes of any kind — the slow `hbf1xv_m24_zexall_system_test` genuinely not needed and
+  not run this cycle, per the standing `feedback_slow_test_cadence.md` directive. This milestone
+  closes ZERO backlog rows (infrastructure/tooling scope, not a device/presentation-layer
+  deliverable); C5's row (`agent-protocol/state/deferred-backlog.md`) gained a factual,
+  non-status-changing cross-reference note (the new `--disk` flag and scripted-input mechanism are
+  now available to a future C5 investigation) — its status remains IN-PROGRESS (M16 partial); backlog
+  E1 (YM2413 DSP/synthesis depth) remains OPEN, untouched this cycle. Full evidence in
+  `docs/m27-implementation-report.md` / `docs/m27-qa-signoff.md`.

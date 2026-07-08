@@ -919,6 +919,63 @@ add_executable(frontend_sdl3_cli_unit_test
 target_link_libraries(frontend_sdl3_cli_unit_test PRIVATE sony_msx_core)
 add_test(NAME frontend_sdl3_cli_unit_test COMMAND frontend_sdl3_cli_unit_test)
 
+# --- M27 Production Hardening + Debug/Test Tooling: full state-dump/CPU-
+#     trace/event-log CLI wiring, real decoded PSG audio capture, keystroke-
+#     sequencing/scripted-input automation, and the replay-determinism proof
+#     (docs/m27-planner-package.md). Headless-buildable; registered OUTSIDE
+#     the SONY_MSX_ENABLE_SDL3 guard below (mirrors the M26-S1/S4 precedent).
+add_executable(peripherals_msx_key_names_unit_test
+    unit/peripherals/msx_key_names_unit_test.cpp
+)
+target_link_libraries(peripherals_msx_key_names_unit_test PRIVATE sony_msx_core)
+add_test(NAME peripherals_msx_key_names_unit_test COMMAND peripherals_msx_key_names_unit_test)
+
+add_executable(machine_input_script_unit_test
+    unit/machine/input_script_unit_test.cpp
+)
+target_link_libraries(machine_input_script_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_input_script_unit_test COMMAND machine_input_script_unit_test)
+
+add_executable(frontend_psg_audio_dump_unit_test
+    unit/frontend/psg_audio_dump_unit_test.cpp
+)
+target_link_libraries(frontend_psg_audio_dump_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_psg_audio_dump_unit_test COMMAND frontend_psg_audio_dump_unit_test)
+
+add_executable(machine_hbf1xv_m27_debug_session_integration_test
+    integration/machine/hbf1xv_m27_debug_session_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m27_debug_session_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m27_debug_session_integration_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_DISKS_DIR="${CMAKE_SOURCE_DIR}/disks")
+add_test(NAME machine_hbf1xv_m27_debug_session_integration_test
+    COMMAND machine_hbf1xv_m27_debug_session_integration_test)
+
+add_executable(machine_hbf1xv_m27_input_script_integration_test
+    integration/machine/hbf1xv_m27_input_script_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m27_input_script_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m27_input_script_integration_test
+    COMMAND machine_hbf1xv_m27_input_script_integration_test)
+
+add_executable(hbf1xv_m27_replay_determinism_system_test
+    system/hbf1xv_m27_replay_determinism_system_test.cpp
+)
+target_link_libraries(hbf1xv_m27_replay_determinism_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m27_replay_determinism_system_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME hbf1xv_m27_replay_determinism_system_test COMMAND hbf1xv_m27_replay_determinism_system_test)
+
+add_executable(hbf1xv_m27_debug_tooling_system_test
+    system/hbf1xv_m27_debug_tooling_system_test.cpp
+)
+target_link_libraries(hbf1xv_m27_debug_tooling_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m27_debug_tooling_system_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME hbf1xv_m27_debug_tooling_system_test COMMAND hbf1xv_m27_debug_tooling_system_test)
+
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The
 #     default headless (-DSONY_MSX_ENABLE_SDL3=OFF) ctest suite is completely
@@ -980,4 +1037,29 @@ if(SONY_MSX_ENABLE_SDL3)
     target_compile_definitions(hbf1xv_m26_sdl3_system_test
         PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
     add_test(NAME hbf1xv_m26_sdl3_system_test COMMAND hbf1xv_m26_sdl3_system_test)
+
+    # --- M27-S4/S7: SDL3-side debug-session/scripted-input wiring +
+    #     cross-consistency/cross-executable-equivalence tests (docs/m27-
+    #     planner-package.md §2.2/§2.4/§3). ---------------------------------
+    add_executable(frontend_sdl3_app_debug_session_integration_test
+        integration/frontend/sdl3_app_debug_session_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_debug_session_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_app_debug_session_integration_test
+        COMMAND frontend_sdl3_app_debug_session_integration_test)
+
+    add_executable(frontend_sdl3_input_mapper_key_names_consistency_integration_test
+        integration/frontend/sdl3_input_mapper_key_names_consistency_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_input_mapper_key_names_consistency_integration_test
+        PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_input_mapper_key_names_consistency_integration_test
+        COMMAND frontend_sdl3_input_mapper_key_names_consistency_integration_test)
+
+    add_executable(frontend_sdl3_app_input_script_integration_test
+        integration/frontend/sdl3_app_input_script_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_input_script_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_app_input_script_integration_test
+        COMMAND frontend_sdl3_app_input_script_integration_test)
 endif()

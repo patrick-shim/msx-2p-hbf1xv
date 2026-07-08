@@ -55,6 +55,7 @@ add_library(sony_msx_core STATIC
     src/peripherals/printer_port.cpp
     src/peripherals/cassette_interface.cpp
     src/peripherals/rensha_turbo.cpp
+    src/peripherals/msx_key_names.cpp
     src/core/scheduler.cpp
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp
@@ -65,8 +66,10 @@ add_library(sony_msx_core STATIC
     src/machine/debug_dump.cpp
     src/machine/debug_event_log.cpp
     src/machine/frame_dump.cpp
+    src/machine/input_script.cpp
     src/frontend/sdl3_cli.cpp
     src/frontend/psg_audio_pump.cpp
+    src/frontend/psg_audio_dump.cpp
 )
 
 target_include_directories(sony_msx_core PUBLIC src)
