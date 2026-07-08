@@ -21,6 +21,7 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/mapper_io.cpp
     src/devices/chipset/switched_io.cpp
     src/devices/chipset/s1985_engine.cpp
+    src/devices/chipset/reset_status_register.cpp
     src/devices/chipset/system_bus.cpp
     src/devices/chipset/system_control.cpp
     src/devices/chipset/mb670836_pause.cpp
@@ -68,6 +69,7 @@ add_library(sony_msx_core STATIC
     src/machine/frame_dump.cpp
     src/machine/input_script.cpp
     src/frontend/sdl3_cli.cpp
+    src/frontend/border_composer.cpp
     src/frontend/psg_audio_pump.cpp
     src/frontend/psg_audio_dump.cpp
 )

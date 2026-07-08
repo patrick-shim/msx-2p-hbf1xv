@@ -152,6 +152,40 @@ def parse_frame_dump(text):
     return width, height, border, bytes(buf)
 
 
+def border_geometry(active_width, active_height):
+    """Presentation border-canvas geometry, mirroring
+    src/frontend/border_composer.cpp border_geometry() EXACTLY (any change
+    there must be mirrored here; both cite the same grounding: V9958
+    fact-sheet §7 line/frame tick tables + openMSX SDLRasterizer.cc
+    translateX()/lineRenderTop, verified against measured openMSX raw
+    screenshots). Returns (canvas_w, canvas_h, x0, y0)."""
+    canvas_w = 640 if active_width > 320 else 320
+    canvas_h = 240
+    x0_table = {240: 41, 256: 32, 480: 82, 512: 64}
+    x0 = x0_table.get(active_width, max(0, (canvas_w - active_width) // 2))
+    y0_table = {192: 24, 212: 14}
+    y0 = y0_table.get(active_height, max(0, (canvas_h - active_height) // 2))
+    return canvas_w, canvas_h, x0, y0
+
+
+def compose_border_canvas(width, height, border, pixel_bytes):
+    """Compose the presented canvas: border-color-filled canvas with the
+    active area at its raster-true position (the same composition
+    src/frontend/border_composer.cpp compose_border_canvas() performs for
+    the SDL3 window). Returns (canvas_w, canvas_h, canvas_pixel_bytes)."""
+    canvas_w, canvas_h, x0, y0 = border_geometry(width, height)
+    lo = border & 0xFF
+    hi = (border >> 8) & 0xFF
+    canvas = bytearray(bytes((lo, hi)) * (canvas_w * canvas_h))
+    copy_w = min(width, canvas_w - x0)
+    copy_h = min(height, canvas_h - y0)
+    for y in range(copy_h):
+        src = y * width * 2
+        dst = ((y + y0) * canvas_w + x0) * 2
+        canvas[dst:dst + copy_w * 2] = pixel_bytes[src:src + copy_w * 2]
+    return canvas_w, canvas_h, bytes(canvas)
+
+
 def rgb555_to_rgb888(pixel):
     """Expand one native RGB555 uint16 (bits 14-10=R, 9-5=G, 4-0=B,
     frame_buffer.h's own documented layout) to 8-bit R,G,B via standard
@@ -281,6 +315,12 @@ def main(argv):
     parser.add_argument("input", nargs="?", help="a Hbf1xvMachine::write_frame_dump() output file")
     parser.add_argument("-o", "--out", help="output PNG path")
     parser.add_argument("--self-check", action="store_true", help="run determinism self-check")
+    parser.add_argument(
+        "--with-border",
+        action="store_true",
+        help="compose the presentation border canvas (320x240/640x240, the"
+             " same geometry the SDL3 presenter shows) around the active area",
+    )
     args = parser.parse_args(argv[1:])
 
     if args.self_check:
@@ -291,6 +331,8 @@ def main(argv):
     with open(args.input, "r", encoding="ascii", errors="replace") as handle:
         text = handle.read()
     width, height, border, pixel_bytes = parse_frame_dump(text)
+    if args.with_border:
+        width, height, pixel_bytes = compose_border_canvas(width, height, border, pixel_bytes)
     png = encode_png_rgb8(width, height, pixel_bytes)
     with open(args.out, "wb") as handle:
         handle.write(png)

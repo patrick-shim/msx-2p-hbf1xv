@@ -18,6 +18,7 @@
 #include "devices/chipset/slot_bus.h"
 #include "devices/chipset/switched_io.h"
 #include "devices/chipset/system_bus.h"
+#include "devices/chipset/reset_status_register.h"
 #include "devices/chipset/system_control.h"
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/cartridge/cartridge_slot.h"
@@ -523,6 +524,11 @@ private:
     Ym2413Clock ym2413_clock_{scheduler_};
     devices::audio::Ym2413Opll ym2413_;
     devices::chipset::SystemControlF5 system_control_;  // #F5 (RTC clock gate)
+    // #F4 reset-status latch (boot-logo fix): the MSX2+ BIOS reads it to
+    // distinguish cold power-up (bit 7 clear -> run the animated MSX logo)
+    // from a warm restart (bit 7 set -> skip it). Sony_HB-F1XV.xml declares
+    // the non-inverted variant on port #F4.
+    devices::chipset::ResetStatusRegister reset_status_;  // #F4
     RtcClock rtc_clock_{scheduler_};
     devices::rtc::Rp5c01 rtc_;  // #B4/#B5
     std::filesystem::path backup_ram_path_;

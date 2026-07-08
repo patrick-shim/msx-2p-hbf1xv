@@ -1030,6 +1030,55 @@ target_compile_definitions(hbf1xv_m28_c5_disk_boot_investigation_system_test PRI
 add_test(NAME hbf1xv_m28_c5_disk_boot_investigation_system_test
     COMMAND hbf1xv_m28_c5_disk_boot_investigation_system_test)
 
+# --- Border-box + boot-logo targeted defect cycle (DEC-0026/DEC-0029
+#     precedent; docs/border-and-boot-logo-investigation.md): the #F4
+#     reset-status latch, line-granular S#0 collision re-latching, the
+#     pre-armed R#44 transfer unit, the GRAPHIC5/6 sprite-compositor edge
+#     clip, the presentation border-canvas composition, and the end-to-end
+#     real-BIOS boot-logo sequence guard. All headless-buildable.
+add_executable(devices_chipset_reset_status_register_unit_test
+    unit/devices/chipset_reset_status_register_unit_test.cpp
+)
+target_link_libraries(devices_chipset_reset_status_register_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_chipset_reset_status_register_unit_test
+    COMMAND devices_chipset_reset_status_register_unit_test)
+
+add_executable(devices_sprite_engine_collision_relatch_unit_test
+    unit/devices/video_sprite_engine_collision_relatch_unit_test.cpp
+)
+target_link_libraries(devices_sprite_engine_collision_relatch_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_sprite_engine_collision_relatch_unit_test
+    COMMAND devices_sprite_engine_collision_relatch_unit_test)
+
+add_executable(devices_vdp_command_engine_pending_col_unit_test
+    unit/devices/video_vdp_command_engine_pending_col_unit_test.cpp
+)
+target_link_libraries(devices_vdp_command_engine_pending_col_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_command_engine_pending_col_unit_test
+    COMMAND devices_vdp_command_engine_pending_col_unit_test)
+
+add_executable(devices_vdp_frame_renderer_sprite_edge_clip_unit_test
+    unit/devices/video_vdp_frame_renderer_sprite_edge_clip_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_sprite_edge_clip_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_sprite_edge_clip_unit_test
+    COMMAND devices_vdp_frame_renderer_sprite_edge_clip_unit_test)
+
+add_executable(frontend_border_composer_unit_test
+    unit/frontend/border_composer_unit_test.cpp
+)
+target_link_libraries(frontend_border_composer_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_border_composer_unit_test COMMAND frontend_border_composer_unit_test)
+
+add_executable(machine_hbf1xv_boot_logo_integration_test
+    integration/machine/hbf1xv_boot_logo_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_boot_logo_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_boot_logo_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_boot_logo_integration_test
+    COMMAND machine_hbf1xv_boot_logo_integration_test)
+
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The
 #     default headless (-DSONY_MSX_ENABLE_SDL3=OFF) ctest suite is completely

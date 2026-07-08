@@ -169,6 +169,15 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.attach(0xB5, &rtc_);
     io_bus_.attach(0xF5, &system_control_);
 
+    // #F4 reset-status latch (boot-logo fix; Sony_HB-F1XV.xml
+    // `<ResetStatusRegister>` `<inverted>false</inverted>` `<io base="0xF4"
+    // num="1"/>`). Cold power-up leaves bit 7 clear, which is what tells the
+    // MSX2+ BIOS to run the animated MSX logo before reaching BASIC; the BIOS
+    // then writes bit 7 set (observed on openMSX: #F4 reads 0x00 at power-on,
+    // 0x80 once boot completes). Previously this port was open-bus 0xFF, so
+    // the BIOS always took the warm-restart path and never showed the logo.
+    io_bus_.attach(0xF4, &reset_status_);
+
     // VDP port mirror #98-#9B -> #9C-#9F (fact-sheet §7). The alias was pre-wired
     // in M11; the M14 V9958 is now attached on the four base ports, so it is
     // automatically reachable on #9C-#9F (A-1/A-2; the VDP decodes port & 0x03).
@@ -231,6 +240,11 @@ void Hbf1xvMachine::cold_boot() {
     psg_.reset();
     ym2413_.reset();  // M17: zeroes all 64 registers + the address latch (A-M17-4)
     system_control_.reset();
+    // Cold power-up clears the #F4 reset-status latch (bit 7 clear = cold
+    // boot; the BIOS shows the boot-logo animation and then sets bit 7). Real
+    // hardware preserves this latch across a warm RESET-button reset; this
+    // machine model only exposes cold power-up.
+    reset_status_.power_on_reset();
     rtc_.reset();
     halnote_.reset();  // M20: bank/flag state cleared + sram_ zeroed (A-M20-12)
 

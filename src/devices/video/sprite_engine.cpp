@@ -223,12 +223,15 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
         status_ = static_cast<std::uint8_t>((status_ & 0x20) | last_sprite_num);
     }
 
-    // Collision detection (SpriteChecker.cc:196-241/410-479). Skipped
-    // entirely if a collision is already latched and unread (C bit set) --
-    // the stored collision X/Y persist until an explicit S#5 read.
-    if ((status_ & 0x20) != 0) {
-        return;
-    }
+    // Collision detection (SpriteChecker.cc:196-241/410-479). The frame's
+    // per-line collision EVENTS are always collected (raster order) so the
+    // S#0 read path can re-latch C at raster/line granularity mid-frame
+    // (sync_collision_to_raster(), the boot-logo fix); the stored collision
+    // X/Y and the C bit itself are only (re)latched when C is not already
+    // latched-and-unread -- the stored coordinates persist until an explicit
+    // S#5 read, exactly as before.
+    collision_events_.clear();
+    next_collision_event_ = 0;
     const bool can0collide = (control_regs[8] & 0x20) != 0;  // TP bit SET (VDP.hh:195-201)
 
     for (int line = 0; line < height; ++line) {
@@ -269,13 +272,43 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             }
         }
         if (min_x_collision < 256) {
-            status_ = static_cast<std::uint8_t>(status_ | 0x20);
             // Fixed +12 (X) / +8 (Y) offsets, baked into the status-register
             // contract (SpriteChecker.cc:236-238/474-476).
-            collision_x_ = min_x_collision + 12;
-            collision_y_ = line + 8;
-            return;  // don't check lines with a higher Y-coordinate
+            collision_events_.push_back(CollisionEvent{line, min_x_collision + 12, line + 8});
         }
+    }
+
+    // Frame-boundary latch: preserves the pre-fix contract (C set right after
+    // on_vsync() when this frame has any collision and none is pending),
+    // consuming the earliest event. Later events stay queued for the raster-
+    // granular S#0 re-latch path.
+    if ((status_ & 0x20) == 0 && !collision_events_.empty()) {
+        latch_collision(collision_events_[0]);
+        next_collision_event_ = 1;
+    }
+}
+
+void SpriteEngine::latch_collision(const CollisionEvent& event) {
+    status_ = static_cast<std::uint8_t>(status_ | 0x20);
+    collision_x_ = event.x;
+    collision_y_ = event.y;
+}
+
+void SpriteEngine::sync_collision_to_raster(const int display_line) {
+    if ((status_ & 0x20) != 0) {
+        return;  // latched & unread: hardware does not re-latch/update coords
+    }
+    if (next_collision_event_ < collision_events_.size() &&
+        collision_events_[next_collision_event_].line <= display_line) {
+        latch_collision(collision_events_[next_collision_event_]);
+        ++next_collision_event_;
+    }
+}
+
+void SpriteEngine::consume_collision_events_up_to(const int display_line) {
+    while (next_collision_event_ < collision_events_.size() &&
+           collision_events_[next_collision_event_].line <= display_line) {
+        ++next_collision_event_;
     }
 }
 
@@ -297,6 +330,8 @@ void SpriteEngine::reset_collision() {
 
 void SpriteEngine::reset() {
     lines_.clear();
+    collision_events_.clear();
+    next_collision_event_ = 0;
     status_ = 0;
     collision_x_ = 0;
     collision_y_ = 0;

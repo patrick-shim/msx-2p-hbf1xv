@@ -48,6 +48,19 @@ CMakeUserPresets.json
 !/debug/frames/mg-sprite-invisibility-after.png
 !/debug/frames/mg-sprite-invisibility-openmsx-reference.png
 
+# DEC-0031 exception: the border + boot-logo fixes' before/after/reference
+# evidence (docs/border-and-boot-logo-investigation.md,
+# docs/border-boot-logo-qa-review.md).
+!/debug/frames/boot-logo-before-f0135-no-logo.png
+!/debug/frames/boot-logo-after-f0150-letters-sliding.png
+!/debug/frames/boot-logo-after-f0210-mainram64k.png
+!/debug/frames/boot-logo-openmsx-reference-t2500ms.png
+!/debug/frames/boot-logo-openmsx-reference-t3500ms.png
+!/debug/frames/border-before-f0300-active-area-only.png
+!/debug/frames/border-after-f0300-basic-skyblue-border.png
+!/debug/frames/border-openmsx-reference-basic-t15s.png
+!/debug/frames/border-openmsx-reference-screen0-text.png
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

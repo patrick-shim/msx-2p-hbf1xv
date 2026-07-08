@@ -14,9 +14,12 @@ namespace sony_msx::frontend {
 // documented RGB555 layout (A-M26-3, independently confirmed by reading both
 // `devices/video/frame_buffer.h` and `references/sdl3/include/SDL3/
 // SDL_pixels.h`: bits 14-10=R, 9-5=G, 4-0=B, bit15/X unused, both plain
-// host-native uint16_t values in memory) -- so `blit_frame()` uploads the
-// raw `FrameBuffer::pixels` buffer via `SDL_UpdateTexture` with ZERO
-// per-pixel conversion in this project's own code.
+// host-native uint16_t values in memory). `blit_frame()` first composes the
+// frame into its border-colored presentation canvas (frontend/
+// border_composer.h, the border-box fix), then uploads that canvas's raw
+// uint16_t pixel buffer via `SDL_UpdateTexture` with ZERO per-pixel
+// conversion in this project's own code (composition copies pixel values,
+// never converts them).
 //
 // `blit_frame()`/`present()` are split (rather than one combined call) so a
 // test can read back the texture's presented pixel data via
@@ -32,10 +35,14 @@ public:
     Sdl3VideoPresenter(const Sdl3VideoPresenter&) = delete;
     Sdl3VideoPresenter& operator=(const Sdl3VideoPresenter&) = delete;
 
-    // Uploads `frame` to the (recreated-on-mode-switch) texture and draws it
-    // to the renderer's current target (SDL_UpdateTexture + SDL_RenderClear +
-    // SDL_RenderTexture) -- does NOT call SDL_RenderPresent(). Returns false
-    // (and records last_error()) on any SDL3 call failure.
+    // Composes `frame` into its border-colored presentation canvas
+    // (frontend/border_composer.h -- active area at its raster-true position
+    // inside a live-per-frame R#7 border surround, 320x240 or 640x240),
+    // uploads the canvas to the (recreated-on-mode-switch) texture and draws
+    // it to the renderer's current target (SDL_UpdateTexture +
+    // SDL_RenderClear + SDL_RenderTexture) -- does NOT call
+    // SDL_RenderPresent(). Returns false (and records last_error()) on any
+    // SDL3 call failure.
     bool blit_frame(const devices::video::FrameBuffer& frame);
 
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept

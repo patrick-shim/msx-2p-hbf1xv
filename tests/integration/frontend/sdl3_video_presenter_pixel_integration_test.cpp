@@ -5,26 +5,27 @@
 #include <iostream>
 
 #include "devices/video/frame_buffer.h"
+#include "frontend/border_composer.h"
 #include "frontend/sdl3_video_presenter.h"
 
 // Suite: Frontend_Sdl3VideoPresenterPixel_Integration (M26-S3, docs/m26-
-// planner-package.md §2.3/A-M26-3).
+// planner-package.md §2.3/A-M26-3; updated for the border-box fix).
 //
-// Independently PROVES (not merely assumes) that A-M26-3's "zero conversion"
-// claim is genuinely true: renders a KNOWN synthetic FrameBuffer through the
-// real Sdl3VideoPresenter::blit_frame() path, reads the PRESENTED pixel data
-// back via the real SDL_RenderReadPixels(), and asserts it matches
-// FrameBuffer's own RGB555 values bit-for-bit (after SDL3's OWN
-// format-aware SDL_ConvertSurface() normalizes the readback surface to
-// SDL_PIXELFORMAT_XRGB1555 for the comparison -- SDL_RenderReadPixels
-// documents that it returns whatever format the CURRENT RENDER TARGET uses,
-// SDL_render.h:2546-2571, which is not necessarily the uploaded texture's
-// own format; this normalization step is SDL3's own trusted, general-purpose
-// color-format converter, not any per-pixel logic added by this project's
-// own C++ code -- the actual "zero conversion" claim under test concerns
-// Sdl3VideoPresenter::blit_frame()'s own SDL_UpdateTexture call, which is
-// independently confirmed by direct source inspection to hand FrameBuffer::
-// pixels.data() to SDL3 with no per-pixel transform whatsoever).
+// Independently PROVES (not merely assumes) two things about the real
+// Sdl3VideoPresenter::blit_frame() path:
+//   1. A-M26-3 "zero conversion": the presented ACTIVE-AREA pixel data
+//      matches FrameBuffer's own RGB555 values bit-for-bit.
+//   2. Border-box composition: the active area sits at its raster-true
+//      border_geometry() anchor inside a border_color surround (the
+//      border-box fix) -- asserted against the SAME border_composer
+//      geometry the presenter uses, with the border color live per frame.
+//
+// The readback surface is normalized to SDL_PIXELFORMAT_XRGB1555 via SDL3's
+// OWN SDL_ConvertSurface (SDL_RenderReadPixels returns whatever format the
+// current render target uses, SDL_render.h:2546-2571); the window/render
+// target is created at EXACTLY the composed canvas size so the
+// SDL_RenderTexture(..., nullptr, nullptr) full-target blit is 1:1 with no
+// scaling ambiguity.
 
 namespace {
 
@@ -47,9 +48,9 @@ void set_dummy_drivers() {
 
 sony_msx::devices::video::FrameBuffer make_known_frame() {
     sony_msx::devices::video::FrameBuffer frame;
-    frame.width = 6;
-    frame.height = 4;
-    frame.border_color = 0x0000;
+    frame.width = 256;
+    frame.height = 192;
+    frame.border_color = 0x2E5F;  // a distinctive, non-zero live border color
     frame.pixels.resize(static_cast<std::size_t>(frame.width) * static_cast<std::size_t>(frame.height));
     // A varied set of real RGB555 values (including the all-1s/all-0s
     // boundary cases) so a pixel-format/byte-order mismatch would be caught,
@@ -65,6 +66,14 @@ sony_msx::devices::video::FrameBuffer make_known_frame() {
     return frame;
 }
 
+std::uint16_t surface_pixel(const SDL_Surface* surface, const int x, const int y) {
+    const auto* row =
+        static_cast<const std::uint8_t*>(surface->pixels) + static_cast<std::size_t>(y) * surface->pitch;
+    std::uint16_t value = 0;
+    std::memcpy(&value, row + static_cast<std::size_t>(x) * 2, 2);
+    return value;
+}
+
 }  // namespace
 
 int main() {
@@ -75,15 +84,16 @@ int main() {
         return 1;
     }
 
-    // The window/render-target is created at EXACTLY the known FrameBuffer's
-    // own dimensions (6x4, matching make_known_frame() below) -- avoiding
-    // any scaling ambiguity in the SDL_RenderTexture(..., nullptr, nullptr)
-    // full-target blit, so a readback pixel at (x,y) corresponds 1:1 to the
-    // SAME logical FrameBuffer pixel, not an interpolated/scaled sample.
+    const sony_msx::devices::video::FrameBuffer frame = make_known_frame();
+    const sony_msx::frontend::BorderGeometry geometry =
+        sony_msx::frontend::border_geometry(frame.width, frame.height);
+
+    // Window/render target at EXACTLY the composed canvas size (320x240 for
+    // a 256x192 frame) so readback (x,y) is 1:1 with canvas pixels.
     SDL_Window* window = nullptr;
     SDL_Renderer* renderer = nullptr;
-    const bool created = SDL_CreateWindowAndRenderer("m26-video-presenter-test", 6, 4, SDL_WINDOW_HIDDEN, &window,
-                                                      &renderer);
+    const bool created = SDL_CreateWindowAndRenderer("m26-video-presenter-test", geometry.canvas_width,
+                                                      geometry.canvas_height, SDL_WINDOW_HIDDEN, &window, &renderer);
     expect(created, "CreateWindowAndRenderer_SucceedsUnderDummyDriver");
     if (!created) {
         std::cerr << "  " << SDL_GetError() << "\n";
@@ -93,7 +103,6 @@ int main() {
 
     {
         sony_msx::frontend::Sdl3VideoPresenter presenter(renderer);
-        const sony_msx::devices::video::FrameBuffer frame = make_known_frame();
 
         const bool blitted = presenter.blit_frame(frame);
         expect(blitted, "BlitFrame_Succeeds");
@@ -116,16 +125,15 @@ int main() {
             }
 
             if (normalized != nullptr) {
-                expect(normalized->w >= frame.width && normalized->h >= frame.height,
-                       "PresentedSurface_AtLeastAsLargeAsFrameBuffer");
+                expect(normalized->w >= geometry.canvas_width && normalized->h >= geometry.canvas_height,
+                       "PresentedSurface_AtLeastComposedCanvasSize");
 
+                // 1. Active area, bit-for-bit at the composed anchor.
                 bool all_pixels_match = true;
                 for (int y = 0; y < frame.height && all_pixels_match; ++y) {
-                    const auto* row =
-                        static_cast<const std::uint8_t*>(normalized->pixels) + static_cast<std::size_t>(y) * normalized->pitch;
                     for (int x = 0; x < frame.width; ++x) {
-                        std::uint16_t presented_pixel = 0;
-                        std::memcpy(&presented_pixel, row + static_cast<std::size_t>(x) * 2, 2);
+                        const std::uint16_t presented_pixel =
+                            surface_pixel(normalized, geometry.x0 + x, geometry.y0 + y);
                         const std::uint16_t expected_pixel = frame.at(x, y);
                         if (presented_pixel != expected_pixel) {
                             all_pixels_match = false;
@@ -136,7 +144,21 @@ int main() {
                     }
                 }
                 expect(all_pixels_match,
-                       "PresentedPixelData_MatchesFrameBufferOwnValues_BitForBit_AM26_3_ZeroConversionProof");
+                       "PresentedActiveArea_MatchesFrameBufferOwnValues_BitForBit_AM26_3_ZeroConversionProof");
+
+                // 2. Border surround: corners + just-outside-active-edge
+                //    pixels all carry the frame's live border color.
+                const std::uint16_t bc = frame.border_color;
+                expect(surface_pixel(normalized, 0, 0) == bc &&
+                           surface_pixel(normalized, geometry.canvas_width - 1, 0) == bc &&
+                           surface_pixel(normalized, 0, geometry.canvas_height - 1) == bc &&
+                           surface_pixel(normalized, geometry.canvas_width - 1, geometry.canvas_height - 1) == bc,
+                       "PresentedBorder_Corners_AreLiveBorderColor");
+                expect(surface_pixel(normalized, geometry.x0 - 1, geometry.y0 + 10) == bc &&
+                           surface_pixel(normalized, geometry.x0 + frame.width, geometry.y0 + 10) == bc &&
+                           surface_pixel(normalized, geometry.x0 + 10, geometry.y0 - 1) == bc &&
+                           surface_pixel(normalized, geometry.x0 + 10, geometry.y0 + frame.height) == bc,
+                       "PresentedBorder_JustOutsideActiveEdges_AreLiveBorderColor");
             }
 
             if (owns_normalized && normalized != nullptr) {
@@ -148,12 +170,15 @@ int main() {
         const bool presented = presenter.present();
         expect(presented, "Present_Succeeds");
 
-        // A mode switch (different width/height) recreates the texture
-        // cleanly -- a second, differently-sized blit still succeeds.
-        sony_msx::devices::video::FrameBuffer frame2 = frame;
-        frame2.width = 8;
-        frame2.height = 8;
-        frame2.pixels.assign(64, 0x1234);
+        // A mode switch (different active dimensions -> different composed
+        // canvas, 640x240) recreates the texture cleanly -- a second,
+        // differently-sized blit still succeeds.
+        sony_msx::devices::video::FrameBuffer frame2;
+        frame2.width = 512;
+        frame2.height = 212;
+        frame2.border_color = 0x0007;
+        frame2.pixels.assign(static_cast<std::size_t>(frame2.width) * static_cast<std::size_t>(frame2.height),
+                             0x1234);
         expect(presenter.blit_frame(frame2), "BlitFrame_AfterModeSwitch_Succeeds");
     }
 

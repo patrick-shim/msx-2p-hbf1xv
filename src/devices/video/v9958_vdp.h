@@ -146,6 +146,16 @@ private:
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
 
+    // Current raster position as an ACTIVE-DISPLAY line index (0-based;
+    // negative while the raster is in the border/erase/sync region between
+    // on_vsync() -- the start of the lower border, fact-sheet §7 -- and the
+    // top of the next active area). Derived pull-style from the same
+    // VdpClockSource the S#2 VR/HR bits use; INT_MIN when no clock is
+    // attached (turning the sprite engine's raster-collision hooks into
+    // no-ops, preserving clockless-test behavior). Used by the S#0 read path
+    // for line-granular collision re-latching (boot-logo fix).
+    [[nodiscard]] int raster_display_line() const;
+
     VdpVram vram_;
     std::array<std::uint8_t, kNumControlRegs> control_regs_{};
     std::array<std::uint16_t, kNumPaletteEntries> palette_{};

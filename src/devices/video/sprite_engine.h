@@ -74,11 +74,49 @@ public:
     // BOTH collision X and Y (SpriteChecker::resetCollision()).
     void reset_collision();
 
+    // Per-line collision re-latch against the live raster position (boot-logo
+    // fix). Real hardware checks sprites PROGRESSIVELY as the raster scans
+    // (openMSX models this in SpriteChecker::sync()/checkSprites1/2, which
+    // run "up to the current emulation time" -- SpriteChecker.hh:70-100): the
+    // S#0 C flag therefore re-latches on the NEXT colliding line scanned
+    // after an S#0 read cleared it, i.e. with LINE granularity, not frame
+    // granularity. The HB-F1XV BIOS's boot-logo wobble effect depends on
+    // this: it paces one R#26/R#27 write per S#0-C poll exit (BIOS
+    // f1xvbios.rom loop at 0x7A5D-0x7A74), which on a frame-granular model
+    // runs two orders of magnitude too slowly and never visibly completes.
+    //
+    // recompute_frame() therefore collects the frame's per-line collision
+    // EVENTS (raster order); the V9958Vdp S#0 read path calls these two
+    // hooks with the current raster display line (derived from its existing
+    // pull-style VdpClockSource -- this engine still owns no clock):
+    //  * sync_collision_to_raster(): if C is clear, latch the next
+    //    unconsumed event the raster has already scanned
+    //    (event line <= display_line).
+    //  * consume_collision_events_up_to(): called after the S#0 read-clear;
+    //    events at already-scanned lines are in the raster's past and can
+    //    never re-latch (matches progressive hardware checking).
+    // With no clock attached the caller passes INT_MIN, making both no-ops
+    // (the pre-fix frame-granular behavior, preserved for clockless tests).
+    void sync_collision_to_raster(int display_line);
+    void consume_collision_events_up_to(int display_line);
+
     // Deterministic power-on reset.
     void reset();
 
 private:
+    // One per-line collision event (coordinates already carry the +12/+8
+    // S#3-S#6 offsets, SpriteChecker.cc:236-238/474-476).
+    struct CollisionEvent {
+        int line = 0;
+        int x = 0;
+        int y = 0;
+    };
+
+    void latch_collision(const CollisionEvent& event);
+
     std::vector<std::vector<VisibleSprite>> lines_;
+    std::vector<CollisionEvent> collision_events_;
+    std::size_t next_collision_event_ = 0;
     std::uint8_t status_ = 0;
     int collision_x_ = 0;
     int collision_y_ = 0;

@@ -105,6 +105,11 @@ void VdpCommandEngine::write_register(const int index, const std::uint8_t value)
     case 11: ny_ = (ny_ & 0x0FFu) | (static_cast<unsigned>(value & 0x03u) << 8); break;
     case 12:  // R#44 COL
         col_ = value;
+        // Any COL write arms one pending transfer unit, even before a
+        // command is issued (VDPCmdEngine.cc:1856-1863 `transfer = true` --
+        // the MSX2+ boot-logo LMMC protocol pre-loads its first pixel this
+        // way; see transfer_pending_'s doc comment in the header).
+        transfer_pending_ = true;
         if ((transfer_kind_ == TransferKind::Lmmc || transfer_kind_ == TransferKind::Hmmc) && ce()) {
             perform_transfer_step();
         } else if (!ce()) {
@@ -170,6 +175,7 @@ void VdpCommandEngine::reset() {
     col_ = arg_ = cmd_ = 0;
     status_ = 0;
     scr_mode_ = -1;
+    transfer_pending_ = false;
     transfer_kind_ = TransferKind::None;
     transfer_adx_ = transfer_dy_ = transfer_dx_start_ = 0;
     transfer_anx_ = transfer_tmp_nx_ = transfer_tmp_ny_ = 0;
@@ -588,6 +594,13 @@ void VdpCommandEngine::start_lmmc() {
     if (transfer_tmp_nx_ == 0 || transfer_tmp_ny_ == 0) {
         command_done();
         transfer_kind_ = TransferKind::None;
+        return;
+    }
+    // Consume a pre-armed COL unit as the FIRST pixel (bug#1014 semantics:
+    // start itself never arms, but a COL value written BEFORE the command
+    // is one pending unit -- the MSX2+ boot-logo protocol).
+    if (transfer_pending_) {
+        perform_transfer_step();
     }
 }
 
@@ -610,10 +623,17 @@ void VdpCommandEngine::start_hmmc() {
     if (transfer_tmp_nx_ == 0 || transfer_tmp_ny_ == 0) {
         command_done();
         transfer_kind_ = TransferKind::None;
+        return;
+    }
+    // Same pre-armed-COL first-byte consumption as start_lmmc() (bug#1014
+    // semantics; VDPCmdEngine.cc:1732-1733 "see startLmmc()").
+    if (transfer_pending_) {
+        perform_transfer_step();
     }
 }
 
 void VdpCommandEngine::perform_transfer_step() {
+    transfer_pending_ = false;  // consume the armed unit (reference `transfer = false`)
     const ModeTraits& t = traits_for(scr_mode_);
     if (transfer_kind_ == TransferKind::Lmmc) {
         const std::uint8_t cl = static_cast<std::uint8_t>(col_ & t.color_mask);

@@ -1,5 +1,6 @@
 #include "devices/video/v9958_vdp.h"
 
+#include <limits>
 #include <span>
 
 #include "devices/video/vdp_access_timing.h"
@@ -197,6 +198,16 @@ std::uint8_t V9958Vdp::read_status(const int reg) {
     if (reg == 7) {
         cmd_engine_.on_color_register_read();
     }
+    if (reg == 0) {
+        // Line-granular collision re-latch (boot-logo fix): before the value
+        // is fetched, latch any per-line collision event the raster has
+        // scanned since the last S#0 read-clear. Real hardware checks
+        // sprites progressively as the raster advances (SpriteChecker.hh:
+        // 70-100 sync()/checkSprites), so C re-latches per colliding LINE,
+        // not per frame -- the HB-F1XV BIOS boot-logo wobble paces one
+        // scroll-register write per S#0-C poll exit and needs this.
+        sprite_engine_.sync_collision_to_raster(raster_display_line());
+    }
     const std::uint8_t ret = peek_status_register(reg);
     switch (reg) {
     case 0:
@@ -207,6 +218,10 @@ std::uint8_t V9958Vdp::read_status(const int reg) {
         status_reg0_ = static_cast<std::uint8_t>(status_reg0_ & ~0x80);
         irq_vertical_ = false;
         sprite_engine_.reset_status();
+        // Events at lines the raster has already scanned are in the past --
+        // they can never re-latch after this read's clear (progressive
+        // hardware checking; see sprite_engine.h).
+        sprite_engine_.consume_collision_events_up_to(raster_display_line());
         update_irq();
         break;
     case 1:
@@ -403,6 +418,22 @@ std::uint8_t V9958Vdp::control_register(const int index) const {
         return 0;
     }
     return control_regs_[static_cast<std::size_t>(index)];
+}
+
+int V9958Vdp::raster_display_line() const {
+    if (clock_source_ == nullptr) {
+        return std::numeric_limits<int>::min();  // clockless: hooks no-op
+    }
+    // Same frame-position arithmetic as the S#2 VR bit (fact-sheet §7 NTSC
+    // breakdown; on_vsync() fires at the start of the lower border, so
+    // tstates==0 is the first bottom-border line): the active display of the
+    // frame being scanned occupies [non_active_lines, 262).
+    const std::uint64_t tstates = clock_source_->cpu_tstates_since_vsync();
+    const int line_since_vsync =
+        static_cast<int>((tstates / static_cast<std::uint64_t>(vdp_access_timing::kCpuTstatesPerLine)) % 262);
+    const bool ln212 = (control_regs_[9] & 0x80) != 0;
+    const int non_active_lines = ln212 ? 50 : 70;  // 262-212 / 262-192
+    return line_since_vsync - non_active_lines;
 }
 
 std::uint8_t V9958Vdp::peek_status_register(const int reg) const {

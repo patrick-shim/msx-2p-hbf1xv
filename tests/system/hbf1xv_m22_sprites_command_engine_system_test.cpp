@@ -156,11 +156,24 @@ int main() {
             0x3E, 0x04, 0xD3, 0x99,  // R#40 data (NX low = 4 pixels = 2 bytes)
             0x3E, 0xA8, 0xD3, 0x99,
 
-            0x3E, 0xB0, 0xD3, 0x99,  // R#46 data (CMD = 0xB0 -> LMMC, IMP)
-            0x3E, 0xAE, 0xD3, 0x99,  // starts the event-driven transfer
-
-            0x3E, 0x01, 0xD3, 0x99,  // R#44 data = 1 (pixel 0)
+            // Authentic LMMC protocol (the real MSX2+ BIOS boot-logo shape,
+            // boot-logo fix): pixel 0's color is PRE-LOADED into R#44 BEFORE
+            // the command -- any R#44 write arms exactly one pending
+            // transfer unit that the command start consumes (openMSX
+            // VDPCmdEngine.cc:1856-1863 `transfer = true` + startLmmc's
+            // bug#1014 comment; independently corroborated by fMSX
+            // V9938.c VDPWrite()'s TR-clear + LmmcEngine()'s consume-on-
+            // TR-clear). This also replaces the stale 0x5A left armed by
+            // the HMMV COL write above -- on real hardware THAT byte would
+            // otherwise have become LMMC pixel 0 (the pre-fix ordering of
+            // this program, which only produced 0x12/0x34 under the old,
+            // reference-divergent "start never consumes" model).
+            0x3E, 0x01, 0xD3, 0x99,  // R#44 data = 1 (pixel 0, pre-loaded)
             0x3E, 0xAC, 0xD3, 0x99,
+
+            0x3E, 0xB0, 0xD3, 0x99,  // R#46 data (CMD = 0xB0 -> LMMC, IMP)
+            0x3E, 0xAE, 0xD3, 0x99,  // starts the transfer, consumes pixel 0
+
             0x3E, 0x02, 0xD3, 0x99,  // pixel 1
             0x3E, 0xAC, 0xD3, 0x99,
             0x3E, 0x03, 0xD3, 0x99,  // pixel 2

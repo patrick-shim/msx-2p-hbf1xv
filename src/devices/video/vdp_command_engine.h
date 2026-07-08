@@ -135,6 +135,17 @@ private:
     int scr_mode_ = -1;
 
     // Event-driven transfer state (LMCM/LMMC/HMMC only).
+    // transfer_pending_ mirrors the reference's `transfer` flag
+    // (VDPCmdEngine.cc:1856-1863 setCmdReg case 0x0C: ANY R#44/COL write
+    // arms exactly one pending CPU->VRAM transfer unit -- even BEFORE the
+    // command is issued -- while startLmmc/startHmmc deliberately do NOT arm
+    // it themselves, VDPCmdEngine.cc:1303-1305/1732-1733 "do not set
+    // 'transfer = true'", their bug#1014). A pre-armed unit is consumed as
+    // the FIRST transferred unit when LMMC/HMMC starts: the MSX2+ boot logo
+    // (HB-F1XV SUB-ROM) pre-loads the first pixel color into R#44, issues
+    // LMMC, then sends only NX*NY-1 further writes -- without this flag the
+    // command never completes and the BIOS spins forever on S#2 CE.
+    bool transfer_pending_ = false;
     TransferKind transfer_kind_ = TransferKind::None;
     unsigned transfer_adx_ = 0, transfer_dy_ = 0;
     unsigned transfer_dx_start_ = 0;

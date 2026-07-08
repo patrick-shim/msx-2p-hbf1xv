@@ -1,5 +1,7 @@
 #include "frontend/sdl3_video_presenter.h"
 
+#include "frontend/border_composer.h"
+
 namespace sony_msx::frontend {
 
 Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer) : renderer_(renderer) {}
@@ -34,14 +36,21 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
 }
 
 bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
-    if (!ensure_texture(frame.width, frame.height)) {
+    // Border-box composition (border fix): a real display shows the active
+    // area surrounded by the R#7 border color, so the presented texture is
+    // the composed 320x240 / 640x240 canvas (border_composer.h documents the
+    // raster-true geometry), not the bare active area stretched edge to
+    // edge. The border color is live per frame (frame.border_color).
+    const devices::video::FrameBuffer canvas = compose_border_canvas(frame);
+    if (!ensure_texture(canvas.width, canvas.height)) {
         return false;
     }
 
-    // Zero per-pixel conversion (A-M26-3): FrameBuffer::pixels is handed to
-    // SDL3 as-is, a raw uint16_t buffer, pitch = width * sizeof(uint16_t).
-    const int pitch = frame.width * static_cast<int>(sizeof(std::uint16_t));
-    if (!SDL_UpdateTexture(texture_, nullptr, frame.pixels.data(), pitch)) {
+    // Zero per-pixel conversion (A-M26-3): the composed canvas's pixels are
+    // handed to SDL3 as-is, a raw uint16_t buffer, pitch = width *
+    // sizeof(uint16_t). (Composition copies pixels but never converts them.)
+    const int pitch = canvas.width * static_cast<int>(sizeof(std::uint16_t));
+    if (!SDL_UpdateTexture(texture_, nullptr, canvas.pixels.data(), pitch)) {
         last_error_ = SDL_GetError();
         return false;
     }

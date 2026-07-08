@@ -275,6 +275,19 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
     // source): TP bit CLEAR -> transparency ON (skip color-0 pixels).
     const bool tp_enabled = (vdp_->control_register(8) & 0x20) == 0;
     const int w = width();
+    // Sprite X coordinates live in a 256-wide space even on the 512-wide
+    // GRAPHIC5/GRAPHIC6 canvases -- each sprite pixel there spans TWO canvas
+    // pixels (out[x*2+0/1] below), so the per-pixel loop must clip at the
+    // sprite-space limit (256), NOT the canvas width. The reference encodes
+    // the same contract: SpriteConverter.hh:134-143 documents the mode-2
+    // buffer as "256 pixels wide" in sprite coordinates with maxX clipping
+    // via clipPattern(), then writes pixelPtr[x*2+0/1] for GRAPHIC5/6
+    // (SpriteConverter.hh:186-198). Using the canvas width here let a
+    // right-edge sprite (the MSX2+ boot-logo animation places its sliding
+    // letter sprites there in SCREEN 6) write out[x*2+1] past the row span
+    // -- an out-of-bounds write (debug-CRT abort during the boot logo).
+    const bool doubled = (m.mode == VdpMode::Graphic5 || m.mode == VdpMode::Graphic6);
+    const int x_limit = doubled ? w / 2 : w;
 
     if (sprite_mode == 1) {
         // Mode 1: reverse-priority overdraw -- draw the highest sprite index
@@ -292,7 +305,7 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
                 pattern <<= static_cast<unsigned>(-x);
                 x = 0;
             }
-            for (; pattern != 0 && x < w; pattern <<= 1, ++x) {
+            for (; pattern != 0 && x < x_limit; pattern <<= 1, ++x) {
                 if (pattern & 0x8000'0000u) {
                     out[static_cast<std::size_t>(x)] = color;
                 }
@@ -319,7 +332,7 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
         }
         const std::uint8_t base_color = static_cast<std::uint8_t>(s.color_attrib & 0x0F);
         if (base_color == 0 && tp_enabled) continue;
-        for (; pattern != 0 && x < w; pattern <<= 1, ++x) {
+        for (; pattern != 0 && x < x_limit; pattern <<= 1, ++x) {
             if (!(pattern & 0x8000'0000u)) continue;
             std::uint8_t color = base_color;
             // OR-merge any immediately-following (higher index, contiguous)
