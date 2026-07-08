@@ -68,15 +68,31 @@ ground accuracy and behavior. Treat them as authoritative grounding evidence —
 memory or assumption when specifying or implementing device behavior. This folder grows over
 time; check it before inventing behavior.
 
-- `references/openmsx-21.0/` — openMSX 21.0 source tree. The **behavior reference** for
+- `references/openmsx-21.0/` — openMSX 21.0 source tree. The **primary behavior reference** for
   device/timing semantics and the basis for A/B parity. Read it to understand correct behavior;
   **never copy its code into `src/`** (license isolation — openMSX is GPL). Cite it as
   `references/openmsx-21.0/<path>` when grounding a claim.
+- `references/fmsx-60/` — fMSX 6.0 (Marat Fayzullin) source tree + executables/ROMs. A **second,
+  independent behavior cross-reference** (added 2026-07-08, human-provided): an implementation
+  lineage independent of openMSX, valuable for triangulating device behavior when the two
+  references agree/disagree (V9938 command engine in `source/fMSX/V9938.c`, AY8910 PSG, YM2413,
+  SCC, WD1793-family FDC, i8255 PPI in `source/EMULib/`, Z80 core in `source/Z80/`). License:
+  freeware, **non-commercial distribution only, not open-source** — the same hard rule as openMSX
+  applies: read for understanding, **never copy its code into `src/`**, and its large data tables
+  fall under the standing zero-license-sensitive-work directive exactly like openMSX's. Cite as
+  `references/fmsx-60/<path>`. Its bundled generic MSX ROMs (`executables/*.ROM`) are
+  cross-reference assets only — this project's machine uses the Sony-specific ROMs in `bios/`.
 - `references/sdl3/` — SDL3 source tree. The **API reference** for frontend integration; consult
   for exact SDL3 signatures/semantics rather than guessing. Do not vendor its code into `src/`.
 - `references/fact-sheets/` — curated hardware/device fact sheets (e.g.
   `references/fact-sheets/Yamaha V9958 VDP.md`). Authoritative spec grounding for the target
   machine's components. New sheets are added here as needed.
+- `references/zexall/` — legally-sourced ZEXALL/ZEXDOC Z80 exerciser binaries (GPL v2, YAZE-AG),
+  used as black-box test fixtures by the M24 CPU-regression suite.
+
+When two behavior references disagree, do not silently pick one: check the fact-sheets/primary
+documentation, note the disagreement in the relevant investigation/implementation report, and
+prefer the interpretation corroborated by real-hardware documentation or A/B evidence.
 
 Rules: when a behavior-affecting decision cites hardware behavior, cite the concrete
 `references/...` path. Reference material grounds understanding and A/B comparison; it does not
@@ -167,8 +183,10 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
 - `bios/`, `roms/`, `disks/` — local development assets (legally sourced; not redistributable).
   `disks/` holds MSX-DOS floppy disk images (e.g. `msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`)
   used for FDC/boot testing.
-- `references/` — read-only grounding sources: openMSX 21.0 source (behavior reference), SDL3
-  source (API reference), and `fact-sheets/` (hardware specs). Reference only; never copied into
-  `src/`. See [Reference materials](#reference-materials-grounding-sources).
+- `references/` — read-only grounding sources: openMSX 21.0 source (primary behavior reference),
+  fMSX 6.0 source (independent second behavior cross-reference, non-commercial freeware), SDL3
+  source (API reference), `fact-sheets/` (hardware specs), and `zexall/` (CPU test fixtures).
+  Reference only; never copied into `src/`. See
+  [Reference materials](#reference-materials-grounding-sources).
 - `.claude/` — agents, commands, workflow, and settings for the orchestration.
 - `debug/` - debug traces, video frames, audio captures, cpu and memory dumps, and etc.

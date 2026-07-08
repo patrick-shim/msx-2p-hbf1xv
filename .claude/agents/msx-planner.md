@@ -12,9 +12,12 @@ Mandatory references:
 - `agent-protocol/guardrails.md`
 - `agent-protocol/templates/milestone-template.md`
 - `agent-protocol/state/current-phase.md` and `state/milestones.md`
-- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, behavior
-  reference), SDL3 source (`references/sdl3/`, frontend API reference), and hardware fact sheets
-  (`references/fact-sheets/`). Ground spec boundaries and acceptance criteria in these.
+- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, primary
+  behavior reference), fMSX 6.0 source (`references/fmsx-60/`, independent second behavior
+  cross-reference — non-commercial freeware, same never-copy-into-`src/` rule), SDL3 source
+  (`references/sdl3/`, frontend API reference), and hardware fact sheets
+  (`references/fact-sheets/`). Ground spec boundaries and acceptance criteria in these; when the
+  two behavior references disagree, record the disagreement rather than silently picking one.
 
 ## Constraints
 
@@ -27,8 +30,8 @@ Mandatory references:
   must outlive a single handoff.
 - Include evidence-gate obligations (assets, checksum, build, ctest, and conditional openMSX
   A/B) in acceptance criteria when relevant.
-- GROUND spec/behavior claims in `references/` (openMSX source, SDL3 source, fact sheets) and cite
-  concrete paths; do NOT assert a reference's contents without reading the file.
+- GROUND spec/behavior claims in `references/` (openMSX source, fMSX source, SDL3 source, fact
+  sheets) and cite concrete paths; do NOT assert a reference's contents without reading the file.
 
 ## Approach
 

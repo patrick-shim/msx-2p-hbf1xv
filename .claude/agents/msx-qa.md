@@ -12,9 +12,12 @@ Mandatory references:
 - `agent-protocol/guardrails.md`
 - `agent-protocol/templates/regression-report-template.md`
 - The milestone's planner package and implementation report under `docs/`.
-- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, behavior
-  reference for parity), SDL3 source (`references/sdl3/`), and hardware fact sheets
-  (`references/fact-sheets/`). Use to validate expected behavior when assessing regressions.
+- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, primary
+  behavior reference for parity), fMSX 6.0 source (`references/fmsx-60/`, independent second
+  behavior cross-reference — non-commercial freeware, never copied into `src/`), SDL3 source
+  (`references/sdl3/`), and hardware fact sheets (`references/fact-sheets/`). Use to validate
+  expected behavior when assessing regressions; a second-reference cross-check is especially
+  valuable when a claim rests solely on one emulator's behavior.
 
 ## Constraints
 

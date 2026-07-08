@@ -107,14 +107,24 @@ accuracy and behavior. Agents must prefer these over memory or assumption when s
 implementing device behavior, and must cite concrete `references/...` paths when grounding a
 behavior claim. The folder grows over time; check it before inventing behavior.
 
-- `references/openmsx-21.0/`: openMSX 21.0 source tree — the behavior reference for device/timing
-  semantics and the basis for A/B parity. Read for understanding only; its code is GPL and MUST
-  NOT be copied into `src/` (license isolation).
+- `references/openmsx-21.0/`: openMSX 21.0 source tree — the primary behavior reference for
+  device/timing semantics and the basis for A/B parity. Read for understanding only; its code is
+  GPL and MUST NOT be copied into `src/` (license isolation).
+- `references/fmsx-60/`: fMSX 6.0 (Marat Fayzullin) source tree + executables/ROMs — an
+  independent second behavior cross-reference (human-provided, 2026-07-08), from an implementation
+  lineage independent of openMSX (V9938 command engine, AY8910, YM2413, SCC, WD1793-family FDC,
+  i8255, Z80 core). License: freeware, non-commercial distribution only, NOT open-source — read
+  for understanding only; its code MUST NOT be copied into `src/`, and its data tables fall under
+  the same zero-license-sensitive-work discipline as openMSX's. When the two behavior references
+  disagree, record the disagreement and prefer the fact-sheet/real-hardware-corroborated
+  interpretation.
 - `references/sdl3/`: SDL3 source tree — the API reference for frontend integration. Consult for
   exact signatures/semantics; do not vendor its code into `src/`.
 - `references/fact-sheets/`: curated hardware/device fact sheets (e.g.
   `references/fact-sheets/Yamaha V9958 VDP.md`) — authoritative spec grounding for the target
   machine's components. New sheets are added as needed.
+- `references/zexall/`: legally-sourced ZEXALL/ZEXDOC Z80 exerciser binaries (GPL v2, YAZE-AG) —
+  black-box CPU-regression test fixtures (M24).
 
 Reference material grounds understanding and A/B comparison; it does not relax the Target Machine
 Specification or license terms. Do not assert a reference says something without reading the file.
@@ -124,7 +134,8 @@ Specification or license terms. Do not assert a reference says something without
 - `docs/`: design notes, architecture records, milestone references.
 - `bios/`: local BIOS assets for development/testing.
 - `roms/`: local ROM assets for development/testing.
-- `references/`: read-only grounding sources (openMSX 21.0 source, SDL3 source, `fact-sheets/`).
+- `references/`: read-only grounding sources (openMSX 21.0 source, fMSX 6.0 source, SDL3 source,
+  `fact-sheets/`, `zexall/`).
 - `tools/`: helper automation scripts used by agents and developers.
 - `debug/`: logs, traces, frame captures, audio captures, cpu and memory dumps, and etc.
 
@@ -134,6 +145,6 @@ Directory usage rules:
 - Any assumption about BIOS/ROM presence must be verified by checking file paths.
 - Planning decisions that affect execution should be captured in `docs/` or protocol channels.
 - Behavior/spec claims should be grounded in `references/` and cite the concrete file path; never
-  copy `references/openmsx-21.0/` or `references/sdl3/` code into `src/`.
+  copy `references/openmsx-21.0/`, `references/fmsx-60/`, or `references/sdl3/` code into `src/`.
 - openMSX A/B smoke evidence should be captured via `tools/openmsx-ab-smoke.ps1` and stored in `docs/openmsx-ab-smoke.md`.
 - While QAing and debugging, all data must be read or written from/to this `debug/` directory (NOTE: organize sub-directories if needed).

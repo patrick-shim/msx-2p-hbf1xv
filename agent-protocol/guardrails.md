@@ -21,8 +21,10 @@ Master must not directly invoke Planner, Developer, or QA.
 - Never claim A/B parity with openMSX without concrete evidence artifacts.
 - Label uncertain statements with `Assumption:` and include a verification action.
 - Prefer quoting exact artifact paths when referencing decisions and evidence.
-- Prefer `references/` (openMSX 21.0 source, SDL3 source, `fact-sheets/`) over memory when
-  grounding device/timing/API behavior; cite the concrete `references/...` file path.
+- Prefer `references/` (openMSX 21.0 source, fMSX 6.0 source, SDL3 source, `fact-sheets/`) over
+  memory when grounding device/timing/API behavior; cite the concrete `references/...` file path.
+- When the two behavior references (openMSX, fMSX) disagree, record the disagreement explicitly
+  and prefer the fact-sheet/real-hardware-corroborated interpretation — never silently pick one.
 - Never assert what a reference source says without having read that concrete file.
 
 ## Evidence Requirements
@@ -40,9 +42,11 @@ Master must not directly invoke Planner, Developer, or QA.
 - Treat `bios/` and `roms/` as local development assets; do not assert redistribution rights.
 - Do not fabricate BIOS/ROM file names, checksums, or provenance.
 - Prefer existing helper scripts in `tools/` when available; avoid duplicating script logic inline.
-- Treat `references/` as read-only grounding material. Never copy `references/openmsx-21.0/` or
-  `references/sdl3/` source code into `src/` — they are GPL/third-party and must stay isolated;
-  reference their behavior/API only.
+- Treat `references/` as read-only grounding material. Never copy `references/openmsx-21.0/`,
+  `references/fmsx-60/`, or `references/sdl3/` source code into `src/` — they are GPL /
+  non-commercial-freeware / third-party respectively and must stay isolated; reference their
+  behavior/API only. fMSX's large data tables fall under the same zero-license-sensitive-work
+  discipline as openMSX's (no transcription, however framed).
 - For checksum claims, prefer `tools/checksum-assets.ps1` and store output in `docs/asset-checksums.txt`.
 - For openMSX A/B smoke checks, prefer `tools/openmsx-ab-smoke.ps1` and store output in `docs/openmsx-ab-smoke.md`.
 

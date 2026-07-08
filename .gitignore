@@ -10,6 +10,10 @@ build/
 *.a
 *.dll
 
+# DEC-0030 exception: the fMSX 6.0 reference executable (human-provided
+# cross-reference asset, references/fmsx-60/ -- NOT a build output).
+!/references/fmsx-60/executables/fMSX.exe
+
 # CMake scratch
 CMakeUserPresets.json
 /cmake-build-*/

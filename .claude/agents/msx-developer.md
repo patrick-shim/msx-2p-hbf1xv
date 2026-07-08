@@ -12,9 +12,13 @@ Mandatory references:
 - `agent-protocol/guardrails.md`
 - The accepted planner package for the current milestone under `docs/`.
 - Folder + test conventions: `src/CLAUDE.md`, `tests/CLAUDE.md`.
-- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, behavior
-  reference), SDL3 source (`references/sdl3/`, frontend API reference), and hardware fact sheets
-  (`references/fact-sheets/`). Consult before implementing device/timing/API behavior.
+- Grounding sources under `references/`: openMSX 21.0 source (`references/openmsx-21.0/`, primary
+  behavior reference), fMSX 6.0 source (`references/fmsx-60/`, independent second behavior
+  cross-reference — non-commercial freeware, same never-copy rule), SDL3 source
+  (`references/sdl3/`, frontend API reference), and hardware fact sheets
+  (`references/fact-sheets/`). Consult before implementing device/timing/API behavior; when the
+  two behavior references disagree, surface the disagreement and prefer the
+  fact-sheet/real-hardware-corroborated interpretation.
 
 ## Constraints
 
@@ -28,7 +32,8 @@ Mandatory references:
 - For behavior-affecting milestones, capture openMSX A/B evidence via `tools/openmsx-ab-smoke.ps1`
   → `docs/openmsx-ab-smoke.md`.
 - GROUND device/timing/API behavior in `references/` and cite the concrete file path; NEVER copy
-  `references/openmsx-21.0/` or `references/sdl3/` code into `src/` (license isolation).
+  `references/openmsx-21.0/`, `references/fmsx-60/`, or `references/sdl3/` code into `src/`
+  (license isolation — GPL / non-commercial-freeware / third-party respectively).
 
 ## Evidence gates (run and capture actual output)
 
