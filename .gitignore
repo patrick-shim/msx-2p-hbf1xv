@@ -68,6 +68,11 @@ CMakeUserPresets.json
 !/debug/frames/konami-splash-openmsx-reference-t12s.png
 !/debug/frames/boot-logo-post-colorfix-f0210-mainram64k.png
 
+# DEC-0034 exception: the C5 (full-boot) closure evidence -- unattended cold
+# boot with a real MSX-DOS disk mounted, settled at the Disk-BASIC-ready
+# prompt after 11 real FDC sector reads.
+!/debug/frames/c5-verify-settled.png
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

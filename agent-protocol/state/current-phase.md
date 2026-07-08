@@ -246,23 +246,49 @@
 19. SUPERSEDED (DEC-0028, 2026-07-08): the M28/DEC-0026 "instruction #145,503 memory-mapper content divergence" finding was investigated (`docs/memory-mapper-segment-divergence-investigation.md`) and proven a FALSE POSITIVE — an artifact of the live-Tcl comparison methodology (a bare openMSX Tcl `reset` does not clear RAM; only a genuine power-cycle does; the harness's pre-script free-run had contaminated the compared byte). Under the corrected power-cycle methodology, both emulators are byte-identical (write history included) over a 300,000-instruction window. The memory-mapper/RAM subsystem is positively confirmed correct. **Standing methodology rule from this finding: any future memory-CONTENT A/B against live openMSX MUST use `set power off/on`, never a bare `reset`** (CPU-register-only comparisons are unaffected). One genuinely open remainder: the separate "~2.8-2.9M instruction dead-end" observation (RST 38 stack corruption → permanent HALT), whose causal framing was anchored to the now-refuted mismatch — its real cause/AB-status is an open question for a future check using the corrected methodology.
 20. NEW from M28: the Conditional-Pass-stop-and-consult rule has now fired TWICE this session (M24, M28), both resolved via the identical human choice ("fix, re-confirm, then tag") — this is now a well-established, low-friction pattern, not a one-off.
 
+## Live-playtesting hardening arc (2026-07-08/09, DEC-0028..DEC-0034, tag v1.0.29) — CLOSED
+
+The project's first sustained human-in-the-loop QA phase, and its most productive defect-finding
+method to date. The human played the real SDL3 frontend (BASIC, Metal Gear, MSX-DOS disks) and
+every finding was root-caused, fixed universally (never game-keyed), QA'd, and landed same-day:
+
+- **DEC-0028**: the #145,503 memory-mapper "divergence" proven a comparison-methodology false
+  positive (bare openMSX Tcl `reset` does not clear RAM — power-cycle rule codified); mapper/RAM
+  subsystem positively confirmed byte-identical to openMSX.
+- **DEC-0029**: sprite mode 2 attribute-table AND-mask addressing — all MSX2 sprites had been
+  invisible; also retroactively explained M22's `sprite_mode2_ninth_ic` divergence.
+- **DEC-0030**: fMSX 6.0 registered as the independent second behavior reference (paid off
+  same-day: corroborated the COL fix, and its two recorded disagreements — collision granularity,
+  color-0 TP conditioning — were arbitrated to the data-book model).
+- **DEC-0031**: the MSX2+ boot logo restored (three stacked causes: missing #F4 reset-status
+  register; frame-vs-line collision granularity; missing pre-armed COL transfer unit — plus a
+  latent G5/G6 sprite-compositing OOB crash); border/backdrop composition added.
+- **DEC-0032**: V99x8 color-0 transparency (backdrop show-through) — a pre-existing universal
+  renderer gap the new border made visible (the suspected DEC-0031 regression was forensically
+  disproven, 215/215 frames byte-identical); border made opt-in (`--border`) per human preference.
+- **DEC-0033**: exact audio pacing — the frame loop had run ~3% fast (16 ms truncation) and the
+  unbounded audio queue accumulated +29.7 ms lag per second; now authentic 59.9227 Hz with a
+  bounded ~40 ms mean audio latency (measured independently twice).
+- **DEC-0034**: **backlog C5 ("full boot") VERIFIED CLOSED after 12 milestones** — unattended cold
+  boot with a real MSX-DOS disk now pages the disk-ROM in (frame 300) and executes 11 real FDC
+  sector reads to a Disk-BASIC-ready prompt (`debug/frames/c5-verify-settled.png`); the "missing
+  auto-boot trigger" was never missing — the arc's boot fixes unblocked it, and the old negative
+  diagnostics were vsync-less loop-shape artifacts. `disks/games/` (YS II two-disk set) registered.
+
+Process changes ratified during the arc: universal-fixes-only (memory); ZEXALL at RC checkpoints
+only, sole cpu/core carve-out (memory, third revision); openMSX-vs-fMSX disagreement-arbitration
+discipline (governance files). Named residuals carried forward: MSXDOS.SYS→`A>` handoff question
+(future M31 candidate); M28 C5 test re-baseline/rename hygiene; multi-disk swap UI (YS II will
+need it); the "~2.8-2.9M boot dead-end" note is OBSOLETE (superseded by the arc's boot fixes —
+the machine demonstrably boots to prompt).
+
 ## Indicative follow-on order (per `agent-protocol/state/deferred-backlog.md`)
 
-**M28 ("Release Candidate — Backlog Closure Sweep + Full-Project Health Audit") is CLOSED**, tagged
-`v1.0.28`, folding in DEC-0026 (the VDP VR/HR boot-hang fix). No further milestone kicked off yet —
-awaiting the next human directive. Candidates now on record: **M29** (KonamiSCC mapper + embedded
-SCC audio chip, least risky of the deferred items, needs a new fact-sheet first), **M30** (YM2413
-FM-synthesis DSP depth, scoped to the formulaically-derivable subset only), **M31** (FDC flux-level/
-DMK disk fidelity, sequenced after C5), **M32** (cassette tape image-format/signal fidelity, needs
-an independent MSX-kernel baud-rate source), **M33** (printer image/ESC-sequence rendering depth,
-blocked on font-asset provenance) — plus two still-unscheduled items: the C1/D4 VDP
-cycle-accurate-timing remainder (license-sensitive, needs an independent numeric source), and the
-"~2.8-2.9M instruction boot dead-end" open question (RST 38 stack corruption → permanent HALT —
-its previously-assumed cause, the #145,503 content mismatch, was proven a false positive by
-DEC-0028; a fresh A/B check with the corrected power-cycle methodology is needed to determine
-whether it is a real divergence at all). The #145,503 memory-mapper divergence itself is RESOLVED
-— no bug, methodology artifact (DEC-0028, `docs/memory-mapper-segment-divergence-investigation.md`).
+Remaining open backlog: **C1/D4** (blocked pending an independent numeric source), **G1→M29**
+(KonamiSCC + SCC chip, needs a fact-sheet first), **E1→M30** (YM2413 FM synthesis — the biggest
+audible gap; the human has framed "M30 or so" as the production-candidate horizon, where the
+RC-checkpoint ZEXALL sweep gate applies), **C10→M31** (FDC flux/DMK), **F1→M32** (cassette),
+**F2→M33** (printer), **G2/G3/G4** (indefinite/on-demand). Awaiting the next human directive.
 
-- Updated At: 2026-07-08T17:50:00+09:00 (DEC-0028 — #145,503 divergence investigation closed as a
-  false positive, zero code change, mapper/RAM subsystem positively confirmed correct; awaiting
-  next human directive)
+- Updated At: 2026-07-09 (DEC-0034 — live-playtesting arc CLOSED, C5 DONE, disks/games/
+  registered, tagged v1.0.29; awaiting next human directive)

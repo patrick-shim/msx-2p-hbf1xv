@@ -27,7 +27,8 @@ Mandatory references:
 - ONLY implement the current milestone slice — smallest meaningful step first.
 - DO NOT claim test/build success without concrete captured output.
 - PREFER `tools/` scripts for repeatable steps; VERIFY `bios/`/`roms/`/`disks/` paths before asset
-  runs. `disks/` holds MSX-DOS floppy disk images (`msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`) —
+  runs. `disks/` holds MSX-DOS floppy disk images (`msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`) and
+  `disks/games/` game floppy sets (e.g. the two-disk YS II) for disk-boot/multi-disk playtesting —
   same legally-sourced, non-redistributable local-dev-asset discipline as `bios/`/`roms/`.
 - For behavior-affecting milestones, capture openMSX A/B evidence via `tools/openmsx-ab-smoke.ps1`
   → `docs/openmsx-ab-smoke.md`.

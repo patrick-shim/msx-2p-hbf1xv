@@ -182,7 +182,8 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
 - `tools/` — PowerShell/Python helper scripts (prefer these over ad-hoc command chains).
 - `bios/`, `roms/`, `disks/` — local development assets (legally sourced; not redistributable).
   `disks/` holds MSX-DOS floppy disk images (e.g. `msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`)
-  used for FDC/boot testing.
+  used for FDC/boot testing, plus `disks/games/` — game floppy images (e.g. the two-disk
+  YS II set) for live/regression playtesting of the disk-boot and multi-disk paths.
 - `references/` — read-only grounding sources: openMSX 21.0 source (primary behavior reference),
   fMSX 6.0 source (independent second behavior cross-reference, non-commercial freeware), SDL3
   source (API reference), `fact-sheets/` (hardware specs), and `zexall/` (CPU test fixtures).
