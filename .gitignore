@@ -37,6 +37,13 @@ CMakeUserPresets.json
 !/debug/sounds/m27-example-tone.wav
 !/debug/sounds/m27-example-tone.dump
 
+# DEC-0029 exception: the sprite-mode-2 fix's before/after/reference evidence
+# (docs/sprite-invisibility-investigation.md, docs/sprite-fix-qa-review.md --
+# QA reproduced both PNGs SHA256-identical from an independent harness).
+!/debug/frames/mg-sprite-invisibility-before.png
+!/debug/frames/mg-sprite-invisibility-after.png
+!/debug/frames/mg-sprite-invisibility-openmsx-reference.png
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

@@ -90,6 +90,12 @@ constexpr std::uint16_t kM2PatternBase = 0x1000;
 
 void select_m2_sprite_tables(V9958Vdp& vdp) {
     set_register(vdp, 1, 0x40);  // R#1 bit6: display enable (spritesEnabledFast() gate)
+    // R#5 low 3 bits are AND-mask bits in sprite mode 2 (VDP.cc:1357-1371:
+    // addr = ((R11<<15)|(R5<<7)|0x7F) & (~0x3FF|index)); 0x07 -> 1KB-aligned
+    // table at 0x0000 with colors at 0-511 and Y/X/pattern at 512-1023 --
+    // this file's exact kM2AttribBase/kM2YxpBase layout (see the sprite-
+    // invisibility investigation, docs/sprite-invisibility-investigation.md).
+    set_register(vdp, 5, 0x07);
     set_register(vdp, 6, static_cast<std::uint8_t>(kM2PatternBase >> 11));
 }
 

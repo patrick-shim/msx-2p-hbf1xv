@@ -103,6 +103,24 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
     // Table base formulas (VDP.hh:262-268, A-M22-16).
     const std::uint32_t attrib_base = (static_cast<std::uint32_t>(control_regs[11]) << 15) |
                                        (static_cast<std::uint32_t>(control_regs[5]) << 7);
+    // Sprite mode 2 attribute-table addressing (the Metal Gear sprite-
+    // invisibility fix): the effective address of a mode-2 table read is
+    //   baseMask & (indexMask | index)
+    // with baseMask = (R#11<<15) | (R#5<<7) | 0x7F and indexMask = ~0x3FF
+    // (VDP.cc:1357-1371 updateSpriteAttributeBase; VDPVRAM.hh:263-279
+    // readNP/getReadArea apply `effectiveBaseMask & index` with unused index
+    // bits set to one). R#5's low 3 bits are therefore AND-MASK bits in mode
+    // 2, NOT base-address bits: with the universal software convention of
+    // setting them to 1 (BIOS SCREEN5 R#5=0xEF, Metal Gear R#5=0xE7), the
+    // table is a 1KB-aligned region -- per-line colors at offsets 0-511,
+    // the Y/X/pattern sub-table at offsets 512-1023. Treating R#5's full
+    // value as a plain base (the pre-fix code) landed every mode-2 Y/X/
+    // pattern read 0x200 bytes too high (inside the sprite PATTERN table),
+    // so every sprite read garbage/zero attributes and vanished.
+    const std::uint32_t attrib_base_mask = attrib_base | 0x7Fu;
+    const auto mode2_attr_addr = [attrib_base_mask](const std::uint32_t index) {
+        return attrib_base_mask & (~0x3FFu | index);
+    };
     const std::uint32_t pattern_base = static_cast<std::uint32_t>(control_regs[6]) << 11;
     const bool planar = vdp_base_is_planar(mode.base);
     const int r23 = control_regs[23];
@@ -128,13 +146,14 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             pattern_index_addr = attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 2u;
             color_addr_base = attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 3u;
         } else {
-            // Mode 2's Y/X/pattern sub-table sits at a FIXED +512-byte offset
+            // Mode 2's Y/X/pattern sub-table sits at index offset +512
             // (A-M22-15, SpriteChecker.cc:284-285/329-330), same 4-byte
-            // stride as mode 1.
-            y = read_table_byte(vram, attrib_base + 512u + static_cast<std::uint32_t>(sprite) * 4u + 0u,
+            // stride as mode 1 -- addressed through the baseMask/indexMask
+            // combine above, NOT a plain base+offset add.
+            y = read_table_byte(vram, mode2_attr_addr(512u + static_cast<std::uint32_t>(sprite) * 4u + 0u),
                                 sprite_planar);
-            x_addr = attrib_base + 512u + static_cast<std::uint32_t>(sprite) * 4u + 1u;
-            pattern_index_addr = attrib_base + 512u + static_cast<std::uint32_t>(sprite) * 4u + 2u;
+            x_addr = mode2_attr_addr(512u + static_cast<std::uint32_t>(sprite) * 4u + 1u);
+            pattern_index_addr = mode2_attr_addr(512u + static_cast<std::uint32_t>(sprite) * 4u + 2u);
         }
         if (y == y_sentinel) {
             sprite_end = sprite;
@@ -171,12 +190,15 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             if (sprite_mode == 1) {
                 color_attrib = read_table_byte(vram, color_addr_base, false);
             } else {
-                // Per-LINE color/attribute byte (A-M22-15): attrib_base + 0 +
-                // (sprite*16 + spriteLine), NOT the +512 sub-table.
+                // Per-LINE color/attribute byte (A-M22-15): table index
+                // sprite*16 + spriteLine (offsets 0-511, NOT the +512
+                // sub-table), through the same baseMask/indexMask combine
+                // (SpriteChecker.cc:312-314/357-359 `(~0u << 10) | (sprite *
+                // 16 + spriteLine)`).
                 color_attrib = read_table_byte(
                     vram,
-                    attrib_base + static_cast<std::uint32_t>(sprite) * 16u +
-                        static_cast<std::uint32_t>(pattern_line),
+                    mode2_attr_addr(static_cast<std::uint32_t>(sprite) * 16u +
+                                    static_cast<std::uint32_t>(pattern_line)),
                     sprite_planar);
             }
 

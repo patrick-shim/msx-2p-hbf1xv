@@ -727,6 +727,15 @@ target_link_libraries(devices_vdp_frame_renderer_sprites_unit_test PRIVATE sony_
 add_test(NAME devices_vdp_frame_renderer_sprites_unit_test
     COMMAND devices_vdp_frame_renderer_sprites_unit_test)
 
+# Sprite mode 2 R#5/R#11 attribute-table AND-mask semantics regression (the
+# Metal Gear sprite-invisibility fix, docs/sprite-invisibility-investigation.md).
+add_executable(devices_sprite_engine_mode2_attribute_masking_unit_test
+    unit/devices/video_sprite_engine_mode2_attribute_masking_unit_test.cpp
+)
+target_link_libraries(devices_sprite_engine_mode2_attribute_masking_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_sprite_engine_mode2_attribute_masking_unit_test
+    COMMAND devices_sprite_engine_mode2_attribute_masking_unit_test)
+
 add_executable(devices_vdp_command_engine_registers_unit_test
     unit/devices/video_vdp_command_engine_registers_unit_test.cpp
 )

@@ -71,6 +71,15 @@ void write_pattern_row(V9958Vdp& vdp, const std::uint8_t pattern_nr, const int r
 void select_graphic4(V9958Vdp& vdp) {
     set_register(vdp, 0, 0x06);  // GRAPHIC4 (base 0x0C) -> sprite mode 2, non-planar
     set_register(vdp, 1, 0x40);  // R#1 bit6: display enable (spritesEnabledFast() gate)
+    // R#5 low 3 bits are AND-mask bits in sprite mode 2, NOT base bits
+    // (VDP.cc:1357-1371: addr = ((R11<<15)|(R5<<7)|0x7F) & (~0x3FF|index));
+    // real software always sets them (BIOS SCREEN5 R#5=0xEF, Metal Gear
+    // R#5=0xE7). 0x07 -> 1KB-aligned table at 0x0000: colors at 0-511,
+    // Y/X/pattern at 512-1023 -- this file's exact kAttribBase/kYxpBase
+    // layout. Leaving R#5=0 (the pre-fix version of this test) would force
+    // address bits A9-A7 to zero and alias every table read (see docs/
+    // sprite-invisibility-investigation.md).
+    set_register(vdp, 5, 0x07);
     set_register(vdp, 6, static_cast<std::uint8_t>(kPatternBase >> 11));
 }
 
