@@ -561,3 +561,48 @@ Use this format:
   first M36 deliverable to localize it before any fix. (3) R-M35-1's test-strengthening should
   ride along once the playtest agent can drive F11 end-to-end.
 - Effective Date: 2026-07-10
+
+---
+
+- Decision ID: DEC-0050
+- Requested By: Human (2026-07-10), during M36 SRAM analysis: "you are developing true sony's
+  hbf1xv msx2+ which has built in FM. you need to decide, as per system spec officially, you need
+  to implement SRAM as peripheral or internal component." Also: "you can create some formatted disk
+  to test save feature of the ysII if it can really write to a disk." Chose FM-PAC-peripheral +
+  spec-clarification via AskUserQuestion.
+- Approved By: Human; MSX Master Agent (coordinator), grounded in the authoritative reference.
+- Decision: **ARCHITECTURAL — the HB-F1XV's built-in FM is MSX-MUSIC (OPLL YM2413 + BIOS, NO SRAM),
+  NOT a Panasonic FM-PAC.** GROUNDING (authoritative): `references/openmsx-21.0/share/machines/
+  Sony_HB-F1XV.xml` declares `<MSX-MUSIC>` (rom + `<ym2413-core>`) with **no** `<sramname>` — while
+  every SRAM-bearing device in that same file has an explicit `<sramname>` (S1985, RTC/cmos,
+  MSX-JE); the real `f1xvmus.rom` is the "APRLOPLL" MSX-MUSIC BIOS. Consequences: **(1)** "NO S-RAM
+  AVAILABLE" is CORRECT hardware behavior on a bare HB-F1XV — the YS II symptom is NOT an internal-
+  FM defect. **(2) SRAM = PERIPHERAL**: the 8 KB battery SRAM belongs to the Panasonic FM-PAC
+  CARTRIDGE (external, insertable), not the machine. **(3) M36 Bug-A REFRAMED** (supersedes the M36
+  planner package's machine-level SRAM framing): implement the FM-PAC as a NEW insertable cartridge
+  peripheral — new `CartridgeMapperType::FmPac` (ROM-bank window at 0x4000-0x5FFF + 8 KB battery
+  SRAM + 0x5FFE/0x5FFF magic unlock + bank register, per `references/openmsx-21.0/src/sound/
+  MSXFmPac.cc`), loadable via `--cart` exactly like plugging an FM-PAC into real hardware; YS II
+  S-RAM save then works WHEN the FM-PAC cartridge is inserted. **(4)** The emulator's speculative
+  internal 8 KB `sram_` (`hbf1xv_machine.h:176-179`, added on a guessed assumption) is an
+  INACCURACY to reconcile — remove from the bare machine / relocate into the FM-PAC peripheral.
+  **(5)** CLAUDE.md SOUND spec-table row clarified (built-in = MSX-MUSIC no-SRAM; FM-PAC w/ SRAM =
+  optional peripheral). **(6) DISK-SAVE PATH (human-suggested test):** independent of the FM-PAC
+  work, verify whether the emulator can actually WRITE to a disk image — create a FORMATTED blank
+  720 KB disk and drive YS II's "DISK" save to it, confirming the write persists back to the `.dsk`
+  file. FIRST determine (system-wide, per feedback_system_wide_review_first) whether the FDC write
+  PATH exists: WD2793 WRITE SECTOR/WRITE TRACK command handling → DRQ → DiskDrive/DiskImage write →
+  flush-to-host-file. If any stage is read-only/stubbed, disk save is an IMPLEMENT task, not just a
+  verify.
+- Impacted Milestones: M36 Phase 2A REFRAMED (FM-PAC peripheral cartridge). NEW M36 work item:
+  disk-write capability verify/implement + a formatted-blank-disk test asset/tool. Dependency: an
+  FM-PAC BIOS ROM asset (Panasonic SW-M004) is needed for the peripheral's real-software validation
+  — human to provide. Applies feedback_system_wide_review_first (peripheral-vs-internal + slot/
+  memory decode + the full FDC write pipeline are whole-system decisions).
+- Risk Notes: (1) The FM-PAC cartridge's 0x4000-0x5FFF window is shared (ROM banks vs unlock-gated
+  SRAM) inside its slot — route reads/writes correctly, coexist with #A8 + the memory-mapper, and
+  do NOT regress the built-in MSX-MUSIC (stays SRAM-less) or other cartridges. (2) Disk WRITE may
+  be unimplemented in the current FDC/DiskImage layer (to be checked) — if so it's real device work
+  (WD2793 write commands + image write-back + host-file flush), NOT a quick fix. (3) FM-PAC BIOS
+  ROM asset dependency gates the peripheral's real-software validation.
+- Effective Date: 2026-07-10

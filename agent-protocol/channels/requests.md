@@ -1649,3 +1649,76 @@ Full 34-row deferred-backlog review; `docs/m24-implementation-report.md` with th
 - Dependencies: docs/m35-implementation-report.md; docs/m35-planner-package.md; DEC-0048;
   REQ-M35-002.
 - Requested At: 2026-07-10T12:00:00+09:00
+
+---
+
+- Request ID: REQ-M36-001
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent (opus)
+- Milestone ID: M36 (playtest/live-QA agent, then two live-playtest bugs; tag target TBD by planner)
+- Type: Milestone planning package
+- Scope: Per DEC-0049, produce `docs/m36-planner-package.md`. TWO phases: **Phase 1 (build first) —
+  a GENERAL, REUSABLE, AUTONOMOUS playtest/live-QA capability**: a new `msx-playtest` agent
+  (`.claude/agents/msx-playtest.md`) + `/msx-playtest` command that simulates a human player. It
+  DERIVES its own inputs by observation (vision): the closed observe-act loop is (a) run the
+  headless emulator deterministically with an `--input-script` + `--dump-frame` at chosen frame
+  boundaries, (b) convert the dump to PNG (`tools/frame-to-png.py`), (c) a vision-capable opus agent
+  READS the PNG(s) to assess on-screen state/progress/anomalies, (d) EXTEND the input script and
+  DETERMINISTICALLY REPLAY from the start (cycle-stamped scripts → same prefix → same state), (e)
+  iterate toward a goal, producing a playtest report + a reusable saved input script. Design must
+  cover: the existing tooling to reuse (`--input-script`, `--debug-session --frames --dump-frame`,
+  `tools/frame-to-png.py`, event log, `--dump-state`) and any MINIMAL additive enhancements needed
+  (e.g. multi-frame capture at intervals, a wrapper tool); how the agent collaborates with
+  planner/developer/qa; bounded-iteration + fallback if autonomous navigation stalls (the agent may
+  request a human hint); and a determinism guarantee. **Phase 2 — apply the harness to the two
+  live-playtest bugs**: (A) FM-PAC SRAM "NO S-RAM AVAILABLE" — hypothesis: the 8 KB FM-PAC battery
+  SRAM storage exists (`hbf1xv_machine.h:176-179`, `sram_`) but the ACCESS/UNLOCK protocol
+  (0x5FFE/0x5FFF magic-byte enable → SRAM window mapped at 0x4000-0x5FFD in the FM-PAC slot, plus
+  the bank register) is unimplemented, so a game's SRAM-detect fails; ground the real protocol in
+  `references/openmsx-21.0` (FM-PAC / `MSXFmPac`) and the FM-PAC fact sheet, and scope the fix
+  (DEVICE-level: `src/devices/audio` FM-PAC memory mapping + `src/machine` wiring; NOT cpu/core →
+  ZEXALL withheld). (B) black-screen-on-building-entry — REPRO-FIRST via the new playtest harness,
+  then root-cause (disk-read-fail vs VDP blank) before proposing a fix. Deliver phase decomposition,
+  slice ordering, per-slice deterministic test obligations, acceptance criteria, risks, and the
+  honest disposition (Phase 1 is tooling; Phase 2's fixes carry the usual A/B where applicable).
+  NO production code. Also fold in residual **R-M35-1** (strengthen the multi_disk integration test
+  to assert the disk index advances) as a small ride-along once the playtest harness can drive F11.
+- Constraints: Phase 1 tooling lives in `.claude/`, `tools/`, and optionally additive
+  `src/main.cpp`/frontend flags (mirror the M27 `--debug-session`/`--input-script` precedent — no
+  pre-existing device/core edits). Phase 2A is device-level (no cpu/core). Cite `references/` for
+  the FM-PAC SRAM protocol; no fabrication. Keep everything deterministic.
+- Dependencies: DEC-0049; the M27 tooling (`src/machine/input_script.*`, `--debug-session`,
+  `src/machine/frame_dump.*`, `tools/frame-to-png.py`, event log); `src/devices/audio/ym2413_opll.*`
+  + FM-PAC references; `references/openmsx-21.0` FM-PAC + FDC + VDP sources.
+- Requested At: 2026-07-10T13:00:00+09:00
+
+---
+
+- Request ID: REQ-M36-002
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent (opus)
+- Milestone ID: M36 (tag target v1.0.37 for Phase 1)
+- Type: Implementation + verification — **PHASE 1 ONLY (playtest harness, S1-S3)**
+- Scope: Implement ONLY M36 Phase 1 per `docs/m36-planner-package.md` slices S1-S3 — the autonomous
+  playtest/live-QA harness. DELIVERABLES: (1) the tooling wrapper (Option A: PowerShell/Python under
+  `tools/`, additive; if any `src/` change is needed keep it additive frontend/main-only per the M27
+  precedent — ZERO device/core edits) that runs the headless emulator with an accumulating
+  `--input-script`, captures frame(s) via `--dump-frame`/`--debug-session --frames`, and converts to
+  PNG via `tools/frame-to-png.py` in one deterministic step; (2) `.claude/agents/msx-playtest.md` —
+  the vision-capable opus agent that runs the observe→act→replay loop (drive → capture → READ the
+  PNG → extend the cycle-stamped script → deterministically replay from start → iterate toward a
+  goal → emit a playtest report + a reusable saved input script), with bounded iteration + a
+  human-hint fallback if it stalls; (3) `.claude/commands/msx-playtest.md` — the `/msx-playtest`
+  command. **VERIFY END-TO-END:** actually RUN the tooling yourself, capture frames, READ the PNGs
+  (you are opus/vision-capable) and PROVE the loop reaches a non-trivial landmark (start with the
+  most reliable: BIOS→BASIC "Ok" prompt, then optionally the YS II title) — commit the derived input
+  script + captured PNGs as evidence. DO NOT implement the bug fixes (S4-S8) — Phase 1 harness ONLY.
+  Produce `docs/m36-implementation-report.md` (Phase 1 section). Do NOT commit (coordinator owns
+  closure).
+- Constraints: additive tooling (`tools/`, `.claude/`) + optionally additive `src/main.cpp`/frontend
+  flags ONLY (mirror M27); ZERO `src/devices/`/`src/core/`/pre-existing-file device edits;
+  deterministic (cycle-stamped scripts, no wall-clock/RNG in the loop). Apply
+  feedback_system_wide_review_first + feedback_universal_fixes_only.
+- Dependencies: `docs/m36-planner-package.md`; DEC-0049; the M27 tooling (`--debug-session`,
+  `--input-script`, `src/machine/frame_dump.*`, `tools/frame-to-png.py`, `src/peripherals/msx_key_names.*`).
+- Requested At: 2026-07-10T14:00:00+09:00
