@@ -1046,9 +1046,55 @@ Use one section per milestone.
   parser defaults unchanged; ZEXALL/ZEXDOC explicitly NOT run (DEC-0035: M31 QA gate only; zero
   CPU/core touch this milestone); headless fast subset 163/163 (159 baseline + 4 new), SDL3-ON
   fast subset 172/172 (168 baseline + 4 new, dummy drivers).
-- Status: **Ready for QA** (implementation complete 2026-07-09; `docs/m30-implementation-report.md`
+- Status: **CLOSED** (DEC-0037, 2026-07-09, tag v1.0.31 — "Next and final in the run: M31";
+  implementation complete 2026-07-09; `docs/m30-implementation-report.md`
   + `docs/m30-identification-ab.md` delivered; A/B AGREEMENT — openMSX with NO -romtype and this
   emulator with NO --cart1-type both resolve roms/aleste.rom to KonamiSCC, Side-B via the
   source-verified `machine_info device` mappertype Tcl query; end-to-end:
   `sony_msx_headless --cart1 roms/aleste.rom` alone now prints the verbatim message A and boots;
   all changes left UNCOMMITTED for coordinator/QA per the established cadence).
+
+## M31 (Kickoff 2026-07-09, DEC-0035 autonomous run — RELEASE CANDIDATE, final in the run)
+
+- Milestone ID: M31
+- Title: YM2413 (OPLL) FM-synthesis DSP depth — the formulaically-derivable subset (closes
+  backlog E1 with the license/sourcing-blocked remainder split out as NEW row E3), plus the
+  full Release-Candidate QA gate for the DEC-0035 run
+- Tag target: v1.0.32
+- Spec Owner: MSX Planner Agent (`docs/m31-planner-package.md`)
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Slices S1-S6 per the package — S1 closed-form logsin/exp operator tables computed at
+  construction (independent in-test recomputation oracles); S2 phase generation (§8, 19-bit
+  A-M31-4 accumulator, §3 MUL table ×2 form, pitch oracle f = F-Num·2^BLOCK·MUL·49716/2^19,
+  §7 measured-peaks volume oracle, FB-doubling property, half-sine rectification, D-M31-1..3
+  recorded in-code); S3 envelope generator (§5 decay/release EXACT — global 18-operator
+  counter, eg_shift/eg_select, 0-3/60-63 specials, first-segment-shorter quirk, closed-form
+  duration oracles; THE §2.4 ATTACK APPROXIMATION with its mandatory three-place disclosure —
+  `YM2413NukeYktTables.ii` NEVER OPENED); S4 nine melody channels + §6 rhythm mode (BD 2-op /
+  TOM 1-op full synthesis, SD/HH/T-CY disclosed approximations, exact ×2 double-output law,
+  $0E keying, $36-$38 volumes) + formula-constrained AM/VIB LFOs; S5 additive
+  `Ym2413Opll::advance_cycles/fm_sample` (72-cycle native tick = exact 49716 Hz, ZOH, exact
+  9:8 decimation) + additive third `MachineAudioMixer` source (kFmAmplitudeScale=5, int16
+  clamp unit-tested, ZERO-YM2413 BYTE-IDENTITY HARD ORACLE) + Sdl3App wiring; S6 register-
+  driven CPU-OUT system test + real-title FM probe + THE FULL RC GATE + ledger.
+- Regression Scope: zero touch to `src/devices/cpu/`, `src/core/`,
+  `src/frontend/audio_pacer.*`, `src/frontend/psg_*`, `src/devices/audio/psg_ym2149.*`,
+  `src/devices/audio/scc_wavetable.*` (verified `git diff v1.0.31` EMPTY for all of them);
+  the four existing YM2413 test files + the M29 mixer unit test byte-unmodified and green;
+  E2 write-timing gate still defaults OFF; `src/machine/` untouched.
+- RC Evidence: headless FULL UNFILTERED ctest **172/172** INCLUDING
+  `hbf1xv_m24_zexall_system_test` — ZEXALL 67/67 ok_markers + ZEXDOC 67/67 ok_markers, BOTH
+  error_markers=0, 5,764,169,474 instructions each, 1746.8 s (durable log
+  `docs/m31-rc-zexall-log.txt`); headless fast subset **171/171** (163 baseline + 8 new);
+  SDL3-ON fast subset **180/180** (172 baseline + 8 new, dummy drivers); 6-item smoke matrix
+  with committed artifacts (`debug/frames/m31-rc-*.png`, `debug/sounds/m31-*.wav`) — incl.
+  metalgear2_scc.rom auto-ID + title-music SCC activity (closes A-M29-4) and REAL-TITLE FM
+  via Aleste 2 (key-ons frame ~698; FM-vs-muted WAV pair; A-M31-1/2 verified, A-M31-6
+  negative control zero key-ons); A/B dispositions `docs/m31-parity-trace-diff.md`; health
+  re-check green (validate-assets, checksums incl. metalgear2_scc.rom, no new TODO/FIXME,
+  both executables launch).
+- Status: **Ready for QA** (implementation complete 2026-07-09;
+  `docs/m31-implementation-report.md` is the handoff artifact; ledger E1 → DONE (M31) + NEW
+  row E3 + G1 cross-note applied same-cycle; all changes left UNCOMMITTED for coordinator/QA
+  per the established cadence).

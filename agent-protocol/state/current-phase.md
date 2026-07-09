@@ -6,7 +6,39 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M30 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)**. Universal
+- Active Phase: **M31 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)** — THE RELEASE
+  CANDIDATE of the DEC-0035 run (tag target v1.0.32). YM2413 (OPLL) FM-synthesis DSP depth,
+  backlog E1's formulaically-derivable subset per `docs/m31-planner-package.md` S1-S6:
+  NEW `src/devices/audio/ym2413_synth.{h,cpp}` (closed-form logsin/exp tables computed at
+  construction; §8 phase generation with the 19-bit A-M31-4 accumulator and the §3 MUL table;
+  §5 EG decay/release EXACT — global 18-operator counter, eg_shift/eg_select, first-segment-
+  shorter quirk unit-proven, durations tied to §5's own closed form; THE §2.4 ATTACK
+  APPROXIMATION prominently disclosed in the mandatory header block — `YM2413NukeYktTables.ii`
+  NEVER OPENED, non-opening attestation in the report; 2-deep feedback averaging with the
+  FB-doubling property; KSR/Rks per A-M31-3; 9 melody channels + §6 rhythm mode with BD/TOM
+  full synthesis, SD/HH/T-CY disclosed approximations, and the ×2 double-output quirk proven
+  as an EXACT sample-for-sample factor; AM/VIB formula-constrained LFOs); ADDITIVE
+  `Ym2413Opll::advance_cycles/fm_sample` (native tick per 72 cycles = exact 49716 Hz, ZOH,
+  the exact 9:8 decimation 648 = 9×72 unit-proven); ADDITIVE third `MachineAudioMixer` source
+  (kFmAmplitudeScale=5 documented policy; **the zero-YM2413 byte-identity HARD oracle green**
+  — nullptr AND silent-attached both byte-identical to the v1.0.31 arithmetic); Sdl3App passes
+  the machine OPLL to the mixer. RC gate: headless FULL UNFILTERED ctest green INCLUDING the
+  ZEXALL/ZEXDOC sweep (durable log `docs/m31-rc-zexall-log.txt`, error_markers=0 both suites);
+  headless fast 171/171, SDL3-ON fast 180/180 (163/172 baselines + 8 new); 6-item smoke matrix
+  with committed artifacts — BIOS logo→BASIC-phase (DEC-0031 intact), Metal Gear GAMEPLAY
+  reached, Aleste 2 auto-ID + boots, **metalgear2_scc.rom auto-ID (SHA1 78560a5c…) + boots to
+  title with REAL SCC samples through the mixer (first activity frame 1244 — closes A-M29-4)**,
+  MSX-DOS disk → the real "MSX BASIC version 3.0 / Disk BASIC version 1.0 / Ok" prompt
+  captured, and **REAL-TITLE FM CONFIRMED: Aleste 2 writes YM2413 key-ons (frame ~698) and the
+  FM-included mix audibly diverges from the FM-muted mix of the identical deterministic run**
+  (`debug/sounds/m31-fm-aleste-fmON/fmOFF.wav`; A-M31-1 "APRLOPLL"@0x18 verified). A/B:
+  audio-sample N/A BY DESIGN + CPU-visible surface unchanged with git-diff proof
+  (`docs/m31-parity-trace-diff.md`). Ledger: E1 → DONE (M31), NEW row E3 (license/sourcing-
+  blocked remainder, C1/D4 standard), G1 cross-note. Health: validate-assets green (3 ROMs incl.
+  metalgear2_scc.rom), checksums refreshed, no new TODO/FIXME, both executables launch.
+  All changes UNCOMMITTED, awaiting QA (`docs/m31-implementation-report.md` is the handoff).
+  Temporary main.cpp evidence probe reverted (`git checkout -- src/main.cpp`).
+- Prior phase (closed): **M30 — CLOSED (DEC-0037, 2026-07-09, tag v1.0.31)**. Universal
   cartridge mapper auto-identification (backlog G2 — the Aleste-2 usability fix, delivered as a
   UNIVERSAL mechanism, nothing game-keyed). Delivered per `docs/m30-planner-package.md` S1-S6:
   clean-room FIPS 180-4/RFC 3174 SHA-1 (`src/machine/sha1.*`, published-vector-gated;

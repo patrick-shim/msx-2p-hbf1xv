@@ -28,6 +28,7 @@ add_library(sony_msx_core STATIC
     src/devices/audio/psg_ym2149.cpp
     src/devices/audio/scc_wavetable.cpp
     src/devices/audio/ym2413_opll.cpp
+    src/devices/audio/ym2413_synth.cpp
     src/devices/rtc/rp5c01.cpp
     src/devices/fdc/disk_image.cpp
     src/devices/fdc/disk_drive.cpp

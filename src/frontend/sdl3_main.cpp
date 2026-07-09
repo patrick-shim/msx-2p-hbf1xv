@@ -87,7 +87,7 @@ int main(int argc, char** argv) {
     }
 
     std::cerr << "sony-msx-hbf1xv SDL3 frontend: window opened, entering real-time loop"
-                 " (PSG audio live; YM2413/FM-PAC intentionally silent -- backlog E1, still open)\n";
+                 " (PSG + SCC + YM2413 FM audio live -- backlog E1 closed by M31)\n";
 
     const int rc = app.run_interactive();
     app.shutdown();

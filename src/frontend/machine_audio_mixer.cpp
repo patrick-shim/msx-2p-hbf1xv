@@ -8,6 +8,14 @@ MachineAudioMixer::MachineAudioMixer(const std::uint64_t cycles_per_sample) : pu
 
 std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
     devices::audio::PsgYm2149& psg, const SccSources& sccs, const std::size_t sample_count) const {
+    // M31: byte-behaviour identical delegation (a nullptr fm contributes an
+    // exact 0 term to every sample -- the hard regression oracle).
+    return mix_interleaved_stereo(psg, sccs, nullptr, sample_count);
+}
+
+std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
+    devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* const fm,
+    const std::size_t sample_count) const {
     std::vector<std::int16_t> pcm;
     pcm.reserve(sample_count * 2);
     for (std::size_t i = 0; i < sample_count; ++i) {
@@ -26,13 +34,26 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
             }
         }
 
+        // FM (M31): advance the OPLL by the SAME per-sample delta (one
+        // native 72-cycle tick per 72 accumulated cycles -- the exact 9:8
+        // decimation at the standard 81-cycle step, planner §2.5) and take
+        // the zero-order-held native sample. nullptr (or a silent, never-
+        // keyed device, whose fm_sample() is exactly 0) contributes exactly
+        // 0 -- the M31 hard regression oracle.
+        std::int32_t fm_term = 0;
+        if (fm != nullptr) {
+            fm->advance_cycles(pump_.cycles_per_sample());
+            fm_term = fm->fm_sample() * kFmAmplitudeScale;
+        }
+
         const std::int32_t scc_term = scc_sum * kSccAmplitudeScale;
-        // The clamp is REQUIRED (R-M29-4): two SCCs + a loud PSG exceed
-        // int16 (see header arithmetic). SCC is mono -- same term on both.
+        // The clamp is REQUIRED (R-M29-4 / R-M31-4): two SCCs + a loud PSG
+        // exceed int16, and so can a loud FM mix (see header arithmetic).
+        // SCC and FM are mono -- the same terms land on both channels.
         const std::int32_t left =
-            std::clamp(s.left * kPsgAmplitudeScale + scc_term, -32768, 32767);
+            std::clamp(s.left * kPsgAmplitudeScale + scc_term + fm_term, -32768, 32767);
         const std::int32_t right =
-            std::clamp(s.right * kPsgAmplitudeScale + scc_term, -32768, 32767);
+            std::clamp(s.right * kPsgAmplitudeScale + scc_term + fm_term, -32768, 32767);
         pcm.push_back(static_cast<std::int16_t>(left));
         pcm.push_back(static_cast<std::int16_t>(right));
     }

@@ -1089,6 +1089,78 @@ target_compile_definitions(machine_hbf1xv_m30_cartridge_identification_integrati
 add_test(NAME machine_hbf1xv_m30_cartridge_identification_integration_test
     COMMAND machine_hbf1xv_m30_cartridge_identification_integration_test)
 
+# --- M31 YM2413 FM-synthesis DSP depth (backlog E1, docs/m31-planner-
+#     package.md, RELEASE CANDIDATE): the formula-grounded Ym2413Synth unit
+#     suites (S1 closed-form table oracles recomputed independently in-test;
+#     S2 pitch/volume/feedback/half-sine oracles; S3 §5 decay/release exact
+#     duration oracles + the disclosed attack approximation's qualitative
+#     contract; S4 rhythm x2 gain law / keying / AM-VIB laws), the mixer
+#     three-source suite (incl. the zero-YM2413 byte-identity HARD oracle
+#     and the 9:8 decimation proof), the real-title FM probe + MG2 SCC
+#     evidence integration tests (asset-gated skips), and the register-
+#     driven CPU-OUT system test. All headless-buildable.
+add_executable(devices_audio_ym2413_synth_tables_unit_test
+    unit/devices/audio_ym2413_synth_tables_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_synth_tables_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_synth_tables_unit_test
+    COMMAND devices_audio_ym2413_synth_tables_unit_test)
+
+add_executable(devices_audio_ym2413_synth_operator_unit_test
+    unit/devices/audio_ym2413_synth_operator_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_synth_operator_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_synth_operator_unit_test
+    COMMAND devices_audio_ym2413_synth_operator_unit_test)
+
+add_executable(devices_audio_ym2413_synth_envelope_unit_test
+    unit/devices/audio_ym2413_synth_envelope_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_synth_envelope_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_synth_envelope_unit_test
+    COMMAND devices_audio_ym2413_synth_envelope_unit_test)
+
+add_executable(devices_audio_ym2413_synth_rhythm_lfo_unit_test
+    unit/devices/audio_ym2413_synth_rhythm_lfo_unit_test.cpp
+)
+target_link_libraries(devices_audio_ym2413_synth_rhythm_lfo_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_ym2413_synth_rhythm_lfo_unit_test
+    COMMAND devices_audio_ym2413_synth_rhythm_lfo_unit_test)
+
+add_executable(frontend_machine_audio_mixer_fm_unit_test
+    unit/frontend/machine_audio_mixer_fm_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_fm_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_fm_unit_test
+    COMMAND frontend_machine_audio_mixer_fm_unit_test)
+
+add_executable(machine_hbf1xv_m31_fm_title_probe_integration_test
+    integration/machine/hbf1xv_m31_fm_title_probe_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m31_fm_title_probe_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m31_fm_title_probe_integration_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m31_fm_title_probe_integration_test
+    COMMAND machine_hbf1xv_m31_fm_title_probe_integration_test)
+
+add_executable(machine_hbf1xv_m31_metalgear2_scc_integration_test
+    integration/machine/hbf1xv_m31_metalgear2_scc_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m31_metalgear2_scc_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m31_metalgear2_scc_integration_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}"
+    SONY_MSX_SOFTWAREDB_PATH="${SONY_MSX_SOFTWAREDB_PATH_ABS}")
+add_test(NAME machine_hbf1xv_m31_metalgear2_scc_integration_test
+    COMMAND machine_hbf1xv_m31_metalgear2_scc_integration_test)
+
+add_executable(hbf1xv_m31_fm_synth_system_test
+    system/hbf1xv_m31_fm_synth_system_test.cpp
+)
+target_link_libraries(hbf1xv_m31_fm_synth_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m31_fm_synth_system_test COMMAND hbf1xv_m31_fm_synth_system_test)
+
 # --- M28-S1 YM2413 register-write timing constraint (backlog E2): E2 gate
 #     unit tests (FakeClock, 12/84-cycle boundaries, determinism) + a machine-
 #     level integration test driving real CPU OUT (#7C)/OUT (#7D) sequences

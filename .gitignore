@@ -74,6 +74,17 @@ CMakeUserPresets.json
 !/debug/frames/m29-aleste-f500.png
 !/debug/frames/m29-aleste-f899.png
 
+# M31 RC exception: the release-candidate smoke-matrix headline evidence
+# (docs/m31-implementation-report.md, docs/m31-qa-signoff.md).
+!/debug/frames/m31-rc-bios-f210.png
+!/debug/frames/m31-rc-metalgear-f1100.png
+!/debug/frames/m31-rc-aleste-f900.png
+!/debug/frames/m31-rc-mg2-f1260.png
+!/debug/frames/m31-rc-dos-f1000.png
+!/debug/sounds/m31-mg2-scc-title.wav
+!/debug/sounds/m31-fm-aleste-fmON.wav
+!/debug/sounds/m31-fm-aleste-fmOFF.wav
+
 # DEC-0034 exception: the C5 (full-boot) closure evidence -- unattended cold
 # boot with a real MSX-DOS disk mounted, settled at the Disk-BASIC-ready
 # prompt after 11 real FDC sector reads.

@@ -263,9 +263,14 @@ void Sdl3App::run_one_frame() {
         // no KonamiSCC cart, in which case the mixed output is byte-
         // identical to the pre-M29 PSG-only path (the mixer's regression
         // oracle).
+        //
+        // M31-S5: the machine's YM2413 (OPLL) is the third mixed source --
+        // real FM synthesis (backlog E1). A silent (never-keyed) OPLL
+        // contributes exactly 0 to every sample (the M31 hard oracle), so
+        // FM-less software sounds byte-identical to v1.0.31.
         audio_presenter_->pump_and_push_paced(
             machine_.psg(), MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
-            machine_.elapsed_cycles());
+            &machine_.ym2413(), machine_.elapsed_cycles());
     }
 
     ++frames_run_;

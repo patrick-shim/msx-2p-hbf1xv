@@ -12,17 +12,17 @@
 
 namespace sony_msx::frontend {
 
-// Real SDL3 audio output for the PSG (YM2149) ONLY (docs/m26-planner-
-// package.md §2.6). YM2413/FM-PAC is honestly, deliberately left SILENT in
-// the mix: it has real register-file/channel/rhythm-decode fidelity (M17,
-// backlog B3) but ZERO waveform-synthesis capability (backlog E1, still
-// OPEN) -- binding it to real audio output here would require inventing an
-// ungrounded DSP pipeline (log-sin/exp operator tables, the 128-level EG
-// global-counter rate mechanism, AM/VIB LFOs, etc. -- YM2413 fact-sheet
-// §4/§5/§7/§9), which this project's culture explicitly disallows (R-M26-5,
-// a hard, non-negotiable constraint, independently re-checked at every
-// review pass: this file touches NO ym2413_opll.* file and adds NO
-// waveform/DSP-shaped code for YM2413 whatsoever).
+// Real SDL3 audio output (docs/m26-planner-package.md §2.6, extended M29 +
+// M31). HISTORY NOTE kept for honesty: M26 shipped this presenter PSG-only
+// with YM2413 deliberately SILENT (backlog E1 then OPEN -- binding it would
+// have required inventing an ungrounded DSP pipeline, disallowed per
+// R-M26-5); M29 added the 0..2 Konami SCC sources through the SDL3-
+// independent MachineAudioMixer; M31 (backlog E1 CLOSED, DEC-0035 RC) adds
+// the YM2413 (OPLL) as the THIRD mixed source, now that a formula-grounded
+// synthesis engine exists (src/devices/audio/ym2413_synth.h -- grounding +
+// mandatory approximation disclosures live there, docs/m31-planner-
+// package.md §2.2/§2.4). The DSP itself stays in src/devices/; this file
+// remains thin SDL_AudioStream plumbing over the headlessly-tested mixer.
 //
 // PSG generator-advance wiring lives HERE, in the frontend, never in
 // src/machine/ or src/devices/ core code (§2.6 point 1's considered-and-
@@ -124,9 +124,18 @@ public:
     // 2-argument overload preserves the pre-M29 signature verbatim: it
     // forwards with zero SCC sources, whose mixed output is byte-identical
     // to the pre-M29 arithmetic (the mixer's hard regression oracle).
+    //
+    // M31 (backlog E1, docs/m31-planner-package.md §2.2): the fm overload
+    // adds the machine's YM2413 (OPLL) as the THIRD mixed source -- the FM
+    // device is advanced by the same per-sample cycle delta as every other
+    // source (the pacer still only decides HOW MANY samples; DEC-0033
+    // untouched). The narrower overloads forward with fm = nullptr, whose
+    // mixed output is byte-identical to v1.0.31 (the M31 hard oracle).
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, std::uint64_t total_elapsed_cycles);
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
                              std::uint64_t total_elapsed_cycles);
+    void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
+                             devices::audio::Ym2413Opll* fm, std::uint64_t total_elapsed_cycles);
 
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }

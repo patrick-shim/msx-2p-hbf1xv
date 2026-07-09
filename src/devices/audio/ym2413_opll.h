@@ -5,6 +5,7 @@
 
 #include "core/bus.h"
 #include "core/device_contracts.h"
+#include "devices/audio/ym2413_synth.h"
 
 namespace sony_msx::devices::audio {
 
@@ -41,8 +42,17 @@ public:
 // register file, the two-port write protocol, per-channel/rhythm decode, and
 // the ROM instrument-patch table; it carries NO bank-register / SRAM-
 // handshake / ID-string-detection logic (that would fabricate hardware this
-// machine does not have) and NO audio waveform synthesis / DSP (backlog E1,
-// explicitly deferred -- see agent-protocol/state/deferred-backlog.md).
+// machine does not have).
+//
+// M31 (backlog E1, DEC-0035): the device ADDITIONALLY owns a Ym2413Synth --
+// the formula-grounded FM waveform-synthesis engine (see ym2413_synth.h's
+// grounding + mandatory approximation-disclosure block). The M17 register
+// contract above is UNCHANGED: synthesis adds ZERO CPU-visible state
+// (io_read stays open-bus 0xFF; the chip remains write-only, fact-sheet §8),
+// so the M17 A/B evidence remains the standing CPU-visible parity proof
+// (planner §2.7). Accepted (post-E2-gate, post-mask) data writes additionally
+// notify the synth's key-edge detector (§2.6); everything else is read live
+// from this register file via the M17 decode accessors at synthesis time.
 //
 // Two-port write protocol (A-M17-3), grounded exactly in
 // references/openmsx-21.0/src/sound/YM2413Okazaki.cc:1368-1374
@@ -122,6 +132,22 @@ public:
 
     // Debug-only register readback (A-M17-6), NOT CPU-bus-reachable.
     [[nodiscard]] std::uint8_t register_value(std::uint8_t addr) const;
+
+    // --- M31 (backlog E1): FM synthesis surface, wholly additive. ---
+    // Deterministic advance in 3.58 MHz MASTER cycles: the owned synth
+    // executes one native FM sample tick per 72 cycles (3.579545 MHz / 72 =
+    // exactly 49716 Hz, fact-sheet §7) and holds the latest native sample
+    // (zero-order hold). NEVER wired into the machine's CPU stepping -- the
+    // frontend mixer (or a test) advances it by the shared
+    // cycles-per-output-sample convention (planner §2.5: 8 output samples x
+    // 81 cycles = 648 = 9 x 72, an exact repeating 9:8 decimation pattern).
+    void advance_cycles(std::uint64_t delta_cycles);
+    // The held native sample. Exactly 0 while every operator is idle (the
+    // S5 zero-YM2413 byte-identity oracle's guarantee).
+    [[nodiscard]] std::int32_t fm_sample() const { return synth_.sample(); }
+    // Debug/test introspection of the synthesis engine (side-effect free;
+    // the A-M17-6 register_value precedent).
+    [[nodiscard]] const Ym2413Synth& synth() const { return synth_; }
 
     // Decoded 2-operator parameter set (modulator/carrier), the resolved
     // per-channel patch shape whether derived live from the user patch
@@ -203,6 +229,10 @@ private:
 
     std::array<std::uint8_t, kRegisterCount> regs_{};
     std::uint8_t latch_ = 0;
+
+    // M31 (backlog E1): the owned FM synthesis engine. Pure register-file
+    // consumer -- it never feeds back into any CPU-visible state.
+    Ym2413Synth synth_;
 
     Ym2413ClockSource* clock_source_ = nullptr;
     bool write_timing_enforced_ = false;

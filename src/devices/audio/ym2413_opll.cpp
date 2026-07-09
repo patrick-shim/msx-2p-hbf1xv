@@ -59,6 +59,10 @@ void Ym2413Opll::reset() {
     has_last_write_ = false;
     last_write_was_address_ = false;
     last_write_cycle_ = 0;
+    // M31 (backlog E1): reset() additionally restores the synth's documented
+    // power-on state (planner §2.2/§2.3). Wholly additive -- the M17 register
+    // contract above is byte-for-byte unchanged.
+    synth_.reset();
 }
 
 void Ym2413Opll::attach_clock_source(Ym2413ClockSource* const source) {
@@ -101,6 +105,10 @@ bool Ym2413Opll::gate_allows_write(const bool is_address_write) {
 
 void Ym2413Opll::write_address(const std::uint8_t value) {
     // A-M17-3: the latch stores the value UNMASKED (YM2413Okazaki.cc:1370-1371).
+    // D-M31-2 (DEC-0030 cross-reference, planner M31 §2.8): fMSX masks at
+    // LATCH time instead (YM2413.c:134-137, `Latch = V&0x3F`) --
+    // observationally equivalent for all write sequences; settled in M17
+    // (mask at USE time, below); recorded, no change.
     if (!gate_allows_write(/*is_address_write=*/true)) {
         return;  // E2: dropped, insufficient spacing since the prior write.
     }
@@ -114,6 +122,15 @@ void Ym2413Opll::write_data(const std::uint8_t value) {
         return;  // E2: dropped, insufficient spacing since the prior write.
     }
     regs_[latch_ & 0x3F] = value;
+    // M31 (planner §2.6): every ACCEPTED data write notifies the synth's
+    // key-edge detector (key-on/off per channel from $20-$28 bit4, per drum
+    // from $0E bits 0-4 gated by bit5). All other synthesis parameters are
+    // read live from regs_ at tick time -- no duplicated decode.
+    synth_.refresh_keys(*this);
+}
+
+void Ym2413Opll::advance_cycles(const std::uint64_t delta_cycles) {
+    synth_.advance_cycles(delta_cycles, *this);
 }
 
 core::BusData Ym2413Opll::io_read(const core::BusAddress /*port*/) {

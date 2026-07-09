@@ -1935,3 +1935,34 @@ Use this format:
 - Re: REQ-M29-002 (implementation, slices S1-S6 per `docs/m29-planner-package.md`, DEC-0035 autonomous run)
 - Outcome: IMPLEMENTATION COMPLETE — all six slices delivered; handoff artifact `docs/m29-implementation-report.md`. S1: `CartridgeMapperType::KonamiSCC` + canonical CLI value "KonamiSCC" (RomInfo.cc:24), additive edits to the M19 shared files only; ONE disclosed pre-existing-test edit (the M19 scope-boundary marker `parse("KonamiSCC")==nullopt` converted to the positive case — it asserted exactly the boundary M29 closes; every other pre-existing assertion unchanged). S2: `src/devices/audio/scc_wavetable.{h,cpp}` (plain-SCC Real mode; 5 channels; runtime-written 32-byte signed waveforms, ch5 sharing ch4's; 12-bit (period+1) dividers with the period<9 counter stop; 4-bit volumes; enable register; Pazos deformation register incl. read-acts-as-write-0xFF and the rotation quirks; enen power-on reset state; De Schrijder AmpOut=640+Σ((s*v)&0x7FF0)/16 law) + full unit suite incl. the LITERAL amp_out()==640 reproduction (all five channels at SampleValue=+1/Vol=15). S3: `src/devices/cartridge/cartridge_konami_scc_rom.{h,cpp}` (`CartridgeKonamiScc`: banks at 5000/7000/9000/B000 in 0x800-wide windows, OPPOSITE-of-plain-Konami mirroring, masked (v&0x3F)==0x3F enable — 0xBF enables, 0x3E disables — both-effects 0x9000 write, SCC window 0x9800-0x9FFF mirrored via addr&0xFF, image-derived default block mask, >512kB accepted) + factory case + unit suite. S4: `Hbf1xvMachine::scc_chip(1|2)` (nullptr regression-null) + bus-level integration test (real Z80 LD (nn),A traffic over the M11 bus, both bays). S5: SDL3-independent `src/frontend/machine_audio_mixer.{h,cpp}` (per-sample: PSG via the genuine PsgAudioPump + each attached SCC advanced by the SAME kCyclesPerSample=81; pcm=clamp_int16(psg*400 + Σscc_ac*12)) wired into `pump_and_push_paced()` — `AudioPacer` and `PsgAudioPump` byte-for-byte untouched (git-diff-verified), pre-M29 2-arg presenter signature preserved as a zero-SCC forwarding overload; **the zero-SCC byte-identity hard oracle is unit-proven** (2000-sample varying sequence vs the literal pre-M29 arithmetic, plus a constructed two-SCC+max-PSG saturation case proving the clamp). S6: system test (in-cart Z80 driver + DEC-0034 frame-loop shape + hand-computed 720-everywhere PCM oracle, byte-identical twice); A/B: A-M29-3 VERIFIED IN SOURCE FIRST (CartridgeSlotManager.cc:455 `-romtype` help, HardwareConfig.cc:60 valueArg, + the live M19 `-carta -romtype` precedent) then `tools/openmsx-m29-scc-parity.ps1` → **ARCHITECTURAL + CONTENT PARITY, EMPTY DIFF over 140 instructions** vs real WSL openMSX 19.1 (`docs/m29-parity-trace-diff.md`; adversarial self-checks BLOCKED=2/DIVERGENCE=1 both correct; audio-sample A/B recorded N/A by design per §2.5). Ledger: G1 → DONE (M29) + NEW row G5 (SCC-I named remainder); `current-phase.md`/`milestones.md` refreshed. BONUS (coordinator-directed): `roms/aleste.rom` under `--cart1-type KonamiSCC` **boots and STARTS** — MSX logo (f240) → loader banner "Aleste 2 ROM version v8 / Konami8 mapper / Press any key to start." (f500) → game intro text running (f899) after the scripted SPACE (`keyboard().set_key(8,0,...)`); evidence `debug/frames/m29-aleste-f{240,500,899}.png`; the temporary main.cpp probe was reverted (`git checkout -- src/main.cpp`) and the headless target rebuilt clean afterward. Evidence gates: validate-assets PASS; checksum-assets regenerated (content-identical, timestamp only); headless build clean + fast subset **159/159**; SDL3-ON build clean + fast subset **168/168** under dummy drivers; ZEXALL/ZEXDOC slow sweep NOT run (DEC-0035 — M31 QA gate only; no CPU/core touch, git-diff-proven). All changes left UNCOMMITTED for coordinator/QA.
 - Responded At: 2026-07-09T09:20:00+09:00
+
+---
+
+- Response ID: RESP-M31-002
+- From: MSX Developer Agent
+- To: MSX Master Agent (coordinator)
+- Milestone ID: M31 (RELEASE CANDIDATE, tag target v1.0.32)
+- Re: coordinator implementation dispatch per `docs/m31-planner-package.md` §7 (DEC-0035
+  autonomous run, final milestone; note: no REQ-M31 entry was recorded in requests.md for this
+  dispatch -- recorded here honestly rather than back-fabricated)
+- Outcome: IMPLEMENTATION COMPLETE -- all six slices delivered; handoff artifact
+  `docs/m31-implementation-report.md`. Backlog E1's formulaically-derivable subset shipped in
+  full: NEW `src/devices/audio/ym2413_synth.{h,cpp}` (closed-form logsin/exp tables; §5
+  EG decay/release EXACT with the global-counter mechanism and closed-form duration oracles;
+  the §2.4 attack approximation prominently disclosed -- `YM2413NukeYktTables.ii` NEVER OPENED,
+  non-opening attestation in the report; §8 phase generation with the S2 pitch oracle; 2-deep
+  feedback averaging with the FB-doubling property; §6 rhythm mode with the exact x2
+  double-output law; formula-constrained AM/VIB); additive `Ym2413Opll::advance_cycles/
+  fm_sample`; additive third `MachineAudioMixer` source with the zero-YM2413 byte-identity
+  HARD oracle green; Sdl3App wiring. RC gate run IN FULL: headless FULL UNFILTERED ctest
+  172/172 including the ZEXALL/ZEXDOC sweep (67/67 groups, error_markers=0 BOTH suites,
+  5,764,169,474 instructions each; durable log `docs/m31-rc-zexall-log.txt`); headless fast
+  171/171; SDL3-ON fast 180/180 (dummy drivers); 6-item smoke matrix with committed artifacts
+  (`debug/frames/m31-rc-*`, `debug/sounds/m31-*`), including metalgear2_scc.rom real-SCC-title
+  evidence (closes A-M29-4) and REAL-TITLE FM (Aleste 2 key-ons at frame ~698, FM-vs-muted WAV
+  pair -- the honest synthetic fallback was NOT needed); A/B dispositions recorded
+  (`docs/m31-parity-trace-diff.md`, audio-sample N/A BY DESIGN + CPU-visible surface unchanged
+  with git-diff proof). Ledger same-cycle: E1 -> DONE (M31), NEW row E3 (license/sourcing-
+  blocked remainder), G1 cross-note; state files at implementation-complete. All changes
+  UNCOMMITTED for coordinator/QA. Temporary main.cpp evidence probe reverted.
+- Responded At: 2026-07-09T12:15:00+09:00
