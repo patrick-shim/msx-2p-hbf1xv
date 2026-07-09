@@ -1,7 +1,9 @@
 # bios/ — Sony HB-F1XV system ROMs
 
 Local, legally-sourced Sony HB-F1XV BIOS assets used for development and validation.
-**Not redistributable** — do not publish this repository with these files present.
+**Third-party IP (Sony); no redistribution rights asserted.** Per **DEC-0047** the repository owner
+has made an informed decision to host this repository publicly with these BIOS files included — an
+owner accepted-risk hosting decision, not a licensing grant. The files remain Sony's property.
 
 ## Required files (all seven)
 

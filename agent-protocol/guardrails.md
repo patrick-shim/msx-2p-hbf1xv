@@ -39,7 +39,10 @@ Master must not directly invoke Planner, Developer, or QA.
 
 ## Asset and Script Safety
 
-- Treat `bios/` and `roms/` as local development assets; do not assert redistribution rights.
+- Treat `bios/`, `roms/`, and `disks/` as third-party development assets; do not assert
+  redistribution rights or fabricate provenance. (Per **DEC-0047** the repo is hosted on a PUBLIC
+  remote by the owner's informed decision, `bios/` included — that is the owner's accepted-risk
+  hosting choice; the assets remain their rights holders' property and this guardrail still holds.)
 - Do not fabricate BIOS/ROM file names, checksums, or provenance.
 - Prefer existing helper scripts in `tools/` when available; avoid duplicating script logic inline.
 - Treat `references/` as read-only grounding material. Never copy `references/openmsx-21.0/`,

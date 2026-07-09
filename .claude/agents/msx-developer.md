@@ -30,7 +30,10 @@ Mandatory references:
 - PREFER `tools/` scripts for repeatable steps; VERIFY `bios/`/`roms/`/`disks/` paths before asset
   runs. `disks/` holds MSX-DOS floppy disk images (`msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`) and
   `disks/games/` game floppy sets (e.g. the two-disk YS II) for disk-boot/multi-disk playtesting —
-  same legally-sourced, non-redistributable local-dev-asset discipline as `bios/`/`roms/`.
+  same legally-sourced, third-party-asset discipline as `bios/`/`roms/` (no redistribution-rights
+  or provenance claims). Per DEC-0047 the repo is hosted on a PUBLIC remote by the owner's
+  decision (`bios/` published; `roms/`+`disks/` content untracked) — an owner accepted-risk
+  choice; the assets remain their rights holders' property.
 - For behavior-affecting milestones, capture openMSX A/B evidence via `tools/openmsx-ab-smoke.ps1`
   → `docs/openmsx-ab-smoke.md`.
 - GROUND device/timing/API behavior in `references/` and cite the concrete file path; NEVER copy

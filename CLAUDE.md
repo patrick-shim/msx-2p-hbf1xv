@@ -59,7 +59,10 @@ joystick); machine composition; SDL3 frontend; unit/integration/system tests; lo
 
 
 **Out of scope (unless a decision approves it):** multi-vendor models; netplay/rewind/TAS;
-mobile/web targets; redistribution of proprietary BIOS/ROM/disk assets.
+mobile/web targets; redistribution of proprietary BIOS/ROM/disk assets. (Per **DEC-0047** the
+repository owner has chosen to host this repo — `bios/` assets included — on a PUBLIC remote; that
+is an owner accepted-risk hosting decision, NOT a project claim of redistribution rights. The
+assets remain third-party IP and no provenance/licensing claim is made.)
 
 ## Reference materials (grounding sources)
 
@@ -188,7 +191,10 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
 - `agent-protocol/` — runtime coordination state, history, and templates.
 - `docs/` — design notes, milestone packages, implementation reports, QA sign-offs.
 - `tools/` — PowerShell/Python helper scripts (prefer these over ad-hoc command chains).
-- `bios/`, `roms/`, `disks/` — local development assets (legally sourced; not redistributable).
+- `bios/`, `roms/`, `disks/` — local development assets (third-party IP; no redistribution rights
+  asserted). Per **DEC-0047** the repo is hosted on a PUBLIC remote by the owner's decision:
+  `bios/` is tracked/published; `roms/`+`disks/` content is untracked (only `.gitkeep` +
+  `roms/README.md`), though their binaries remain in pre-b5efd29 history.
   `disks/` holds MSX-DOS floppy disk images (e.g. `msxdos22.dsk`, `msxdos23.dsk`, `msxdos24/`)
   used for FDC/boot testing, plus `disks/games/` — game floppy images (e.g. the two-disk
   YS II set) for live/regression playtesting of the disk-boot and multi-disk paths.

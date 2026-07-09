@@ -143,18 +143,21 @@ Thumbs.db
 Desktop.ini
 .DS_Store
 
-# NOTE: bios/, roms/, and disks/ contain local, legally-sourced development
-# assets that are NOT redistributable. bios/ remains fully tracked (mirrored to
-# the owner's PRIVATE remote per DEC-0046). roms/ and disks/ now have their
-# CONTENT untracked per owner request (the .rom/.dsk binaries and MSX-DOS disk
-# trees are provisioned locally, not from git); only the directory scaffolding
-# (.gitkeep) and roms/README.md are tracked -- see the roms//disks/ block above.
-# Do NOT push this repository to a PUBLIC remote without first removing bios/.
+# NOTE: bios/, roms/, and disks/ contain third-party assets (Sony HB-F1XV BIOS
+# ROMs, cartridge ROMs, MSX-DOS disks) that remain their rights holders' property;
+# this project asserts NO redistribution rights and makes no provenance claim.
+# Per DEC-0047 the repository OWNER has made an informed decision to host the full
+# repo -- bios/ included -- on a PUBLIC remote (github.com/patrick-shim/msx-2p-hbf1xv).
+# bios/ stays fully tracked and is published per the owner's instruction. roms/ and
+# disks/ CONTENT is untracked (provisioned locally, not from git); only the directory
+# scaffolding (.gitkeep) and roms/README.md are tracked -- see the roms//disks/ block
+# above. Those roms/disks binaries nonetheless remain in PRE-b5efd29 history and are
+# published by any push; purging them would require history rewriting, not untracking.
+# The public-exposure risk is the owner's accepted responsibility (DEC-0047).
 #
-# DEC-0046 note: the DEC-0044 remote-export scope (which ignored references/,
-# tests/, tools/, docs/, debug/, .claude/ for a lean PUBLIC compile-only push)
-# is SUPERSEDED. The single source of truth is this full repository, mirrored
-# whole to the owner's PRIVATE remote -- so those trees are tracked normally
-# again (no `git add -f` friction). The pattern-based /debug/**/* ignores above
-# still apply (regenerable runtime captures stay untracked; committed evidence
-# keeps its explicit `!` exceptions).
+# DEC-0047 supersedes DEC-0044's lean-export scope AND the private-mirror intent
+# formerly annotated here as "DEC-0046" (which was never a recorded decision). The
+# whole repository is the single source of truth (references/, tests/, tools/, docs/,
+# debug/, .claude/ tracked normally, no `git add -f` friction). The pattern-based
+# /debug/**/* ignores above still apply (regenerable runtime captures stay untracked;
+# committed evidence keeps its explicit `!` exceptions).

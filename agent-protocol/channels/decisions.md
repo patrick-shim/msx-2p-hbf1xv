@@ -439,3 +439,50 @@ Use this format:
 - Impacted Milestones: M34 closed. The production line advances v1.0.34 -> v1.0.35 (both DEC-0043 defects were real playtest-visible defects). NEW open backlog row E4 (on-demand, playtest-triggered). R-M34-1 (the 20.7 kHz residual audibility) awaits the human live re-check as its final acceptance signal. Remaining open backlog otherwise unchanged: C1/D4 + E3 + E4 (sourcing/depth-blocked), D8/D9/D10 (renderer remainders), C10/F1/F2 (era-labeled), G3/G4/G5/G6 (on-demand).
 - Risk Notes: (1) The audio fix deliberately changed output PCM bytes -- every affected byte-oracle was re-baselined through planner->developer->QA discipline, never silently; the "unchanged-expected" oracles were verified byte-frozen (motion would have been a defect). (2) The four regenerated Aleste PNGs document the CURRENT renderer with a reproducible committed recipe; their sprite-row divergence from the M32 originals is the lost-recipe residue, not a rendering regression (QA gate-removed discriminator proof). (3) The box filter is a disclosed simplification, not true band-limiting (E4).
 - Effective Date: 2026-07-09
+
+---
+
+- Decision ID: DEC-0047
+- Requested By: Human (2026-07-09): "it's okay. it's my decision. push it. and apply, propagate
+  this decision across the project and agents." — after the coordinator warned TWICE that the
+  target GitHub remote is PUBLIC and that both the working tree and the full git history contain
+  non-redistributable third-party assets (the seven Sony HB-F1XV BIOS ROMs in `bios/`; and, in
+  history, cartridge ROMs and MSX-DOS disk images).
+- Approved By: Human (explicit, informed risk acceptance); MSX Master Agent (coordinator)
+  recording and propagating.
+- Decision: The single source of truth is now the owner's PUBLIC GitHub remote
+  **https://github.com/patrick-shim/msx-2p-hbf1xv** (`origin`), pushed one-way LOCAL → REMOTE
+  (no fetch/pull/merge from remote into local, per the human's explicit "not the other way at
+  all"). `bios/` remains fully tracked and is published per the owner's explicit instruction
+  ("bios/ and its files must be in"). `roms/` and `disks/` CONTENT stays untracked going forward
+  (commit b5efd29: directories kept via `.gitkeep`; `roms/README.md` kept), but those binaries
+  remain present in PRE-b5efd29 history and are therefore ALSO published by any push — the owner
+  accepts this. SUPERSEDES: (a) the "do not publish this repository" / "remove assets before
+  publishing" imperatives previously in `README.md`, `bios/README.md`, `roms/README.md`,
+  `CLAUDE.md` (Out-of-Scope + repository-layout), and `agent-protocol/guardrails.md`; and (b) the
+  private-only intent that was annotated as "DEC-0046" in `.gitignore` — that ID was only ever a
+  `.gitignore` annotation, never a recorded decision, and is retired here; DEC-0044's lean-export
+  scope is likewise fully superseded. FACTUAL POSITION UNCHANGED: the assets remain the
+  intellectual property of their respective rights holders (Sony, Konami, Microsoft/ASCII, et
+  al.); this project asserts NO redistribution rights, makes NO provenance/licensing claim, and
+  the guardrail "do not assert redistribution rights / do not fabricate provenance" STANDS. The
+  public-exposure risk is the repository owner's informed, accepted responsibility — not a
+  licensing determination by the project or the assistant.
+- Operational constraint (recorded): the Claude Code auto-mode safety classifier BLOCKS the
+  assistant from executing the push (a `git push` of proprietary assets to a public remote is
+  classified as data exfiltration). The push is therefore performed by the human directly, or by
+  the assistant only outside auto mode with an explicit per-call permission approval. Standing
+  sequence: `git remote add origin https://github.com/patrick-shim/msx-2p-hbf1xv.git` →
+  `git push -u origin main` → `git push origin --tags` (25 tags, v1.0.11..v1.0.35).
+- Impacted Milestones: none functionally (zero device-behavior change; no cpu/core/device edits).
+  Governance/docs propagation applied this cycle: `.gitignore`, `README.md`, `bios/README.md`,
+  `roms/README.md`, `CLAUDE.md`, `agent-protocol/guardrails.md`,
+  `.claude/agents/msx-developer.md`, `agent-protocol/state/current-phase.md`, and a project
+  memory. Config/asset changes were committed as b5efd29 before this entry.
+- Risk Notes: (1) Public exposure of third-party assets is copyright-sensitive and effectively
+  irreversible (GitHub caching, forks, crawlers index within minutes) — owner-accepted. (2) A
+  future reversal to a clean public repo requires HISTORY REWRITING (`git filter-repo`) to purge
+  the `bios/`/`roms/`/`disks/` blobs, not merely untracking them. (3) This entry is NOT
+  authorization to bypass the auto-mode classifier — the assistant still will not push under auto
+  mode; the human owns the push action.
+- Effective Date: 2026-07-09

@@ -452,9 +452,19 @@ gate applies), **C10→M32-era** (FDC flux/DMK), **F1→M33-era** (cassette), **
 (printer), **G3/G4/G5** (indefinite/on-demand). G1 closed (M29, v1.0.30); G2 closed (M30,
 pending QA/tag v1.0.31).
 
+- Remote/hosting (**DEC-0047**, 2026-07-09): `origin` = **PUBLIC** github.com/patrick-shim/msx-2p-hbf1xv,
+  one-way LOCAL → REMOTE (no fetch/pull/merge inbound). Owner's informed decision to publish the
+  full repo, `bios/` included (coordinator warned twice re: third-party-asset exposure; owner
+  accepted). `roms/`+`disks/` CONTENT untracked as of commit **b5efd29** but their binaries remain
+  in pre-b5efd29 history. Config/asset commit b5efd29 landed; the PUSH ITSELF is owner-run — the
+  auto-mode safety classifier blocks the assistant from pushing proprietary assets to a public
+  remote. Decision propagated across .gitignore / README.md / bios/README.md / roms/README.md /
+  CLAUDE.md / guardrails.md / .claude/agents/msx-developer.md + a project memory. Standing push
+  sequence: `git remote add origin <url>` → `git push -u origin main` → `git push origin --tags`.
 - Updated At: 2026-07-09 (M34 CLOSED per DEC-0045, tag v1.0.35 — the DEC-0043 playtest defect
   pair fixed universally: PSG/SCC band-limited box-average integration killed the Aleste 2
   transition-beep alias; an R#1 BL render gate fixed the Metal Gear room-transition slow-fill.
   QA Conditional Pass fully discharged; both evidence escalations independently confirmed; 4
   Aleste PNGs regenerated from a committed recipe. 183/183 + 192/192. R-M32-7 closed PASS.
-  Coordinator idle awaiting the human's M34 live re-check and next directive.)
+  Coordinator idle awaiting the human's M34 live re-check. DEC-0047 public-remote decision
+  recorded + propagated; push is owner-run under the auto-mode constraint.)

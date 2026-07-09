@@ -117,8 +117,12 @@ Debug output lands under `debug/` (see [`debug/README.md`](debug/README.md)).
 
 `bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (cartridge images), and `disks/`
 (MSX-DOS system disks + `disks/games/` floppy sets, e.g. the two-disk YS II) are local,
-legally-sourced development assets. **They are not redistributable — do not publish this
-repository without removing them.** Validate and checksum with:
+legally-sourced development assets. **They remain third-party IP; this project asserts no
+redistribution rights.** Per **DEC-0047** the repository owner has made an informed decision to
+host this repo publicly with `bios/` included (`roms/`/`disks/` content is untracked, but their
+binaries remain in pre-`b5efd29` history). That public-exposure risk is the owner's accepted
+responsibility; contributors must still not claim redistribution rights or fabricate provenance.
+Validate and checksum with:
 
 ```powershell
 ./tools/validate-assets.ps1
