@@ -123,6 +123,17 @@ CMakeUserPresets.json
 !/debug/sounds/m32-fm-aleste-fmON.wav
 !/debug/sounds/m32-fm-aleste-fmOFF.wav
 
+# --- Non-redistributable assets: roms/ and disks/ (directories kept, content ignored) ---
+# Per owner request: keep the roms/ and disks/ directory scaffolding tracked (via
+# .gitkeep) but do NOT track their content -- the .rom/.dsk binaries and MSX-DOS
+# disk trees are non-redistributable and are provisioned locally, not from git.
+# roms/README.md (folder documentation, human-authored) stays tracked explicitly.
+/roms/*
+!/roms/.gitkeep
+!/roms/README.md
+/disks/*
+!/disks/.gitkeep
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user
@@ -133,20 +144,17 @@ Desktop.ini
 .DS_Store
 
 # NOTE: bios/, roms/, and disks/ contain local, legally-sourced development
-# assets that are NOT redistributable. They are tracked here per the project
-# owner's explicit request for a fully-tracked local repository. Do NOT push
-# this repository to a public remote without first removing those assets.
-
-# --- Remote-export scope (owner directive 2026-07-09, DEC-0044) ---
-# The owner is preparing a lean remote push: the remote needs only what is
-# required to COMPILE the project elsewhere. These trees are excluded from
-# NEW tracking. IMPORTANT mechanics: files already tracked before this rule
-# stay tracked (and stay in history) -- this block only stops NEW files from
-# appearing as untracked noise. Agents adding project files under tests/,
-# tools/, or docs/ during milestones must stage them with `git add -f`.
-references/
-tests/
-tools/
-docs/
-debug/
-.claude/
+# assets that are NOT redistributable. bios/ remains fully tracked (mirrored to
+# the owner's PRIVATE remote per DEC-0046). roms/ and disks/ now have their
+# CONTENT untracked per owner request (the .rom/.dsk binaries and MSX-DOS disk
+# trees are provisioned locally, not from git); only the directory scaffolding
+# (.gitkeep) and roms/README.md are tracked -- see the roms//disks/ block above.
+# Do NOT push this repository to a PUBLIC remote without first removing bios/.
+#
+# DEC-0046 note: the DEC-0044 remote-export scope (which ignored references/,
+# tests/, tools/, docs/, debug/, .claude/ for a lean PUBLIC compile-only push)
+# is SUPERSEDED. The single source of truth is this full repository, mirrored
+# whole to the owner's PRIVATE remote -- so those trees are tracked normally
+# again (no `git add -f` friction). The pattern-based /debug/**/* ignores above
+# still apply (regenerable runtime captures stay untracked; committed evidence
+# keeps its explicit `!` exceptions).

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "model": "sonnect", 
-  "MAX-THINKING-TOKKENS": 12000,
-  "CLAUDE_CODE_SUBAGENT_MODEL": "haiku",
+  "env": {
+    "MAX_THINKING_TOKENS": "12000"
+  },
   "permissions": {
     "allow": [
       "Read",
