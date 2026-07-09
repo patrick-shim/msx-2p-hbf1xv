@@ -125,4 +125,9 @@ if(SONY_MSX_ENABLE_SDL3)
     sony_msx_stage_sdl3_dll(sony_msx_sdl3)
 endif()
 
-add_subdirectory(tests)
+# Guarded for lean remote checkouts (DEC-0044): a clone without tests/ (the
+# owner's compile-only remote scope) must still configure and build both
+# executables; the full test suite exists in the primary repository.
+if(EXISTS "${CMAKE_SOURCE_DIR}/tests/CMakeLists.txt")
+    add_subdirectory(tests)
+endif()

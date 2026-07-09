@@ -136,3 +136,17 @@ Desktop.ini
 # assets that are NOT redistributable. They are tracked here per the project
 # owner's explicit request for a fully-tracked local repository. Do NOT push
 # this repository to a public remote without first removing those assets.
+
+# --- Remote-export scope (owner directive 2026-07-09, DEC-0044) ---
+# The owner is preparing a lean remote push: the remote needs only what is
+# required to COMPILE the project elsewhere. These trees are excluded from
+# NEW tracking. IMPORTANT mechanics: files already tracked before this rule
+# stay tracked (and stay in history) -- this block only stops NEW files from
+# appearing as untracked noise. Agents adding project files under tests/,
+# tools/, or docs/ during milestones must stage them with `git add -f`.
+references/
+tests/
+tools/
+docs/
+debug/
+.claude/
