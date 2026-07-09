@@ -5,6 +5,11 @@
 
 namespace sony_msx::frontend {
 
+// The two constants are one presentation policy declared in two
+// SDL3-independence-separated places (M29-S5); they must never drift apart.
+static_assert(Sdl3AudioPresenter::kAmplitudeScale == MachineAudioMixer::kPsgAmplitudeScale,
+              "presenter/mixer PSG amplitude scales must match (byte-identity oracle)");
+
 Sdl3AudioPresenter::Sdl3AudioPresenter() = default;
 
 Sdl3AudioPresenter::~Sdl3AudioPresenter() {
@@ -42,16 +47,10 @@ void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std
         return;
     }
 
-    const std::vector<devices::audio::PsgYm2149::StereoSample> samples = pump_.pump_samples(psg, sample_count);
-
-    std::vector<std::int16_t> pcm;
-    pcm.reserve(samples.size() * 2);
-    for (const auto& s : samples) {
-        const std::int32_t left = std::clamp(s.left * kAmplitudeScale, -32768, 32767);
-        const std::int32_t right = std::clamp(s.right * kAmplitudeScale, -32768, 32767);
-        pcm.push_back(static_cast<std::int16_t>(left));
-        pcm.push_back(static_cast<std::int16_t>(right));
-    }
+    // Zero-SCC mix == the pre-M29 psg_raw * kAmplitudeScale arithmetic,
+    // byte-for-byte (MachineAudioMixer's hard regression oracle, M29-S5).
+    const std::vector<std::int16_t> pcm =
+        mixer_.mix_interleaved_stereo(psg, MachineAudioMixer::SccSources{nullptr, nullptr}, sample_count);
 
     if (!SDL_PutAudioStreamData(stream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)))) {
         last_error_ = SDL_GetError();
@@ -59,6 +58,14 @@ void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std
 }
 
 void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
+                                             const std::uint64_t total_elapsed_cycles) {
+    // Pre-M29 signature preserved verbatim: zero SCC sources (byte-identical
+    // output to v1.0.29 -- the mixer's regression oracle).
+    pump_and_push_paced(psg, MachineAudioMixer::SccSources{nullptr, nullptr}, total_elapsed_cycles);
+}
+
+void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
+                                             const MachineAudioMixer::SccSources& sccs,
                                              const std::uint64_t total_elapsed_cycles) {
     if (stream_ == nullptr) {
         return;
@@ -89,27 +96,22 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
         return;
     }
 
-    // ALWAYS pump the full batch: the PSG generator's notion of time stays in
-    // lockstep with the machine's elapsed cycles even when the pushed output
-    // is trimmed by backpressure.
-    const std::vector<devices::audio::PsgYm2149::StereoSample> samples =
-        pump_.pump_samples(psg, static_cast<std::size_t>(decision.samples_to_pump));
+    // ALWAYS pump the full batch: BOTH generators' (PSG + attached SCCs')
+    // notion of time stays in lockstep with the machine's elapsed cycles
+    // even when the pushed output is trimmed by backpressure (M29-S5; the
+    // DEC-0033 invariant extended uniformly to the SCC sources).
+    const std::vector<std::int16_t> pcm =
+        mixer_.mix_interleaved_stereo(psg, sccs, static_cast<std::size_t>(decision.samples_to_pump));
 
     if (decision.samples_to_push == 0) {
         return;
     }
 
-    std::vector<std::int16_t> pcm;
-    pcm.reserve(static_cast<std::size_t>(decision.samples_to_push) * 2);
-    for (std::size_t i = 0; i < static_cast<std::size_t>(decision.samples_to_push); ++i) {
-        const auto& s = samples[i];
-        const std::int32_t left = std::clamp(s.left * kAmplitudeScale, -32768, 32767);
-        const std::int32_t right = std::clamp(s.right * kAmplitudeScale, -32768, 32767);
-        pcm.push_back(static_cast<std::int16_t>(left));
-        pcm.push_back(static_cast<std::int16_t>(right));
-    }
-
-    if (!SDL_PutAudioStreamData(stream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)))) {
+    // Push only the FIRST samples_to_push pairs (2 int16 values each) of the
+    // fully-pumped batch -- exactly the pre-M29 trim behaviour.
+    const auto push_bytes = static_cast<int>(static_cast<std::size_t>(decision.samples_to_push) * 2 *
+                                             sizeof(std::int16_t));
+    if (!SDL_PutAudioStreamData(stream_, pcm.data(), push_bytes)) {
         last_error_ = SDL_GetError();
     }
 }

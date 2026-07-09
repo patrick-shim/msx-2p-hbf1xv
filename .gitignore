@@ -68,6 +68,12 @@ CMakeUserPresets.json
 !/debug/frames/konami-splash-openmsx-reference-t12s.png
 !/debug/frames/boot-logo-post-colorfix-f0210-mainram64k.png
 
+# M29 exception: the Aleste-2-under-KonamiSCC real-ROM smoke evidence
+# (docs/m29-implementation-report.md).
+!/debug/frames/m29-aleste-f240.png
+!/debug/frames/m29-aleste-f500.png
+!/debug/frames/m29-aleste-f899.png
+
 # DEC-0034 exception: the C5 (full-boot) closure evidence -- unattended cold
 # boot with a real MSX-DOS disk mounted, settled at the Disk-BASIC-ready
 # prompt after 11 real FDC sector reads.

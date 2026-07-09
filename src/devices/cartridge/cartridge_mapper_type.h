@@ -5,7 +5,8 @@
 
 namespace sony_msx::devices::cartridge {
 
-// The six MVP external-cartridge mapper types (M19-S1, backlog B7).
+// The external-cartridge mapper types: the six MVP types (M19-S1, backlog
+// B7) plus KonamiSCC (M29-S1, backlog G1).
 //
 // Every value + its canonical name string is taken VERBATIM from openMSX's own
 // RomType/RomInfo tables (never an invented vocabulary), so a `--cartN-type`
@@ -18,12 +19,14 @@ namespace sony_msx::devices::cartridge {
 //     ASCII8       -> "ASCII8"
 //     ASCII16      -> "ASCII16"
 //     MIRRORED     -> "Mirrored"
+//   references/openmsx-21.0/src/memory/RomInfo.cc:24 (M29, backlog G1)
+//     KONAMI_SCC   -> "KonamiSCC"
 //
-// The deferred remainder of openMSX's ~90 RomType values (KonamiSCC and the
-// long vendor-specific tail) is out of scope for M19 (planner §1.2, backlog
-// rows G1/G4) -- never copy openMSX's RomType/RomInfo code itself into src/
-// (GPL isolation, guardrails); this enum + the name table below are an
-// independent, from-scratch re-expression of the same 6 canonical names.
+// The deferred remainder of openMSX's ~90 RomType values (the long
+// vendor-specific tail, backlog row G4; SCC-I/"SCC+" split out as row G5) is
+// still out of scope -- never copy openMSX's RomType/RomInfo code itself into
+// src/ (GPL isolation, guardrails); this enum + the name table below are an
+// independent, from-scratch re-expression of the same canonical names.
 enum class CartridgeMapperType {
     Mirrored,
     Generic8kB,
@@ -31,9 +34,13 @@ enum class CartridgeMapperType {
     Ascii8kB,
     Ascii16kB,
     Konami,
+    // M29 (backlog G1): the SCC-bearing Konami MegaROM sibling
+    // (cartridge_konami_scc_rom.h). Canonical openMSX display string
+    // "KonamiSCC" (RomInfo.cc:24).
+    KonamiSCC,
 };
 
-// Case-insensitive parse of one of the 6 canonical name strings above. Returns
+// Case-insensitive parse of one of the canonical name strings above. Returns
 // std::nullopt for any unrecognized string -- NEVER a silent default (planner
 // A-M19-3/A-M19-5: only an OMITTED `--cartN-type` flag defaults to Mirrored;
 // an unrecognized VALUE is always an error at the CLI layer, cartridge_cli.h).

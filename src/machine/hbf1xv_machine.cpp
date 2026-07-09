@@ -5,6 +5,7 @@
 #include <system_error>
 #include <utility>
 
+#include "devices/cartridge/cartridge_konami_scc_rom.h"
 #include "machine/debug_dump.h"
 #include "machine/debug_format.h"
 #include "machine/frame_dump.h"
@@ -694,6 +695,29 @@ const devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot2() const 
 
 devices::cartridge::CartridgeSlot& Hbf1xvMachine::cartridge_slot2() {
     return cartridge_slot2_;
+}
+
+devices::audio::SccWavetable* Hbf1xvMachine::scc_chip(const int slot_number) {
+    // M29-S4 (backlog G1): non-null exactly when the named bay holds a
+    // KonamiSCC cartridge (docs/m29-planner-package.md §2.3). The static_cast
+    // is type-safe by construction: CartridgeKonamiScc is the ONLY mapper
+    // whose mapper_type() reports KonamiSCC (cartridge_slot.cpp factory).
+    devices::cartridge::CartridgeSlot* slot = nullptr;
+    if (slot_number == 1) {
+        slot = &cartridge_slot1_;
+    } else if (slot_number == 2) {
+        slot = &cartridge_slot2_;
+    } else {
+        return nullptr;
+    }
+    if (!slot->loaded() || slot->mapper_type() != devices::cartridge::CartridgeMapperType::KonamiSCC) {
+        return nullptr;
+    }
+    return &static_cast<devices::cartridge::CartridgeKonamiScc*>(slot->mapper())->scc();
+}
+
+const devices::audio::SccWavetable* Hbf1xvMachine::scc_chip(const int slot_number) const {
+    return const_cast<Hbf1xvMachine*>(this)->scc_chip(slot_number);
 }
 
 const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {

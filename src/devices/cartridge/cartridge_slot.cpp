@@ -7,6 +7,7 @@
 #include "devices/cartridge/cartridge_generic16kb_rom.h"
 #include "devices/cartridge/cartridge_generic8kb_rom.h"
 #include "devices/cartridge/cartridge_konami_rom.h"
+#include "devices/cartridge/cartridge_konami_scc_rom.h"
 #include "devices/cartridge/cartridge_mirrored_rom.h"
 
 namespace sony_msx::devices::cartridge {
@@ -54,6 +55,14 @@ CartridgeLoadResult CartridgeSlot::load(const CartridgeMapperType type, std::vec
                 return CartridgeLoadResult::ImageSizeInvalidForMapperType;
             }
             candidate = std::make_unique<CartridgeKonamiRom>(std::move(image));
+            break;
+        case CartridgeMapperType::KonamiSCC:
+            // M29-S3 (backlog G1): size-validate -> construct -> reset ->
+            // install, the same uniform contract as the six M19 types.
+            if (!CartridgeKonamiScc::is_valid_image_size(image.size())) {
+                return CartridgeLoadResult::ImageSizeInvalidForMapperType;
+            }
+            candidate = std::make_unique<CartridgeKonamiScc>(std::move(image));
             break;
     }
 

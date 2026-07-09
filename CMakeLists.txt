@@ -26,6 +26,7 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/system_control.cpp
     src/devices/chipset/mb670836_pause.cpp
     src/devices/audio/psg_ym2149.cpp
+    src/devices/audio/scc_wavetable.cpp
     src/devices/audio/ym2413_opll.cpp
     src/devices/rtc/rp5c01.cpp
     src/devices/fdc/disk_image.cpp
@@ -43,6 +44,7 @@ add_library(sony_msx_core STATIC
     src/devices/cartridge/cartridge_ascii8kb_rom.cpp
     src/devices/cartridge/cartridge_ascii16kb_rom.cpp
     src/devices/cartridge/cartridge_konami_rom.cpp
+    src/devices/cartridge/cartridge_konami_scc_rom.cpp
     src/devices/cartridge/cartridge_slot.cpp
     src/devices/halnote/halnote_rom.cpp
     src/devices/kanji/kanji_font_rom.cpp
@@ -72,6 +74,7 @@ add_library(sony_msx_core STATIC
     src/frontend/border_composer.cpp
     src/frontend/audio_pacer.cpp
     src/frontend/psg_audio_pump.cpp
+    src/frontend/machine_audio_mixer.cpp
     src/frontend/psg_audio_dump.cpp
 )
 

@@ -1006,6 +1006,46 @@ target_compile_definitions(hbf1xv_m27_debug_tooling_system_test
     PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
 add_test(NAME hbf1xv_m27_debug_tooling_system_test COMMAND hbf1xv_m27_debug_tooling_system_test)
 
+# --- M29 KonamiSCC mapper + SCC wavetable audio chip (backlog G1, docs/
+#     m29-planner-package.md): the SccWavetable device unit suite (De
+#     Schrijder/Pazos/NYYRIKKI hand-computed oracles), the CartridgeKonamiScc
+#     mapper unit suite (opposite-of-plain-Konami mirroring, masked 0x3F
+#     enable, both-effects 0x9000 write, 0x9800-0x9FFF window), the
+#     MachineAudioMixer unit suite (incl. the zero-SCC byte-identity hard
+#     regression oracle), the bus-level integration test (real Z80 writes
+#     over the M11 bus), and the cold-boot in-cart-driver system test. All
+#     headless-buildable (the mixer is SDL3-independent, M26-S5 precedent).
+add_executable(devices_audio_scc_wavetable_unit_test
+    unit/devices/audio_scc_wavetable_unit_test.cpp
+)
+target_link_libraries(devices_audio_scc_wavetable_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_scc_wavetable_unit_test COMMAND devices_audio_scc_wavetable_unit_test)
+
+add_executable(devices_cartridge_konami_scc_rom_unit_test
+    unit/devices/cartridge/cartridge_konami_scc_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_konami_scc_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_konami_scc_rom_unit_test COMMAND devices_cartridge_konami_scc_rom_unit_test)
+
+add_executable(frontend_machine_audio_mixer_unit_test
+    unit/frontend/machine_audio_mixer_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_unit_test COMMAND frontend_machine_audio_mixer_unit_test)
+
+add_executable(machine_hbf1xv_m29_konami_scc_integration_test
+    integration/machine/hbf1xv_m29_konami_scc_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m29_konami_scc_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m29_konami_scc_integration_test
+    COMMAND machine_hbf1xv_m29_konami_scc_integration_test)
+
+add_executable(hbf1xv_m29_scc_system_test
+    system/hbf1xv_m29_scc_system_test.cpp
+)
+target_link_libraries(hbf1xv_m29_scc_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m29_scc_system_test COMMAND hbf1xv_m29_scc_system_test)
+
 # --- M28-S1 YM2413 register-write timing constraint (backlog E2): E2 gate
 #     unit tests (FakeClock, 12/84-cycle boundaries, determinism) + a machine-
 #     level integration test driving real CPU OUT (#7C)/OUT (#7D) sequences

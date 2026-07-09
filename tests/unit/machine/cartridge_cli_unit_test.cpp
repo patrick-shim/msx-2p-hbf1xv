@@ -67,6 +67,8 @@ int main() {
             {"ASCII8", CartridgeMapperType::Ascii8kB},      {"ascii8", CartridgeMapperType::Ascii8kB},
             {"ASCII16", CartridgeMapperType::Ascii16kB},    {"ascii16", CartridgeMapperType::Ascii16kB},
             {"Konami", CartridgeMapperType::Konami},        {"KONAMI", CartridgeMapperType::Konami},
+            // M29 (backlog G1): the KonamiSCC mapper type, additive (QA F1).
+            {"KonamiSCC", CartridgeMapperType::KonamiSCC},  {"konamiscc", CartridgeMapperType::KonamiSCC},
         };
         bool all_ok = true;
         for (const auto& c : cases) {

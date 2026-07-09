@@ -1,6 +1,32 @@
 # Current Phase
 
-- Objective: The M21-M28 continuation is COMPLETE (v1.0.21..v1.0.28). The human's earlier-deferred
+- Objective: DEC-0035 three-milestone autonomous run (2026-07-09, human-ratified): **M29
+  (KonamiSCC mapper + SCC wavetable chip, backlog G1, tag target v1.0.30) → M30 (Aleste-2
+  cartridge-loading fix; E1/FM-synthesis renumbered M30→M31) → M31 (YM2413 FM-synthesis DSP
+  depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
+  coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
+  handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
+- Active Phase: **M29 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)**. Delivered per
+  `docs/m29-planner-package.md` S1-S6: `CartridgeMapperType::KonamiSCC` + CLI value "KonamiSCC";
+  `src/devices/audio/scc_wavetable.*` (plain-SCC Real mode: De Schrijder AmpOut=640+Σ mixing law
+  reproduced literally in a unit oracle, Pazos deformation register incl. read-as-write-0xFF,
+  NYYRIKKI latching/restart/period<9 stop, enen power-on state; mode-aware-ready for the new G5
+  remainder); `src/devices/cartridge/cartridge_konami_scc_rom.*` (opposite-of-plain-Konami
+  mirroring, 0x800-wide bank windows, masked (v&0x3F)==0x3F enable incl. 0xBF, both-effects
+  0x9000 write, 0x9800-0x9FFF SCC window mirrored via addr&0xFF); machine `scc_chip()` accessor;
+  SDL3-independent `src/frontend/machine_audio_mixer.*` wired into the presenter with
+  `AudioPacer`/`PsgAudioPump` byte-for-byte untouched (DEC-0033) and the zero-SCC byte-identity
+  hard regression oracle unit-proven. Evidence: headless fast subset **159/159**, SDL3-ON fast
+  subset **168/168** (dummy drivers; slow sweep NOT run per DEC-0035); openMSX A/B **EMPTY DIFF
+  over 140 instructions** (`docs/m29-parity-trace-diff.md`, `tools/openmsx-m29-scc-parity.ps1`,
+  A-M29-3 forcing syntax verified in source first); audio-sample A/B recorded N/A by design per
+  the package's own §2.5 disposition. BONUS real-ROM smoke (coordinator-directed): `roms/
+  aleste.rom` **boots AND starts** under `--cart1-type KonamiSCC` (loader banner "Konami8
+  mapper", game intro running after the scripted keypress — `debug/frames/m29-aleste-f*.png`).
+  Ledger: G1 → DONE (M29), NEW row G5 (SCC-I) added. All changes UNCOMMITTED, awaiting QA
+  (`docs/m29-implementation-report.md` is the handoff artifact). Temporary main.cpp probe
+  reverted (`git checkout -- src/main.cpp`).
+- Prior objective (closed): The M21-M28 continuation is COMPLETE (v1.0.21..v1.0.28). The human's earlier-deferred
   debug/-folder artifact request (raised 2026-07-08 after M25 completed) was fully discharged across
   M26 (SDL3 frontend) and M27 (Production Hardening + Debug/Test Tooling). M28 ("Release Candidate")
   then swept the remaining backlog and delivered a full-project health audit; a real, human-reported
@@ -12,7 +38,7 @@
   human choice). Standing "zero license-sensitive future work" and "don't run the slow test unless
   necessary" directives remain in force (project memories `feedback_license_sensitive_scope.md` /
   `feedback_slow_test_cadence.md`). No further milestone has been requested by the human yet.
-- Active Phase: M28 ("Release Candidate — Backlog Closure Sweep + Full-Project Health Audit") —
+- Prior Phase: M28 ("Release Candidate — Backlog Closure Sweep + Full-Project Health Audit") —
   **CLOSED 2026-07-08 (DEC-0027/REQ-M28-004, git tag v1.0.28)**, folding **DEC-0026** (a separately
   discovered/fixed VDP boot-hang bug, outside M28's own approved scope) into the same closure
   commit/tag per QA's explicit recommendation. Approved scope: IN-M28 = E2 (YM2413 write-timing

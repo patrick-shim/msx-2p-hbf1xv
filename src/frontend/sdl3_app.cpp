@@ -232,7 +232,15 @@ void Sdl3App::run_one_frame() {
         // ms-truncation below). samples_to_pump is a pure function of
         // elapsed cycles, so the deterministic ctest path is unaffected by
         // host-queue state.
-        audio_presenter_->pump_and_push_paced(machine_.psg(), machine_.elapsed_cycles());
+        //
+        // M29-S5: the SCC sources are queried fresh each frame (cheap, and
+        // correct across cartridge load state) -- nullptr when a bay holds
+        // no KonamiSCC cart, in which case the mixed output is byte-
+        // identical to the pre-M29 PSG-only path (the mixer's regression
+        // oracle).
+        audio_presenter_->pump_and_push_paced(
+            machine_.psg(), MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
+            machine_.elapsed_cycles());
     }
 
     ++frames_run_;

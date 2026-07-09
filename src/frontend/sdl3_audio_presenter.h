@@ -7,6 +7,7 @@
 
 #include "devices/audio/psg_ym2149.h"
 #include "frontend/audio_pacer.h"
+#include "frontend/machine_audio_mixer.h"
 #include "frontend/psg_audio_pump.h"
 
 namespace sony_msx::frontend {
@@ -113,15 +114,29 @@ public:
     // backpressure, pushes any underrun-boundary re-prime silence first, then
     // pumps the full batch (PSG generator time ALWAYS tracks machine time)
     // and pushes only what fits under the queue cap.
+    //
+    // M29-S5 (docs/m29-planner-package.md §2.4): per-sample production is
+    // delegated to the SDL3-independent MachineAudioMixer, which mixes 0..2
+    // attached Konami SCC chips into the PSG stream. AudioPacer::plan()'s
+    // call and inputs are UNCHANGED (samples_to_pump remains a pure function
+    // of total_elapsed_cycles; SCC generator time, like PSG generator time,
+    // always tracks machine time -- DEC-0033 accounting untouched). The
+    // 2-argument overload preserves the pre-M29 signature verbatim: it
+    // forwards with zero SCC sources, whose mixed output is byte-identical
+    // to the pre-M29 arithmetic (the mixer's hard regression oracle).
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, std::uint64_t total_elapsed_cycles);
+    void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
+                             std::uint64_t total_elapsed_cycles);
 
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
-    [[nodiscard]] const PsgAudioPump& pump() const { return pump_; }
+    // Kept accessor shape (M26): the pump is now owned by the mixer.
+    [[nodiscard]] const PsgAudioPump& pump() const { return mixer_.pump(); }
+    [[nodiscard]] const MachineAudioMixer& mixer() const { return mixer_; }
     [[nodiscard]] const AudioPacer& pacer() const { return pacer_; }
 
 private:
-    PsgAudioPump pump_{kCyclesPerSample};
+    MachineAudioMixer mixer_{kCyclesPerSample};
     AudioPacer pacer_{kSampleRateHz, kSystemClockHz, kLowWaterSamples, kMaxQueuedSamples};
     SDL_AudioStream* stream_ = nullptr;
     std::string last_error_;

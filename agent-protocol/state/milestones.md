@@ -955,3 +955,50 @@ Use one section per milestone.
   own trailer all refreshed to reference DEC-0026 and the 146/146 count. Milestone closed clean on
   the second pass. Tag `v1.0.28`, covering both M28's own approved scope and DEC-0026 together.
   Closes backlog **E2** in full.
+
+## M29 (Kickoff 2026-07-09, DEC-0035 autonomous run)
+
+- Milestone ID: M29
+- Title: KonamiSCC mapper + Konami SCC 5-channel wavetable sound chip (closes backlog G1)
+- Spec Owner: MSX Planner Agent (`docs/m29-planner-package.md`; grounding precondition delivered
+  FIRST: `references/fact-sheets/Konami SCC.md`, independently community-measurement-grounded,
+  seven openMSX-vs-fMSX disagreements arbitrated per DEC-0030)
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Slices S1-S6 per the package — S1 `CartridgeMapperType::KonamiSCC` + CLI value
+  "KonamiSCC" (RomInfo.cc:24 canonical name); S2 `SccWavetable`
+  (`src/devices/audio/scc_wavetable.*`, plain-SCC Real mode only, mode-aware-ready for G5);
+  S3 `CartridgeKonamiScc` (`src/devices/cartridge/cartridge_konami_scc_rom.*`) + factory case;
+  S4 machine `scc_chip()` accessor + bus-level integration test; S5 SDL3-independent
+  `frontend::MachineAudioMixer` wired into `Sdl3AudioPresenter::pump_and_push_paced()` with
+  `AudioPacer`/`PsgAudioPump` byte-for-byte untouched (DEC-0033) and the zero-SCC byte-identity
+  hard regression oracle; S6 system test + openMSX A/B harness
+  (`tools/openmsx-m29-scc-parity.ps1` -> `docs/m29-parity-trace-diff.md`) + ledger closure
+  (G1 -> DONE (M29), new row G5 for SCC-I). SCC-I/SCC+ explicitly OUT (named remainder G5);
+  ZEXALL/ZEXDOC slow sweep explicitly NOT run (DEC-0035: M31 QA gate only).
+- Acceptance Criteria: package §4 items 1-11.
+- Unit Tests Required: `devices_audio_scc_wavetable_unit_test` (De Schrijder amp_out()==640
+  literal reproduction, Pazos deform semantics incl. read-as-write-0xFF and rotation quirks,
+  NYYRIKKI latching/restart/period<9 stop, enen power-on state, two-instance determinism);
+  `devices_cartridge_konami_scc_rom_unit_test` (opposite-of-plain-Konami mirroring both
+  directions, 0x800-wide decode, masked 0x3F/0xBF enable + 0x3E disable, both-effects 0x9000
+  write, 0x9800-0x9FFF window + 0x9900 mirror, ROM-mirror-pages-never-expose-SCC);
+  `frontend_machine_audio_mixer_unit_test` (zero-SCC byte-identity hard oracle, hand-computed
+  clamp cases incl. a constructed saturation input, determinism); additive
+  `devices_cartridge_mapper_type_unit_test` cases (one disclosed M19 scope-marker assertion
+  converted: parse("KonamiSCC") nullopt -> positive).
+- Integration Tests Required: `machine_hbf1xv_m29_konami_scc_integration_test` (real Z80
+  LD (nn),A traffic over the M11 bus, both bays, accessor nullability matrix, empty-slot
+  open-bus regression guard); `hbf1xv_m29_scc_system_test` (cold boot + IN-CART Z80 driver
+  program + DEC-0034 frame-loop shape + hand-computed PCM oracle, byte-identical twice).
+- Regression Scope: zero touch to `src/devices/cpu/`, `src/core/`,
+  `src/frontend/audio_pacer.*`, `src/devices/audio/psg_ym2149.*`,
+  `src/devices/audio/ym2413_opll.*`, the six M19 mapper device files (verified
+  `git diff v1.0.29` clean); zero-SCC audio path byte-identical to v1.0.29 (unit-proven);
+  headless fast subset 159/159, SDL3-ON fast subset 168/168 (dummy drivers).
+- Status: **Ready for QA** (implementation complete 2026-07-09; `docs/m29-implementation-report.md`
+  + `docs/m29-parity-trace-diff.md` delivered; openMSX A/B EMPTY DIFF over 140 instructions;
+  BONUS real-ROM smoke: `roms/aleste.rom` boots AND starts under `--cart1-type KonamiSCC` —
+  loader banner "Konami8 mapper", game intro text reached after the scripted keypress,
+  evidence PNGs `debug/frames/m29-aleste-f{240,500,899}.png`; all changes left UNCOMMITTED
+  for coordinator/QA per the dispatch).

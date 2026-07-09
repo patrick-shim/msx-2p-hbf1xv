@@ -9,6 +9,7 @@
 #include "core/bus.h"
 #include "core/scheduler.h"
 #include "devices/audio/psg_ym2149.h"
+#include "devices/audio/scc_wavetable.h"
 #include "devices/audio/ym2413_opll.h"
 #include "devices/chipset/io_bus.h"
 #include "devices/chipset/mapper_io.h"
@@ -269,6 +270,21 @@ public:
     devices::cartridge::CartridgeSlot& cartridge_slot1();
     [[nodiscard]] const devices::cartridge::CartridgeSlot& cartridge_slot2() const;
     devices::cartridge::CartridgeSlot& cartridge_slot2();
+
+    // Konami SCC wavetable chip accessor (M29-S4, backlog G1; docs/m29-
+    // planner-package.md §2.3). Returns the given cartridge bay's owned
+    // SccWavetable when that bay currently holds a `KonamiSCC` cartridge,
+    // else nullptr -- including invalid slot numbers and every other mapper
+    // type. Mirrors psg()'s accessor shape with the M25 default-nullptr
+    // attach-point precedent: with no SCC cart loaded the frontend/mixer
+    // sees nullptr and behaves byte-identically to v1.0.29 (regression
+    // null). Both bays are queryable independently (real hardware mixes
+    // both slots' sound-in lines). NO new clock consumer and NO wire_bus()
+    // change: the chip is reached over the existing M19 slot attachment;
+    // its generator advances only via the frontend audio pump
+    // (SccWavetable::advance_cycles, A-M29-6).
+    [[nodiscard]] devices::audio::SccWavetable* scc_chip(int slot_number);
+    [[nodiscard]] const devices::audio::SccWavetable* scc_chip(int slot_number) const;
 
     // S1985 16-byte backup-RAM .sram persistence (M15-S5, backlog C4). Set the
     // file path BEFORE cold_boot to load it (absent -> deterministic zero state,
