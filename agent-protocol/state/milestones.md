@@ -1142,3 +1142,46 @@ Use one section per milestone.
   `--debug-session --frames/--dump-frame` enabler coordinator-reviewed, fast suite
   re-confirmed 177/177, cpu/core diff still EMPTY. NEW backlog row G6 (typed-BASIC harness,
   human proposal) recorded at closure.
+
+
+## M33 (Kickoff 2026-07-09, DEC-0041 — repository housekeeping; tag target v1.0.34)
+
+- Milestone ID: M33
+- Title: Repository housekeeping — single stream / single build / docs truth sweep
+- Charter: the human's directive verbatim in DEC-0041 (single build, single tree, single
+  source of truth, single way to build and test; fix/remove stale .md; concise 100%-accurate
+  READMEs; protect current-phase/deferred-backlog/DoD/milestones integrity).
+- Delivered:
+  - Git stream VERIFIED single: one branch (main), one worktree, zero stashes, linear
+    v1.0.11..v1.0.33 history — nothing to merge.
+  - Build consolidation: 13 build trees (>12 GB) + root QA logs + 69 untracked debug strays
+    deleted; ONE canonical build/ re-established; NEW tools/bootstrap-build.ps1 = THE single
+    build/test entry point (builds SDL3 once from references/sdl3 into build/_sdl3_install
+    when missing — M26 recipe; fast-subset ctest by default, -Slow gate for the ZEXALL sweep
+    per the standing cadence); CLAUDE.md build-flow section rewritten to the single-build
+    policy; .gitignore hardened (/build*/, /build-*.log, /debug/**/*.frame, __pycache__/).
+  - UNIVERSAL build fix: SDL3.dll staging moved INTO CMake (sony_msx_stage_sdl3_dll
+    POST_BUILD per SDL3-linked target, root CMakeLists.txt + tests foreach) — kills the
+    0xc0000135 MODAL loader dialogs that interrupted unattended ctest runs (human-reported
+    live during this milestone); any build path is now self-sufficient.
+  - Protected-state integrity: definition-of-done.yaml was MISSING milestone_records for
+    M29-M32 (the autonomous-run gap) — all four added in the established format, yaml parse
+    validated, M0-M32 complete.
+  - Docs truth sweep (REQ/RESP-M33-001): root README rewritten (v1.0.33 snapshot, verified
+    CLI flags, single-way build); tools/README rewritten (all 42 scripts indexed);
+    docs/README rewritten (frozen-triad taxonomy); debug/README NEW (runtime layout +
+    committed-evidence inventory); bios/README fact-checked three ways; peripherals README
+    (M0 junk stub) rewritten as an accurate file map; chipset README file map completed
+    (ppi_8255/mb670836_pause/reset_status_register/system_control rows, ppi_slot_select
+    re-scoped); agent-protocol/README gains the missing deferred-backlog.md row;
+    tests/CLAUDE.md gains the tests/parity/ note; STALE M17-era "YM2413 intentionally
+    SILENT" usage text in sdl3_main.cpp replaced with the post-M31/M32 truth; tracked
+    Python bytecode git-rm'd.
+- Evidence: tools/bootstrap-build.ps1 -RunTests from the fresh canonical tree — configure +
+  build clean, fast-subset ctest **186/186** (42.02 s), SDL3.dll staged beside all ten SDL3
+  binaries, ZERO loader dialogs. ZEXALL correctly NOT run (no cpu/core semantic change; the
+  one unfiltered bootstrap invocation was STOPPED mid-sweep by the coordinator per cadence).
+- Status: **CLOSED (DEC-0042, 2026-07-09, tag v1.0.34)** — coordinator-executed housekeeping
+  (docs slice delegated to msx-developer, RESP-M33-001); no device-behavior change, so the
+  planner/QA cycle was not convened per the DEC-0041 charter (the human's directive was the
+  spec; the 186/186 gate + protected-file validation is the evidence).

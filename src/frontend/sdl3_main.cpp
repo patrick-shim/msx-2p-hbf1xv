@@ -26,10 +26,8 @@ void print_usage(const char* argv0) {
                  "presents decoded V9958 video, plays real PSG (YM2149) audio, and reads\n"
                  "keyboard/joystick input.\n"
                  "\n"
-                 "NOTE: YM2413 (OPLL/FM-PAC) channels are intentionally SILENT in the audio\n"
-                 "mix -- this device has full register-file/channel/rhythm-decode fidelity\n"
-                 "(M17, backlog B3) but ZERO waveform-synthesis capability (backlog E1,\n"
-                 "still open). This is a disclosed, tracked scope boundary, not a bug.\n";
+                 "Audio mix: PSG (YM2149) + Konami SCC + YM2413 (OPLL/MSX-MUSIC) FM synthesis\n"
+                 "are all live (backlog E1 closed by M31; mix calibration M32/DEC-0040).\n";
 }
 
 }  // namespace

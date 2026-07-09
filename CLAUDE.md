@@ -108,15 +108,12 @@ license terms. Do not assert a reference says something without reading the conc
 
 ## Build & test flow (authoritative)
 
-Headless / core:
+**Single-build policy (M33, DEC-0041): there is exactly ONE build tree — `build/`.** Never
+create per-agent or per-purpose trees (`build-qa-*`, `build-<milestone>-*`, ...); QA re-verifies
+from the same `build/` after a clean rebuild, not from a parallel tree. `.gitignore` swallows
+any `build*` path, but creating one is itself a policy violation.
 
-```powershell
-cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=OFF
-cmake --build build --config Debug
-ctest --test-dir build -C Debug --output-on-failure
-```
-
-SDL3 frontend (needs `SDL3Config.cmake` on the prefix path):
+The standard configuration is SDL3=ON — it is the superset (both executables + all tests):
 
 ```powershell
 cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=ON
@@ -124,8 +121,12 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
+Headless-only fallback (only for an environment without `SDL3Config.cmake` on the prefix
+path) reconfigures the SAME tree: `cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=OFF`.
+
 - Multi-config generators (VS): use `-C Debug`/`-C Release` at test time.
 - Single-config generators: set `-DCMAKE_BUILD_TYPE=Debug` at configure time.
+- Executables land in `build/Debug/` (`sony_msx_headless.exe`, `sony_msx_sdl3.exe`).
 
 ## Evidence gates (run and capture; never fabricate)
 

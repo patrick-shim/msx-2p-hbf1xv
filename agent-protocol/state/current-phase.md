@@ -6,11 +6,18 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **IDLE — M32 CLOSED (DEC-0040, 2026-07-09, tag v1.0.33); awaiting the human's
-  verification run (Aleste 2 gameplay + FM audibility at k=21, R-M32-7) and next directive.**
+- Active Phase: **IDLE — M33 CLOSED (DEC-0042, 2026-07-09, tag v1.0.34); awaiting the human's
+  M32 verification run (Aleste 2 gameplay + FM audibility at k=21, R-M32-7) and next
+  directive.** M33 delivered the human's housekeeping charter (DEC-0041): single git stream
+  verified; >12 GB of build debris purged; ONE canonical build/ via tools/bootstrap-build.ps1
+  (fast-subset default, -Slow RC gate); SDL3.dll staging moved into CMake (kills the modal
+  0xc0000135 loader dialogs); DoD records M29-M32 restored; full docs truth sweep (root/tools/
+  docs/debug READMEs + stale-text fixes). Fresh-tree gate: **186/186**.
   Remaining open backlog: C1/D4 + E3 (sourcing-blocked), D8/D9/D10 (M32 named remainders),
   C10/F1/F2 (era-labeled, unscheduled), G3/G4/G5/G6 (on-demand; G6 = typed-BASIC harness,
   near-term candidate).
+- Prior phase (closed): **M32 — CLOSED (DEC-0040, 2026-07-09, tag v1.0.33)**; the human's
+  post-M32 verification (R-M32-7) remains awaited.
 - Prior phase (closed): **M32 — CLOSED (DEC-0040; QA CONDITIONAL PASS RESP-M32-003, all
   conditions discharged; tag v1.0.33)** — both DEC-0039 defects fixed universally per `docs/m32-planner-package.md` S1-S5
   with the RESP-M32-001 D-1/D-2 ratifications applied. **(A) Raster-accurate per-line rendering +
@@ -432,7 +439,7 @@ gate applies), **C10→M32-era** (FDC flux/DMK), **F1→M33-era** (cassette), **
 (printer), **G3/G4/G5** (indefinite/on-demand). G1 closed (M29, v1.0.30); G2 closed (M30,
 pending QA/tag v1.0.31).
 
-- Updated At: 2026-07-09 (M32 CLOSED per DEC-0040, tag v1.0.33 — both DEC-0039 RC-playtest
-  defects fixed universally: per-line rendering + line-interrupt delivery, FM k=21. QA
-  Conditional Pass fully discharged; AC-6 all-four-confirmed; evidence regenerated with
-  recorded recipes. Coordinator idle awaiting the human's verification run.)
+- Updated At: 2026-07-09 (M33 CLOSED per DEC-0042, tag v1.0.34 — housekeeping: single
+  stream/build/docs-truth per the human's DEC-0041 charter; DoD M29-M32 gap repaired;
+  bootstrap-build.ps1 is THE build/test entry point; 186/186 fresh-tree gate. Coordinator
+  idle awaiting the human's M32 verification verdict and next directive.)

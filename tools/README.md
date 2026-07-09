@@ -1,99 +1,103 @@
-# Tools Directory
+# tools/ — automation index
 
-Helper tools written in Python and PowerShell for build, test, data prep, and agent-assisted workflows.
+PowerShell (`*.ps1`) and Python (`*.py`) helpers used by agents and developers. Prefer
+these over ad-hoc command chains; any script-assisted result should cite the exact script
+path used. All scripts assume the repository root as working directory unless a parameter
+says otherwise; every converter/generator is deterministic (identical input → byte-identical
+output).
 
-## Purpose
+## Build / bootstrap
 
-- Keep repeatable automation in one place.
-- Reduce ad-hoc command drift across developers and agents.
-- Provide deterministic, scriptable project operations.
+- `bootstrap-build.ps1` — **THE single way to build and test** (M33 single-build policy,
+  DEC-0041). Builds SDL3 once from `references/sdl3/` into `build/_sdl3_install` if missing,
+  configures the ONE canonical `build/` tree (`-DSONY_MSX_ENABLE_SDL3=ON` superset), builds,
+  and with `-RunTests` runs ctest. Wiping `build/` is always safe — this restores it.
+  `powershell -ExecutionPolicy Bypass -File tools/bootstrap-build.ps1 -RunTests [-Config Release]`
+
+## Evidence gates (run at every milestone)
+
+- `validate-assets.ps1` — asserts all seven required Sony HB-F1XV BIOS ROMs exist in `bios/`
+  and ≥1 `.rom` in `roms/`. Exit 0 = OK. `./tools/validate-assets.ps1 [-Json]`
+- `checksum-assets.ps1` — reproducible SHA256 checksums of `bios/*.rom` + `roms/*.rom`.
+  `./tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt [-Json]`
+
+## openMSX A/B harnesses (WSL `/usr/bin/openmsx`; write `docs/*` evidence)
+
+General:
+
+- `openmsx-ab-smoke.ps1` — verifies openMSX availability on WSL and writes the smoke
+  evidence document `docs/openmsx-ab-smoke.md`.
+
+Per-milestone parity harnesses (each drives our emulator and openMSX over the same
+deterministic probe and diffs the results into `docs/m<N>-parity-trace-diff.md` or a named
+output doc):
+
+- `openmsx-trace-parity.ps1` — M10 per-instruction opcode-trace parity (with `trace-diff.py`).
+- `openmsx-io-parity.ps1` — M11 I/O-bus probe parity (`tests/parity/m11_bus_probe.bin`).
+- `openmsx-cpu-parity.ps1` — M12 Z80 CPU checkpoint parity.
+- `openmsx-mem-parity.ps1` — M13 memory/mapper probe parity.
+- `openmsx-vdp-parity.ps1` — M14 VDP register/status probe parity.
+- `openmsx-m16-boot-parity.ps1` — M16 FDC/disk-boot register-sequence parity.
+- `openmsx-ym2413-parity.ps1` — M17 YM2413 (OPLL) register-write parity.
+- `openmsx-peripheral-io-parity.ps1` — M18 Kanji-font/printer/cassette I/O parity.
+- `openmsx-m19-cartridge-parity.ps1` — M19 cartridge-mapper probe parity.
+- `openmsx-m20-halnote-parity.ps1` — M20 Halnote firmware-mapper parity.
+- `openmsx-m21-vdp-render-parity.ps1` — M21 VDP rendering-path parity.
+- `openmsx-m22-sprite-cmd-parity.ps1` — M22 sprite + VDP-command-engine parity.
+- `openmsx-m23-halt-r-parity.ps1` — M23 HALT R-register timing parity.
+- `openmsx-m24-zexall-parity.ps1` — M24 bounded-prefix ZEXALL/ZEXDOC trace parity.
+- `openmsx-m25-rensha-parity.ps1` — M25 Ren-Sha Turbo autofire parity (live Sony_HB-F1XV).
+- `openmsx-m28-c5-boot-parity.ps1` — M28/C5 disk-auto-boot investigation trace.
+- `openmsx-m29-scc-parity.ps1` — M29 KonamiSCC banking + SCC register parity.
+- `openmsx-m30-identification-ab.ps1` — M30 no-forcing mapper auto-identification agreement
+  (writes `docs/m30-identification-ab.md`).
+- `openmsx-m32-split-ab.ps1` — M32 split-screen (line-interrupt) frame A/B (with
+  `gen-m32-split-probe.py` + `m32-split-ab-compare.py`).
+
+## Probe / fixture generators (regenerate `tests/parity/` fixtures byte-identically)
+
+- `gen-m16-boot-disk.py` — 720 KB 2DD synthetic boot disk (`m16_boot.dsk`).
+- `gen-m16-fdc-probe.py` — WD2793 restore/read-sector Z80 probe.
+- `gen-m17-ym2413-probe.py` — YM2413 two-port register-write probe.
+- `gen-m18-peripheral-io-probe.py` — combined Kanji/printer/cassette probe.
+- `gen-m19-cartridge-probe.py` — synthetic Generic8kB cartridge + probe.
+- `gen-m20-halnote-probe.py` — synthetic 1 MB Halnote mapper image.
+- `gen-m21-vdp-render-probe.py` — four VDP render-mode probes (palette/G7/YJK/planar).
+- `gen-m22-sprite-cmd-probe.py` — sprite + command-engine probes.
+- `gen-m29-scc-probe.py` — synthetic KonamiSCC cartridge + SCC probe.
+- `gen-m32-split-probe.py` — openMSX-side split-screen Z80 program.
+
+## Comparators / report parsers
+
+- `trace-diff.py` — deterministic per-instruction A-vs-B trace diff (used by the parity
+  harnesses).
+- `m32-split-ab-compare.py` — region-structural split-frame comparator (our frame dump vs
+  an openMSX raw screenshot; no byte-level color compare by design).
+- `zexall-report.py` — parses `sony_msx_headless --cpm-run` captured output into the
+  ZEXALL/ZEXDOC PASS/FAIL group report.
+
+## Capture / convert (debug artifacts)
+
+- `frame-to-png.py` — decoded frame dump (`HBF1XV-FRAME-DUMP v1`, from `--dump-frame` /
+  `write_frame_dump()`) → real truecolor PNG. Deterministic encoder.
+- `audio-dump-to-wav.py` — decoded PSG audio dump (`HBF1XV-AUDIO-DUMP v1`) → playable
+  canonical PCM WAV.
+- `mem-to-png.py` — raw memory buffer or a `--region DRAM|SRAM|VRAM` slice of a full-state
+  dump → INERT grayscale PNG (raw byte view, no VDP rendering). Has `--self-check`.
+- `mem-to-audio.py` — same inputs → INERT raw-PCM WAV (no PSG/OPLL synthesis). Has
+  `--self-check`.
+
+## Recorded evidence recipes
+
+- `capture-metalgear-evidence.ps1` (+ data file `metalgear-evidence-input.script`) — the
+  permanent, recorded recipe that regenerates the committed Metal Gear gameplay evidence
+  `debug/frames/m31-rc-metalgear-f1100.png` (M32 closure supersession). Runs the capture
+  twice and asserts byte-identical frame dumps before converting.
 
 ## Conventions
 
-- Python scripts: `*.py`
-- PowerShell scripts: `*.ps1`
-- Prefer lowercase kebab-case names, for example `prepare-rom-index.ps1`.
-- Scripts should be idempotent where practical.
-
-## Expected Script Categories
-
-- Build helpers (configure/build/test wrappers).
-- Asset validation helpers (`bios/` and `roms/` path checks).
-- Report or protocol helpers (optional).
-
-## Included Script
-
-- `validate-assets.ps1`: verifies required Sony HB-F1XV BIOS files and checks that at least one `.rom` exists in `roms/`.
-- `checksum-assets.ps1`: generates reproducible asset checksums (`bios/*.rom`, `roms/*.rom`) for QA and protocol evidence.
-- `openmsx-ab-smoke.ps1`: verifies openMSX availability on WSL and writes A/B smoke evidence to `docs/openmsx-ab-smoke.md`.
-- `openmsx-trace-parity.ps1` / `trace-diff.py`: M10-S4 opcode-trace parity harness and deterministic diff.
-- `mem-to-png.py`: M10-S5 deterministic memory-buffer -> grayscale PNG visualizer (INERT raw byte view; no VDP rendering).
-- `mem-to-audio.py`: M10-S5 deterministic memory-buffer -> PCM WAV serializer (INERT raw byte view; no PSG/OPLL synthesis).
-
-Usage:
-
-```powershell
-./tools/validate-assets.ps1
-./tools/validate-assets.ps1 -Json
-./tools/checksum-assets.ps1
-./tools/checksum-assets.ps1 -Json
-./tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt
-./tools/openmsx-ab-smoke.ps1
-```
-
-## M10-S5 memory converters (`mem-to-png.py`, `mem-to-audio.py`)
-
-Deterministic converters that turn a dumped MSX memory buffer into an inspectable
-artifact. Both are INERT raw-buffer visualizers/serializers: they treat source bytes
-directly (one byte -> one grayscale pixel; bytes -> raw PCM samples). Neither performs
-real V9958 VDP rendering nor PSG/YM2413 audio synthesis -- those remain separate device
-milestones.
-
-Input contract (either converter):
-
-- Raw binary buffer (default): a file of raw bytes -- a region extracted from a dump, or
-  any committed memory image (e.g. `tests/parity/z80_parity_checkpoint.bin`).
-- M10-S3 region dump (`--region NAME`): parses the full-state dump text emitted by
-  `src/machine/debug_dump.cpp` (`write_state_dump`, tag `HBF1XV-STATE-DUMP v1`) and
-  extracts a named region (`DRAM`/`SRAM`/`VRAM`). The folded canonical hex (`*` repeat
-  marker, 16 bytes/line, 8-hex-digit offset) is expanded losslessly back to bytes.
-
-Output contract:
-
-- `mem-to-png.py` -> 8-bit grayscale PNG (color type 0), `--width` px/row (default 256),
-  height `ceil(len/width)`, last row padded with `--pad` (default `00`).
-- `mem-to-audio.py` -> canonical PCM WAV (44-byte header + data): mono, 8-bit unsigned,
-  8000 Hz by default; `--bits 16`, `--rate`, `--channels` configurable.
-
-Determinism: identical input -> byte-identical output on any platform. The PNG `IDAT` is
-emitted as DEFLATE *stored* (uncompressed) blocks (no zlib compression-level/version
-dependence); no `tIME`/`tEXt`/`pHYs` chunks. The WAV header is hand-assembled with fixed
-fields and carries no timestamp/`LIST`/`fact` chunk. Both use stdlib only (`struct`,
-`zlib` for CRC/Adler only, `hashlib`, `argparse`).
-
-Self-checks (hermetic, re-runnable; assert a fixed golden SHA-256 + format invariants +
-two-encode reproducibility + S3 fold round-trip):
-
-```powershell
-python tools/mem-to-png.py --self-check
-python tools/mem-to-audio.py --self-check
-
-# Convert a raw memory buffer:
-python tools/mem-to-png.py tests/parity/z80_parity_checkpoint.bin -o out.png --width 16
-python tools/mem-to-audio.py tests/parity/z80_parity_checkpoint.bin -o out.wav
-
-# Convert a region out of an M10-S3 full-state dump:
-python tools/mem-to-png.py debug/traces/state.txt --region VRAM -o vram.png
-python tools/mem-to-audio.py debug/traces/state.txt --region DRAM -o dram.wav
-```
-
-Exit codes:
-
-- `0`: required BIOS set present and at least one ROM available.
-- `1`: one or more required BIOS files are missing, or no ROM files were found.
-
-## Agent Usage Policy
-
-- Agents should prefer scripts in this directory when an equivalent exists.
-- Any script-assisted result should report the exact script path used.
-- Avoid embedding large one-off shell logic in agent responses when a script can own it.
+- Lowercase kebab-case names; scripts idempotent where practical.
+- Generators/converters are stdlib-only Python and hand-assemble their output formats so
+  results are byte-identical across platforms.
+- Harness outputs under `docs/` are milestone evidence — do not regenerate them casually;
+  historical `docs/m<N>-parity-trace-diff.md` files are frozen records.

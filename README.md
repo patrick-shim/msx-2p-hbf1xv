@@ -1,236 +1,140 @@
 # sony-msx-hbf1xv
 
-Production-oriented Sony HB-F1XV MSX2+ emulator written in C++ with a cycle-aware core and an optional SDL3 desktop frontend.
+Production-oriented **Sony HB-F1XV (MSX2+, 1988)** emulator in C++: a cycle-aware,
+deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RAM, PSG,
+Konami SCC, YM2413 FM/MSX-MUSIC, RTC, WD2793-family FDC with 720 KB 3.5" floppy, full
+slot/mapper fabric) plus an optional SDL3 desktop frontend. The authoritative hardware
+target and all operating rules live in [`CLAUDE.md`](CLAUDE.md).
 
-## Current status
+## Current status (2026-07-09)
 
-This repository now includes a working initial scaffold with:
+- **Milestones M0–M32 are closed**; git tags `v1.0.11`…`v1.0.33` mark the closure line
+  (`v1.0.NN` = milestone `MNN` through M28; `v1.0.29` tagged the live-playtesting hardening
+  arc DEC-0028..DEC-0034, so tags offset milestone numbers by one from M29 on: M29=v1.0.30 …
+  M32=v1.0.33). `v1.0.32` was declared the production candidate; `v1.0.33` advanced that
+  line with the M32 RC-playtest fixes (raster-accurate per-line rendering + line
+  interrupts, FM mix calibration).
+- **Authoritative live status:** [`agent-protocol/state/current-phase.md`](agent-protocol/state/current-phase.md)
+  (active phase), [`state/milestones.md`](agent-protocol/state/milestones.md),
+  [`state/deferred-backlog.md`](agent-protocol/state/deferred-backlog.md) (open backlog),
+  and [`channels/decisions.md`](agent-protocol/channels/decisions.md) (DEC-NNNN history).
+  Always trust those over any README snapshot.
+- Working today, per the closed-milestone record under `docs/`: real Sony BIOS cold boot to
+  the MSX2+ logo and BASIC; MSX-DOS / Disk BASIC boot from `.dsk` images; cartridge loading
+  with universal mapper auto-identification (softwaredb SHA1 match, then a bank-write
+  heuristic); sprites + V9958 command engine with per-line raster rendering; live PSG + SCC
+  + YM2413 FM audio; keyboard/joystick, Ren-Sha Turbo, hardware PAUSE and Speed Controller;
+  ZEXALL/ZEXDOC clean (durable log `docs/m31-rc-zexall-log.txt`).
 
-- CMake-based build system.
-- Core machine/scheduler skeleton.
-- Initial CPU bus contract skeleton and deterministic tests.
-- Deterministic unit, integration, and system test executables.
-- Claude Code multi-agent orchestration: subagents and commands under `.claude/`, with runtime coordination state under `agent-protocol/`.
-- Asset directories for BIOS and ROM files.
-- A `tools` directory for Python/PowerShell helper scripts used by agents.
-- A `docs` directory for project documentation.
+## Build and test (the single way)
 
-## Project goals
-
-- Emulate Sony HB-F1XV behavior with strong timing correctness and predictable results.
-- Keep strict subsystem boundaries (`core`, `devices`, `peripherals`, `machine`, `frontend`, `tests`).
-- Maintain deterministic test-first development and regression discipline.
-
-## Scope
-
-### In scope
-
-- Sony HB-F1XV focused emulation (MSX2+ generation).
-- Cycle-aware execution model for timing-sensitive behavior.
-- SDL3 desktop frontend (optional build target).
-- Unit, integration, and system tests.
-- Local BIOS/ROM assets for development workflows.
-- Agent automation helper scripts under `tools`.
-
-### Out of scope (for now)
-
-- Broad multi-vendor MSX model coverage.
-- Netplay, rewind, TAS workflows, advanced debugger UX.
-- Mobile/web targets.
-
-## Project scaffold
-
-```text
-.
-|-- CMakeLists.txt
-|-- README.md
-|-- docs
-|-- bios
-|-- roms
-|-- tools
-|   `-- README.md
-|-- src
-|   |-- main.cpp
-|   |-- core
-|   |   |-- bus.h
-|   |   |-- scheduler.h
-|   |   `-- scheduler.cpp
-|   |-- devices
-|   |   `-- cpu
-|   |       |-- cpu_bus_client.h
-|   |       `-- cpu_bus_client.cpp
-|   |-- machine
-|   |   |-- hbf1xv_machine.h
-|   |   `-- hbf1xv_machine.cpp
-|   `-- frontend
-|       `-- sdl3_main.cpp
-|-- tests
-|   |-- CMakeLists.txt
-|   |-- unit
-|   |   `-- core
-|   |       |-- scheduler_unit_test.cpp
-|   |       `-- bus_contract_unit_test.cpp
-|   |   `-- devices
-|   |       `-- cpu_bus_client_unit_test.cpp
-|   |-- integration
-|   |   |-- devices
-|   |   |   `-- cpu_bus_contract_integration_test.cpp
-|   |   `-- machine
-|   |       `-- hbf1xv_machine_integration_test.cpp
-|   `-- system
-|       `-- boot_system_test.cpp
-|-- CLAUDE.md
-|-- .claude
-|   |-- agents            (msx-orchestration, msx-planner, msx-developer, msx-qa)
-|   |-- commands          (msx-master, msx-autopilot, msx-kickoff, msx-test-matrix)
-|   |-- workflows         (msx-milestone.js)
-|   `-- settings.json
-`-- agent-protocol
-    |-- channels          (requests, responses, decisions)
-    |-- state             (current-phase, milestones, definition-of-done)
-    `-- templates
-```
-
-## Build and test
-
-### Headless/core scaffold
+**Single-build policy (DEC-0041): there is exactly ONE build tree — `build/`.** Never create
+per-agent or per-purpose trees. Bootstrap everything with:
 
 ```powershell
-cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=OFF
-cmake --build build
+powershell -ExecutionPolicy Bypass -File tools/bootstrap-build.ps1 -RunTests
+```
+
+This builds SDL3 once from the vendored `references/sdl3/` source into `build/_sdl3_install`
+(only if missing), configures the canonical `build/` tree with `-DSONY_MSX_ENABLE_SDL3=ON`
+(the superset: both executables + all tests), builds Debug, and runs `ctest`.
+
+Manual equivalent (see `CLAUDE.md` "Build & test flow"):
+
+```powershell
+cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=ON "-DCMAKE_PREFIX_PATH=build/_sdl3_install"
+cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-### SDL3 frontend scaffold
+- Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the SAME tree with
+  `-DSONY_MSX_ENABLE_SDL3=OFF`.
+- Fast subset: `ctest --test-dir build -C Debug -LE m24_slow_full_sweep` — excludes the
+  ~30-minute ZEXALL/ZEXDOC sweep, which runs only at release-candidate checkpoints or after
+  direct `src/devices/cpu/` / `src/core/` edits.
+- Executables land in `build/Debug/`: `sony_msx_headless.exe`, `sony_msx_sdl3.exe`.
 
-Prerequisite: install SDL3 with `SDL3Config.cmake` available to CMake.
+## Run
+
+Run from the repository root (asset paths and the default softwaredb path are CWD-relative).
+
+**SDL3 frontend** (real window, throttled real-time loop, live audio/input):
 
 ```powershell
-cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=ON
-cmake --build build
-ctest --test-dir build -C Debug --output-on-failure
+build\Debug\sony_msx_sdl3.exe                                  # plain BIOS boot to BASIC
+build\Debug\sony_msx_sdl3.exe --cart1 roms\aleste.rom          # cartridge, mapper auto-identified
+build\Debug\sony_msx_sdl3.exe --disk disks\msxdos22.dsk        # MSX-DOS boot floppy
 ```
 
-Notes:
+Flags (all verified in `src/frontend/sdl3_main.cpp` / `src/frontend/sdl3_cli.cpp`):
+`--bios-dir <path>` (default `bios`), `--disk <path>`, `--cart1 <path>`,
+`--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`,
+`--softwaredb <path>` (default `references/openmsx-21.0/share/softwaredb.xml`),
+`--max-frames <N>`, `--hidden-window`, `--border`, `--dump-state <name>`,
+`--trace-cpu <name>`, `--event-log <name>`, `--input-script <path>`, `--help`.
+`--cartN-type` omitted (or `auto`) triggers auto-identification; an explicit type is
+honored byte-for-byte.
 
-- On Windows Visual Studio generators (multi-config), use `-C Debug` (or `-C Release`) with `ctest`.
-- On single-config generators, configure with `-DCMAKE_BUILD_TYPE=Debug` and run `ctest --test-dir build --output-on-failure`.
+**Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 
-## BIOS, ROM, and disk directories
+```powershell
+build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.dsk `
+    --frames 1000 --dump-frame boot.frame --dump-state state.txt --event-log run.log
+```
 
-- `bios/`: local BIOS blobs used for development and validation.
-- `roms/`: local software/game/test ROM images used for emulator bring-up.
-- `disks/`: local MSX-DOS floppy disk images used for FDC/boot testing (e.g. `msxdos22.dsk`,
-  `msxdos23.dsk`, `msxdos24/`).
+`--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--cart1/--cart1-type`,
+`--cart2/--cart2-type`, `--softwaredb`, `--debug-root`, `--dump-state`, `--trace-cpu`,
+`--event-log`, `--input-script`, `--frames <N>` (drive N real frames; `<max_steps>` then
+ignored), `--dump-frame <name>`. Other single-purpose headless modes (each prints usage):
+`--cpm-run`, `--parity-trace`, `--bios-boot-trace`, `--frame-dump-demo`,
+`--audio-dump-demo`, and the per-milestone parity probes (`--vdp-parity`,
+`--vdp-render-parity`, `--sprite-cmd-parity`, `--ym2413-parity`, `--halnote-parity`).
+Debug output lands under `debug/` (see [`debug/README.md`](debug/README.md)).
 
-Repository policy:
+## Repository layout
 
-- Keep BIOS/ROM/disk files local and legally sourced.
-- Do not assume redistribution rights for proprietary files.
-- Agents must reference exact file paths and must not invent missing assets.
+- `src/` — emulator source; folder boundaries in [`src/CLAUDE.md`](src/CLAUDE.md)
+  (`core`, `devices`, `peripherals`, `machine`, `frontend`).
+- `tests/` — deterministic unit/integration/system tests + `tests/parity/` fixtures;
+  conventions in [`tests/CLAUDE.md`](tests/CLAUDE.md).
+- `tools/` — PowerShell/Python automation (build bootstrap, evidence gates, A/B harnesses,
+  converters); index in [`tools/README.md`](tools/README.md).
+- `docs/` — frozen milestone packages/reports/sign-offs + investigation reports; taxonomy in
+  [`docs/README.md`](docs/README.md).
+- `agent-protocol/` — multi-agent coordination: live state (`state/`), append-only channels
+  (`channels/`), canonical baseline/guardrails text.
+- `references/` — read-only grounding sources (openMSX 21.0, fMSX 6.0, SDL3, fact sheets,
+  ZEXALL). Never copied into `src/` (license isolation).
+- `bios/`, `roms/`, `disks/` — local, legally-sourced development assets (see below);
+  `bios/` contents documented in [`bios/README.md`](bios/README.md).
+- `debug/` — runtime debug output (traces/logs/frames/sounds); mostly gitignored, with
+  committed evidence exceptions ([`debug/README.md`](debug/README.md)).
+- `.claude/` — agents, commands, workflow, and settings for the orchestration.
+- `build/` — the one canonical CMake tree (gitignored; recreate any time with
+  `tools/bootstrap-build.ps1`).
 
-Quick validation:
+## Assets (BIOS / ROM / disk policy)
+
+`bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (cartridge images), and `disks/`
+(MSX-DOS system disks + `disks/games/` floppy sets, e.g. the two-disk YS II) are local,
+legally-sourced development assets. **They are not redistributable — do not publish this
+repository without removing them.** Validate and checksum with:
 
 ```powershell
 ./tools/validate-assets.ps1
 ./tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt
 ```
 
-## Tools directory
+## Reference A/B validation
 
-- `tools/` is reserved for Python and PowerShell helper scripts used by agents and developers.
-- See `tools/README.md` for script expectations and conventions.
-- Prefer invoking repository scripts from `tools/` when an equivalent script exists.
-- Current asset check script: `tools/validate-assets.ps1`.
-- Current checksum evidence script: `tools/checksum-assets.ps1`.
-- Current openMSX A/B smoke script: `tools/openmsx-ab-smoke.ps1`.
+openMSX (at `/usr/bin/openmsx` inside WSL) is the primary behavior reference; fMSX 6.0 is
+the independent cross-reference. Behavior-affecting milestones carry A/B evidence produced
+by the `tools/openmsx-*.ps1` harnesses and recorded as `docs/m<N>-parity-trace-diff.md`
+(smoke: `tools/openmsx-ab-smoke.ps1` → `docs/openmsx-ab-smoke.md`).
 
-## Docs directory
+## Multi-agent workflow
 
-- `docs/` contains design notes, milestones, and implementation references.
-- Planner outputs should be mirrored or summarized in `docs/` for long-lived decisions.
-- A/B smoke evidence with openMSX is recorded in `docs/openmsx-ab-smoke.md`.
-
-## A/B testing with openMSX on WSL
-
-openMSX is available on this machine through WSL and can be used as a reference emulator for A/B validation.
-
-Verified binary path:
-
-- `/usr/bin/openmsx` (inside WSL)
-
-Run smoke evidence generation:
-
-```powershell
-./tools/openmsx-ab-smoke.ps1
-```
-
-This produces:
-
-- `docs/openmsx-ab-smoke.md`
-
-A/B policy:
-
-- A: `sony-msx-hbf1xv` local behavior.
-- B: openMSX behavior on WSL for the same BIOS/ROM.
-- For behavior-affecting milestones, capture and reference A/B evidence in QA handoffs.
-
-## Deterministic test policy
-
-- `tests/unit/*_unit_test.cpp`: isolated deterministic behavior.
-- `tests/integration/*_integration_test.cpp`: cross-component deterministic behavior.
-- `tests/system/*_system_test.cpp`: machine-level deterministic behavior.
-
-All integration/system tests must include a deterministic oracle and avoid wall-clock dependence.
-
-## Agent workflow (Claude Code multi-agent)
-
-The repository runs a Claude Code native, role-based orchestration.
-See [`CLAUDE.md`](CLAUDE.md) for the full rules.
-
-Hierarchy — **Human -> Coordinator (main session) -> specialist subagents**:
-
-- The **main Claude Code session** is the human-facing coordinator.
-- It consults the read-only `msx-orchestration` subagent to validate protocol gates.
-- It delegates execution, planner-first, to the specialist subagents:
-  - `msx-planner` (specs, milestones, acceptance criteria)
-  - `msx-developer` (implementation + deterministic tests + evidence gates)
-  - `msx-qa` (regression assessment + sign-off)
-
-### How to run it
-
-Interactive coordination:
-
-```text
-/msx-master <objective, scope, constraints, completion criteria>
-```
-
-Continuous autopilot loop (wrap with `/loop` for hands-off, interval or self-paced runs):
-
-```text
-/msx-autopilot target=M10 completion="M10 done with QA signoff"
-```
-
-Initialize a fresh run, or generate a deterministic test matrix:
-
-```text
-/msx-kickoff <run name, objective, constraints>
-/msx-test-matrix <devices/subsystems, acceptance goals>
-```
-
-Deterministic auto-runnable orchestration (planner -> developer -> QA, loop until sign-off) is
-defined in [`.claude/workflows/msx-milestone.js`](.claude/workflows/msx-milestone.js) and runs
-via the Workflow tool.
-
-All handoffs and state are tracked under `agent-protocol/`:
-
-- `agent-protocol/channels/requests.md`
-- `agent-protocol/channels/responses.md`
-- `agent-protocol/state/current-phase.md`
-- `agent-protocol/state/milestones.md`
-
-## Next build-out steps
-
-1. Add first CPU execution micro-slice on top of the existing bus contract skeleton.
-2. Replace placeholder device/peripheral headers with first real interfaces.
-3. Expand system tests to cover deterministic boot and ROM flow checkpoints using `bios/` and `roms/` assets.
+The repository runs a Claude Code native orchestration — Human → Coordinator →
+`msx-planner` / `msx-developer` / `msx-qa` specialists, planner-first, with QA sign-off
+gating every milestone. Full rules in [`CLAUDE.md`](CLAUDE.md); protocol data in
+[`agent-protocol/`](agent-protocol/README.md).

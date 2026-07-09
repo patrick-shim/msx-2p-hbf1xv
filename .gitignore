@@ -1,6 +1,11 @@
 # --- Build output (regenerable; excluded from version control) ---
-/build/
+# M33 single-build policy (DEC-0041): ONE canonical CMake tree at /build/.
+# The /build*/ pattern also swallows any legacy per-agent tree (build-qa-*,
+# build-m31-sdl, ...) so they can never reappear as repo noise — but creating
+# them is itself a policy violation; agents must reuse /build/.
+/build*/
 build/
+/build-*.log
 *.o
 *.obj
 *.exe
@@ -13,6 +18,10 @@ build/
 # DEC-0030 exception: the fMSX 6.0 reference executable (human-provided
 # cross-reference asset, references/fmsx-60/ -- NOT a build output).
 !/references/fmsx-60/executables/fMSX.exe
+
+# Python bytecode
+__pycache__/
+*.pyc
 
 # CMake scratch
 CMakeUserPresets.json
@@ -28,6 +37,7 @@ CMakeUserPresets.json
 /debug/**/*.wav
 /debug/**/*.bin
 /debug/**/*.dump
+/debug/**/*.frame
 
 # M26 exception: one real, committed decoded-FrameBuffer-capture example
 # (backlog C9's authorized debug/testing capability, docs/m26-planner-

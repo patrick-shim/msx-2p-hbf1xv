@@ -33,6 +33,7 @@ the full canonical text that handoffs cite as dependencies.
 - `channels/decisions.md` — approved decisions and scope changes.
 - `state/current-phase.md` — single source of truth for the active phase and status.
 - `state/milestones.md` — milestone checklist and progress.
+- `state/deferred-backlog.md` — deferred/open backlog ledger (row status + milestone owners).
 - `state/definition-of-done.yaml` — machine-readable DoD gates and phase-transition rules.
 - `templates/handoff-template.md` — standard handoff schema.
 - `templates/milestone-template.md` — standard milestone schema.

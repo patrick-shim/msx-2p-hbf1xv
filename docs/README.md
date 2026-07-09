@@ -1,45 +1,61 @@
-# Docs Directory
+# docs/ — document taxonomy
 
-This folder stores persistent project documentation.
+Long-lived project documentation and milestone evidence. **Everything here except this
+README, `asset-checksums.txt`, and `openmsx-ab-smoke.md` is a FROZEN historical record**: milestone
+documents are never edited retroactively (at most a clearly-marked supersession note may be
+added with coordinator approval — see `docs/m32-implementation-report.md` §9 for the
+precedent). The LIVE project status does not live here — it lives in
+`agent-protocol/state/` (`current-phase.md`, `milestones.md`, `deferred-backlog.md`,
+`definition-of-done.yaml`) with the decision history in
+`agent-protocol/channels/decisions.md`.
 
-Recommended contents:
+## Per-milestone records (M0–M32, all closed; tags v1.0.11–v1.0.33)
 
-- Architecture notes
-- Milestone specifications
-- Design decisions and rationale
-- Testing strategy notes
+Each milestone `mNN` leaves a triad, in workflow order:
 
-Workflow guidance:
+1. `mNN-planner-package.md` — the approved scope, slices, acceptance criteria, and risks.
+2. `mNN-implementation-report.md` — the developer's delivered change set + captured
+   evidence-gate output (M0 uses `m0-implementation-prep.md` instead).
+3. `mNN-qa-signoff.md` — QA's independent regression assessment and verdict
+   (Pass / Conditional Pass), which gated the closure decision and git tag.
 
-- Planner outputs that need long-term visibility should be captured here.
-- Protocol channels remain the source of handoff/event history.
+Where the milestone was behavior-affecting, a fourth artifact records openMSX A/B evidence:
+`mNN-parity-trace-diff.md` — present for **m10–m25, m28, m29, m31, m32**. Milestone-specific
+adjuncts:
 
-Current milestone planning artifacts:
+- `m26-frontend-evidence.md` — M26 SDL3-frontend A/B/human-observed evidence disposition.
+- `m28-release-candidate-audit.md` — M28 full-project health audit.
+- `m30-identification-ab.md` — M30 cartridge auto-identification A/B agreement.
+- `m31-rc-zexall-log.txt` — the durable release-candidate ZEXALL/ZEXDOC full-sweep log
+  (the standing slow-test-cadence policy: this sweep runs only at RC checkpoints or after
+  direct cpu/core edits, and its log is kept).
 
-- `m0-planner-package.md`: Accepted M0 planner package for REQ-M0-003, including subsystem boundaries, dependency sequencing, risk/assumption verification, build/test acceptance mapping, and evidence-gate references.
-- `m0-implementation-prep.md`: M0 implementation-prep package for REQ-M0-005 with deterministic test-lane mapping and fresh evidence-gate execution results.
-- `m0-qa-signoff.md`: M0 QA signoff report for REQ-M0-006 with closure recommendation and residual risk summary.
-- `m1-planner-package.md`: M1 planner package for REQ-M1-002 defining first-slice boundaries, deterministic test obligations, and evidence gates.
-- `m1-implementation-report.md`: M1 implementation report for REQ-M1-004 covering deterministic machine stepping/frame-counter slice and execution evidence.
-- `m1-qa-signoff.md`: M1 QA signoff report for REQ-M1-005 with closure recommendation and residual risk summary.
-- `m2-planner-package.md`: M2 planner package for REQ-M2-002 covering deterministic scheduler batching scope.
-- `m2-implementation-report.md`: M2 implementation report for REQ-M2-003 with scheduler batch-step code/test evidence.
-- `m2-qa-signoff.md`: M2 QA signoff report for REQ-M2-004.
-- `m3-planner-package.md`: M3 planner package for REQ-M3-002 covering CPU bus word-access scope.
-- `m3-implementation-report.md`: M3 implementation report for REQ-M3-003 with bus word-helper code/test evidence.
-- `m3-qa-signoff.md`: M3 QA signoff report for REQ-M3-004.
-- `m4-planner-package.md`: M4 planner package for REQ-M4-002 covering machine multi-frame stepping scope.
-- `m4-implementation-report.md`: M4 implementation report for REQ-M4-003 with multi-frame machine code/test evidence.
-- `m4-qa-signoff.md`: M4 QA signoff report for REQ-M4-004.
-- `m5-planner-package.md`: M5 planner package for REQ-M5-002 covering boot-invariant hardening scope.
-- `m5-implementation-report.md`: M5 implementation report for REQ-M5-003 with boot invariant code/test evidence.
-- `m5-qa-signoff.md`: M5 QA signoff report for REQ-M5-004.
-- `m6-planner-package.md`: M6 planner package for REQ-M6-002 covering scheduler target-advance scope.
-- `m6-implementation-report.md`: M6 implementation report for REQ-M6-003 with scheduler target-advance code/test evidence.
-- `m6-qa-signoff.md`: M6 QA signoff report for REQ-M6-004.
-- `m7-planner-package.md`: M7 planner package for REQ-M7-002 covering CPU bus big-endian word-access scope.
-- `m7-implementation-report.md`: M7 implementation report for REQ-M7-003 with big-endian helper code/test evidence.
-- `m7-qa-signoff.md`: M7 QA signoff report for REQ-M7-004.
-- `m8-planner-package.md`: M8 planner package for REQ-M8-002 covering machine target-cycle stepping scope.
-- `m8-implementation-report.md`: M8 implementation report for REQ-M8-003 with target-cycle machine code/test evidence.
-- `m8-qa-signoff.md`: M8 QA signoff report for REQ-M8-004.
+## Investigation / fix reports (frozen; live-playtesting arc and M28-era findings)
+
+- `vdp-vr-hr-boot-hang-fix-report.md` — DEC-0026: SDL3 permanent-black-screen boot hang
+  (VDP S#2 VR/HR bits), fixed via live raster-derived status.
+- `memory-mapper-segment-divergence-investigation.md` — DEC-0028: the "instruction #145,503
+  divergence" proven a comparison-methodology FALSE POSITIVE (power-cycle rule codified).
+- `sprite-invisibility-investigation.md` + `sprite-fix-qa-review.md` — DEC-0029: sprite
+  mode 2 attribute-table addressing (all MSX2 sprites had been invisible).
+- `border-and-boot-logo-investigation.md` + `border-boot-logo-qa-review.md` — DEC-0031:
+  MSX2+ boot logo restored; border/backdrop composition added.
+- `konami-splash-regression-investigation.md` + `konami-splash-qa-review.md` — DEC-0032:
+  V99x8 color-0 transparency (backdrop show-through); suspected regression disproven.
+- `audio-latency-investigation.md` + `audio-latency-qa-review.md` — DEC-0033: exact audio
+  pacing (authentic 59.9227 Hz frame rate, bounded audio latency).
+
+## Regenerable evidence artifacts (the only non-frozen files here)
+
+- `asset-checksums.txt` — regenerated by `tools/checksum-assets.ps1 -OutFile
+  docs/asset-checksums.txt` at evidence gates.
+- `openmsx-ab-smoke.md` — regenerated by `tools/openmsx-ab-smoke.ps1`.
+
+## Rules for resuming agents
+
+- Read `agent-protocol/state/current-phase.md` FIRST for where the project actually is;
+  use these docs as the immutable history behind it.
+- Never rewrite a milestone document to match later reality — later milestones supersede
+  earlier ones by reference (decision entries and supersession notes), not by editing.
+- New milestone work adds a new `mNN-*` triad; behavior-affecting work also adds its
+  `mNN-parity-trace-diff.md` A/B evidence.

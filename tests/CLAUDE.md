@@ -8,6 +8,8 @@ build/test flow and evidence gates.
 - `tests/unit/` — small deterministic tests for one class or one behavior.
 - `tests/integration/` — cross-device and cross-subsystem deterministic tests.
 - `tests/system/` — machine-level boot, ROM workflow, and regression scenarios.
+- `tests/parity/` — committed probe binaries/fixtures consumed by the openMSX A/B harnesses
+  in `tools/` (not a test level; no `*_test.cpp` files live here).
 
 ## Required file naming
 

@@ -91,6 +91,27 @@ target_link_libraries(sony_msx_headless PRIVATE sony_msx_core)
 if(SONY_MSX_ENABLE_SDL3)
     find_package(SDL3 CONFIG REQUIRED)
 
+    # SDL3 is a SHARED library on Windows: every executable that links it
+    # (directly or transitively via sony_msx_sdl3_frontend) needs SDL3.dll
+    # beside it, or the Windows loader aborts with 0xc0000135 AND a MODAL
+    # error dialog that hangs unattended ctest runs (M33/DEC-0041 finding).
+    # Staging the DLL at build time per target makes every build path --
+    # tools/bootstrap-build.ps1, bare cmake, or an IDE -- self-sufficient.
+    if(TARGET SDL3::SDL3-shared)
+        set(SONY_MSX_SDL3_RUNTIME_TARGET SDL3::SDL3-shared)
+    else()
+        set(SONY_MSX_SDL3_RUNTIME_TARGET SDL3::SDL3)
+    endif()
+    function(sony_msx_stage_sdl3_dll target)
+        if(WIN32)
+            add_custom_command(TARGET ${target} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                        $<TARGET_FILE:${SONY_MSX_SDL3_RUNTIME_TARGET}>
+                        $<TARGET_FILE_DIR:${target}>
+                VERBATIM)
+        endif()
+    endfunction()
+
     add_library(sony_msx_sdl3_frontend STATIC
         src/frontend/sdl3_app.cpp
         src/frontend/sdl3_video_presenter.cpp
@@ -101,6 +122,7 @@ if(SONY_MSX_ENABLE_SDL3)
 
     add_executable(sony_msx_sdl3 src/frontend/sdl3_main.cpp)
     target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_sdl3_frontend)
+    sony_msx_stage_sdl3_dll(sony_msx_sdl3)
 endif()
 
 add_subdirectory(tests)

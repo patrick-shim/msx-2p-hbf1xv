@@ -1389,4 +1389,22 @@ if(SONY_MSX_ENABLE_SDL3)
     target_link_libraries(frontend_sdl3_app_input_script_integration_test PRIVATE sony_msx_sdl3_frontend)
     add_test(NAME frontend_sdl3_app_input_script_integration_test
         COMMAND frontend_sdl3_app_input_script_integration_test)
+
+    # M33/DEC-0041: stage SDL3.dll beside every SDL3-linked test executable
+    # (see the sony_msx_stage_sdl3_dll definition in the root CMakeLists.txt --
+    # without this, each test dies 0xc0000135 with a MODAL loader dialog that
+    # blocks unattended ctest). Any future SDL3-linked test target must be
+    # added to this list.
+    foreach(sdl3_test_target
+        frontend_sdl3_app_headless_integration_test
+        frontend_sdl3_video_presenter_pixel_integration_test
+        frontend_sdl3_audio_presenter_integration_test
+        frontend_sdl3_input_mapper_integration_test
+        frontend_sdl3_cli_session_integration_test
+        hbf1xv_m26_sdl3_system_test
+        frontend_sdl3_app_debug_session_integration_test
+        frontend_sdl3_input_mapper_key_names_consistency_integration_test
+        frontend_sdl3_app_input_script_integration_test)
+        sony_msx_stage_sdl3_dll(${sdl3_test_target})
+    endforeach()
 endif()

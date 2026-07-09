@@ -13,8 +13,9 @@ namespace sony_msx::devices::chipset {
 // Port A of the MSX PPI is the primary-slot select register (S1985 fact-sheet
 // §3; openMSX references/openmsx-21.0/src/MSXPPI.cc). Writing #A8 latches the
 // 2-bits-per-page primary selection and drives SlotBus; reading #A8 returns the
-// latched byte. Only port A is modelled here — ports #A9/#AA/#AB (keyboard row,
-// port C, control) are a later peripherals milestone (plan §1.2).
+// latched byte. Only port A is modelled here. Ports #A9/#AA/#AB live in the
+// full Ppi8255 (M15), which superseded this class in the machine wiring; this
+// minimal implementation survives as the M11 reference with its own unit test.
 class PpiSlotSelect final : public core::IoDevice {
 public:
     explicit PpiSlotSelect(SlotBus& slot_bus);
