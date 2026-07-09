@@ -21,6 +21,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# MSVC otherwise reads sources in the system code page (cp949 on the author's
+# machine) and warns C4819 on files carrying UTF-8 comments (em-dashes, etc.).
+# /utf-8 makes MSVC treat sources as UTF-8. Placed before any target so the core
+# library, both executables, and the tests/ subdirectory all inherit it; no-op
+# on GCC/Clang.
+if(MSVC)
+    add_compile_options(/utf-8)
+endif()
+
 enable_testing()
 
 add_library(sony_msx_core STATIC
