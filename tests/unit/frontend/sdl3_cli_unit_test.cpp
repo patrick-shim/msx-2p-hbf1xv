@@ -99,6 +99,31 @@ int main() {
                "BorderFlag_OrderIndependent_AlongsideOtherFlags");
     }
 
+    // --- Case 7 (M30 additive, backlog G2): --softwaredb flows through
+    // parse_sdl3_cli's delegated cartridge parse (docs/m30-planner-package.md
+    // §4-S4), alongside the `auto` type value and type_was_explicit. ---
+    {
+        const auto parsed = parse_sdl3_cli(
+            {"--softwaredb", "custom/softwaredb.xml", "--cart1", "roms/foo.rom"});
+        expect(parsed.errors.empty(), "SoftwareDbFlag_NoErrors");
+        expect(parsed.cartridges.softwaredb_path.has_value() &&
+                   *parsed.cartridges.softwaredb_path == "custom/softwaredb.xml",
+               "SoftwareDbFlag_FlowsThroughDelegatedCartridgeParse");
+        expect(!parsed.cartridges.slot1.type_was_explicit,
+               "SoftwareDbFlag_TypelessCart1_NotExplicit");
+    }
+    {
+        const auto parsed = parse_sdl3_cli({"--cart1", "roms/foo.rom", "--cart1-type", "auto"});
+        expect(parsed.errors.empty(), "AutoTypeValue_NoErrors");
+        expect(!parsed.cartridges.slot1.type_was_explicit,
+               "AutoTypeValue_NotExplicit_ThroughDelegatedParse");
+    }
+    {
+        const auto parsed = parse_sdl3_cli({});
+        expect(!parsed.cartridges.softwaredb_path.has_value(),
+               "SoftwareDbFlag_Absent_Nullopt");
+    }
+
     if (g_failures != 0) {
         std::cerr << g_failures << " case(s) failed\n";
         return 1;

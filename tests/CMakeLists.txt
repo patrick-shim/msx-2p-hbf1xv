@@ -1046,6 +1046,49 @@ add_executable(hbf1xv_m29_scc_system_test
 target_link_libraries(hbf1xv_m29_scc_system_test PRIVATE sony_msx_core)
 add_test(NAME hbf1xv_m29_scc_system_test COMMAND hbf1xv_m29_scc_system_test)
 
+# --- M30 universal cartridge auto-identification (backlog G2, docs/
+#     m30-planner-package.md): clean-room SHA-1 (published FIPS/RFC vectors),
+#     the tolerant softwaredb subset parser (FULLY SYNTHETIC fixtures --
+#     never real softwaredb content), the precedence engine + re-derived
+#     bank-write heuristic + verbatim A-E messages, and the asset-gated
+#     real-ROM identification/boot-smoke integration test. All headless-
+#     buildable; the SDL3-side additive case lives in the guarded
+#     frontend_sdl3_cli_session_integration_test below.
+add_executable(machine_sha1_unit_test
+    unit/machine/sha1_unit_test.cpp
+)
+target_link_libraries(machine_sha1_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_sha1_unit_test COMMAND machine_sha1_unit_test)
+
+add_executable(machine_software_db_unit_test
+    unit/machine/software_db_unit_test.cpp
+)
+target_link_libraries(machine_software_db_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_software_db_unit_test COMMAND machine_software_db_unit_test)
+
+add_executable(machine_cartridge_identifier_unit_test
+    unit/machine/cartridge_identifier_unit_test.cpp
+)
+target_link_libraries(machine_cartridge_identifier_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_cartridge_identifier_unit_test COMMAND machine_cartridge_identifier_unit_test)
+
+# The DEC-0016 absolute-path compile-def pattern (see the watch-item note
+# above): the real softwaredb.xml stays in references/ untouched -- the test
+# only PARSES it at runtime, and skip-gates on its presence (plus on the ROM
+# asset's presence AND exact SHA1, planner A-M30-1/A-M30-2).
+set(SONY_MSX_SOFTWAREDB_PATH_ABS "${CMAKE_SOURCE_DIR}/references/openmsx-21.0/share/softwaredb.xml")
+
+add_executable(machine_hbf1xv_m30_cartridge_identification_integration_test
+    integration/machine/hbf1xv_m30_cartridge_identification_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m30_cartridge_identification_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m30_cartridge_identification_integration_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}"
+    SONY_MSX_SOFTWAREDB_PATH="${SONY_MSX_SOFTWAREDB_PATH_ABS}")
+add_test(NAME machine_hbf1xv_m30_cartridge_identification_integration_test
+    COMMAND machine_hbf1xv_m30_cartridge_identification_integration_test)
+
 # --- M28-S1 YM2413 register-write timing constraint (backlog E2): E2 gate
 #     unit tests (FakeClock, 12/84-cycle boundaries, determinism) + a machine-
 #     level integration test driving real CPU OUT (#7C)/OUT (#7D) sequences
@@ -1185,7 +1228,10 @@ if(SONY_MSX_ENABLE_SDL3)
     target_compile_definitions(frontend_sdl3_cli_session_integration_test PRIVATE
         SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
         SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}"
-        SONY_MSX_DISKS_DIR="${SONY_MSX_DISKS_DIR_ABS}")
+        SONY_MSX_DISKS_DIR="${SONY_MSX_DISKS_DIR_ABS}"
+        # M30 (backlog G2): the additive auto-identification Case 3
+        # (skip-gated on ROM presence + exact SHA1 + DB presence).
+        SONY_MSX_SOFTWAREDB_PATH="${SONY_MSX_SOFTWAREDB_PATH_ABS}")
     add_test(NAME frontend_sdl3_cli_session_integration_test
         COMMAND frontend_sdl3_cli_session_integration_test)
 

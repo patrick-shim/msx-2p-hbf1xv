@@ -63,6 +63,9 @@ add_library(sony_msx_core STATIC
     src/machine/hbf1xv_machine.cpp
     src/machine/rom_asset_loader.cpp
     src/machine/cartridge_cli.cpp
+    src/machine/sha1.cpp
+    src/machine/software_db.cpp
+    src/machine/cartridge_identifier.cpp
     src/machine/cpu_trace_sink.cpp
     src/machine/cpm_bdos_harness.cpp
     src/machine/memory_region.cpp

@@ -10,6 +10,7 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/psg_audio_dump.h"
 #include "machine/cartridge_cli.h"
+#include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
 #include "machine/hbf1xv_machine.h"
 #include "machine/input_script.h"
@@ -41,6 +42,14 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
         return 2;
     }
 
+    // M30 (backlog G2): auto-identification for type-less --cartN requests
+    // via the ONE shared resolver (cartridge_identifier.h, also consumed by
+    // the SDL3 frontend). Explicit --cartN-type specs pass through the
+    // session untouched -- zero new output, byte-for-byte the pre-M30
+    // behavior. Identified-but-unsupported -> loud message + exit 2 (the
+    // existing error-path convention).
+    sony_msx::machine::CartridgeIdentificationSession ident_session(parsed.softwaredb_path);
+
     auto load_one = [&](const int slot_number, const ParsedCartridgeSlotCli& spec) -> int {
         if (!spec.path.has_value()) {
             return 0;
@@ -52,10 +61,18 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
         }
         const std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
                                                std::istreambuf_iterator<char>());
-        const CartridgeLoadResult result = machine.load_cartridge(slot_number, spec.type, image);
+        const auto resolution = ident_session.resolve(slot_number, spec, image);
+        for (const std::string& message : resolution.messages) {
+            std::cerr << message << "\n";
+        }
+        if (!resolution.ok) {
+            return 2;
+        }
+        const auto type = resolution.type;
+        const CartridgeLoadResult result = machine.load_cartridge(slot_number, type, image);
         if (result != CartridgeLoadResult::Ok) {
             std::cerr << "cartridge: failed to load --cart" << slot_number << " (" << *spec.path << ") as "
-                       << to_string(spec.type) << ": ";
+                       << to_string(type) << ": ";
             switch (result) {
                 case CartridgeLoadResult::ImageSizeInvalidForMapperType:
                     std::cerr << "image size is invalid for this mapper type\n";
@@ -69,7 +86,7 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
             return 2;
         }
         std::cerr << "cartridge: --cart" << slot_number << " loaded (" << *spec.path << ", "
-                   << to_string(spec.type) << ")\n";
+                   << to_string(type) << ")\n";
         return 0;
     };
 
@@ -1082,9 +1099,14 @@ int main(int argc, char** argv) {
         if (argc < 4) {
             std::cerr << "usage: " << argv[0]
                       << " --debug-session <bios_dir> <max_steps> [--disk <path>] [--cart1 <path>]"
-                         " [--cart1-type <T>] [--cart2 <path>] [--cart2-type <T>] [--debug-root <path>]"
+                         " [--cart1-type <T>|auto] [--cart2 <path>] [--cart2-type <T>|auto]"
+                         " [--softwaredb <path>] [--debug-root <path>]"
                          " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
-                         " [--input-script <path>]\n";
+                         " [--input-script <path>]\n"
+                         "  --cartN-type is optional: when omitted (or 'auto') the mapper type is\n"
+                         "  auto-identified via softwaredb SHA1 match, then a bank-write heuristic\n"
+                         "  (M30, --softwaredb overrides the default references/openmsx-21.0/share/"
+                         "softwaredb.xml).\n";
             return 2;
         }
         const std::string bios_dir = argv[2];

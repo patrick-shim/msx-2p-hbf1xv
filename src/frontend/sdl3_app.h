@@ -23,6 +23,18 @@ struct Sdl3AppConfig {
     devices::cartridge::CartridgeMapperType cart1_type = devices::cartridge::CartridgeMapperType::Mirrored;
     std::optional<std::string> cart2_path;
     devices::cartridge::CartridgeMapperType cart2_type = devices::cartridge::CartridgeMapperType::Mirrored;
+    // M30 (backlog G2): whether cartN_type was EXPLICITLY chosen. Defaults
+    // to true so every pre-existing PROGRAMMATIC Sdl3AppConfig construction
+    // keeps byte-for-byte current behavior (the config's type field stays
+    // authoritative, mirroring the machine-API rule of planner §2.4.1 step
+    // 5); sdl3_main.cpp sets it from the parsed `type_was_explicit`, so a
+    // CLI run with no --cartN-type (or `auto`) triggers auto-identification
+    // through the ONE shared resolver (machine/cartridge_identifier.h).
+    bool cart1_type_explicit = true;
+    bool cart2_type_explicit = true;
+    // M30: --softwaredb override; std::nullopt selects the CWD-relative
+    // default (machine::kDefaultSoftwareDbPath).
+    std::optional<std::string> softwaredb_path;
     // Real disk-image loading (A-M26-6): reads the file's bytes and mounts
     // them via the existing, unmodified devices::fdc::DiskImage(bytes)
     // constructor -- zero machine-level change required.

@@ -2,6 +2,7 @@
 
 #include <exception>
 #include <fstream>
+#include <iostream>
 #include <iterator>
 #include <utility>
 #include <vector>
@@ -9,6 +10,7 @@
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/fdc/disk_image.h"
 #include "frontend/audio_pacer.h"
+#include "machine/cartridge_identifier.h"
 
 namespace sony_msx::frontend {
 
@@ -29,8 +31,15 @@ Sdl3App::~Sdl3App() {
 bool Sdl3App::load_configured_assets() {
     using devices::cartridge::CartridgeLoadResult;
 
+    // M30 (backlog G2): auto-identification for type-less --cartN requests
+    // via the ONE shared resolver (machine/cartridge_identifier.h, also
+    // consumed by src/main.cpp's load_cartridges_from_args). Explicit types
+    // (config default: cartN_type_explicit == true) pass through untouched.
+    machine::CartridgeIdentificationSession ident_session(config_.softwaredb_path);
+
     auto load_cart = [&](const int slot_number, const std::optional<std::string>& path,
-                         const devices::cartridge::CartridgeMapperType type) -> bool {
+                         const devices::cartridge::CartridgeMapperType type,
+                         const bool type_explicit) -> bool {
         if (!path.has_value()) {
             return true;
         }
@@ -41,7 +50,23 @@ bool Sdl3App::load_configured_assets() {
         }
         const std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
                                                std::istreambuf_iterator<char>());
-        const CartridgeLoadResult result = machine_.load_cartridge(slot_number, type, image);
+        machine::ParsedCartridgeSlotCli spec;
+        spec.path = *path;
+        spec.type = type;
+        spec.type_was_explicit = type_explicit;
+        const auto resolution = ident_session.resolve(slot_number, spec, image);
+        for (const std::string& message : resolution.messages) {
+            std::cerr << message << "\n";
+        }
+        if (!resolution.ok) {
+            // Identified-but-unsupported: startup abort (planner §2.4.3) --
+            // the message-B line doubles as last_error_ so sdl3_main.cpp's
+            // "initialization failed:" report carries the full reason.
+            last_error_ = resolution.messages.empty() ? "unsupported cartridge mapper type"
+                                                      : resolution.messages.back();
+            return false;
+        }
+        const CartridgeLoadResult result = machine_.load_cartridge(slot_number, resolution.type, image);
         if (result != CartridgeLoadResult::Ok) {
             last_error_ = "failed to load --cart" + std::to_string(slot_number) + " (" + *path + ")";
             return false;
@@ -49,10 +74,10 @@ bool Sdl3App::load_configured_assets() {
         return true;
     };
 
-    if (!load_cart(1, config_.cart1_path, config_.cart1_type)) {
+    if (!load_cart(1, config_.cart1_path, config_.cart1_type, config_.cart1_type_explicit)) {
         return false;
     }
-    if (!load_cart(2, config_.cart2_path, config_.cart2_type)) {
+    if (!load_cart(2, config_.cart2_path, config_.cart2_type, config_.cart2_type_explicit)) {
         return false;
     }
 

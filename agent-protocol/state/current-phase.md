@@ -6,7 +6,35 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M29 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)**. Delivered per
+- Active Phase: **M30 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)**. Universal
+  cartridge mapper auto-identification (backlog G2 — the Aleste-2 usability fix, delivered as a
+  UNIVERSAL mechanism, nothing game-keyed). Delivered per `docs/m30-planner-package.md` S1-S6:
+  clean-room FIPS 180-4/RFC 3174 SHA-1 (`src/machine/sha1.*`, published-vector-gated;
+  `references/fmsx-60/source/EMULib/SHA1.c` deliberately never opened — R-M30-2 discipline
+  held); tolerant softwaredb.xml subset parser (`src/machine/software_db.*`,
+  RomDatabase.cc-grounded semantics, GPL data file stays in references/ and is only parsed at
+  runtime, zero real-DB content in any fixture); precedence engine + re-derived guessRomType
+  heuristic + verbatim A-E message formatter (`src/machine/cartridge_identifier.*`; the four
+  openMSX-vs-fMSX disagreements recorded in-code per DEC-0030, all arbitrated to openMSX);
+  ONE shared resolver consumed by BOTH executables (`--softwaredb` additive, `--cartN-type auto`
+  accepted, explicit-type invocations byte-for-byte unchanged per the re-run A-M30-3 grep,
+  DB-identified-but-unsupported -> loud message B + non-zero exit/startup abort). End-to-end:
+  `sony_msx_headless --cart1 roms/aleste.rom` (NO type flag) prints the verbatim message A
+  ("Aleste 2" (KonamiSCC) via softwaredb SHA1 match) and boots; the heuristic-only path (DB
+  removed) ALSO lands KonamiSCC for the same file (scores KonamiSCC=6 Konami=6, tie-break) — a
+  free corroboration. Evidence: headless fast subset **163/163** (159 baseline + 4 new), SDL3-ON
+  fast subset **172/172** (168 baseline + 4 new, dummy drivers; slow sweep NOT run per DEC-0035,
+  zero CPU/core touch confirmed via `git diff v1.0.30` — empty for src/devices, src/core,
+  src/peripherals, audio_pacer.*); A/B **AGREEMENT** (`docs/m30-identification-ab.md`,
+  `tools/openmsx-m30-identification-ab.ps1`): openMSX with NO `-romtype` and this emulator with
+  NO `--cart1-type` both resolve the same file to KonamiSCC — Side-B queried live via the
+  source-verified `machine_info device` mappertype mechanism (R-M30-6 verified in
+  MSXMotherBoard.cc/MSXRom.cc/HardwareConfig.cc/RomFactory.cc BEFORE scripting). Ledger: G2 ->
+  DONE (M30) with named non-goals (CARTS.SHA/CARTS.CRC skipped with reasoning; PAGE2 subsumed by
+  A-M19-8); E1 renumbered M30->M31 THIS cycle per package §2.7 (citing DEC-0035); C10/F1/F2
+  numeric-owner shift notes (M32/M33/M34-era). All changes UNCOMMITTED, awaiting QA
+  (`docs/m30-implementation-report.md` is the handoff artifact).
+- Prior phase (closed): **M29 — CLOSED (DEC-0036, 2026-07-09, tag v1.0.30)**. Delivered per
   `docs/m29-planner-package.md` S1-S6: `CartridgeMapperType::KonamiSCC` + CLI value "KonamiSCC";
   `src/devices/audio/scc_wavetable.*` (plain-SCC Real mode: De Schrijder AmpOut=640+Σ mixing law
   reproduced literally in a unit oracle, Pazos deformation register incl. read-as-write-0xFF,
@@ -310,11 +338,13 @@ the machine demonstrably boots to prompt).
 
 ## Indicative follow-on order (per `agent-protocol/state/deferred-backlog.md`)
 
-Remaining open backlog: **C1/D4** (blocked pending an independent numeric source), **G1→M29**
-(KonamiSCC + SCC chip, needs a fact-sheet first), **E1→M30** (YM2413 FM synthesis — the biggest
-audible gap; the human has framed "M30 or so" as the production-candidate horizon, where the
-RC-checkpoint ZEXALL sweep gate applies), **C10→M31** (FDC flux/DMK), **F1→M32** (cassette),
-**F2→M33** (printer), **G2/G3/G4** (indefinite/on-demand). Awaiting the next human directive.
+Remaining open backlog (post-DEC-0035 renumber, applied to the ledger in the M30 cycle):
+**C1/D4** (blocked pending an independent numeric source), **E1→M31** (YM2413 FM synthesis —
+the biggest audible gap; the DEC-0035 release candidate, where the RC-checkpoint ZEXALL sweep
+gate applies), **C10→M32-era** (FDC flux/DMK), **F1→M33-era** (cassette), **F2→M34-era**
+(printer), **G3/G4/G5** (indefinite/on-demand). G1 closed (M29, v1.0.30); G2 closed (M30,
+pending QA/tag v1.0.31).
 
-- Updated At: 2026-07-09 (DEC-0034 — live-playtesting arc CLOSED, C5 DONE, disks/games/
-  registered, tagged v1.0.29; awaiting next human directive)
+- Updated At: 2026-07-09 (M30 implementation complete — universal cartridge auto-identification,
+  G2 -> DONE (M30) pending QA; E1 renumber M30->M31 applied to the ledger per DEC-0035 +
+  m30-planner-package §2.7; next: QA sign-off, then tag v1.0.31, then M31 kickoff)

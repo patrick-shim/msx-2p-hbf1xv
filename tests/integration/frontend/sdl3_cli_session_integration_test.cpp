@@ -1,14 +1,17 @@
 #include <SDL3/SDL.h>
 
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
 #include <string>
 #include <vector>
 
+#include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/fdc/disk_image.h"
 #include "frontend/sdl3_app.h"
 #include "frontend/sdl3_cli.h"
+#include "machine/sha1.h"
 
 #ifndef SONY_MSX_BIOS_DIR
 #error "SONY_MSX_BIOS_DIR must be defined by the build (see tests/CMakeLists.txt)"
@@ -18,6 +21,9 @@
 #endif
 #ifndef SONY_MSX_DISKS_DIR
 #error "SONY_MSX_DISKS_DIR must be defined by the build (see tests/CMakeLists.txt)"
+#endif
+#ifndef SONY_MSX_SOFTWAREDB_PATH
+#error "SONY_MSX_SOFTWAREDB_PATH must be defined by the build (see tests/CMakeLists.txt)"
 #endif
 
 // Suite: Frontend_Sdl3CliSession_Integration (M26-S7, docs/m26-planner-
@@ -66,9 +72,16 @@ sony_msx::frontend::Sdl3AppConfig config_from_args(const std::vector<std::string
     }
     config.disk_path = parsed.disk_path;
     config.max_frames = parsed.max_frames;
+    // M30 (backlog G2): mirror sdl3_main.cpp's own config building exactly
+    // (this helper's documented contract), incl. the new type_was_explicit
+    // carry-through and --softwaredb. Cases 1/2 below are behaviorally
+    // untouched: Case 1 passes an explicit type; Case 2 fails at file-open,
+    // BEFORE type resolution.
+    config.softwaredb_path = parsed.cartridges.softwaredb_path;
     if (parsed.cartridges.slot1.path.has_value()) {
         config.cart1_path = parsed.cartridges.slot1.path;
         config.cart1_type = parsed.cartridges.slot1.type;
+        config.cart1_type_explicit = parsed.cartridges.slot1.type_was_explicit;
     }
     return config;
 }
@@ -154,6 +167,61 @@ int main() {
         expect(!init_ok, "BadCartPath_Sdl3AppInitFails_NotSilentFallback");
         expect(!app.last_error().empty(), "BadCartPath_LastErrorIsRecordedAndNonEmpty");
         expect(!app.initialized(), "BadCartPath_AppLeftUninitialized_NoPartialState");
+    }
+
+    // --- Case 3 (M30 additive, backlog G2, docs/m30-planner-package.md
+    // §4-S5): --cart1 <aleste> with NO type flag under dummy drivers ->
+    // auto-identified via softwaredb SHA1 match -> the session starts
+    // (covers the Sdl3App path end-to-end through the ONE shared resolver).
+    // Skip-gated with the SAME discipline as the headless M30 integration
+    // test: ROM present AND the exact specified dump AND the DB present --
+    // a differing user-supplied asset SKIPS this case, never fails it. ---
+    {
+        const std::string softwaredb_path = SONY_MSX_SOFTWAREDB_PATH;
+        std::ifstream rom_in(cart_path, std::ios::binary);
+        bool skip = false;
+        std::string skip_reason;
+        std::vector<std::uint8_t> rom_bytes;
+        if (!rom_in) {
+            skip = true;
+            skip_reason = "roms/aleste.rom not present";
+        } else {
+            rom_bytes.assign((std::istreambuf_iterator<char>(rom_in)), std::istreambuf_iterator<char>());
+            const std::string sha1 = sony_msx::machine::sha1_hex(rom_bytes);
+            if (sha1 != "e93d0840c59c6eba273df546d22148d486a150a6") {
+                skip = true;
+                skip_reason = "roms/aleste.rom is a different dump (sha1=" + sha1 + ")";
+            }
+        }
+        if (!skip && !std::filesystem::exists(softwaredb_path)) {
+            skip = true;
+            skip_reason = "softwaredb not present at " + softwaredb_path;
+        }
+
+        if (skip) {
+            std::cout << "SKIP (Case 3, M30 auto-identification): " << skip_reason
+                      << " (planner A-M30-1/A-M30-2 skip discipline)\n";
+        } else {
+            const std::vector<std::string> args{
+                "--bios-dir", bios_dir,        "--cart1", cart_path,
+                "--softwaredb", softwaredb_path, "--max-frames", "1",
+            };
+            bool parse_ok = false;
+            sony_msx::frontend::Sdl3AppConfig config = config_from_args(args, &parse_ok);
+            expect(parse_ok, "AutoIdentify_ParsesWithoutErrors");
+            expect(!config.cart1_type_explicit, "AutoIdentify_TypeNotExplicit_InConfig");
+
+            sony_msx::frontend::Sdl3App app(std::move(config));
+            const bool init_ok = app.init();
+            expect(init_ok, "AutoIdentify_SessionStarts_TypelessCart1");
+            if (!init_ok) {
+                std::cerr << "  " << app.last_error() << "\n";
+            } else {
+                expect(app.machine().cartridge_slot1().loaded(),
+                       "AutoIdentify_Cartridge1Loaded_ViaSharedResolver");
+                app.shutdown();
+            }
+        }
     }
 
     if (g_failures != 0) {

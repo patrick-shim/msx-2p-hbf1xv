@@ -119,6 +119,62 @@ int main() {
         expect(!parsed.slot1.path.has_value(), "DanglingFlag_NoValue_PathNotSet");
     }
 
+    // =====================================================================
+    // M30 additive rows (backlog G2, docs/m30-planner-package.md §2.4/§4-S4).
+    // Every assertion ABOVE this line is the unmodified pre-M30 suite -- the
+    // parser's Mirrored default and type_was_explicit semantics are
+    // unchanged (planner Acceptance Criterion 5).
+    // =====================================================================
+
+    // --- --softwaredb <path> recorded; absent flag -> std::nullopt. ---
+    {
+        const auto parsed = parse_cartridge_cli({"--softwaredb", "my/softwaredb.xml"});
+        expect(parsed.softwaredb_path.has_value() && *parsed.softwaredb_path == "my/softwaredb.xml",
+               "SoftwareDb_PathRecorded");
+        expect(parsed.errors.empty(), "SoftwareDb_NoErrors");
+    }
+    {
+        const auto parsed = parse_cartridge_cli({"--cart1", "x.rom"});
+        expect(!parsed.softwaredb_path.has_value(), "SoftwareDb_AbsentFlag_Nullopt");
+    }
+    {
+        const auto parsed = parse_cartridge_cli({"--softwaredb"});
+        expect(!parsed.errors.empty(), "SoftwareDb_DanglingFlag_IsParseError");
+        expect(!parsed.softwaredb_path.has_value(), "SoftwareDb_DanglingFlag_PathNotSet");
+    }
+
+    // --- --cartN-type auto == "as if omitted" (type_was_explicit=false,
+    //     Mirrored struct default), case-insensitively; never an error. ---
+    {
+        const auto parsed = parse_cartridge_cli({"--cart1", "x.rom", "--cart1-type", "auto"});
+        expect(parsed.errors.empty(), "AutoType_NotAParseError");
+        expect(parsed.slot1.type == CartridgeMapperType::Mirrored, "AutoType_FieldStaysAtStructDefault");
+        expect(!parsed.slot1.type_was_explicit, "AutoType_NotMarkedExplicit");
+    }
+    {
+        const auto parsed = parse_cartridge_cli({"--cart2", "y.rom", "--cart2-type", "AUTO"});
+        expect(parsed.errors.empty() && !parsed.slot2.type_was_explicit &&
+                   parsed.slot2.type == CartridgeMapperType::Mirrored,
+               "AutoType_CaseInsensitive_Slot2");
+    }
+    {
+        // Last occurrence wins (the parser's existing repeated-flag rule):
+        // an explicit type followed by `auto` reverts to auto-identify.
+        const auto parsed = parse_cartridge_cli(
+            {"--cart1", "x.rom", "--cart1-type", "Konami", "--cart1-type", "auto"});
+        expect(parsed.errors.empty() && !parsed.slot1.type_was_explicit &&
+                   parsed.slot1.type == CartridgeMapperType::Mirrored,
+               "AutoType_AfterExplicit_LastWins_RevertsToAuto");
+    }
+    {
+        // And the reverse: `auto` followed by an explicit type is explicit.
+        const auto parsed = parse_cartridge_cli(
+            {"--cart1", "x.rom", "--cart1-type", "auto", "--cart1-type", "KonamiSCC"});
+        expect(parsed.errors.empty() && parsed.slot1.type_was_explicit &&
+                   parsed.slot1.type == CartridgeMapperType::KonamiSCC,
+               "AutoType_ThenExplicit_LastWins_Explicit");
+    }
+
     if (g_failures != 0) {
         std::cerr << g_failures << " case(s) failed\n";
         return 1;

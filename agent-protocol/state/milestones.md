@@ -996,9 +996,59 @@ Use one section per milestone.
   `src/devices/audio/ym2413_opll.*`, the six M19 mapper device files (verified
   `git diff v1.0.29` clean); zero-SCC audio path byte-identical to v1.0.29 (unit-proven);
   headless fast subset 159/159, SDL3-ON fast subset 168/168 (dummy drivers).
-- Status: **Ready for QA** (implementation complete 2026-07-09; `docs/m29-implementation-report.md`
-  + `docs/m29-parity-trace-diff.md` delivered; openMSX A/B EMPTY DIFF over 140 instructions;
-  BONUS real-ROM smoke: `roms/aleste.rom` boots AND starts under `--cart1-type KonamiSCC` —
-  loader banner "Konami8 mapper", game intro text reached after the scripted keypress,
-  evidence PNGs `debug/frames/m29-aleste-f{240,500,899}.png`; all changes left UNCOMMITTED
-  for coordinator/QA per the dispatch).
+- Status: **CLOSED (DEC-0036, 2026-07-09, tag v1.0.30)** — QA Conditional Pass resolved via the
+  established fix-re-confirm-then-proceed pattern (no human stop, per DEC-0035); G1 -> DONE (M29),
+  new row G5 (SCC-I) opened. Evidence: `docs/m29-implementation-report.md`,
+  `docs/m29-parity-trace-diff.md` (openMSX A/B EMPTY DIFF over 140 instructions),
+  `docs/m29-qa-signoff.md`; real-ROM smoke: `roms/aleste.rom` boots AND starts under
+  `--cart1-type KonamiSCC` (loader banner "Konami8 mapper",
+  `debug/frames/m29-aleste-f{240,500,899}.png`). [Status line refreshed during the M30 cycle —
+  the M29 closure commit itself had left this entry at "Ready for QA".]
+
+## M30 (Kickoff 2026-07-09, DEC-0035 autonomous run)
+
+- Milestone ID: M30
+- Title: Universal cartridge mapper auto-identification — SHA1 software-database lookup +
+  bank-write heuristic fallback (closes backlog G2; the Aleste-2 usability fix, resolved as a
+  UNIVERSAL mechanism per the human's never-game-keyed requirement)
+- Spec Owner: MSX Planner Agent (`docs/m30-planner-package.md`)
+- Developer Owner: MSX Developer Agent
+- QA Owner: MSX QA Agent
+- Scope: Slices S1-S6 per the package — S1 clean-room FIPS 180-4/RFC 3174 SHA-1
+  (`src/machine/sha1.*`; `references/fmsx-60/source/EMULib/SHA1.c` deliberately never opened);
+  S2 tolerant softwaredb.xml subset parser (`src/machine/software_db.*`, RomDatabase.cc-grounded
+  semantics: rom-defaults-Mirrored / megarom-no-default / hashless-drop / start-composed-raw /
+  first-duplicate-wins; GPL data file stays in references/, parsed at runtime, nothing copied
+  into src/tests); S3 precedence engine + re-derived guessRomType heuristic + verbatim A-E
+  message formatter (`src/machine/cartridge_identifier.*`; four openMSX-vs-fMSX disagreements
+  recorded per DEC-0030, all arbitrated to openMSX); S4 CLI wiring through the ONE shared
+  resolver on BOTH executables (`--softwaredb <path>` additive, `--cartN-type auto` accepted,
+  explicit-type path byte-for-byte unchanged, unsupported-identification -> loud non-zero
+  exit/startup abort); S5 asset-gated real-ROM integration test (skip-gates: ROM present AND
+  sha1==e93d0840c59c6eba273df546d22148d486a150a6 AND DB present) + SDL3-gated session case;
+  S6 A/B agreement check + ledger closure (G2 -> DONE (M30) with named non-goals
+  CARTS.SHA/CARTS.CRC + PAGE2; E1 renumber M30->M31 applied this cycle per package §2.7 citing
+  DEC-0035; C10/F1/F2 numeric-owner shift notes).
+- Acceptance Criteria: package §5 items 1-12.
+- Unit Tests Required: `machine_sha1_unit_test` (published FIPS/RFC vectors + streaming==oneshot),
+  `machine_software_db_unit_test` (fully synthetic fixtures — zero real softwaredb content),
+  `machine_cartridge_identifier_unit_test` (hand-computed score-table/tie-break/handicap/size-gate/
+  signature oracles, poisoned-DB precedence proofs, verbatim A-E messages, two-run determinism),
+  additive rows in `machine_cartridge_cli_unit_test` (--softwaredb, auto) and
+  `frontend_sdl3_cli_unit_test` (--softwaredb flows through the delegated parse).
+- Integration Tests Required: `machine_hbf1xv_m30_cartridge_identification_integration_test`
+  (real softwaredb parse -> ("Aleste 2", "KonamiSCC") -> resolver KonamiSCC via SoftwareDbSha1 ->
+  message A verbatim -> load Ok -> 60-frame DEC-0034-shape boot smoke); additive Case 3 in
+  `frontend_sdl3_cli_session_integration_test` (type-less --cart1 under dummy drivers ->
+  session starts via the shared resolver).
+- Regression Scope: zero touch to `src/devices/` (ALL of it), `src/core/`, `src/peripherals/`,
+  `src/frontend/audio_pacer.*` (verified `git diff v1.0.30` clean); `load_cartridge` API and
+  parser defaults unchanged; ZEXALL/ZEXDOC explicitly NOT run (DEC-0035: M31 QA gate only; zero
+  CPU/core touch this milestone); headless fast subset 163/163 (159 baseline + 4 new), SDL3-ON
+  fast subset 172/172 (168 baseline + 4 new, dummy drivers).
+- Status: **Ready for QA** (implementation complete 2026-07-09; `docs/m30-implementation-report.md`
+  + `docs/m30-identification-ab.md` delivered; A/B AGREEMENT — openMSX with NO -romtype and this
+  emulator with NO --cart1-type both resolve roms/aleste.rom to KonamiSCC, Side-B via the
+  source-verified `machine_info device` mappertype Tcl query; end-to-end:
+  `sony_msx_headless --cart1 roms/aleste.rom` alone now prints the verbatim message A and boots;
+  all changes left UNCOMMITTED for coordinator/QA per the established cadence).
