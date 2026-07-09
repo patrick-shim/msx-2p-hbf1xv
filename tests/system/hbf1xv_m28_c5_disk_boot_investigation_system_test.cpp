@@ -1,3 +1,16 @@
+// ============================================================================
+//  Sony HB-F1XV MSX2+ Emulator
+//  Copyright (c) 2026 Patrick Shim <patrick.shim@live.co.kr>
+//
+//  LEGAL NOTICE - Personal reference only.
+//  This source code is made available solely for personal, non-commercial
+//  reference and educational study. Commercial use, sale, or redistribution
+//  for profit is not permitted without the author's written consent.
+//  Provided "AS IS", without warranty of any kind.
+//  Proprietary BIOS/ROM/disk assets remain the property of their respective
+//  rights holders and are NOT licensed by this notice.
+// ============================================================================
+
 // Suite: Hbf1xvM28C5DiskBootInvestigation_System  (M28-S2, backlog C5)
 //
 // C5 full-boot / automatic disk-ROM boot-handshake trigger investigation

@@ -1,4 +1,17 @@
 #!/usr/bin/env python3
+# ============================================================================
+#  Sony HB-F1XV MSX2+ Emulator
+#  Copyright (c) 2026 Patrick Shim <patrick.shim@live.co.kr>
+#
+#  LEGAL NOTICE - Personal reference only.
+#  This source code is made available solely for personal, non-commercial
+#  reference and educational study. Commercial use, sale, or redistribution
+#  for profit is not permitted without the author's written consent.
+#  Provided "AS IS", without warranty of any kind.
+#  Proprietary BIOS/ROM/disk assets remain the property of their respective
+#  rights holders and are NOT licensed by this notice.
+# ============================================================================
+
 """M24-S3 ZEXALL/ZEXDOC captured-output PASS/FAIL report parser (backlog C3).
 
 Parses a captured-output log as written by `sony_msx_headless --cpm-run`
