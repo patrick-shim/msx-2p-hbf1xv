@@ -87,6 +87,13 @@ time; check it before inventing behavior.
 - `references/fact-sheets/` — curated hardware/device fact sheets (e.g.
   `references/fact-sheets/Yamaha V9958 VDP.md`). Authoritative spec grounding for the target
   machine's components. New sheets are added here as needed.
+- `references/music_in_basic.md` — human-provided (2026-07-09) MSX-MUSIC BASIC sample programs
+  (`CALL MUSIC` / `PLAY #n` MML, preset instruments `@n`, rhythm channel `#10`). Purpose: typed
+  BASIC programs as agile, game-asset-free FM test drivers — they exercise the extended-statement
+  dispatch into `bios/f1xvmus.rom`, the FM-BIOS sequencer, and the OPLL built-in instrument
+  presets, a path games (which drive the chip directly) do not cover. Caveat: MSX-MUSIC BASIC
+  dialects vary — validate any statement against the actual `f1xvmus.rom` behavior and an openMSX
+  A/B of the identical typed program before treating a sample as a fixture.
 - `references/zexall/` — legally-sourced ZEXALL/ZEXDOC Z80 exerciser binaries (GPL v2, YAZE-AG),
   used as black-box test fixtures by the M24 CPU-regression suite.
 

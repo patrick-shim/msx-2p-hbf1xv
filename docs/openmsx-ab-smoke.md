@@ -11,7 +11,7 @@
 > HALT checkpoint) is the authoritative artifact: `docs/m10-parity-trace-diff.md`.
 > The capability probe below remains as the honest record of the original blocker.
 
-Generated at: 2026-07-06T00:43:48.7906562+09:00
+Generated at: 2026-07-09T15:17:09.2298265+09:00
 WSL openMSX binary: /usr/bin/openmsx
 WSL openMSX version: openMSX 19.1 flavour: debian components: ALSAMIDI CORE GL LASERDISC
 

@@ -1250,6 +1250,56 @@ target_compile_definitions(machine_hbf1xv_boot_logo_integration_test
 add_test(NAME machine_hbf1xv_boot_logo_integration_test
     COMMAND machine_hbf1xv_boot_logo_integration_test)
 
+# --- M32 raster-accurate per-line rendering + line-interrupt delivery +
+#     FM mix calibration (DEC-0039 defect pair, docs/m32-planner-package.md):
+#     the VdpScanlineAccumulator static-frame-equivalence hard oracle (AC-4),
+#     the V9958 render-sync seam contract, the machine-level L+1 latch rule
+#     (incl. the debug_io_write hook-exclusion property), the line-interrupt
+#     trigger rule ((R#19 - R#23) & 0xFF, both-references-agreed), the
+#     synthetic split-screen system oracle with its adversarial IE1-off arm,
+#     and the FM loudness-ratio oracle. All headless-buildable. -----------
+add_executable(devices_vdp_scanline_accumulator_unit_test
+    unit/devices/video_vdp_scanline_accumulator_unit_test.cpp
+)
+target_link_libraries(devices_vdp_scanline_accumulator_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_scanline_accumulator_unit_test
+    COMMAND devices_vdp_scanline_accumulator_unit_test)
+
+add_executable(devices_v9958_render_sync_seam_unit_test
+    unit/devices/video_v9958_render_sync_seam_unit_test.cpp
+)
+target_link_libraries(devices_v9958_render_sync_seam_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_render_sync_seam_unit_test
+    COMMAND devices_v9958_render_sync_seam_unit_test)
+
+add_executable(machine_hbf1xv_m32_per_line_latch_integration_test
+    integration/machine/hbf1xv_m32_per_line_latch_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m32_per_line_latch_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m32_per_line_latch_integration_test
+    COMMAND machine_hbf1xv_m32_per_line_latch_integration_test)
+
+add_executable(machine_hbf1xv_m32_line_interrupt_integration_test
+    integration/machine/hbf1xv_m32_line_interrupt_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m32_line_interrupt_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m32_line_interrupt_integration_test
+    COMMAND machine_hbf1xv_m32_line_interrupt_integration_test)
+
+add_executable(hbf1xv_m32_split_screen_system_test
+    system/hbf1xv_m32_split_screen_system_test.cpp
+)
+target_link_libraries(hbf1xv_m32_split_screen_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m32_split_screen_system_test
+    COMMAND hbf1xv_m32_split_screen_system_test)
+
+add_executable(frontend_machine_audio_mixer_loudness_ratio_unit_test
+    unit/frontend/machine_audio_mixer_loudness_ratio_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_loudness_ratio_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_loudness_ratio_unit_test
+    COMMAND frontend_machine_audio_mixer_loudness_ratio_unit_test)
+
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The
 #     default headless (-DSONY_MSX_ENABLE_SDL3=OFF) ctest suite is completely

@@ -31,6 +31,28 @@ Hbf1xvMachine::Hbf1xvMachine() : cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
     wire_bus();
 }
 
+void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
+    // M32-S2 (docs/m32-planner-package.md §2.3): a write while the beam is
+    // on display line L takes effect from line L+1 -- commit [watermark,
+    // L+1) from the PRE-write state before the write mutates anything. The
+    // openMSX sync-before-change protocol at line granularity
+    // (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
+    // Negative L (raster in border/vblank) clamps to a no-op inside
+    // sync_to_line() -- vblank writes affect the whole next frame.
+    // Suspended while the machine's non-perturbing debug_io_write() seam is
+    // driving the bus (§2.3 documented exclusion).
+    if (suspended_) {
+        return;
+    }
+    // Any real VDP write invalidates the boundary fast path's completed
+    // frame -- state has moved past the sealed frame.
+    machine_.scanline_accumulator_.mark_completed_frame_stale();
+    const int line = machine_.vdp_.raster_display_line();
+    if (line >= 0) {
+        machine_.scanline_accumulator_.sync_to_line(line + 1);
+    }
+}
+
 void Hbf1xvMachine::wire_bus() {
     // --- Memory fabric (SlotBus) ---
     // HB-F1XV slot/sub-slot/page population, derived from the authoritative
@@ -200,6 +222,9 @@ void Hbf1xvMachine::wire_bus() {
     // pull-style, consulted only from peek_status_register(2) -- never wired
     // into step_cpu_instruction()/run_cycles()/run_frame().
     vdp_.attach_clock_source(&vdp_raster_clock_);
+    // M32-S2 render-sync seam: per-line frame accumulation as the raster
+    // advances (Defect A of DEC-0039; docs/m32-planner-package.md §2.3).
+    vdp_.attach_render_sync(&render_sync_adapter_);
 
     // Mapper I/O readback on #FC-#FF (fact-sheet §4), pattern configured by S1985.
     s1985_engine_.configure_mapper(mapper_io_);
@@ -227,6 +252,18 @@ void Hbf1xvMachine::cold_boot() {
     // zero (matching the retired vram_.clear()), reloading the boot palette, and
     // releasing the /INT line (M14-S1/S4).
     vdp_.reset();
+    // M32: cold power-up clears the scanline accumulator (no accumulated
+    // lines, no completed frame) and invalidates the line-interrupt cache.
+    // last_vsync_cycle_ returns to 0 alongside the scheduler reset above --
+    // the scheduler restarts at cycle 0, so every vsync-relative raster
+    // derivation (VdpRasterClock, the line-int schedule) must restart from
+    // the same origin (a machine that ran frames before this cold_boot would
+    // otherwise underflow cpu_tstates_since_vsync(); latent since M23, first
+    // load-bearing for the M32 line-int cache).
+    scanline_accumulator_.reset();
+    line_int_cache_valid_ = false;
+    line_int_next_cycle_ = kLineIntNever;
+    last_vsync_cycle_ = 0;
 
     // Reset the S1985 chipset volatile state (primary select + sub-slot regs -> 0).
     slot_bus_.reset();
@@ -403,6 +440,33 @@ void Hbf1xvMachine::on_vsync_boundary() {
     // (which level-samples the held line). Exact sub-frame raster position is
     // DEFERRED (backlog D4).
     vdp_.on_vsync();
+    // M32 (Defect A, §2.4): seal the frame that just ended -- the ONE
+    // additive call this milestone adds here. Every line the raster passed
+    // is already committed (render-sync seam); finalize renders the
+    // remaining lines from live end-of-frame registers and stores the
+    // completed frame render_frame() returns at the boundary.
+    //
+    // ORDERING -- documented, deliberate deviation from the planner
+    // package's "finalize BEFORE vdp_.on_vsync()" clause, in service of the
+    // package's own HARD oracles AC-4/AC-5 (committed-evidence
+    // byte-identity): vdp_.on_vsync() mutates NO register/VRAM/palette
+    // state consumed by the background renderer -- but it DOES (a)
+    // recompute the sprite visibility tables from the frame's own
+    // END-of-frame VRAM (v9958_vdp.cpp on_vsync ->
+    // sprite_engine_.recompute_frame) and (b) advance the R#13 blink
+    // countdown. The legacy snapshot renderer that produced every committed
+    // evidence frame ran AFTER on_vsync() (Sdl3App::run_one_frame() /
+    // boot-logo-test shape: step ... on_vsync_boundary() ...
+    // render_frame()), i.e. against the post-recompute sprite table and
+    // post-decrement blink state. Finalizing BEFORE on_vsync() would render
+    // the projected lines against the PREVIOUS boundary's sprite table --
+    // one frame of sprite lag versus both the legacy pipeline and real
+    // hardware (which fetches attributes live during the frame; the
+    // vblank-handler attribute writes for frame F land after boundary F-1's
+    // recompute and are therefore first visible in the recompute at
+    // boundary F -- exactly the table this finalize must use). Sprite
+    // per-line LIVE fetching remains the named D9 remainder.
+    scanline_accumulator_.finalize(devices::video::Field::Progressive);
     // M25 Speed-Controller duty-cycle hook (backlog C8, planner §2.3 point
     // 4): a single additive line, immediately alongside the existing
     // vdp_.on_vsync() call above. Advances the PAUSE controller's internal
@@ -491,6 +555,16 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     const std::uint32_t tstates = datasheet_tstates + m1_wait;
     scheduler_.tick(tstates);
 
+    // M32-S2 line-interrupt delivery (DEC-0039 Defect A leg 2, D-1 ratified
+    // in RESP-M32-001; docs/m32-planner-package.md §2.5). Machine-level,
+    // immediately after the CPU step -- the M25 pause-gate precedent for
+    // per-step machine logic; NOT in Z80aCpu, NOT in core::Scheduler. O(1):
+    // an input-fingerprint compare plus one cached-cycle compare (see
+    // poll_line_interrupt()). With R#0 IE1 disabled, vdp_.on_line_match()
+    // is a proven no-op on the IRQ line and S#1 FH (v9958_vdp.cpp) -- zero
+    // behavior change for IE1-off software.
+    poll_line_interrupt();
+
     if (event_logging_enabled_) {
         const std::uint64_t stamp = elapsed_cycles();
         debug_event_log_.record(
@@ -504,6 +578,89 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     }
 
     return tstates;
+}
+
+void Hbf1xvMachine::poll_line_interrupt() {
+    // §2.5 trigger rule -- the relation BOTH behavior references agree on:
+    // the horizontal scan (line) interrupt fires when the raster enters
+    // SCREEN-space display line M = (R#19 - R#23) & 0xFF.
+    //   * openMSX references/openmsx-21.0/src/video/VDP.cc:518-576
+    //     (scheduleHScan): the match moment is
+    //     `((controlRegs[19] - controlRegs[23]) & 0xFF)` display lines
+    //     after display start (:527-529), rescheduled on R#19/R#23/R#0
+    //     writes (:518-524), with matches beyond the frame's line count
+    //     mapped to "never" (:554-559).
+    //   * fMSX references/fmsx-60/source/fMSX/MSX.c:2091-2104: fires when
+    //     `(((ScanLine+VScroll)&0xFF)-VDP[19])&0xFF` reaches its
+    //     coincidence value, IRQ gated on `VDP[0]&0x10` -- algebraically
+    //     the identical screen-space relation.
+    // Precision disclosure (§2.5): openMSX raises FH at the matched line's
+    // right border (VDP.cc:913-923); this poll fires at the first
+    // instruction boundary at-or-after the raster ENTERS the matched line
+    // -- up to one instruction early relative to openMSX, a ±1-line-class
+    // deviation the split-test margins and the A/B gate encode.
+    const std::uint8_t r19 = vdp_.control_register(19);
+    const std::uint8_t r23 = vdp_.control_register(23);
+    const std::uint8_t r9 = vdp_.control_register(9);
+    const std::uint64_t now = scheduler_.total_cycles();
+
+    if (!line_int_cache_valid_ || r19 != line_int_r19_ || r23 != line_int_r23_ ||
+        r9 != line_int_r9_ || last_vsync_cycle_ != line_int_vsync_) {
+        // An input changed since the cache was built (a register rewrite,
+        // by ANY write path, detected by value; or a new vsync origin) --
+        // the openMSX reschedule semantic (VDP.cc:518-524) at instruction
+        // granularity.
+        recompute_line_interrupt_cache(r19, r23, r9, now);
+    }
+
+    if (now >= line_int_next_cycle_) {
+        // The raster crossed into the match line during the instruction
+        // that just retired. Deliver exactly once per crossing: the
+        // recompute below sees `now` at/inside the matched line, so its
+        // strictly-future candidate lands in the NEXT frame window.
+        vdp_.on_line_match();
+        recompute_line_interrupt_cache(r19, r23, r9, now);
+    }
+}
+
+void Hbf1xvMachine::recompute_line_interrupt_cache(const std::uint8_t r19, const std::uint8_t r23,
+                                                   const std::uint8_t r9, const std::uint64_t now) {
+    line_int_r19_ = r19;
+    line_int_r23_ = r23;
+    line_int_r9_ = r9;
+    line_int_vsync_ = last_vsync_cycle_;
+    line_int_cache_valid_ = true;
+
+    const int match = (r19 - r23) & 0xFF;
+    const bool ln212 = (r9 & 0x80) != 0;
+    const int non_active_lines = ln212 ? 50 : 70;   // 262-212 / 262-192 (fact-sheet §7,
+                                                    // same arithmetic as raster_display_line)
+    const int active_lines = ln212 ? 212 : 192;
+    if (match >= active_lines) {
+        // openMSX's "never occurs" clamp, line-granular analogue
+        // (VDP.cc:554-559).
+        line_int_next_cycle_ = kLineIntNever;
+        return;
+    }
+
+    constexpr std::uint64_t kLineCycles =
+        static_cast<std::uint64_t>(devices::video::vdp_access_timing::kCpuTstatesPerLine);
+    constexpr std::uint64_t kFrameCyclesLocal = kLineCycles * 262;
+    // Raster origin: on_vsync() fires at the start of the lower border
+    // (tstates-since-vsync == 0), so display line M of the frame being
+    // scanned starts at (non_active_lines + M) lines after the origin.
+    const std::uint64_t offset =
+        (static_cast<std::uint64_t>(non_active_lines) + static_cast<std::uint64_t>(match)) * kLineCycles;
+    const std::uint64_t base = (last_vsync_cycle_ <= now) ? last_vsync_cycle_ : now;
+    const std::uint64_t windows = (now - base) / kFrameCyclesLocal;
+    std::uint64_t candidate = base + windows * kFrameCyclesLocal + offset;
+    while (candidate <= now) {
+        // Strictly-future arming: a match moment already entered/passed in
+        // this 262-line window schedules for the next window (the openMSX
+        // `if (hScanSyncTime > time)` passed-moment rule, VDP.cc:571-574).
+        candidate += kFrameCyclesLocal;
+    }
+    line_int_next_cycle_ = candidate;
 }
 
 void Hbf1xvMachine::load_memory(const std::uint16_t address, const std::uint8_t* bytes, const std::uint32_t size) {
@@ -532,7 +689,23 @@ std::uint8_t Hbf1xvMachine::debug_io_read(const std::uint16_t port) {
 }
 
 void Hbf1xvMachine::debug_io_write(const std::uint16_t port, const std::uint8_t value) {
+    // M32 (§2.3 documented exclusion): the non-perturbing debug seam does
+    // NOT drive the render-sync hook -- scenes built through debug_io_write
+    // are covered by the lazy projection/finalize path (nothing accumulates,
+    // so render_frame() projects every line from the final state, exactly
+    // the legacy snapshot semantics this seam always had). The line-int
+    // cache needs no special handling: it re-fingerprints R#19/R#23/R#9 by
+    // VALUE at the next step_cpu_instruction, independent of the write path.
+    render_sync_adapter_.set_suspended(true);
     bus_.io_write(port, value);
+    render_sync_adapter_.set_suspended(false);
+    // A debug write to the VDP ports (#98-#9B + the S1985 #9C-#9F mirror)
+    // still moves VDP state past any sealed frame -- drop the boundary fast
+    // path so a subsequent render_frame() live-projects the new scene
+    // (legacy snapshot semantics for debug-built scenes).
+    if ((port & 0xF8) == 0x98) {
+        scanline_accumulator_.mark_completed_frame_stale();
+    }
 }
 
 bool Hbf1xvMachine::slot_expanded(const int primary) const {
@@ -615,7 +788,41 @@ devices::video::V9958Vdp& Hbf1xvMachine::vdp() {
 }
 
 devices::video::FrameBuffer Hbf1xvMachine::render_frame(const devices::video::Field field) const {
-    return vdp_frame_renderer_.render_frame(field);
+    // M32 re-route (Defect A, §2.4). Even/Odd keep the legacy frozen-
+    // snapshot semantics (test/debug-only fields; no production caller --
+    // documented design choice, see the header comment).
+    if (field != devices::video::Field::Progressive) {
+        return vdp_frame_renderer_.render_frame(field);
+    }
+
+    const int line = vdp_.raster_display_line();
+    if (line >= 0) {
+        // Mid-display call: commit the lines the beam has already passed
+        // (memoization -- see the logical-constness note in the header),
+        // then compose accumulated past + live-projected future.
+        scanline_accumulator_.sync_to_line(line + 1);
+        return scanline_accumulator_.compose(field);
+    }
+    if (scanline_accumulator_.watermark() > 0) {
+        // Beam in the border/vblank region BELOW a partially accumulated
+        // frame (a step-only caller that never finalizes): the beam has
+        // passed the whole display area -- committing to the bottom is
+        // memoization too.
+        scanline_accumulator_.sync_to_line(vdp_frame_renderer_.height());
+        return scanline_accumulator_.compose(field);
+    }
+    if (scanline_accumulator_.completed_frame_fresh()) {
+        // Frame-boundary call (every production call site: immediately
+        // after on_vsync_boundary(), before the next frame's display area
+        // begins, with no VDP write in between): return the finalized
+        // per-line frame of the frame that just ended.
+        return scanline_accumulator_.completed_frame();
+    }
+    // Nothing accumulated and no fresh sealed frame (fresh machine, a
+    // debug-built scene, or VDP writes since the last boundary while the
+    // beam is still in the border): pure live projection -- byte-identical
+    // to the legacy snapshot renderer by construction (AC-4).
+    return scanline_accumulator_.compose(field);
 }
 
 std::uint64_t Hbf1xvMachine::RtcClock::cpu_cycles() const {

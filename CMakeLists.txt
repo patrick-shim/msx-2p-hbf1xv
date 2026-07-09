@@ -54,6 +54,7 @@ add_library(sony_msx_core STATIC
     src/devices/video/sprite_engine.cpp
     src/devices/video/vdp_command_engine.cpp
     src/devices/video/vdp_frame_renderer.cpp
+    src/devices/video/vdp_scanline_accumulator.cpp
     src/peripherals/keyboard_matrix.cpp
     src/peripherals/joystick.cpp
     src/peripherals/printer_port.cpp

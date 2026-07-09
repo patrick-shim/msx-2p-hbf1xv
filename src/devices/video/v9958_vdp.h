@@ -26,6 +26,27 @@ public:
     [[nodiscard]] virtual std::uint64_t cpu_tstates_since_vsync() const = 0;
 };
 
+// Render-sync seam (M32-S1, Defect A of DEC-0039; docs/m32-planner-package.md
+// §2.3). Nullable listener notified at the TOP of V9958Vdp::io_write() for
+// all four ports (#98 VRAM data, #99 register/address, #9A palette, #9B
+// indirect) BEFORE the write mutates any state -- the direct analogue of
+// openMSX's sync-before-change protocol, where every VDP state-change
+// notification renders up to the current beam position before the change
+// applies (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394
+// register/palette updates; :510-517 VRAM writes). One call site, uniform:
+// covers control registers, palette, VRAM, and every command-engine mutation
+// (all 13 commands execute inside register/data-port writes per the M22
+// hybrid model, so their VRAM effects are bracketed by hooked writes).
+// X-pattern of VdpClockSource/IrqLine: default nullptr = byte-identical
+// no-op (proven by unit test). Rendering through this seam has ZERO
+// interrupt/status side effects -- the listener reads registers/VRAM and
+// writes only into its own pixel store (§2.3).
+class VdpRenderSyncListener {
+public:
+    virtual ~VdpRenderSyncListener() = default;
+    virtual void on_before_state_change() = 0;
+};
+
 // Yamaha V9958 VDP — register / VRAM / status / interrupt CONTRACT (M14).
 //
 // This device delivers the externally observable behavior a program drives
@@ -72,6 +93,10 @@ public:
     // fallback (no clock attached, e.g. unit tests constructing a bare
     // V9958Vdp with no machine).
     void attach_clock_source(VdpClockSource* source);
+
+    // Wire the render-sync listener (M32-S1, see VdpRenderSyncListener
+    // above). Nullptr (the default) detaches -- byte-identical no-op.
+    void attach_render_sync(VdpRenderSyncListener* listener);
 
     // --- core::IoDevice (dispatch on port & 0x03; the S1985 mirror #9C-#9F
     //     collapses to the same 0..3, A-2). ---
@@ -122,6 +147,19 @@ public:
     [[nodiscard]] const SpriteEngine& sprite_engine() const;
     [[nodiscard]] const VdpCommandEngine& cmd_engine() const;
 
+    // Current raster position as an ACTIVE-DISPLAY line index (0-based;
+    // negative while the raster is in the border/erase/sync region between
+    // on_vsync() -- the start of the lower border, fact-sheet §7 -- and the
+    // top of the next active area). Derived pull-style from the same
+    // VdpClockSource the S#2 VR/HR bits use; INT_MIN when no clock is
+    // attached (turning the sprite engine's raster-collision hooks into
+    // no-ops, preserving clockless-test behavior). Used by the S#0 read path
+    // for line-granular collision re-latching (boot-logo fix) and -- public
+    // since M32-S2 -- by the machine's render-sync adapter (write at line L
+    // takes effect from line L+1) and line-interrupt delivery
+    // (docs/m32-planner-package.md §2.3/§2.5).
+    [[nodiscard]] int raster_display_line() const;
+
 private:
     // #98 VRAM data path.
     void vram_data_write(std::uint8_t value);
@@ -145,16 +183,6 @@ private:
     void recompute_mode();
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
-
-    // Current raster position as an ACTIVE-DISPLAY line index (0-based;
-    // negative while the raster is in the border/erase/sync region between
-    // on_vsync() -- the start of the lower border, fact-sheet §7 -- and the
-    // top of the next active area). Derived pull-style from the same
-    // VdpClockSource the S#2 VR/HR bits use; INT_MIN when no clock is
-    // attached (turning the sprite engine's raster-collision hooks into
-    // no-ops, preserving clockless-test behavior). Used by the S#0 read path
-    // for line-granular collision re-latching (boot-logo fix).
-    [[nodiscard]] int raster_display_line() const;
 
     VdpVram vram_;
     std::array<std::uint8_t, kNumControlRegs> control_regs_{};
@@ -185,6 +213,10 @@ private:
     // S#2 VR/HR raster-position clock source (bug fix, post-M28). Nullptr by
     // default; attached by the machine in wire_bus().
     VdpClockSource* clock_source_ = nullptr;
+
+    // Render-sync listener (M32-S1). Nullptr by default (byte-identical
+    // no-op); attached by the machine in wire_bus().
+    VdpRenderSyncListener* render_sync_ = nullptr;
 
     // Blink countdown state (M21-S2, backlog D6; VDP.cc:600-608/1040-1057).
     // Frames remaining at the current blink phase; 0 = stable (no further

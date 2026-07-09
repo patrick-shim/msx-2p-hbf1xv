@@ -186,10 +186,13 @@ int main() {
         expect(fm_audible, "MixingLaw_KeyedFm_ActuallyNonSilent");
     }
 
-    // --- 4. Constructed SATURATION input (R-M31-4: the clamp is REQUIRED):
-    //     max PSG (62*400 = 24,800) + 9 phase-aligned full-scale FM carriers
-    //     (9 * 256 * 5 = 11,520 at the shared sine peak) => 36,320 > 32,767
-    //     => clamped samples must appear, and no value may exceed int16. ---
+    // --- 4. Constructed SATURATION worst case (M32-S4, R-M31-4 updated per
+    //     docs/m32-planner-package.md §2.8: the clamp is REQUIRED at k=21):
+    //     9 phase-aligned full-scale FM carriers (9 * 256 * 21 = 48,384 --
+    //     FM ALONE exceeds int16) + max PSG (62*400 = 24,800) + two max
+    //     SCCs (2 * 600 * 12 = 14,400) => up to 87,584 raw => exact clamp
+    //     to +32,767 must appear on BOTH stereo sides, and no value can
+    //     exceed int16. ---
     {
         PsgYm2149 psg;
         program_psg_max(psg);
@@ -198,14 +201,55 @@ int main() {
         for (int channel = 0; channel < 9; ++channel) {
             program_fm_tone_channel(fm, channel);
         }
+        // Two SCC chips at a loud constant-ish output: full-amplitude
+        // square-ish waveform on channel 1 (the M29 saturation idiom).
+        SccWavetable scc_a;
+        SccWavetable scc_b;
+        for (SccWavetable* scc : {&scc_a, &scc_b}) {
+            scc->reset();
+            for (int i = 0; i < 32; ++i) {
+                scc->write(static_cast<std::uint8_t>(i), 0x7F);
+            }
+            scc->write(0x8A, 0x0F);  // channel 1 volume 15
+            scc->write(0x8F, 0x01);  // channel 1 enable
+            scc->write(0x80, 0xFF);  // channel 1 period (slow -> long flat tops)
+            scc->write(0x81, 0x00);
+        }
         const MachineAudioMixer mixer(kCyclesPerSample);
         const std::vector<std::int16_t> mixed = mixer.mix_interleaved_stereo(
-            psg, MachineAudioMixer::SccSources{nullptr, nullptr}, &fm, 300);
-        std::int16_t peak = 0;
-        for (const std::int16_t v : mixed) {
-            peak = std::max(peak, v);
+            psg, MachineAudioMixer::SccSources{&scc_a, &scc_b}, &fm, 300);
+        std::int16_t peak_left = -32768;
+        std::int16_t peak_right = -32768;
+        for (std::size_t i = 0; i + 1 < mixed.size(); i += 2) {
+            peak_left = std::max(peak_left, mixed[i]);
+            peak_right = std::max(peak_right, mixed[i + 1]);
         }
-        expect(peak == 32767, "Saturation_NinePhaseAlignedCarriersPlusMaxPsg_ClampedTo32767");
+        expect(peak_left == 32767 && peak_right == 32767,
+               "Saturation_WorstCaseFmPsgTwoSccs_ExactClampAt32767_BothSides");
+    }
+
+    // --- 4b. FM ALONE exceeds int16 at k=21 on BOTH rails (9 * 256 * 21 =
+    //     +-48,384): silent PSG, no SCCs => the sine's positive AND
+    //     negative extremes both clamp exactly. ---
+    {
+        PsgYm2149 psg;
+        psg.reset();  // silent
+        Ym2413Opll fm;
+        fm.reset();
+        for (int channel = 0; channel < 9; ++channel) {
+            program_fm_tone_channel(fm, channel);
+        }
+        const MachineAudioMixer mixer(kCyclesPerSample);
+        const std::vector<std::int16_t> mixed = mixer.mix_interleaved_stereo(
+            psg, MachineAudioMixer::SccSources{nullptr, nullptr}, &fm, 600);
+        std::int16_t max_v = -32768;
+        std::int16_t min_v = 32767;
+        for (const std::int16_t v : mixed) {
+            max_v = std::max(max_v, v);
+            min_v = std::min(min_v, v);
+        }
+        expect(max_v == 32767, "Saturation_FmAlone_PositiveRail_ClampedTo32767");
+        expect(min_v == -32768, "Saturation_FmAlone_NegativeRail_ClampedToMinus32768");
     }
 
     // --- 5. The exact 9:8 decimation pattern (planner §2.5): 8 output

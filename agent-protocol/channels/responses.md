@@ -1966,3 +1966,103 @@ Use this format:
   blocked remainder), G1 cross-note; state files at implementation-complete. All changes
   UNCOMMITTED for coordinator/QA. Temporary main.cpp evidence probe reverted.
 - Responded At: 2026-07-09T12:15:00+09:00
+
+---
+
+- Response ID: RESP-M32-001 (planner outcome + coordinator ratification of D-1/D-2)
+- From: MSX Planner Agent → MSX Master Agent (coordinator)
+- Milestone ID: M32
+- Outcome: `docs/m32-planner-package.md` delivered — five slices (S1 accumulator + render-sync seam, device-layer only; S2 machine wiring incl. line-interrupt delivery + committed-evidence byte-identity regression; S3 synthetic split-screen system test + openMSX A/B + Aleste 2 live smoke; S4 FM calibration k=5→21; S5 gates/ledger/docs/QA handoff), 16 acceptance criteria, new backlog rows D8 (sub-line accuracy), D9 (sprite frame-snapshot remainder), D10 (mid-frame geometry adaptation policy). **Load-bearing survey finding (coordinator-VERIFIED by independent grep): `V9958Vdp::on_line_match()` has ZERO production call sites — only unit tests fire it. Line interrupts never occur in any real execution today, so Aleste 2's split handler never runs; Defect A necessarily = per-line rendering AND machine-level line-interrupt delivery.** Design: nullable VdpRenderSyncListener seam at the top of io_write() for #98-#9B (openMSX sync-before-change protocol, PixelRenderer.cc:253-394,510-517); write at line L takes effect line L+1 (openMSX Accuracy::LINE equivalence, PixelRenderer.cc:549-571; fMSX per-scanline architecture corroborates, MSX.c:209-224); machine-owned VdpScanlineAccumulator finalized at on_vsync_boundary() with end-of-frame geometry (static-frame identity automatic); legacy VdpFrameRenderer kept untouched as the in-test oracle; render_frame() signature unchanged, all four consumers audited; O(1) cached-threshold line-IRQ poll in step_cpu_instruction() (M25 pause-gate precedent) at display line (R#19 − R#23) & 0xFF — the relation both references agree on (VDP.cc:527-529; MSX.c:2094-2100); IE1-off software sees zero change.
+- Coordinator ratifications (recorded here, effective immediately):
+  - **D-1 RATIFIED — line-interrupt delivery is IN SCOPE for M32.** It is not scope creep: DEC-0039's charter is "fix the split-screen defect universally", and the verified zero-call-site finding proves the split is impossible without IE1 delivery. The "renderer change, not a timing change" phrasing in the charter's latch-contract clause is hereby refined: the latch contract itself stays non-timing (line-boundary reads), while line-IRQ delivery is a MISSING-DEVICE-BEHAVIOR fix (the V9958 fact-sheet's IE1/R#19 contract, unimplemented until now). ZEXALL cadence UNAFFECTED: the poll lives in src/machine/ (hbf1xv_machine), no src/devices/cpu/ or src/core/ file is touched; the tripwire (stop and escalate if that changes) stands.
+  - **D-2 RATIFIED — kFmAmplitudeScale = 21 via the per-channel derivation.** The planner source-verified openMSX's normalization (AY8910.cc:64-93,977-980 per-channel max 1.0; YM2413Okazaki.cc:48,154-165,1051-1054 per-channel 255 × 1/256), making 21000:9000 a PER-CHANNEL ratio: k = round(400×31×(3/7)/256) = 21. The charter's own parenthetical (~10,600 full-scale sum) is superseded — the planner correctly showed the sum-based reading reproduces M31's flawed normalization (k≈4.6, no fix at all). Cross-check accepted: 2×256×21 = 10,752 ≈ 10,600. Clamp worst case 125,216 → constructed saturation unit test mandatory (AC in package).
+- Next: developer dispatch (REQ-M32-002) with D-1/D-2 resolved; S2 line-int wiring and S4's constant are unblocked.
+- Responded At: 2026-07-09T11:05:00+09:00
+
+---
+
+- Response ID: RESP-M32-002 (developer outcome — implementation complete, QA handoff)
+- From: MSX Developer Agent → MSX Master Agent (coordinator)
+- Milestone ID: M32
+- Outcome: `docs/m32-planner-package.md` S1-S5 implemented in full with the RESP-M32-001 D-1/D-2
+  ratifications applied; handoff artifact `docs/m32-implementation-report.md`. **Defect A**: NEW
+  `src/devices/video/vdp_scanline_accumulator.{h,cpp}` + nullable `VdpRenderSyncListener` seam at
+  the top of `V9958Vdp::io_write()` (sync-before-change, PixelRenderer.cc:253-394/510-517);
+  machine adapter (L+1 latch rule), finalize in `on_vsync_boundary()` (AFTER `vdp_.on_vsync()` —
+  a documented, justified ordering deviation in service of the package's own AC-4/AC-5 oracles:
+  the boundary recompute samples the frame's OWN end-of-frame VRAM, and the legacy pipeline that
+  produced all committed evidence rendered post-recompute), `render_frame()` re-routed with the
+  exact signature kept (mutable-accumulator logical constness documented), O(1)
+  fingerprint-cached line-interrupt poll in `step_cpu_instruction()` at screen line
+  (R#19 − R#23) & 0xFF (VDP.cc:518-576 + MSX.c:2091-2104; both references agree) — the §1.2
+  zero-call-site gap CLOSED; IE1-off provably unchanged (twin-trajectory test + full suites).
+  **Split proof**: synthetic system oracle green incl. the adversarial IE1-off arm; openMSX A/B
+  **PARITY with split-boundary delta 0** (`tools/openmsx-m32-split-ab.ps1` + gen/compare tools,
+  region-structural comparator, self-check + reference-side IE1-off arm both green;
+  `docs/m32-parity-trace-diff.md`; two honest bring-up findings recorded: R#8 VR bit, openMSX
+  throttle-off screenshot staleness). **Aleste 2 live smoke: the human's repro RESOLVED** —
+  gameplay reached past weapon select, HUD intact + NON-GARBAGE scrolling playfield
+  (`debug/frames/m32-aleste-play-f{2600..3600}`); A-M32-1 measured: IE1 enabled MID-FRAME from
+  gameplay start (frame 2844), R#19=220, vblank/line-handler R#23 toggle — the DEC-0039 triage
+  shape. **AC-5 sweep** (v1.0.32-worktree recipe-recovery methodology, recipes byte-verified):
+  byte-identical across bios(8/9)/dos(5/5)/aleste(2/2)/mg2(2/3)/c5/m26-example/konami-splash/
+  boot-logo-timeline; FOUR root-caused raster-truth divergences ESCALATED per AC-6, never
+  rebaselined: bios-f150 (DEC-0031 wobble's mid-frame R#26/R#27 writes now rendered raster-true
+  — per-line tearing, the openMSX LINE-accuracy direction), metalgear-f1100/f1400 + mg2-f1700
+  (D9-class sprite-band lag in mid-frame-committed rows, the package's own §1.4-item-2
+  prediction, now measured); A-M32-2 HOLDS (no evidence scenario enables IE1 — instrumented
+  survey incl. mid-frame sampling). **Defect B**: kFmAmplitudeScale 5→21 (D-2 per-channel
+  derivation in the header; clamp math redone: 48,384/86,016/125,216 → clamp REQUIRED,
+  saturation-tested at both rails incl. two max SCCs); loudness oracle measured 0.4335 vs
+  0.42857 (+1.2%, gate ±15%); zero-YM2413 byte-identity oracle green UNMODIFIED; fmON/fmOFF
+  re-captured at k=21 (`debug/sounds/m32-fm-aleste-*`; FM contribution peak 3,780 = exactly
+  900×21/5, mean-nonzero 1,094 ≈ ×4.2). **Gates**: headless fast 177/177 (171+6), SDL3-ON fast
+  186/186 (180+6); validate-assets True; checksums refreshed; ab-smoke refreshed (historical R5
+  note restored per the DEC-0032/F1 lesson); `git diff v1.0.32` EMPTY for src/devices/cpu,
+  src/core, audio_pacer.*, psg_audio_pump.*, ym2413_synth.*, ym2413_opll.*,
+  machine_audio_mixer.cpp, vdp_frame_renderer.* and src/main.cpp (temporary --m32-evidence
+  probe reverted, M31 precedent); ZEXALL correctly NOT run. Ledger: D8/D9/D10 added,
+  C10→M33-era/F1→M34-era/F2→M35-era recorded, open rows re-affirmed. All changes UNCOMMITTED
+  for QA/coordinator; the AC-6 arbitration on the four divergences is the coordinator's.
+- Responded At: 2026-07-09T15:45:00+09:00
+
+---
+
+- Response ID: RESP-M32-003 (QA outcome)
+- From: MSX QA Agent → MSX Master Agent (coordinator)
+- Milestone ID: M32
+- Outcome: **CONDITIONAL PASS** (`docs/m32-qa-signoff.md`) — conditions are three closure-hygiene actions, ZERO code fixes. Independent fresh-build reproduction: headless **177/177** (41.73 s, build-qa-m32), SDL3-ON **186/186** (45.62 s, build-qa-m32-sdl). **AC-6 arbitration: ALL FOUR divergences CONFIRMED — the coordinator's provisional acceptance STANDS.** (1) bios-f150: instrumented per-instruction probe caught the BIOS rewriting R#26/R#27 EVERY display line (9/7 ↔ 56/1 alternation from line 30); the committed openMSX reference t2500ms PNG shows the SAME interleaved comb — M32 moves TOWARD openMSX; the old clean logo was the snapshot-flattening artifact. (2) metalgear-f1100: M31 recipe genuinely unrecoverable (verified); divergence confirmed sprite-band-shaped at two independent trajectories with byte-identical backgrounds. (3) mg2-f1700: pixel-exact mechanism proof — 28/28 divergent pixels equal the baseline's PREVIOUS frame (f1699), 0/28 static: the D9 one-frame sprite-snapshot lag measured, not inferred. (4) A-M32-2 reproduced STRONGER than claimed: per-instruction IE1 sampling across bios 3000f / DOS 1000f / MG 1400f / MG2 2200f / Aleste 900f → ie1_ever=0 everywhere; every other committed artifact reproduced byte-identically from scratch. Mutations 3/3 killed and hash-verified restored (L-not-L+1 → latch fails; fire-disabled → 4 split cases fail, IE1-off arm still passes; k=5 → ratio 0.103 fails + both rail-clamp cases fail). Reference faithfulness re-read (VDP.cc:518-576/913-926, MSX.c:2091-2107): relation/clamp/future-only arming match; fMSX +2 coincidence-constant nuance recorded, openMSX A/B delta-0 dispositive. k=21 independently re-derived; BONUS: the machine XML's selected NukeYKT core amplifies 1/256 too (YM2413NukeYktTables-adjacent NukeYKT.cc:914-917 — QA cited the .cc, tables file untouched), strengthening the per-channel reading. Loudness ratio re-measured 0.433548 (+1.16% vs 3/7). Zero-YM2413 oracle host file unmodified vs v1.0.32. Deviations judged SOUND (finalize-after-on_vsync REQUIRED for AC-5; Even/Odd snapshot has no production caller). Hard constraints all clean (cpu/core empty diff → ZEXALL correctly not run; audio chain/legacy renderer/main.cpp byte-untouched; nothing game-keyed; no structural transcription). Gates re-run: validate-assets True; checksums content-identical; **openMSX split A/B re-run live: PARITY, boundary 82==82, delta 0**; Aleste f2900/f3600 sighted — HUD intact, non-garbage scrolling, score accumulating.
+- Conditions (closure hygiene): (1) attribute or segregate the .claude/settings.json out-of-cycle hunk → coordinator: EXCLUDED from the closure commit per standing precedent (fifth consecutive milestone). (2) record provenance for references/music_in_basic.md or exclude → coordinator: provenance IS recorded (human-provided 2026-07-09, registered in CLAUDE.md reference-materials section with the dialect-validation caveat); file + registration go into the closure commit. (3) AC-6 regenerations with supersession notes; the Metal Gear regeneration must record its input script → dispatched to developer (in progress at this entry's timestamp).
+- Residual risks carried: D8/D9/D10 named rows (D9 now MEASURED: 8-17 sprite-band rows, trajectory-dependent); k=21 perceptual acceptance rests with the human's ear (R-M32-7 — the human's live SDL3 session is the final signal); no live frame-rate measurement this cycle; pre-existing IE1-gated FH narrowing unchanged.
+- Responded At: 2026-07-09T16:40:00+09:00
+
+---
+
+- Response ID: RESP-M32-004 (developer — QA closure condition discharged: committed-evidence supersession with recorded recipes)
+- From: MSX Developer Agent → MSX Master Agent (coordinator)
+- Milestone ID: M32
+- Outcome: Both COMMITTED artifacts QA confirmed as intended raster-truth changes
+  (`docs/m32-qa-signoff.md` Conditional Pass) regenerated IN PLACE under the M32 renderer,
+  each with a recorded, re-runnable recipe; originals remain at tag v1.0.32. (1)
+  `debug/frames/boot-logo-after-f0150-letters-sliding.png` (old sha256 4e54dd54…, new
+  e72f4d4c…, 640×240 bordered geometry preserved): unattended cold boot, frame 150, via the
+  NEW permanent `--debug-session --frames 150 --dump-frame …` + `frame-to-png.py
+  --with-border`; the capture is byte-identical to the AC-5 sweep's probe artifact
+  (`m32-divergence-bios-f150-m32.frame`) — mechanism validated. (2)
+  `debug/frames/m31-rc-metalgear-f1100.png` (new sha256 38d2f1d6…): regenerated by the NEW
+  permanent `tools/capture-metalgear-evidence.ps1` consuming the RECORDED
+  `tools/metalgear-evidence-input.script` (SPACE held frames [300,315)/[600,615), cycle
+  stamps 299/314/599/614 × 59,736; ROM loaded explicitly as Konami; 1,100 frames, real frame
+  loop) — the tool self-checks two-run byte identity (frame sha256 61E8DEC7… both runs) and
+  its header records the v1.0.32 supersession note; output byte-identical to the same-script
+  A/B M32 capture. Local-only frames (metalgear-f1400, mg2-f1700) untouched per the
+  directive. ENABLER (permanent, additive): `--debug-session` gained `--frames <N>`
+  (real-frame-loop drive — VBlank delivered, no halt-stop; the step-only loop cannot boot
+  titles, the DEC-0034 finding) and `--dump-frame <name>`; absent flags = byte-identical
+  pre-existing behavior. Report updated: NEW §9 "Evidence supersession (M32 closure)", §4
+  main.cpp isolation note corrected (the temporary probe REMAINS reverted; this is a separate
+  permanent additive change), §10 post-supersession gate re-run. Gates re-run after the
+  change: headless build clean; fast suite **177/177**; `git diff v1.0.32 -- src/devices/cpu
+  src/core` still EMPTY (SDL3-ON unaffected — main.cpp links only into sony_msx_headless; the
+  186/186 result stands). Still uncommitted; coordinator owns the commit.
+- Responded At: 2026-07-09T16:20:00+09:00

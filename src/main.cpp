@@ -727,6 +727,22 @@ struct DebugSessionOptions {
     std::optional<std::string> trace_cpu_name;
     std::optional<std::string> event_log_name;
     std::optional<std::string> input_script_path;
+    // M32 closure additions (QA condition, docs/m32-qa-signoff.md: committed
+    // evidence must carry RECORDED, re-runnable recipes; consumed by
+    // tools/capture-metalgear-evidence.ps1). Both additive; absent flags
+    // leave every pre-M32 invocation byte-identical.
+    //   --frames <N>: drive N frames via the REAL frame-loop shape
+    //     (step_cpu_instruction() to each frame boundary, then
+    //     on_vsync_boundary() -- the Sdl3App::run_one_frame()/C5-closure
+    //     shape) INSTEAD of the step-only loop. The positional <max_steps>
+    //     argument is ignored in this mode (the frame count is the budget),
+    //     and the loop deliberately does NOT stop on HALT -- real titles
+    //     HALT-wait for the VBlank interrupt every frame (the DEC-0034
+    //     loop-shape finding).
+    //   --dump-frame <name>: write_frame_dump(<name>) after the run
+    //     (to <debug_root>/frames/<name>).
+    std::optional<std::uint32_t> frames;
+    std::optional<std::string> dump_frame_name;
 };
 
 std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
@@ -776,6 +792,16 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
         } else if (arg == "--input-script") {
             if (auto v = take_debug_session_value(args, i, "--input-script", errors)) {
                 opts.input_script_path = *v;
+                ++i;
+            }
+        } else if (arg == "--frames") {
+            if (auto v = take_debug_session_value(args, i, "--frames", errors)) {
+                opts.frames = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--dump-frame") {
+            if (auto v = take_debug_session_value(args, i, "--dump-frame", errors)) {
+                opts.dump_frame_name = *v;
                 ++i;
             }
         }
@@ -851,12 +877,34 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     }
 
     std::uint32_t steps = 0;
-    while (steps < max_steps && !machine.cpu().state().halted()) {
-        machine.step_cpu_instruction();
-        script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
-        ++steps;
+    if (opts.frames.has_value()) {
+        // M32 frame-loop mode: the real production drive shape
+        // (Sdl3App::run_one_frame() / the DEC-0034 C5-closure loop) --
+        // VBlank interrupts delivered at every boundary, no halt-stop
+        // (titles HALT-wait for VBlank). Deterministic: a pure function of
+        // the frame count and the input script's cycle stamps.
+        const std::uint64_t target = machine.frame_cycles_per_frame();
+        for (std::uint32_t frame = 0; frame < *opts.frames; ++frame) {
+            const std::uint64_t start = machine.elapsed_cycles();
+            while (machine.elapsed_cycles() - start < target) {
+                machine.step_cpu_instruction();
+                script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
+                ++steps;
+            }
+            machine.on_vsync_boundary();
+        }
+    } else {
+        while (steps < max_steps && !machine.cpu().state().halted()) {
+            machine.step_cpu_instruction();
+            script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
+            ++steps;
+        }
     }
 
+    if (opts.dump_frame_name.has_value() && !machine.write_frame_dump(*opts.dump_frame_name)) {
+        std::cerr << "debug-session: failed to write --dump-frame " << *opts.dump_frame_name << "\n";
+        return 2;
+    }
     if (opts.dump_state_name.has_value() && !machine.write_state_dump(*opts.dump_state_name)) {
         std::cerr << "debug-session: failed to write --dump-state " << *opts.dump_state_name << "\n";
         return 2;
@@ -1102,7 +1150,10 @@ int main(int argc, char** argv) {
                          " [--cart1-type <T>|auto] [--cart2 <path>] [--cart2-type <T>|auto]"
                          " [--softwaredb <path>] [--debug-root <path>]"
                          " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
-                         " [--input-script <path>]\n"
+                         " [--input-script <path>] [--frames <N>] [--dump-frame <name>]\n"
+                         "  --frames drives N frames via the real frame loop (VBlank delivered;\n"
+                         "  <max_steps> ignored, HALT does not stop the run); --dump-frame writes\n"
+                         "  the decoded frame to <debug_root>/frames/<name> after the run (M32).\n"
                          "  --cartN-type is optional: when omitted (or 'auto') the mapper type is\n"
                          "  auto-identified via softwaredb SHA1 match, then a bank-write heuristic\n"
                          "  (M30, --softwaredb overrides the default references/openmsx-21.0/share/"

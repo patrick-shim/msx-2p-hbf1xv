@@ -40,6 +40,7 @@
 #include "devices/video/v9958_vdp.h"
 #include "devices/video/vdp_access_timing.h"
 #include "devices/video/vdp_frame_renderer.h"
+#include "devices/video/vdp_scanline_accumulator.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/memory_region.h"
@@ -188,11 +189,26 @@ public:
     [[nodiscard]] const devices::video::V9958Vdp& vdp() const;
     devices::video::V9958Vdp& vdp();
 
-    // Deterministic, pull-model VDP pixel renderer accessor (M21, backlog
-    // D1/D5/D6/D7-display-path). Additive only: the renderer is a pure,
-    // on-demand consumer of vdp_'s stored state (no elapsed_cycles()
-    // dependency, no new clock consumer), so no change to wire_bus() or
-    // cold_boot() is needed. Mirrors the existing vdp() accessor pattern.
+    // Decoded frame accessor. SIGNATURE UNCHANGED since M21; semantics
+    // upgraded by M32 (Defect A of DEC-0039, docs/m32-planner-package.md
+    // §2.4): Field::Progressive (every production call site) now routes to
+    // the raster-true scanline accumulator -- "accumulated past + projected
+    // future". Called at a frame boundary (immediately after
+    // on_vsync_boundary(), the Sdl3App::run_one_frame() shape) it returns
+    // the finalized per-line frame of the frame that just ended; called
+    // mid-frame it returns the raster-true partial accumulation plus a
+    // live-register projection of the lines below the beam. For any frame
+    // with NO mid-frame VDP write it is byte-identical to the legacy
+    // snapshot renderer for ANY call position (AC-4 hard oracle). Even/Odd
+    // (test/debug-only interlace fields; no production caller) keep the
+    // legacy frozen-snapshot semantics via VdpFrameRenderer::render_frame().
+    //
+    // Logical constness (documented decision, §2.4): the accumulator member
+    // is `mutable` -- committing lines the beam has already passed is
+    // memoization (a subsequent hooked write would commit the identical
+    // bytes, since no VDP state can change between this call and that write
+    // except through hooked writes themselves). No observable state of the
+    // machine changes.
     [[nodiscard]] devices::video::FrameBuffer render_frame(
         devices::video::Field field = devices::video::Field::Progressive) const;
 
@@ -377,6 +393,41 @@ private:
     // (Re)load the local bios/ ROM images into the ROM devices from asset_root_,
     // applying the deterministic missing-asset policy; records diagnostics.
     void load_rom_assets();
+
+    // Render-sync adapter (M32-S2, docs/m32-planner-package.md §2.3): the
+    // machine-side listener behind V9958Vdp's render-sync seam. On every
+    // hooked VDP io_write it reads the live raster position L =
+    // vdp_.raster_display_line() and commits display lines [watermark, L+1)
+    // -- i.e. A WRITE WHILE THE BEAM IS ON DISPLAY LINE L TAKES EFFECT FROM
+    // LINE L+1; lines <= L keep the pre-write state. This is the
+    // line-granular simplification of openMSX's LINE-accuracy rounding
+    // (references/openmsx-21.0/src/video/PixelRenderer.cc:549-571) and errs
+    // by at most one line against the PIXEL-accurate model (§2.3 precision
+    // disclosure). `suspended` gates the machine's non-perturbing
+    // debug_io_write() seam OUT of the hook (§2.3: scenes built through
+    // debug_io_write are covered by the lazy projection/finalize path --
+    // its documented contract stays "non-perturbing", proven by
+    // integration test).
+    class VdpRenderSyncAdapter final : public devices::video::VdpRenderSyncListener {
+    public:
+        explicit VdpRenderSyncAdapter(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_before_state_change() override;
+        void set_suspended(const bool suspended) { suspended_ = suspended; }
+
+    private:
+        Hbf1xvMachine& machine_;
+        bool suspended_ = false;
+    };
+
+    // Line-interrupt delivery (M32-S2, the DEC-0039/RESP-M32-001 D-1
+    // ratified leg; §2.5). Consulted once per step_cpu_instruction, O(1):
+    // an input-fingerprint check (R#19/R#23/R#9/last-vsync value compare)
+    // plus one cycle compare against the cached next-match cycle. The cache
+    // recomputes only when an input changed (openMSX's own reschedule
+    // semantic, VDP.cc:518-524) or after a crossing fired.
+    void poll_line_interrupt();
+    void recompute_line_interrupt_cache(std::uint8_t r19, std::uint8_t r23, std::uint8_t r9,
+                                        std::uint64_t now);
 
     // Level-held /INT adapter (M14-S4): forwards the V9958's owned interrupt
     // line to the M12 Z80A maskable-interrupt request/clear, REUSING the IM1
@@ -608,6 +659,14 @@ private:
     // M21 pixel renderer (additive; binds vdp_ by const reference at
     // construction -- must be declared AFTER vdp_).
     devices::video::VdpFrameRenderer vdp_frame_renderer_{vdp_};
+    // M32 scanline accumulator (Defect A; §2.2). Declared AFTER
+    // vdp_frame_renderer_ (binds const V9958Vdp& + const VdpFrameRenderer&).
+    // `mutable` per the documented logical-constness decision on
+    // render_frame() above -- committing already-scanned lines is
+    // memoization, not observable state change.
+    mutable devices::video::VdpScanlineAccumulator scanline_accumulator_{vdp_, vdp_frame_renderer_};
+    // The render-sync listener instance attached to vdp_ in wire_bus().
+    VdpRenderSyncAdapter render_sync_adapter_{*this};
 
     CpuTraceSink cpu_trace_sink_;
     DebugEventLog debug_event_log_;
@@ -626,6 +685,24 @@ private:
     // last_vsync_cycle_ (initialization-order requirement, see the class
     // comment above); attached to vdp_ in wire_bus().
     VdpRasterClock vdp_raster_clock_{scheduler_, last_vsync_cycle_};
+
+    // Line-interrupt delivery cache (M32-S2, §2.5). line_int_next_cycle_ is
+    // the absolute scheduler cycle at which the raster next ENTERS screen
+    // line M = (R#19 - R#23) & 0xFF -- the relation BOTH behavior references
+    // agree on (openMSX references/openmsx-21.0/src/video/VDP.cc:527-529:
+    // `((controlRegs[19] - controlRegs[23]) & 0xFF)` display lines after
+    // display start; fMSX references/fmsx-60/source/fMSX/MSX.c:2094-2100:
+    // fires when `(((ScanLine+VScroll)&0xFF)-VDP[19])&0xFF` hits its
+    // coincidence value -- algebraically the identical screen-space
+    // relation). kLineIntNever = the openMSX "never occurs" clamp analogue
+    // (VDP.cc:554-559) for M >= the active line count.
+    static constexpr std::uint64_t kLineIntNever = ~static_cast<std::uint64_t>(0);
+    std::uint64_t line_int_next_cycle_ = kLineIntNever;
+    std::uint8_t line_int_r19_ = 0;
+    std::uint8_t line_int_r23_ = 0;
+    std::uint8_t line_int_r9_ = 0;
+    std::uint64_t line_int_vsync_ = 0;
+    bool line_int_cache_valid_ = false;
 
     // M25 Sony MB670836 hardware PAUSE + Speed Controller (backlog C8). A
     // machine-level CPU-execution gate consulted at the very top of

@@ -90,6 +90,29 @@ CMakeUserPresets.json
 # prompt after 11 real FDC sector reads.
 !/debug/frames/c5-verify-settled.png
 
+# M32 exception: the DEC-0039 defect-pair evidence (docs/m32-implementation-
+# report.md) -- the Aleste 2 gameplay-split smoke (the human repro resolved),
+# the openMSX split A/B artifacts (PARITY, docs/m32-parity-trace-diff.md),
+# the AC-6 divergence escalation set (root-caused raster-truth shifts, never
+# rebaselined -- coordinator arbitration pending), and the k=21 fmON/fmOFF
+# re-capture pair.
+!/debug/frames/m32-aleste-play-f2600.png
+!/debug/frames/m32-aleste-play-f2900.png
+!/debug/frames/m32-aleste-play-f3000.png
+!/debug/frames/m32-aleste-play-f3200.png
+!/debug/frames/m32-aleste-play-f3600.png
+!/debug/frames/m32-split-ab-ours.png
+!/debug/frames/m32-split-ab-openmsx-raw.png
+!/debug/frames/m32-split-ab-openmsx-noie1-raw.png
+!/debug/frames/m32-divergence-bios-f150-m32.png
+!/debug/frames/m32-divergence-metalgear-f1100-m32.png
+!/debug/frames/m32-divergence-metalgear-f1100-v1032.png
+!/debug/frames/m32-divergence-metalgear-f1400-m32.png
+!/debug/frames/m32-divergence-metalgear-f1400-v1032.png
+!/debug/frames/m32-divergence-mg2-f1700-m32.png
+!/debug/sounds/m32-fm-aleste-fmON.wav
+!/debug/sounds/m32-fm-aleste-fmOFF.wav
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

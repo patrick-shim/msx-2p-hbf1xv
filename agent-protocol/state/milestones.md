@@ -1098,3 +1098,47 @@ Use one section per milestone.
   `docs/m31-implementation-report.md` is the handoff artifact; ledger E1 → DONE (M31) + NEW
   row E3 + G1 cross-note applied same-cycle; all changes left UNCOMMITTED for coordinator/QA
   per the established cadence).
+
+## M32 (Kickoff 2026-07-09, DEC-0039 — the RC-playtest defect pair; tag target v1.0.33)
+
+- Milestone ID: M32
+- Title: Raster-accurate per-line rendering + line-interrupt delivery (Defect A) + honest FM
+  mix calibration k=21 (Defect B)
+- Package: `docs/m32-planner-package.md` (RESP-M32-001: D-1 line-interrupt delivery IN SCOPE,
+  D-2 kFmAmplitudeScale = 21 per-channel derivation — both coordinator-ratified).
+- Deliverables (implemented, RESP-M32-002): NEW `src/devices/video/vdp_scanline_accumulator.*`
+  + nullable `VdpRenderSyncListener` seam on `V9958Vdp::io_write()` (openMSX
+  sync-before-change, LINE accuracy); machine write-hook adapter (L+1 latch),
+  `on_vsync_boundary()` finalize (documented ordering: AFTER `vdp_.on_vsync()`, in service of
+  AC-4/AC-5), `render_frame()` re-route (signature unchanged, mutable-accumulator logical
+  constness), O(1) fingerprint-cached line-interrupt poll in `step_cpu_instruction()` at
+  (R#19 − R#23) & 0xFF; `kFmAmplitudeScale` 5→21 with redone clamp math + loudness-ratio
+  oracle (measured 0.4335 vs 0.42857) + both-rails saturation tests + fmON/fmOFF re-capture
+  (FM peak 3,780 = exactly ×21/5); 6 new deterministic tests + the synthetic split-screen
+  system oracle (adversarial IE1-off arm included); permanent A/B tooling
+  (`tools/openmsx-m32-split-ab.ps1`, `tools/gen-m32-split-probe.py`,
+  `tools/m32-split-ab-compare.py`).
+- Evidence: headless fast **177/177** (171+6); SDL3-ON fast **186/186** (180+6); openMSX A/B
+  **PARITY, split-boundary delta 0** (`docs/m32-parity-trace-diff.md`); Aleste 2 live smoke
+  reaches NON-GARBAGE scrolling gameplay past weapon select (`debug/frames/m32-aleste-play-*`
+  — the DEC-0039 human repro resolved; A-M32-1 measured: mid-frame IE1 from frame 2844,
+  R#19=220); AC-5 committed-evidence sweep green EXCEPT four root-caused raster-truth
+  divergences (bios-f150 wobble tearing; metalgear-f1100/f1400 + mg2-f1700 D9 sprite bands)
+  ESCALATED per AC-6, never rebaselined (`debug/frames/m32-divergence-*`); A-M32-2 holds (no
+  evidence scenario enables IE1); zero `src/devices/cpu/`/`src/core/` edits (ZEXALL correctly
+  not run); AudioPacer/PsgAudioPump/ym2413_synth/opll/legacy-renderer byte-untouched
+  (git-diff-proven). Ledger: NEW rows D8/D9/D10; C10→M33-era, F1→M34-era, F2→M35-era.
+- Status: **CLOSED (DEC-0040, 2026-07-09, tag v1.0.33)** — QA CONDITIONAL PASS
+  (`docs/m32-qa-signoff.md`, RESP-M32-003: independent fresh-build 177/177 + 186/186;
+  mutations 3/3 killed; k=21 re-derived with the NukeYKT 1/256 corroboration; loudness ratio
+  re-measured 0.433548; openMSX split A/B re-run live at PARITY delta 0). AC-6 arbitration
+  FINAL: all four divergences CONFIRMED raster-truth (bios-f150 comb matches the committed
+  openMSX reference; mg2-f1700 pixel-proven 28/28 previous-frame = D9 lag); the two committed
+  artifacts regenerated in place with supersession notes (report §9) and a PERMANENT recorded
+  Metal Gear recipe (`tools/capture-metalgear-evidence.ps1` + `tools/metalgear-evidence-
+  input.script`, two-run byte-identity self-asserting; originals remain at tag v1.0.32).
+  QA conditions 1-3 all discharged (settings.json excluded per precedent; music_in_basic.md
+  provenance recorded in CLAUDE.md; regenerations done). Post-QA additive
+  `--debug-session --frames/--dump-frame` enabler coordinator-reviewed, fast suite
+  re-confirmed 177/177, cpu/core diff still EMPTY. NEW backlog row G6 (typed-BASIC harness,
+  human proposal) recorded at closure.

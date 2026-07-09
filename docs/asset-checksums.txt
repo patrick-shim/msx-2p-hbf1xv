@@ -1,5 +1,5 @@
 ﻿Asset checksum report
-Generated at: 2026-07-09T12:04:53.6892668+09:00
+Generated at: 2026-07-09T15:16:36.0210973+09:00
 Algorithm: SHA256
 
 [bios]

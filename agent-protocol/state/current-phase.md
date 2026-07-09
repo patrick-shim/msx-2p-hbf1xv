@@ -6,8 +6,62 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M31 — IMPLEMENTATION COMPLETE, Ready for QA (2026-07-09)** — THE RELEASE
-  CANDIDATE of the DEC-0035 run (tag target v1.0.32). YM2413 (OPLL) FM-synthesis DSP depth,
+- Active Phase: **IDLE — M32 CLOSED (DEC-0040, 2026-07-09, tag v1.0.33); awaiting the human's
+  verification run (Aleste 2 gameplay + FM audibility at k=21, R-M32-7) and next directive.**
+  Remaining open backlog: C1/D4 + E3 (sourcing-blocked), D8/D9/D10 (M32 named remainders),
+  C10/F1/F2 (era-labeled, unscheduled), G3/G4/G5/G6 (on-demand; G6 = typed-BASIC harness,
+  near-term candidate).
+- Prior phase (closed): **M32 — CLOSED (DEC-0040; QA CONDITIONAL PASS RESP-M32-003, all
+  conditions discharged; tag v1.0.33)** — both DEC-0039 defects fixed universally per `docs/m32-planner-package.md` S1-S5
+  with the RESP-M32-001 D-1/D-2 ratifications applied. **(A) Raster-accurate per-line rendering +
+  line-interrupt delivery**: NEW `src/devices/video/vdp_scanline_accumulator.{h,cpp}` + the
+  nullable `VdpRenderSyncListener` seam at the top of `V9958Vdp::io_write()` (sync-before-change,
+  PixelRenderer.cc:253-394/510-517); machine write-hook adapter (write at display line L takes
+  effect from L+1), finalize in `on_vsync_boundary()` (AFTER `vdp_.on_vsync()` — a documented,
+  justified ordering deviation in service of the package's own AC-4/AC-5 byte-identity oracles),
+  `render_frame(field)` re-routed with its exact signature kept (mutable-accumulator logical
+  constness documented); O(1) fingerprint-cached line-interrupt poll in `step_cpu_instruction()`
+  firing at display line (R#19 − R#23) & 0xFF (VDP.cc:518-576 + MSX.c:2091-2104, both references
+  agree) — `on_line_match()`'s zero-production-call-site gap CLOSED; IE1-off software provably
+  unchanged. Synthetic split-screen system oracle green incl. the adversarial IE1-off arm;
+  **openMSX A/B PARITY with split-boundary delta 0** (`tools/openmsx-m32-split-ab.ps1` +
+  `tools/gen-m32-split-probe.py` + `tools/m32-split-ab-compare.py`, region-structural comparator
+  with adversarial self-check; `docs/m32-parity-trace-diff.md`); **Aleste 2 live smoke reaches
+  NON-GARBAGE scrolling gameplay past weapon select** (`debug/frames/m32-aleste-play-*`, the
+  human's exact repro resolved; A-M32-1 verified: Aleste enables IE1 mid-frame from gameplay
+  start, R#19=220 HUD-split protocol). AC-5 committed-evidence sweep: byte-identical across the
+  matrix EXCEPT four root-caused raster-truth divergences (bios-f150 wobble tearing;
+  metalgear f1100/f1400 + mg2 f1700 D9-class sprite bands) — ESCALATED per AC-6 with evidence
+  (`debug/frames/m32-divergence-*`), never rebaselined. **(B) FM mix calibration**:
+  `kFmAmplitudeScale` 5 → 21 via the D-2-ratified per-channel derivation (k = round(400×31×(3/7)
+  /256)), header clamp math redone (melody 48,384 / rhythm 86,016 / +PSG+2×SCC 125,216 → clamp
+  REQUIRED, saturation-tested at both rails); loudness-ratio oracle green (measured 0.4335 vs
+  reference 0.42857, +1.2%); zero-YM2413 byte-identity oracle green UNMODIFIED; fmON/fmOFF pair
+  re-captured at k=21 (`debug/sounds/m32-fm-aleste-*`; FM contribution peak 3,780 = exactly the
+  package-predicted 900×21/5). Evidence: headless fast **177/177** (171 + 6 new), SDL3-ON fast
+  **186/186** (180 + 6 new); zero `src/devices/cpu/`/`src/core/` edits (ZEXALL correctly NOT
+  run); ledger D8/D9/D10 added + C10/F1/F2 era shifts recorded. All changes UNCOMMITTED for
+  QA/coordinator. Handoff: `docs/m32-implementation-report.md`.
+- Prior phase state (planning kickoff, retained): **M32 — PLANNING (kickoff 2026-07-09,
+  DEC-0039)** — the RC-playtest defect pair,
+  human-authorized after first-hand v1.0.32 play of Aleste 2 ("M32: both fixes"). **(A)
+  raster-accurate per-line rendering** — `Hbf1xvMachine::render_frame()` renders the whole frame
+  from ONE register snapshot, so a mid-frame R#23 rewrite from a line-interrupt handler (the
+  standard HUD/playfield screen split — Aleste 2 gameplay) is unrepresentable BY CONSTRUCTION:
+  the human sees the HUD correct and the scroll ring-buffer un-rotated (garbage) below it, while
+  every non-split screen (cutscene/title/weapon-select/game-over) is pixel-perfect. Universal
+  fix: accumulate the frame scanline-by-scanline as the raster advances, reading LIVE VDP
+  registers per line (openMSX PixelRenderer model; DEC-0031's line-granular collision +
+  VdpRasterClock already exist as groundwork). **(B) FM mix calibration** — `kFmAmplitudeScale=5`
+  leaves the (fully working, APRLOPLL-detected, genuinely keyed) YM2413 ~29 dB under the PSG:
+  measured from the committed M31 evidence WAVs, FM contribution peak 900 / mean-nonzero 261 on
+  ±32,767 vs PSG effects at 24,800; openMSX's own Sony_HB-F1XV.xml balances PSG:MSX-MUSIC at
+  21000:9000 (~7 dB). Universal fix: re-derive the scale from the reference ratio + an A/B
+  loudness comparison. Tag target v1.0.33. ZEXALL: NOT expected (no cpu/core touch planned;
+  fast-subset cadence). The human also CONFIRMED the DEC-0033 sound-delay fix in live play.
+- Prior phase (closed): **M31 — CLOSED (DEC-0038, 2026-07-09, tag v1.0.32 = PRODUCTION
+  CANDIDATE; QA unconditional PASS with the explicit RC verdict)** — THE RELEASE
+  CANDIDATE of the DEC-0035 run. YM2413 (OPLL) FM-synthesis DSP depth,
   backlog E1's formulaically-derivable subset per `docs/m31-planner-package.md` S1-S6:
   NEW `src/devices/audio/ym2413_synth.{h,cpp}` (closed-form logsin/exp tables computed at
   construction; §8 phase generation with the 19-bit A-M31-4 accumulator and the §3 MUL table;
@@ -36,8 +90,9 @@
   (`docs/m31-parity-trace-diff.md`). Ledger: E1 → DONE (M31), NEW row E3 (license/sourcing-
   blocked remainder, C1/D4 standard), G1 cross-note. Health: validate-assets green (3 ROMs incl.
   metalgear2_scc.rom), checksums refreshed, no new TODO/FIXME, both executables launch.
-  All changes UNCOMMITTED, awaiting QA (`docs/m31-implementation-report.md` is the handoff).
-  Temporary main.cpp evidence probe reverted (`git checkout -- src/main.cpp`).
+  Closure: QA's F2 cosmetic comment fix applied at commit; committed 00023cd with the curated
+  evidence set (5 smoke PNGs + 3 WAVs, .gitignore M31 RC exception block); annotated tag
+  v1.0.32. The DEC-0035 run is COMPLETE: M29 v1.0.30 → M30 v1.0.31 → M31 v1.0.32.
 - Prior phase (closed): **M30 — CLOSED (DEC-0037, 2026-07-09, tag v1.0.31)**. Universal
   cartridge mapper auto-identification (backlog G2 — the Aleste-2 usability fix, delivered as a
   UNIVERSAL mechanism, nothing game-keyed). Delivered per `docs/m30-planner-package.md` S1-S6:
@@ -377,6 +432,7 @@ gate applies), **C10→M32-era** (FDC flux/DMK), **F1→M33-era** (cassette), **
 (printer), **G3/G4/G5** (indefinite/on-demand). G1 closed (M29, v1.0.30); G2 closed (M30,
 pending QA/tag v1.0.31).
 
-- Updated At: 2026-07-09 (M30 implementation complete — universal cartridge auto-identification,
-  G2 -> DONE (M30) pending QA; E1 renumber M30->M31 applied to the ledger per DEC-0035 +
-  m30-planner-package §2.7; next: QA sign-off, then tag v1.0.31, then M31 kickoff)
+- Updated At: 2026-07-09 (M32 CLOSED per DEC-0040, tag v1.0.33 — both DEC-0039 RC-playtest
+  defects fixed universally: per-line rendering + line-interrupt delivery, FM k=21. QA
+  Conditional Pass fully discharged; AC-6 all-four-confirmed; evidence regenerated with
+  recorded recipes. Coordinator idle awaiting the human's verification run.)

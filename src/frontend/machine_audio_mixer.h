@@ -79,15 +79,65 @@ public:
     // sdl3_audio_presenter.cpp under the SDL3 build).
     static constexpr int kPsgAmplitudeScale = 400;
     static constexpr int kSccAmplitudeScale = 12;
-    // M31 documented presentation policy (same disclosed class as 400/12,
-    // planner §2.2): FM per-channel peak ~ +-256 (the §7 measured-peaks
-    // scale) -> +-1280 per loud melody channel; a realistic loud mix of ~6
-    // melody channels + rhythm x2 can exceed int16 together with a loud PSG
-    // (e.g. 9 aligned melody carriers 9*256*5 = 11,520 plus PSG max 24,800 =
-    // 36,320 > 32,767), so the int16 clamp is REQUIRED and unit-tested at a
-    // constructed saturation input (R-M31-4). §7's own "blend ratio varies
-    // by machine" note covers this being a policy, not a measured constant.
-    static constexpr int kFmAmplitudeScale = 5;
+    // M32 (Defect B of DEC-0039, D-2 ratified in RESP-M32-001; docs/
+    // m32-planner-package.md §2.8): the honestly-derived FM presentation
+    // scale, replacing M31's k=5 (which left the fully-functional YM2413
+    // ~29 dB under the PSG -- coordinator-measured from the committed
+    // debug/sounds/m31-fm-aleste-fmON/fmOFF.wav pair: FM peak 900 on the
+    // +-32,767 scale vs PSG effects at 24,800).
+    //
+    // Reference ratio: openMSX's own machine definition balances this
+    // exact machine's PSG:MSX-MUSIC at 21000:9000 = 7:3 (~-7.36 dB FM
+    // under PSG) -- references/openmsx-21.0/share/machines/
+    // Sony_HB-F1XV.xml:63 (<volume>21000</volume>) and :191
+    // (<volume>9000</volume>).
+    //
+    // What the ratio applies to (source-verified): openMSX normalizes BOTH
+    // chips to the same PER-CHANNEL unit before the XML volumes apply --
+    // AY8910 per-channel volume table peaks at exactly 1.0 with device
+    // amplification 1.0 (references/openmsx-21.0/src/sound/AY8910.cc:64-93,
+    // :977-980); YM2413 per-slot linear peak is (1<<DB2LIN_AMP_BITS)-1 =
+    // 255 with device amplification 1/256 (references/openmsx-21.0/src/
+    // sound/YM2413Okazaki.cc:48, :154-165, :1051-1054) -> per-channel peak
+    // ~= 1.0. So 21000:9000 is a PER-CHANNEL loudness ratio. (The
+    // alternative worst-case-SUM normalization is rejected: it yields
+    // k ~= 4.6 (melody) / 2.6 (rhythm) -- "no change or quieter",
+    // reproducing exactly the flawed M31 arithmetic that caused the
+    // defect. Worst-case sums belong in the CLAMP analysis below.)
+    //
+    // Our units: one full-volume PSG channel = 31 (psg_ym2149.h resolved
+    // amplitude) x 400 = 12,400 PCM; one full-volume FM channel peaks at
+    // +-256 (ym2413_synth.h: +-2048 operator width through the documented
+    // >>3 presentation scale, anchored to the fact-sheet §7 measured
+    // per-volume peak series "255, 180, 127, ..." --
+    // references/fact-sheets/Yamaha YM2413 FM Chip.md:184; §7's "blend
+    // ratio varies by machine" note at :186 is why an external reference
+    // ratio is the right calibrator). Therefore:
+    //
+    //   kFmAmplitudeScale = round(400 * 31 * (9000/21000) / 256)
+    //                     = round(12,400 * 0.42857 / 256)
+    //                     = round(20.76) = 21
+    //
+    // Cross-check against DEC-0039's own full-scale form: the charter's
+    // "24,800 * 9000/21000 ~= 10,600" -- 24,800 is TWO PSG channel-units
+    // per stereo side, so the FM equivalent is two FM channel-units:
+    // 2 * 256 * 21 = 10,752, within 1.2% (integer rounding of k).
+    // Resulting single-channel ratio (256*21)/12,400 = 0.4335 vs reference
+    // 0.42857 -> -7.26 dB vs -7.36 dB. FM rises 21/5 = 4.2x (+12.5 dB)
+    // over v1.0.32.
+    //
+    // CLAMP MATH (redone honestly at k = 21): worst theoretical alignments
+    // -- melody 9 * 256 * 21 = 48,384 (FM ALONE exceeds int16); rhythm
+    // mode 6 * 256 + 5 * (256 * 2) = 4,096 raw (the fact-sheet §6 rhythm
+    // x2 double-output law, Yamaha YM2413 FM Chip.md:179/:183) -> 4,096 *
+    // 21 = 86,016; plus PSG 24,800 and two SCCs 14,400 = 125,216 >>
+    // 32,767. The int16 clamp is therefore REQUIRED and is unit-tested at
+    // a constructed worst case (machine_audio_mixer_fm_unit_test.cpp:
+    // 9 aligned carriers + max PSG + two max SCCs -> exact clamp at
+    // +32,767 on both stereo sides; FM-alone case clamps BOTH rails).
+    // Realistic music sits far below (M31's measured raw FM peak 180 ->
+    // ~3,780 at k = 21).
+    static constexpr int kFmAmplitudeScale = 21;
 
     // 0..2 attached chips; nullptr entries are skipped (the "no SCC cart
     // loaded" regression null, Hbf1xvMachine::scc_chip()'s own contract).

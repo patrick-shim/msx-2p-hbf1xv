@@ -77,6 +77,10 @@ void V9958Vdp::attach_clock_source(VdpClockSource* const source) {
     clock_source_ = source;
 }
 
+void V9958Vdp::attach_render_sync(VdpRenderSyncListener* const listener) {
+    render_sync_ = listener;
+}
+
 // --- core::IoDevice ---------------------------------------------------------
 
 core::BusData V9958Vdp::io_read(const core::BusAddress port) {
@@ -94,6 +98,16 @@ core::BusData V9958Vdp::io_read(const core::BusAddress port) {
 }
 
 void V9958Vdp::io_write(const core::BusAddress port, const core::BusData value) {
+    // M32-S1 render-sync seam: notify BEFORE any state mutates, for all four
+    // ports uniformly -- the openMSX sync-before-change protocol at line
+    // granularity (PixelRenderer.cc:253-394 register/palette updates,
+    // :510-517 VRAM writes: every update handler calls sync(time)/
+    // renderUntil(time) FIRST, then applies the change). The listener only
+    // reads state and writes into its own pixel store -- zero interrupt/
+    // status/VRAM side effects (docs/m32-planner-package.md §2.3).
+    if (render_sync_ != nullptr) {
+        render_sync_->on_before_state_change();
+    }
     const auto byte = static_cast<std::uint8_t>(value & 0xFF);
     switch (port & 0x03) {
     case 0:  // #98 VRAM data write
