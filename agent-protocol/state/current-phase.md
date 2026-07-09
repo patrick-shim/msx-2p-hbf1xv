@@ -6,14 +6,22 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M35 PLANNING (Kickoff 2026-07-10, DEC-0048) — Multi-disk hot-swap.** Closes the
-  standing residual "multi-disk swap UI — YS II will need it," human-authorized during live YS II
-  play (disk1 booted, reached the real "INSERT DATADISK IN DRIVE A - RET" prompt). Frontend-only:
-  a repeatable `--disk` list + an F11 hotkey cycling drive A at runtime (re-attaching the DiskImage
-  so a running title reads the new disk on its next FDC access); tag target v1.0.36. Scope override
-  of the tentative F2/M35-era label (F2 printer depth re-deferred, DEC-0048). Planner engaged next
-  (REQ-M35-001 → msx-planner). Constraints: zero cpu/core edits (ZEXALL withheld), additive/
-  default-off, deterministic. Prior: **IDLE — M34 CLOSED (DEC-0045, 2026-07-09, tag v1.0.35);
+- Active Phase: **M36 PLANNING (Kickoff 2026-07-10, DEC-0049) — Playtest/live-QA agent, then two
+  live-playtest bugs.** Per the human's ratified decisions after live YS II play: (1) BUILD A
+  PLAYTEST/LIVE-QA AGENT + COMMAND FIRST — hybrid design: headless `--input-script` drive +
+  `--dump-frame` PNG capture read by a vision-capable opus agent (deterministic, regression-able)
+  PLUS optional real-window spot-checks; the agent works alongside planner/developer/qa to simulate
+  a human player. (2) THEN fix the two bugs the human found: **(A) FM-PAC SRAM "NO S-RAM AVAILABLE"**
+  — the 8 KB FM-PAC battery-SRAM storage exists (hbf1xv_machine.h:176-179) but the access/unlock
+  protocol (0x5FFE/0x5FFF magic → SRAM window at 0x4000-0x5FFD) appears unimplemented, so YS II
+  can't detect it; **(B) black screen on building entry** — the active area goes blank while UI
+  persists and the game stops, needs deterministic repro (disk-read-fail vs VDP blank). ALL FOUR
+  agents now on **opus** (developer/qa/planner/orchestration). Prior: **M35 CLOSED (DEC-0049,
+  2026-07-10, tag v1.0.36) — multi-disk hot-swap, LIVE human-validated (F11 swapped disk1→disk2 in
+  YS II, game continued); 183/183 + 194/194; residual R-M35-1 (strengthen the multi_disk
+  integration test) carried forward; a QA-agent git-checkout clobber incident was caught and
+  recovered by the coordinator (checkpoint e360a5b), and the msx-qa agent gained a non-destructive-
+  mutation rule.** Prior: **IDLE — M34 CLOSED (DEC-0045, 2026-07-09, tag v1.0.35);
   awaiting the human's live re-check of the two M34 fixes (Aleste 2 transition-beep gone; Metal
   Gear room-transition clean backdrop wipe — R-M34-1 is the final acceptance signal on the 20.7
   kHz residual).** M34 fixed the DEC-0043 playtest defect pair universally: (A) PSG/SCC

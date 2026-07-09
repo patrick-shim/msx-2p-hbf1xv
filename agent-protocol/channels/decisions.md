@@ -518,3 +518,46 @@ Use this format:
   correctness risk. (2) Multi-controller/multi-drive is OUT of scope (drive A only). (3) F11 must
   not collide with the existing host keys (Pause/F6-F9) — confirm free.
 - Effective Date: 2026-07-09
+
+---
+
+- Decision ID: DEC-0049
+- Requested By: Human live-playtest of the v1.0.36 candidate (2026-07-10): validated the M35 disk
+  swap first-hand (F11 swapped disk1→disk2 in YS II and the game continued into gameplay), then
+  reported two bugs, directed "opus for full coding, qa and planning," and asked for a
+  playtest/live-QA agent. Four decisions ratified via AskUserQuestion.
+- Approved By: Human; MSX Master Agent (coordinator).
+- Decision: (1) **CLOSE M35 (multi-disk hot-swap), tag v1.0.36 — LIVE HUMAN-VALIDATED. PASS**
+  (`docs/m35-qa-signoff.md`, coordinator-authored). 183/183 headless + 194/194 SDL3-ON; frontend-
+  only (swap via existing `set_disk_changed(true)`/`attach_image()`); zero cpu/core edits. Residual
+  **R-M35-1**: strengthen the `multi_disk` integration test — adversarial mutation B (disable the
+  disk-index rotation) did NOT fail it, so it doesn't assert the drive-A disk actually advances
+  (the SDL3 dummy-driver env can't drive F11 end-to-end; the human playtest is the authoritative
+  proof for now). (2) **QA-PROCESS INCIDENT + STANDING FIX**: the delegated `msx-qa` agent's
+  adversarial-mutation step used `git checkout` to undo mutations on UNCOMMITTED work, reverting
+  `sdl3_cli.cpp` + `sdl3_input_mapper.cpp` to pre-M35 and producing a FALSE "critical compile
+  defect" FAIL. The coordinator diagnosed it (the code built 194/194 before AND after restoring the
+  clobber), restored both files from intact sources, committed a protective checkpoint (`e360a5b`)
+  so the tree is clean, and completed the adversarial validation directly (mutation A killed the
+  disk_swap unit test — real coverage; B exposed R-M35-1). NEW STANDING RULE added to the msx-qa
+  agent: adversarial mutation MUST be non-destructive — edit-then-revert-the-precise-edit, or
+  operate only against committed state; NEVER `git checkout`/`restore`/`stash` uncommitted working-
+  tree files. (3) **MODEL CONFIG**: all four specialist agents moved to **opus**
+  (developer/qa/planner/orchestration) per the human, after the sonnet-QA reliability issues.
+  (4) **OPEN M36**: build a **playtest/live-QA agent + command FIRST** (new `msx-playtest` agent +
+  `/msx-playtest`), hybrid design — headless `--input-script` drive + `--dump-frame` PNG capture
+  read by a vision-capable opus agent (deterministic, regression-able) PLUS optional real-window
+  spot-checks; it collaborates with planner/developer/qa to simulate a human player. THEN fix the
+  two live-playtest bugs: **(A) FM-PAC SRAM "NO S-RAM AVAILABLE"** — the 8 KB FM-PAC battery-SRAM
+  storage exists (`hbf1xv_machine.h:176-179`) but the access/unlock protocol (0x5FFE/0x5FFF magic →
+  SRAM window at 0x4000-0x5FFD) appears unimplemented, so YS II can't detect it; **(B) black screen
+  on building entry** — active area blanks (UI persists) and the game stops, repro-first root-cause
+  (disk-read-fail vs VDP blank).
+- Impacted Milestones: M35 CLOSED (tag v1.0.36). M36 OPEN (playtest agent, then bugs A/B). R-M35-1
+  carried forward.
+- Risk Notes: (1) Bug A (FM-PAC SRAM) touches `src/devices/audio` (OPLL/FM-PAC) memory mapping +
+  `src/machine` wiring — DEVICE-level, NOT cpu/core, so ZEXALL stays withheld unless a genuine
+  core edit appears. (2) Bug B may be FDC or VDP — the playtest agent's deterministic repro is the
+  first M36 deliverable to localize it before any fix. (3) R-M35-1's test-strengthening should
+  ride along once the playtest agent can drive F11 end-to-end.
+- Effective Date: 2026-07-10

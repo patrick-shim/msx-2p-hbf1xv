@@ -1251,5 +1251,15 @@ Use one section per milestone.
 - Origin: human-authorized during live YS II play (disk1 booted, reached "INSERT DATADISK IN DRIVE
   A - RET"). Scope override of the tentative F2/M35-era label — F2 (printer depth) re-deferred per
   DEC-0048.
-- Status: **PLANNING** (planner-first; REQ-M35-001 issued to msx-planner). Awaiting the M35 planner
-  package (`docs/m35-planner-package.md`).
+- Status: **CLOSED (DEC-0049, 2026-07-10, tag v1.0.36)** — LIVE HUMAN-VALIDATED: the human booted
+  YS II from disk1, hit the real "INSERT DATADISK IN DRIVE A - RET" prompt, pressed F11 (title →
+  disk2.dsk, stderr logged the swap), pressed RET, and the game read disk 2 and continued into
+  gameplay (the authoritative acceptance signal). Evidence: headless 183/183, SDL3-ON 194/194 (2
+  new M35 test exes green); zero cpu/core edits; media-change via existing set_disk_changed(true).
+  Adversarial: mutation A killed the disk_swap unit test (real coverage); mutation B did NOT kill
+  the multi_disk integration test → residual **R-M35-1** (strengthen that test to assert the disk
+  index advances). QA-process incident (QA agent's git-checkout clobbered uncommitted work → false
+  FAIL; coordinator diagnosed/restored/committed checkpoint e360a5b and completed QA directly) —
+  recorded in DEC-0049; msx-qa agent given a non-destructive-mutation rule. Sign-off:
+  `docs/m35-qa-signoff.md`. Follow-on: **M36** (playtest/live-QA agent first, then the two live-
+  playtest bugs: FM-PAC SRAM "NO S-RAM AVAILABLE" + black-screen-on-building-entry).
