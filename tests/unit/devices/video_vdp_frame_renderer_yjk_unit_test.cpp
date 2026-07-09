@@ -55,6 +55,7 @@ int main() {
     //     R=G=y, B=clamp((5y+2)/4) (plain int division). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0E);   // GRAPHIC7 base
         set_register(vdp, 25, 0x08);  // YJK (no YAE) -> ScreenYjk
         const VdpFrameRenderer renderer(vdp);
@@ -85,6 +86,7 @@ int main() {
     //     with the unaffected J/K (bits 0-2 of p1 are unchanged). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0E);
         set_register(vdp, 25, 0x18);  // YJK + YAE -> ScreenYjkYae
         const VdpFrameRenderer renderer(vdp);

@@ -56,7 +56,7 @@ void set_palette(V9958Vdp& vdp, const int index, const std::uint8_t r3, const st
 
 void select_text2(V9958Vdp& vdp) {
     set_register(vdp, 0, 0x04);  // M4
-    set_register(vdp, 1, 0x10);  // M1 -> base 0x09 (TEXT2)
+    set_register(vdp, 1, 0x50);  // M1 -> base 0x09 (TEXT2)
 }
 
 }  // namespace
@@ -65,6 +65,7 @@ int main() {
     // --- Dimensions. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         select_text2(vdp);
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 480, "Text2_Width_Is480");
@@ -74,6 +75,7 @@ int main() {
     // --- Plain (non-blinking) content: name/pattern/color triple lookup. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         select_text2(vdp);
         set_register(vdp, 2, 0x00);   // name table base 0x0000
         set_register(vdp, 4, 0x01);   // pattern table base 0x0800
@@ -101,6 +103,7 @@ int main() {
     //     blink colors instead of the plain R#7 colors. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         select_text2(vdp);
         set_register(vdp, 2, 0x00);
         set_register(vdp, 4, 0x01);   // pattern table base 0x0800

@@ -86,7 +86,80 @@ public:
     };
     // Numeric stereo mix (fact-sheet §2: A=Center, B=Left, C=Right). Each channel
     // contributes its resolved 5-bit amplitude when audible.
+    //
+    // POINT-SAMPLE API, byte-kept by M34 (docs/m34-planner-package.md §2.3):
+    // returns the instantaneous level at the current generator state. The
+    // PRODUCTION sample path uses take_integrated_sample() below instead --
+    // point-sampling a 3.58 MHz-grain square at the ~44.2 kHz host rate
+    // aliases >Nyquist content into the audible band (DEC-0043 Defect A).
     [[nodiscard]] StereoSample sample() const;
+
+    // ------------------------------------------------------------------
+    // M34 box-average integration API (DEC-0043 Defect A;
+    // docs/m34-planner-package.md §2.3 contract).
+    //
+    // During advance_cycles(), the chip accumulates per-channel
+    //   Σ level_ch(t) × dwell_cycles
+    // into three uint64 integrals, where level_ch = channel_audible(ch) ?
+    // resolved_amplitude(ch) : 0 is piecewise-constant between generator
+    // steps. The dwell walk visits the TRUE chip-step boundaries: a head
+    // partial step from cycle_residual_, whole kCyclesPerGeneratorStep(16)-
+    // cycle steps, and a tail partial step.
+    //
+    // BOUNDARY CONVENTION (§2.3.3, load-bearing for every hand oracle): a
+    // generator step completing at cycle t changes the level effective AFTER
+    // cycle t -- the completing cycle's dwell belongs to the PRE-step level.
+    // Consequence: with window_cycles == 16 and a period-1 tone from reset,
+    // the integrated sequence is {0, 31, 0, 31, ...} where the point sampler
+    // produced {31, 0, 31, 0, ...}.
+    //
+    // take_integrated_sample(W) returns the exact box average over the
+    // accumulated window: left = round(intA+intB, W), right =
+    // round(intA+intC, W) (stereo law unchanged, fact-sheet §2), where
+    // round is the shared round-half-away-from-zero helper
+    // (dwell_rounding.h, §2.3.4), then resets the integrals. W == 0 returns
+    // {0, 0} (§2.3.5, the M26 pump idle case). PRECONDITION (§2.3.7): the
+    // caller advances exactly window_cycles between takes -- PsgAudioPump
+    // guarantees this by construction.
+    //
+    // FIXED-POINT PROPERTY: a constant summed level L over the whole window
+    // integrates to exactly L (dwell_rounding.h) -- silent stays exactly
+    // silent, constant stays exactly constant (the §2.5 oracle re-baseline
+    // rests on this).
+    //
+    // WHAT THE BOX FILTER HONESTLY IS (§2.4, disclosed simplification): the
+    // exact integer zero-order model of the analog output reconstruction;
+    // its frequency response is |sin(pi f T)/(pi f T)| (T = W/3,579,545 s),
+    // NOT a brickwall. Exact worst-case AC bounds of the box average for a
+    // full-volume tone (levels 0/A, half-period H = 16P, P = max(1, p),
+    // W = 81): |avg - A/2| <= A*B(P)/W with B(P) = H/2 when H <= W/2, else
+    // B(P) = H - W/2:
+    //
+    //  p | f (Hz)  | alias@44,192Hz | sinc atten.     | B(P) | per-ch bound  | 2-ch/side bound
+    //    |         |                |                 |cycles| (A=31,x400PCM)| + rounding
+    //  0/1 111,861 | 20,715         | 0.125 (-18.1dB) | 7.5  | <=1,148       | <=2,500
+    //  2 |  55,930 | 11,738         | 0.187 (-14.6dB) | 16   | <=2,449       | <=5,100
+    //  3 |  37,287 |  6,905         | 0.178 (-15.0dB) | 7.5  | <=1,148       | <=2,500
+    //  4 |  27,965 | 16,227         | 0.460 ( -6.7dB) | 23.5 | <=3,597       | <=7,400
+    //  5 |  22,372 | 21,820         | 0.629           | 39.5 | <=6,046       | <=12,300
+    // >=6| <=18,643| (passband)     | >=0.73 @18.6kHz | --   | --            | --
+    //
+    // Passband droop: -0.0004 dB @440 Hz, -0.007 dB @1 kHz, -0.18 dB @5 kHz,
+    // -0.74 dB @10 kHz, -1.72 dB @15 kHz.
+    //
+    // HONEST STATEMENT (package §2.4, verbatim-in-spirit): the box filter
+    // fully resolves the actual defect (the p=0/1 ~112 kHz silence idiom:
+    // >=18 dB down AND the residual parked at ~20.7 kHz), but periods 2-4
+    // receive only PARTIAL suppression (audible-band aliases at up to
+    // ~19%/46% of channel amplitude per the table), and the audible band has
+    // sinc rolloff. This is a disclosed simplification vs openMSX's true
+    // band-limited resampling (references/openmsx-21.0/src/sound/
+    // AY8910.cc:38-39,482 native-rate generation + ResampledSoundDevice.hh:
+    // 23,29,46-48 / BlipBuffer.hh:1-28 band-limited resampling -- behaviour
+    // reference only, never copied); genuine band-limited depth is the named
+    // E-series backlog row (agent-protocol/state/deferred-backlog.md).
+    // ------------------------------------------------------------------
+    [[nodiscard]] StereoSample take_integrated_sample(std::uint64_t window_cycles);
 
     // Introspection for deterministic tests.
     [[nodiscard]] std::uint16_t tone_period(int channel) const;   // 12-bit
@@ -148,6 +221,10 @@ private:
     Noise noise_{};
     Envelope envelope_{};
     std::uint64_t cycle_residual_ = 0;
+    // M34: per-channel Σ level×dwell accumulators for take_integrated_sample()
+    // (§2.3 contract above). Levels are 0..31, so the integral stays far from
+    // uint64 overflow for any realistic window.
+    std::array<std::uint64_t, 3> level_dwell_integral_{};
     PsgPortSource* port_source_ = nullptr;
 };
 

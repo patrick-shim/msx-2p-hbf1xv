@@ -3,14 +3,23 @@
 //
 // THE M31 HARD REGRESSION ORACLE lives here: with fm == nullptr AND
 // separately with a real-but-silent (never-keyed) Ym2413Opll attached, the
-// mixer's PCM output must be BYTE-IDENTICAL to the v1.0.31 3-arg arithmetic
+// mixer's PCM output must be BYTE-IDENTICAL to the 3-arg zero-FM arithmetic
 // for any input sequence -- reproduced below against independent twins
-// driven by the raw PsgAudioPump + the literal pre-M31 conversion loop (the
-// exact M29 zero-SCC oracle pattern). Plus: the documented three-source
-// mixing law against a lock-step FM twin, the REQUIRED int16 clamp at a
+// driven by the raw PsgAudioPump + the literal conversion loop (the exact
+// M29 zero-SCC oracle pattern). Plus: the documented three-source mixing
+// law against a lock-step FM twin, the REQUIRED int16 clamp at a
 // constructed saturation input (R-M31-4), the exact 9:8 native-tick
 // decimation pattern (8 x 81 cycles = 648 = 9 x 72, planner §2.5), and
 // two-run determinism.
+//
+// M34 RE-GROUNDING NOTE (2026-07-09, docs/m34-planner-package.md §2.5 row 4,
+// disposition G): PsgAudioPump now produces box-average integrated samples
+// (DEC-0043 Defect A), so the byte-identity arms recompute through the same
+// integrated pump on both sides -- the MEANING survives intact: a nullptr
+// or silent-attached FM contributes EXACTLY 0 to every sample. The FM
+// native path (advance + fm_sample + k=21) is byte-untouched by M34; the
+// clamp/decimation/determinism cases are constants + FM-native properties
+// and hold UNMODIFIED (verified at M34, not assumed).
 
 #include <algorithm>
 #include <cstdint>
@@ -92,8 +101,10 @@ void program_fm_tone_channel(Ym2413Opll& opll, const int channel) {
     write_reg(opll, 0x20 + channel, 0x19);  // key-on, block 4, fnum 256
 }
 
-// The literal pre-M31 (v1.0.31) presenter/mixer arithmetic, reproduced
-// independently: PSG pump * 400 (+ SCC term) with the int16 clamp.
+// The literal zero-FM presenter/mixer arithmetic, reproduced independently:
+// PSG pump * 400 (+ SCC term) with the int16 clamp. M34 re-grounding (§2.5
+// row 4): the pump is the integrated-sample pump on both sides -- this twin
+// still proves the fm term is exactly 0 when fm is null/silent.
 std::vector<std::int16_t> reference_pre_m31(PsgYm2149& psg, const std::size_t count) {
     const PsgAudioPump pump(kCyclesPerSample);
     std::vector<std::int16_t> reference;

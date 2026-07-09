@@ -12,12 +12,23 @@
 // §2.4; backlog G1)
 //
 // THE HARD REGRESSION ORACLE lives here: with zero SCC sources attached, the
-// mixer's PCM output must be BYTE-IDENTICAL to the pre-M29 presenter
-// arithmetic (psg_raw * 400 per channel, clamped to int16) for any input
-// sequence -- reproduced below against an independent PSG twin driven by the
-// raw PsgAudioPump + the literal pre-M29 conversion loop. Plus the
-// documented clamp formula with SCC sources (hand-computed cases incl. a
-// constructed saturation input, risk R-M29-4) and two-run determinism.
+// mixer's PCM output must be BYTE-IDENTICAL to the bare-pump presenter
+// arithmetic (psg pump sample * 400 per channel, clamped to int16) for any
+// input sequence -- reproduced below against an independent PSG twin driven
+// by the raw PsgAudioPump + the literal conversion loop. Plus the documented
+// clamp formula with SCC sources (hand-computed cases incl. a constructed
+// saturation input, risk R-M29-4) and two-run determinism.
+//
+// M34 RE-GROUNDING NOTE (2026-07-09, docs/m34-planner-package.md §2.5 row 3,
+// disposition G): PsgAudioPump::pump_one_sample() now produces box-average
+// integrated samples (DEC-0043 Defect A), so BOTH sides of case 1 compute
+// through the same integrated pump -- the oracle's MEANING is unchanged and
+// still load-bearing: an absent/null SCC source contributes EXACTLY 0 to
+// every sample for ANY input sequence. Cases 2-5 are constant-signal fixed
+// points of the §2.3.4 rounding law (constant level L integrates to exactly
+// L), so their hand-computed values (720 / 32,767 / 31,940) hold UNCHANGED
+// -- verified at M34, not assumed; any motion in them is an integration
+// bug, never a rebaseline.
 
 namespace {
 
@@ -113,8 +124,11 @@ int main() {
         const std::vector<std::int16_t> mixed = mixer.mix_interleaved_stereo(
             psg_mixer, MachineAudioMixer::SccSources{nullptr, nullptr}, 2000);
 
-        // The literal pre-M29 presenter loop (sdl3_audio_presenter.cpp @
-        // v1.0.29): pump_samples + s.{left,right} * 400, clamped.
+        // The literal pre-M29 presenter loop shape (sdl3_audio_presenter.cpp
+        // @ v1.0.29): pump_samples + s.{left,right} * 400, clamped. M34
+        // re-grounding (§2.5 row 3): the pump inside is now the integrated-
+        // sample pump on both sides -- the oracle still proves the mixer's
+        // zero-SCC path adds exactly 0.
         const PsgAudioPump pump(kCyclesPerSample);
         const std::vector<PsgYm2149::StereoSample> samples = pump.pump_samples(psg_reference, 2000);
         std::vector<std::int16_t> reference;

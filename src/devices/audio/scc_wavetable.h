@@ -110,9 +110,60 @@ public:
     void advance_cycles(std::uint64_t delta_cycles);
 
     // AC mix sum over the enabled channels (range ~ +-600, fact-sheet §5).
+    //
+    // POINT-SAMPLE API, byte-kept by M34 (docs/m34-planner-package.md §2.3):
+    // the instantaneous held-output sum. The PRODUCTION mix path uses
+    // take_integrated_sample() below (DEC-0043 Defect A: point-sampling
+    // aliases >Nyquist wavetable stepping into the audible band).
     [[nodiscard]] std::int32_t sample() const;
     // The literal De Schrijder form: 640 + sample() (range +40..+1235).
     [[nodiscard]] std::int32_t amp_out() const;
+
+    // ------------------------------------------------------------------
+    // M34 box-average integration API (DEC-0043 Defect A;
+    // docs/m34-planner-package.md §2.3 contract -- the same paired-API shape
+    // as PsgYm2149::take_integrated_sample()).
+    //
+    // During advance_cycles(), one mono int64 integral accumulates
+    // Σ level(t) × dwell_cycles over the enabled channels, walked at each
+    // channel's OWN (period+1)-master-cycle position-step boundaries: a
+    // stopped channel (period <= 8) holds out_ constant and contributes
+    // exactly out × delta; a running channel contributes its held output per
+    // dwell segment, refreshed at every position step (which is also where
+    // pending volume/wave writes become audible -- fact-sheet §4 latching,
+    // unchanged). Channel-enable gating matches sample() exactly (enable_
+    // bit clear => the channel contributes 0 to the integral while its phase
+    // keeps running).
+    //
+    // BOUNDARY CONVENTION (§2.3.3): a position step completing at cycle t
+    // changes the level effective AFTER cycle t -- the completing cycle's
+    // dwell belongs to the pre-step held output.
+    //
+    // take_integrated_sample(W) returns round(integral, W) via the shared
+    // round-half-away-from-zero helper (dwell_rounding.h, §2.3.4), then
+    // resets the integral. W == 0 returns 0 (§2.3.5). PRECONDITION
+    // (§2.3.7): the caller advances exactly window_cycles between takes
+    // (MachineAudioMixer guarantees this by construction). FIXED-POINT
+    // PROPERTY: a constant summed level L integrates to exactly L.
+    //
+    // WHAT THE BOX FILTER HONESTLY IS (package §2.4, disclosed
+    // simplification -- the SAME response as the PSG side, T = W/3,579,545 s):
+    // |H(f)| = |sin(pi f T)/(pi f T)| -- a sinc, NOT a brickwall. For a
+    // full-volume PSG-style square of half-period H cycles and W = 81 the
+    // exact worst-case AC bound is A*B/W with B = H/2 (H <= W/2) else
+    // H - W/2; the per-period consequence table (p = 0..5 rows, partial
+    // suppression at p=2/4, passband droop -0.007 dB @1 kHz .. -1.72 dB
+    // @15 kHz) is recorded in full in psg_ym2149.h's contract block and
+    // applies unchanged to SCC content at the same step rates: ultrasonic
+    // stepping (period+1 <= ~40 cycles) is strongly suppressed but NOT
+    // erased; audible-band wavetable playback sees only sinc rolloff. This
+    // is a disclosed simplification vs openMSX's true band-limited
+    // resampling (references/openmsx-21.0/src/sound/ResampledSoundDevice.hh:
+    // 23,29,46-48, BlipBuffer.hh:1-28 -- behaviour reference only, never
+    // copied); genuine band-limited depth is the named E-series backlog row
+    // (agent-protocol/state/deferred-backlog.md).
+    // ------------------------------------------------------------------
+    [[nodiscard]] std::int32_t take_integrated_sample(std::uint64_t window_cycles);
 
     // Introspection for deterministic tests (side-effect free).
     [[nodiscard]] std::int8_t wave(int channel, int index) const;
@@ -153,6 +204,10 @@ private:
     // deform-register changes and by period writes under deform bit5 (the
     // Artag-confirmed resync, fact-sheet §6 bit5 row).
     std::uint64_t deform_cycles_ = 0;
+    // M34: mono Σ level×dwell accumulator for take_integrated_sample()
+    // (§2.3 contract above). |level| <= 600, so int64 never overflows for
+    // any realistic window.
+    std::int64_t level_dwell_integral_ = 0;
 };
 
 }  // namespace sony_msx::devices::audio

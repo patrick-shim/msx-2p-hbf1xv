@@ -1185,3 +1185,53 @@ Use one section per milestone.
   (docs slice delegated to msx-developer, RESP-M33-001); no device-behavior change, so the
   planner/QA cycle was not convened per the DEC-0041 charter (the human's directive was the
   spec; the 186/186 gate + protected-file validation is the evidence).
+
+
+## M34 (Kickoff 2026-07-09, DEC-0043 — the playtest defect pair; tag v1.0.35)
+
+- Milestone ID: M34
+- Title: PSG/SCC band-limited box-average integration (Defect A) + R#1 BL display-enable
+  render gate (Defect B)
+- Charter: DEC-0043 — two coordinator-triaged v1.0.33/v1.0.34 playtest defects. (A) the
+  Aleste 2 title-to-weapon-select transition "beee bbee bip": PSG/SCC point-sampling aliased
+  the game's period-0 silence idiom (~112 kHz on real hardware, analog-smoothed to DC) into a
+  loud ~20.6 kHz audible tone. (B) the Metal Gear room-transition "slow fill": the background
+  renderer ignored R#1 bit6 (BL, display-enable) and drew half-rewritten VRAM instead of the
+  backdrop wipe real hardware shows.
+- Package: docs/m34-planner-package.md (RESP-M34-001: Q1 single box-average filter with honest
+  p=2-4 partial-suppression disclosure; Q2 regenerate m27-example-tone.wav — both ratified).
+- Deliverables (RESP-M34-002/003): (A) NEW src/devices/audio/dwell_rounding.h (shared
+  round-half-away-from-zero, fixed-point-proven) + additive PsgYm2149/SccWavetable
+  take_integrated_sample(window) walking level×dwell accumulators at true chip-step boundaries
+  (PSG 16-cycle step incl. cycle_residual_ phase; SCC per-channel (period+1) steps); point
+  sample()/amp_out() byte-kept; PsgAudioPump + MachineAudioMixer SCC term switched (FM branch
+  byte-identical). (B) one BL gate at the top of VdpFrameRenderer::render_line() (BL=0 =>
+  border_color() fill, content+sprites+MSK skipped) — closes the pre-M34 asymmetry (sprites
+  honored BL, background did not); shared by the legacy renderer AND the M32 accumulator, so
+  M32 static-frame equivalence holds by construction and the L+1 latch comes free. 6 new
+  deterministic tests + the Aleste ultrasonic regression system oracle; the 16-surface audio
+  byte-oracle re-baseline (anti-tautology discipline); permanent A/B tooling
+  (tools/openmsx-m34-aleste-audio-ab.ps1, tools/openmsx-m34-mg-bl-ab.ps1) + the committed
+  Aleste-play capture recipe (tools/capture-aleste-play-evidence.ps1 +
+  tools/aleste-play-evidence-input.script).
+- Evidence: headless fast **183/183** (171+... incl. 6 new); SDL3-ON fast **192/192**;
+  Aleste regression zero burst blocks post-fix (17 pre-fix), residual ~500 RMS @ 20.7 kHz;
+  ultrasonic oracle p=0..4 bounds met (2400/2400/2800/2400/7200); midband fidelity ac_rms ==
+  sinc predictor; openMSX audio A/B silence-property PARITY; MG BL S4 OUTCOME (a) — the game
+  genuinely blanks (ours f4173→f4191, openMSX ref f4175→f4201); BL pure-backdrop + L+1 latch +
+  accumulator BL=0 equivalence green. QA mutations 3/3 killed (hash-verified restoration).
+  Committed-evidence sweep byte-identical EXCEPT the four m32-aleste-play gameplay PNGs — BOTH
+  escalations independently CONFIRMED by QA (rows 14-15 = Aleste's real BL=0 blank at display
+  line 13; f3000 rows 99-117 = M34-independent recipe residue via the gate-removed
+  discriminator) — REGENERATED in place from the now-committed recipe (two-run byte-identical,
+  f2600 byte-stable; originals at tag v1.0.34). Audio evidence regenerated (m27-example-tone;
+  m32-fm-aleste fmON/fmOFF FM peak 3,780). Zero src/devices/cpu//src/core/ edits (ZEXALL
+  correctly withheld). Ledger: NEW row E4 (true band-limited resampling depth); D8/D9
+  cross-notes.
+- Status: **CLOSED (DEC-0045, 2026-07-09, tag v1.0.35)** — QA CONDITIONAL PASS
+  (docs/m34-qa-signoff.md, RESP-M34-003): independent fresh-build 183/183 + 192/192; every
+  audio oracle re-derived; §2.5 anti-tautology audit held (motion-is-a-bug rows byte-frozen);
+  both escalations CONFIRMED; hard constraints clean. Three closure-hygiene conditions all
+  discharged (Aleste PNGs regenerated w/ committed recipe; settings.json excluded; git add -f
+  applied per DEC-0044). R-M34-1 (20.7 kHz residual audibility) awaits the human's live
+  re-check as its final acceptance signal.

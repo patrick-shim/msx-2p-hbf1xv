@@ -68,6 +68,7 @@ int main() {
     //     unscrolled. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         // GRAPHIC1 is the reset/default mode.
         set_palette(vdp, 5, 5, 1, 1);
         set_palette(vdp, 9, 1, 1, 5);
@@ -88,6 +89,7 @@ int main() {
     //     (CharacterConverter.cc:255-270). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 4, 0x01);   // pattern table base 0x0800 (avoid aliasing name/color)
         set_register(vdp, 3, 0x40);   // color table base 0x1000
         set_palette(vdp, 6, 2, 2, 2);
@@ -107,6 +109,7 @@ int main() {
     //     read by one full 128-byte row. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_palette(vdp, 0xC, 3, 3, 3);
         set_palette(vdp, 0xD, 4, 4, 4);
@@ -126,6 +129,7 @@ int main() {
     //     SDLRasterizer.cc:465-471. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_palette(vdp, 0xC, 6, 0, 0);
         write_vram(vdp, 4, 0xC0);    // byte4 -> pixel8 = palette 0xC
@@ -139,6 +143,7 @@ int main() {
     }
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);
         set_palette(vdp, 0xF, 0, 6, 0);
         write_vram(vdp, 1, 0x0F);   // byte1 low nibble -> pixel3 = palette 0xF
@@ -155,6 +160,7 @@ int main() {
     //     border color; pixel 8 onward is unaffected content (VDP.hh:353-360). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_register(vdp, 7, 0x05);  // backdrop index 5
         set_palette(vdp, 5, 7, 0, 0);
@@ -179,6 +185,7 @@ int main() {
     //     even page, even though R#2 selects the odd page (VDP.hh:362-370). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_palette(vdp, 1, 1, 0, 0);
         set_palette(vdp, 2, 0, 1, 0);
@@ -215,6 +222,7 @@ int main() {
     //     Field::Even/Progressive select the configured page. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0A);  // GRAPHIC6 (planar; 1-bit page selector)
         set_palette(vdp, 1, 1, 0, 0);
         set_palette(vdp, 2, 0, 1, 0);

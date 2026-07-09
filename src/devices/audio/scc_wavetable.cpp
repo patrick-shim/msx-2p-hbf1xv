@@ -1,5 +1,7 @@
 #include "devices/audio/scc_wavetable.h"
 
+#include "devices/audio/dwell_rounding.h"
+
 namespace sony_msx::devices::audio {
 
 namespace {
@@ -28,6 +30,7 @@ void SccWavetable::reset() {
     rotate_.fill(false);
     read_only_.fill(false);
     deform_cycles_ = 0;
+    level_dwell_integral_ = 0;
     // Held outputs refreshed from the power-on wave/volume state.
     for (int ch = 0; ch < kChannels; ++ch) {
         out_[static_cast<std::size_t>(ch)] = adjust(ch);
@@ -222,25 +225,60 @@ void SccWavetable::advance_cycles(const std::uint64_t delta_cycles) {
     deform_cycles_ += delta_cycles;  // rotation time base (A-M29-6)
     for (int ch = 0; ch < kChannels; ++ch) {
         const auto i = static_cast<std::size_t>(ch);
+        // M34 (§2.3.2): enable gating of the dwell integral matches sample()
+        // exactly -- a disabled channel contributes 0 while its phase keeps
+        // running.
+        const bool enabled = ((enable_ >> ch) & 1) != 0;
         if (period_[i] <= 8) {
             // NYYRIKKI: a period value under 9 stops the sample counter
             // entirely -- the current output byte is held (fact-sheet §4,
-            // §9.2 arbitration; count deliberately NOT accumulated).
+            // §9.2 arbitration; count deliberately NOT accumulated). Held
+            // output constant across the whole delta => exact contribution
+            // out × delta (M34 §2.3.2).
+            if (enabled) {
+                level_dwell_integral_ +=
+                    static_cast<std::int64_t>(out_[i]) * static_cast<std::int64_t>(delta_cycles);
+            }
             continue;
         }
+        // M34 dwell walk at the channel's own (period+1)-master-cycle
+        // position-step boundaries. Phase-state evolution (count_/pos_/out_)
+        // is IDENTICAL to the pre-M34 bulk advance; only the Σ level×dwell
+        // bookkeeping is new. Boundary convention (§2.3.3): the completing
+        // cycle's dwell belongs to the PRE-step held output.
         const std::uint64_t step_cycles = static_cast<std::uint64_t>(period_[i]) + 1;
-        count_[i] += delta_cycles;
-        const std::uint64_t steps = count_[i] / step_cycles;
-        count_[i] %= step_cycles;
-        if (steps != 0) {
-            pos_[i] = static_cast<std::uint8_t>((pos_[i] + steps) % kWaveLength);
-            // Held output refreshed at the position step -- this is where
-            // pending volume/wave writes become audible (fact-sheet §4).
-            // Refreshed for disabled channels too (phase keeps running;
-            // sample() gates the contribution).
-            out_[i] = adjust(ch);
+        std::uint64_t remaining = delta_cycles;
+        while (remaining > 0) {
+            const std::uint64_t to_boundary = step_cycles - count_[i];
+            const std::uint64_t dwell = remaining < to_boundary ? remaining : to_boundary;
+            if (enabled) {
+                level_dwell_integral_ +=
+                    static_cast<std::int64_t>(out_[i]) * static_cast<std::int64_t>(dwell);
+            }
+            count_[i] += dwell;
+            remaining -= dwell;
+            if (count_[i] == step_cycles) {
+                count_[i] = 0;
+                pos_[i] = static_cast<std::uint8_t>((pos_[i] + 1) % kWaveLength);
+                // Held output refreshed at the position step -- this is where
+                // pending volume/wave writes become audible (fact-sheet §4).
+                // Refreshed for disabled channels too (phase keeps running;
+                // sample()/the integral gate the contribution).
+                out_[i] = adjust(ch);
+            }
         }
     }
+}
+
+std::int32_t SccWavetable::take_integrated_sample(const std::uint64_t window_cycles) {
+    const std::int64_t integral = level_dwell_integral_;
+    level_dwell_integral_ = 0;
+    if (window_cycles == 0) {
+        // §2.3.5 zero-window guard: silence, no division.
+        return 0;
+    }
+    return static_cast<std::int32_t>(
+        round_div_half_away_from_zero(integral, static_cast<std::int64_t>(window_cycles)));
 }
 
 std::int32_t SccWavetable::sample() const {

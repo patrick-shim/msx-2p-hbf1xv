@@ -50,12 +50,18 @@ void program_channel_a_square_wave(PsgYm2149& psg) {
 }  // namespace
 
 int main() {
-    // --- Case 1: cycles_per_sample == kCyclesPerGeneratorStep (16) -- exactly
-    // one generator step per sample, zero residual carry-over. With
-    // period=1, Tone::advance() toggles output on EVERY generator step (see
-    // psg_ym2149.cpp Tone::advance: ++count(1) >= period(1) -> reset + toggle
-    // every single step) -- output starts 0 (post-reset default) and
-    // alternates 1,0,1,0,... one toggle per pump call. ---
+    // --- Case 1 (M34-RE-DERIVED, docs/m34-planner-package.md §2.5 row 1;
+    // dwell math authored BEFORE execution): cycles_per_sample ==
+    // kCyclesPerGeneratorStep (16) -- exactly one generator step per sample.
+    // With period=1 the tone toggles at EVERY step; under the §2.3.3
+    // boundary convention the step completing at cycle t changes the level
+    // AFTER cycle t, so level(t) = 31 iff floor((t-1)/16) is odd. Window k
+    // covers cycles [16k+1, 16k+16] -- entirely inside block k:
+    //   w0 = block0 (low)  -> 0        w1 = block1 (high) -> 31
+    // Integrated sequence {0, 31, 0, 31, 0, 31} -- the EXACT flip of the
+    // pre-M34 point-sample oracle {31, 0, ...} (the point sampler read the
+    // level AFTER the window's closing toggle; the box average reads the
+    // level DURING the window). ---
     {
         PsgYm2149 psg;
         psg.reset();
@@ -65,7 +71,7 @@ int main() {
         const std::vector<PsgYm2149::StereoSample> samples = pump.pump_samples(psg, 6);
 
         expect(samples.size() == 6, "OneStepPerSample_CollectsRequestedSampleCount");
-        const std::array<std::int32_t, 6> expected_left{31, 0, 31, 0, 31, 0};
+        const std::array<std::int32_t, 6> expected_left{0, 31, 0, 31, 0, 31};
         bool all_left_match = true;
         bool all_right_match = true;
         for (std::size_t i = 0; i < samples.size(); ++i) {
@@ -78,17 +84,23 @@ int main() {
                 all_right_match = false;
             }
         }
-        expect(all_left_match, "OneStepPerSample_LeftChannel_MatchesHandComputedSquareWaveOracle");
-        expect(all_right_match, "OneStepPerSample_RightChannel_MatchesHandComputedSquareWaveOracle");
+        expect(all_left_match, "OneStepPerSample_LeftChannel_MatchesHandComputedDwellOracle");
+        expect(all_right_match, "OneStepPerSample_RightChannel_MatchesHandComputedDwellOracle");
     }
 
-    // --- Case 2: cycles_per_sample == kCyclesPerGeneratorStep/2 (8) -- HALF a
-    // generator step per pump call, proving cycle_residual_ genuinely
-    // accumulates FRACTIONAL cycles correctly ACROSS repeated pump_one_sample
-    // calls (the real wiring hazard R-M26-4 names: an untested-in-anger
-    // real-time-driven consumer). A toggle-eligible step only completes every
-    // SECOND call: [no-advance, advance(toggle), no-advance, advance(toggle),
-    // no-advance, advance(toggle)] -> output sequence 0,1,1,0,0,1. ---
+    // --- Case 2 (M34-RE-DERIVED, §2.5 row 1; dwell math authored BEFORE
+    // execution): cycles_per_sample == kCyclesPerGeneratorStep/2 (8) -- HALF
+    // a generator step per pump call, proving cycle_residual_ genuinely
+    // accumulates FRACTIONAL cycles across repeated pump_one_sample calls
+    // (R-M26-4's wiring hazard, unchanged). Same level timeline as case 1
+    // (level = 31 iff floor((t-1)/16) odd); windows of 8 cycles:
+    //   w0 = cycles  1- 8 (low)  -> 0     w1 = cycles  9-16 (low)  -> 0
+    //   w2 = cycles 17-24 (high) -> 31    w3 = cycles 25-32 (high) -> 31
+    //   w4 = cycles 33-40 (low)  -> 0     w5 = cycles 41-48 (low)  -> 0
+    // Every 8-cycle window sits entirely inside one 16-cycle level block, so
+    // each sample is an exact constant -- {0, 0, 31, 31, 0, 0} (the pre-M34
+    // point oracle was {0, 31, 31, 0, 0, 31}: it read the post-toggle level
+    // at windows 1/3/5). ---
     {
         PsgYm2149 psg;
         psg.reset();
@@ -97,7 +109,7 @@ int main() {
         const PsgAudioPump pump(PsgYm2149::kCyclesPerGeneratorStep / 2);
         const std::vector<PsgYm2149::StereoSample> samples = pump.pump_samples(psg, 6);
 
-        const std::array<std::int32_t, 6> expected_left{0, 31, 31, 0, 0, 31};
+        const std::array<std::int32_t, 6> expected_left{0, 0, 31, 31, 0, 0};
         bool all_match = true;
         for (std::size_t i = 0; i < samples.size(); ++i) {
             if (samples[i].left != expected_left[i] || samples[i].right != expected_left[i]) {

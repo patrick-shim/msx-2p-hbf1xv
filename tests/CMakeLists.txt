@@ -1021,6 +1021,18 @@ add_executable(devices_audio_scc_wavetable_unit_test
 target_link_libraries(devices_audio_scc_wavetable_unit_test PRIVATE sony_msx_core)
 add_test(NAME devices_audio_scc_wavetable_unit_test COMMAND devices_audio_scc_wavetable_unit_test)
 
+# --- M34 playtest defect pair (DEC-0043, docs/m34-planner-package.md):
+#     Defect A = PSG/SCC box-average integration (the shared rounding helper
+#     + chip-level dwell oracles extend the existing chip unit tests above;
+#     the new mixer-level ultrasonic/mid-band oracles and the Aleste
+#     regression live further below); Defect B = the R#1 BL render gate
+#     (renderer BL unit test + L+1 latch integration test below).
+add_executable(devices_audio_dwell_rounding_unit_test
+    unit/devices/audio_dwell_rounding_unit_test.cpp
+)
+target_link_libraries(devices_audio_dwell_rounding_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_audio_dwell_rounding_unit_test COMMAND devices_audio_dwell_rounding_unit_test)
+
 add_executable(devices_cartridge_konami_scc_rom_unit_test
     unit/devices/cartridge/cartridge_konami_scc_rom_unit_test.cpp
 )
@@ -1299,6 +1311,55 @@ add_executable(frontend_machine_audio_mixer_loudness_ratio_unit_test
 target_link_libraries(frontend_machine_audio_mixer_loudness_ratio_unit_test PRIVATE sony_msx_core)
 add_test(NAME frontend_machine_audio_mixer_loudness_ratio_unit_test
     COMMAND frontend_machine_audio_mixer_loudness_ratio_unit_test)
+
+# --- M34-S3 Defect-A hard oracles (DEC-0043, docs/m34-planner-package.md
+#     §2.6): the ultrasonic-silence family (exact §2.4 dwell bounds p=0..4 +
+#     the 1 kHz control arm + SCC fixed-point arm), the mid-band fidelity
+#     oracle (exact 12,400 peak / transition confinement / RMS vs the
+#     ideal-square predictor), and the Aleste transition regression (the
+#     recorded m32 smoke recipe, frames 2150-2350, ZCR burst metric --
+#     asset-gated skip per the DEC-0016 discipline). ---
+add_executable(frontend_machine_audio_mixer_ultrasonic_silence_unit_test
+    unit/frontend/machine_audio_mixer_ultrasonic_silence_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_ultrasonic_silence_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_ultrasonic_silence_unit_test
+    COMMAND frontend_machine_audio_mixer_ultrasonic_silence_unit_test)
+
+add_executable(frontend_machine_audio_mixer_midband_fidelity_unit_test
+    unit/frontend/machine_audio_mixer_midband_fidelity_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_midband_fidelity_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_midband_fidelity_unit_test
+    COMMAND frontend_machine_audio_mixer_midband_fidelity_unit_test)
+
+add_executable(hbf1xv_m34_aleste_ultrasonic_regression_system_test
+    system/hbf1xv_m34_aleste_ultrasonic_regression_system_test.cpp
+)
+target_link_libraries(hbf1xv_m34_aleste_ultrasonic_regression_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m34_aleste_ultrasonic_regression_system_test PRIVATE
+    SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+    SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME hbf1xv_m34_aleste_ultrasonic_regression_system_test
+    COMMAND hbf1xv_m34_aleste_ultrasonic_regression_system_test)
+
+# --- M34-S5 Defect-B hard oracles (DEC-0043, docs/m34-planner-package.md
+#     §3.4): the R#1 BL render-gate unit oracle (per-mode pure backdrop +
+#     sprites-absent + BL=1 content) and the machine-level L+1 BL latch
+#     through the REAL seam (+ debug-seam exclusion + determinism). ---
+add_executable(devices_vdp_frame_renderer_bl_unit_test
+    unit/devices/video_vdp_frame_renderer_bl_unit_test.cpp
+)
+target_link_libraries(devices_vdp_frame_renderer_bl_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_vdp_frame_renderer_bl_unit_test
+    COMMAND devices_vdp_frame_renderer_bl_unit_test)
+
+add_executable(machine_hbf1xv_m34_bl_latch_integration_test
+    integration/machine/hbf1xv_m34_bl_latch_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m34_bl_latch_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m34_bl_latch_integration_test
+    COMMAND machine_hbf1xv_m34_bl_latch_integration_test)
 
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The

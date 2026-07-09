@@ -139,23 +139,36 @@ FrameBuffer accumulate_chunked(VdpScanlineAccumulator& acc, const VdpFrameRender
 }  // namespace
 
 int main() {
+    // M34 re-grounding (docs/m34-planner-package.md §3.4.2): every content
+    // row now sets R#1 bit6 (BL, display enable) -- the M34 render gate
+    // blanks BL=0 lines, and pre-M34 the background renderer simply ignored
+    // the bit, so adding it preserves each row's rendered bytes while
+    // keeping the row a genuine CONTENT-equivalence case. The matrix
+    // additionally gains explicit BL=0 configurations (pure-backdrop lines):
+    // the accumulator-vs-legacy equivalence must hold for them by
+    // construction (the gate lives inside the shared render_line()).
     const ModeConfig configs[] = {
         // name        R#0   R#1   R#25  R#23 sprites
-        {"Text1", 0x00, 0x10, 0x00, 0, false},
-        {"Text2", 0x04, 0x10, 0x00, 0, false},
-        {"Graphic1", 0x00, 0x00, 0x00, 0, false},
-        {"Graphic2", 0x02, 0x00, 0x00, 0, false},
-        {"Graphic3", 0x04, 0x00, 0x00, 0, false},
-        {"Multicolor", 0x00, 0x08, 0x00, 0, false},
-        {"Graphic4", 0x06, 0x00, 0x00, 0, false},
-        {"Graphic4_Scrolled", 0x06, 0x00, 0x00, 100, false},
+        {"Text1", 0x00, 0x50, 0x00, 0, false},
+        {"Text2", 0x04, 0x50, 0x00, 0, false},
+        {"Graphic1", 0x00, 0x40, 0x00, 0, false},
+        {"Graphic2", 0x02, 0x40, 0x00, 0, false},
+        {"Graphic3", 0x04, 0x40, 0x00, 0, false},
+        {"Multicolor", 0x00, 0x48, 0x00, 0, false},
+        {"Graphic4", 0x06, 0x40, 0x00, 0, false},
+        {"Graphic4_Scrolled", 0x06, 0x40, 0x00, 100, false},
         {"Graphic4_Sprites", 0x06, 0x40, 0x00, 0, true},
-        {"Graphic5", 0x08, 0x00, 0x00, 0, false},
-        {"Graphic6", 0x0A, 0x00, 0x00, 0, false},
-        {"Graphic7", 0x0E, 0x00, 0x00, 0, false},
-        {"ScreenYjk", 0x0E, 0x00, 0x08, 0, false},
-        {"ScreenYjkYae", 0x0E, 0x00, 0x18, 0, false},
-        {"Blank_UndefinedModeBits", 0x02, 0x10, 0x00, 0, false},
+        {"Graphic5", 0x08, 0x40, 0x00, 0, false},
+        {"Graphic6", 0x0A, 0x40, 0x00, 0, false},
+        {"Graphic7", 0x0E, 0x40, 0x00, 0, false},
+        {"ScreenYjk", 0x0E, 0x40, 0x08, 0, false},
+        {"ScreenYjkYae", 0x0E, 0x40, 0x18, 0, false},
+        {"Blank_UndefinedModeBits", 0x02, 0x50, 0x00, 0, false},
+        // M34 §3.4.2 BL=0 rows: the whole frame is backdrop on both sides.
+        {"Graphic4_BL0_Backdrop", 0x06, 0x00, 0x00, 0, false},
+        {"Text2_BL0_Backdrop", 0x04, 0x10, 0x00, 0, false},
+        {"Graphic7_BL0_Backdrop", 0x0E, 0x00, 0x00, 0, false},
+        {"Graphic4_BL0_SpritesConfigured", 0x06, 0x00, 0x00, 0, true},
     };
 
     // --- 1. AC-4 HARD ORACLE: randomized chunked accumulation ==

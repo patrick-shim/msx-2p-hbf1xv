@@ -57,6 +57,7 @@ int main() {
     // GRAPHIC1 is the reset/default mode (base 0x00) -- no R#0/R#1 write needed.
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 256, "Graphic1_Width_Is256");
         expect(renderer.height() == 192, "Graphic1_Height_Is192_WhenLnClear");
@@ -66,6 +67,7 @@ int main() {
     //     PER-CHARACTER-BLOCK color byte (not global R#7). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 2, 0x00);   // name table base 0x0000
         set_register(vdp, 4, 0x01);   // pattern table base 0x0800 (1<<11)
         set_register(vdp, 3, 0x40);   // color table base 0x1000 ((0x40<<6)|(0<<14))
@@ -97,6 +99,7 @@ int main() {
     //     content itself uses per-block colors). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 7, 0x03);  // backdrop index 3
         set_palette(vdp, 3, 4, 2, 0);
         const VdpFrameRenderer renderer(vdp);

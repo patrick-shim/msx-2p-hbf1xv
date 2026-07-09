@@ -62,6 +62,7 @@ int main() {
     //     raster lines. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x02);  // M3 -> GRAPHIC2 (base 0x04)
         set_register(vdp, 2, 0x00);  // name table base 0
         set_register(vdp, 4, 0x02);  // pattern table base 0x1000 (2<<11)
@@ -106,6 +107,7 @@ int main() {
     // --- GRAPHIC3 (base 0x08) reuses the SAME renderer as GRAPHIC2. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x04);  // M4 -> GRAPHIC3 (base 0x08)
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 256, "Graphic3_Width_Is256");
@@ -117,7 +119,8 @@ int main() {
     //     matching CharacterConverter.cc:299-325. ---
     {
         V9958Vdp vdp;
-        set_register(vdp, 1, 0x08);  // M2 -> MULTICOLOR (base 0x02)
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(vdp, 1, 0x48);  // M2 -> MULTICOLOR (base 0x02)
         set_register(vdp, 2, 0x00);  // name table base
         set_register(vdp, 4, 0x02);  // pattern table base 0x1000
         set_palette(vdp, 9, 1, 2, 3);
@@ -165,8 +168,9 @@ int main() {
     {
         // TEXT1Q: base 0x05 (M1 + M3).
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x02);  // M3
-        set_register(vdp, 1, 0x10);  // M1
+        set_register(vdp, 1, 0x50);  // M1
         set_palette(vdp, 15, 6, 6, 6);
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 256 && renderer.height() == 192, "Text1Q_Dimensions_256x192");
@@ -182,8 +186,9 @@ int main() {
     {
         // MULTIQ: base 0x06 (M2 + M3).
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x02);  // M3
-        set_register(vdp, 1, 0x08);  // M2
+        set_register(vdp, 1, 0x48);  // M2
         set_palette(vdp, 15, 3, 2, 1);
         const VdpFrameRenderer renderer(vdp);
         std::uint16_t row[256];
@@ -198,7 +203,8 @@ int main() {
     {
         // Unknown: base 0x03 (M1 + M2, no M3/M4/M5) -- not in the decoded set.
         V9958Vdp vdp;
-        set_register(vdp, 1, 0x18);  // M1 + M2
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(vdp, 1, 0x58);  // M1 + M2
         set_palette(vdp, 15, 1, 1, 1);
         const VdpFrameRenderer renderer(vdp);
         std::uint16_t row[256];

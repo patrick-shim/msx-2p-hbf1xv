@@ -69,14 +69,18 @@ int main() {
         expect(psg_raw_sum_to_pcm16(9999) == 32767, "PcmScale_OverMaxRaw_ClampedTo62");
     }
 
-    // --- Case 2: sample_rate_hz == kSystemClockHz (3579545, A-M27-5's own
-    // constant) -> cycles_per_sample == 1 exactly (a clean, hand-computable
-    // division). With Tone period=1 and kCyclesPerGeneratorStep=16, a full
-    // generator step (and therefore a toggle) only completes once every 16
-    // samples -- a real, deterministic, hand-computable oracle: 15 silent
-    // samples, then two audible ones (samples index 15 and 16 of a 17-sample
-    // run), proving the residual-cycle accumulation genuinely works across
-    // MANY pump_one_sample() calls. ---
+    // --- Case 2 (M34-RE-DERIVED, docs/m34-planner-package.md §2.5 row 2;
+    // dwell math authored BEFORE execution): sample_rate_hz == kSystemClockHz
+    // (3579545, A-M27-5's own constant) -> cycles_per_sample == 1 exactly. A
+    // W=1 box window degenerates to the DURING-cycle level (§2.3.6). With
+    // tone period=1 and kCyclesPerGeneratorStep=16, the first toggle
+    // completes AT cycle 16, and under the §2.3.3 boundary convention the
+    // completing cycle's dwell belongs to the PRE-step level -- so sample
+    // index i carries the level of cycle i+1: indices 0..15 (cycles 1..16)
+    // are silent and index 16 (cycle 17) is the first audible sample. The
+    // pre-M34 point sampler read the POST-toggle level at cycle 16, putting
+    // the first audible sample one index earlier (index 15) -- the §2.3.3
+    // one-index shift, re-derived here, not rebaselined blindly. ---
     {
         constexpr std::uint64_t kSampleRateHz = 3579545;
         constexpr std::size_t kSampleCount = 17;
@@ -109,15 +113,14 @@ int main() {
         expect(samples.size() == 17, "Oracle_SampleCount_Matches");
 
         std::vector<std::int32_t> expected_raw(17, 0);
-        expected_raw[15] = 31;
-        expected_raw[16] = 31;
+        expected_raw[16] = 31;  // cycle 17 -- the first cycle AFTER the toggle at cycle 16
         bool oracle_matches = true;
         for (std::size_t i = 0; i < samples.size(); ++i) {
             if (samples[i].left != expected_raw[i] || samples[i].right != expected_raw[i]) {
                 oracle_matches = false;
             }
         }
-        expect(oracle_matches, "Oracle_RawStereoSequence_MatchesHandComputedExpectation_15SilentThen2Audible");
+        expect(oracle_matches, "Oracle_RawStereoSequence_MatchesHandComputedExpectation_16SilentThen1Audible");
 
         std::vector<std::uint8_t> expected_pcm;
         expected_pcm.reserve(samples.size() * 4);

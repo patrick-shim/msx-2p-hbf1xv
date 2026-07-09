@@ -90,6 +90,7 @@ int main() {
     //     char0/row0's pattern byte. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 4, 1);     // pattern_base = 0x800
         set_register(vdp, 3, 0x10);  // color_base = 0x10<<6 = 0x400
         write_vram(vdp, 0x400, 0x79);  // fg=7, bg=9 (char code 0's color byte)
@@ -121,6 +122,7 @@ int main() {
     //     (scrMode = -1). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         write_vram(vdp, 0x800, 0x00);
         // R#25 CMD bit stays clear (reset default).
         set_dx(vdp, 0);

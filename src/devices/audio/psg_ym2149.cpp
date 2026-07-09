@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "devices/audio/dwell_rounding.h"
+
 namespace sony_msx::devices::audio {
 
 namespace {
@@ -146,6 +148,7 @@ void PsgYm2149::reset() {
     regs_.fill(0);
     address_ = 0;
     cycle_residual_ = 0;
+    level_dwell_integral_.fill(0);
     for (auto& t : tone_) {
         t.reset();
     }
@@ -291,18 +294,57 @@ std::uint8_t PsgYm2149::channel_amplitude(const int channel) const {
 }
 
 void PsgYm2149::advance_cycles(const std::uint64_t delta_cpu_cycles) {
-    cycle_residual_ += delta_cpu_cycles;
-    const std::uint64_t steps64 = cycle_residual_ / kCyclesPerGeneratorStep;
-    cycle_residual_ %= kCyclesPerGeneratorStep;
-    if (steps64 == 0) {
-        return;
+    // M34 dwell walk (docs/m34-planner-package.md §2.3.1): the level of each
+    // channel is piecewise-constant between generator steps, so the exact
+    // box integral is a walk over the true step boundaries -- head partial
+    // step from cycle_residual_, whole 16-cycle steps, tail partial step.
+    // Generator-state evolution is IDENTICAL to the pre-M34 bulk advance
+    // (same residual arithmetic, same per-step Tone/Noise/Envelope
+    // semantics); only the Σ level×dwell bookkeeping is new. Boundary
+    // convention (§2.3.3): the step completing at cycle t changes the level
+    // effective AFTER cycle t -- the completing cycle's dwell is accumulated
+    // at the PRE-step level.
+    std::uint64_t remaining = delta_cpu_cycles;
+    while (remaining > 0) {
+        const std::uint64_t to_boundary = kCyclesPerGeneratorStep - cycle_residual_;
+        const std::uint64_t dwell = remaining < to_boundary ? remaining : to_boundary;
+        for (int ch = 0; ch < 3; ++ch) {
+            if (channel_audible(ch)) {
+                level_dwell_integral_[static_cast<std::size_t>(ch)] +=
+                    static_cast<std::uint64_t>(resolved_amplitude(ch)) * dwell;
+            }
+        }
+        cycle_residual_ += dwell;
+        remaining -= dwell;
+        if (cycle_residual_ == kCyclesPerGeneratorStep) {
+            cycle_residual_ = 0;
+            for (auto& t : tone_) {
+                t.advance(1);
+            }
+            noise_.advance(1);
+            envelope_.advance(1);
+        }
     }
-    const int steps = static_cast<int>(steps64);
-    for (auto& t : tone_) {
-        t.advance(steps);
+}
+
+PsgYm2149::StereoSample PsgYm2149::take_integrated_sample(const std::uint64_t window_cycles) {
+    const std::uint64_t int_a = level_dwell_integral_[0];
+    const std::uint64_t int_b = level_dwell_integral_[1];
+    const std::uint64_t int_c = level_dwell_integral_[2];
+    level_dwell_integral_.fill(0);
+    if (window_cycles == 0) {
+        // §2.3.5 zero-window guard (the M26 pump idle case): silence, no
+        // division.
+        return {0, 0};
     }
-    noise_.advance(steps);
-    envelope_.advance(steps);
+    // Stereo law unchanged (fact-sheet §2: A=Center, B=Left, C=Right);
+    // rounding per the shared §2.3.4 helper.
+    const auto window = static_cast<std::int64_t>(window_cycles);
+    const auto left = static_cast<std::int32_t>(
+        round_div_half_away_from_zero(static_cast<std::int64_t>(int_a + int_b), window));
+    const auto right = static_cast<std::int32_t>(
+        round_div_half_away_from_zero(static_cast<std::int64_t>(int_a + int_c), window));
+    return {left, right};
 }
 
 PsgYm2149::StereoSample PsgYm2149::sample() const {

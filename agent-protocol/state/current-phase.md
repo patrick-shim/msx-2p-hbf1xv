@@ -6,18 +6,31 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **IDLE — M33 CLOSED (DEC-0042, 2026-07-09, tag v1.0.34); awaiting the human's
-  M32 verification run (Aleste 2 gameplay + FM audibility at k=21, R-M32-7) and next
-  directive.** M33 delivered the human's housekeeping charter (DEC-0041): single git stream
-  verified; >12 GB of build debris purged; ONE canonical build/ via tools/bootstrap-build.ps1
-  (fast-subset default, -Slow RC gate); SDL3.dll staging moved into CMake (kills the modal
-  0xc0000135 loader dialogs); DoD records M29-M32 restored; full docs truth sweep (root/tools/
-  docs/debug READMEs + stale-text fixes). Fresh-tree gate: **186/186**.
-  Remaining open backlog: C1/D4 + E3 (sourcing-blocked), D8/D9/D10 (M32 named remainders),
-  C10/F1/F2 (era-labeled, unscheduled), G3/G4/G5/G6 (on-demand; G6 = typed-BASIC harness,
-  near-term candidate).
-- Prior phase (closed): **M32 — CLOSED (DEC-0040, 2026-07-09, tag v1.0.33)**; the human's
-  post-M32 verification (R-M32-7) remains awaited.
+- Active Phase: **IDLE — M34 CLOSED (DEC-0045, 2026-07-09, tag v1.0.35); awaiting the human's
+  live re-check of the two M34 fixes (Aleste 2 transition-beep gone; Metal Gear room-transition
+  clean backdrop wipe — R-M34-1 is the final acceptance signal on the 20.7 kHz residual) and
+  next directive.** M34 fixed the DEC-0043 playtest defect pair universally: (A) PSG/SCC
+  band-limited box-average integration killed the ultrasonic point-sampling alias (Aleste 2's
+  period-0 silence idiom that read as the transition beep) — zero post-fix burst blocks,
+  residual ~500 RMS at 20.7 kHz sub-threshold, openMSX audio A/B silence-parity; the full
+  16-surface audio byte-oracle re-baseline executed under the anti-tautology discipline. (B) an
+  R#1 BL (display-enable) render gate fixed Metal Gear's room-transition slow-fill of
+  half-rewritten VRAM (both references agree; MG genuinely blanks — S4 outcome (a)). QA
+  CONDITIONAL PASS, both committed-evidence escalations independently confirmed; the four
+  m32-aleste-play PNGs regenerated from a now-committed recipe. Fresh-tree gate: **183/183
+  headless + 192/192 SDL3-ON**. NEW backlog row E4 (true band-limited resampling depth,
+  on-demand). R-M32-7 CLOSED PASS (the human: "absolutely gold").
+  Remaining open backlog: C1/D4 + E3 + E4 (sourcing/depth-blocked), D8/D9/D10 (renderer
+  remainders), C10/F1/F2 (era-labeled, unscheduled), G3/G4/G5/G6 (on-demand; G6 = typed-BASIC
+  harness, near-term candidate).
+- Prior phase (closed): **M33 — CLOSED (DEC-0042, 2026-07-09, tag v1.0.34)** — repository
+  housekeeping (single git stream, ONE canonical build/ via tools/bootstrap-build.ps1, CMake
+  SDL3.dll staging killing the modal loader dialogs, DoD M29-M32 records restored, full docs
+  truth sweep). Also DEC-0044 (daad6b8): references/tests/tools/docs/debug/.claude added to
+  .gitignore for a lean compile-only remote export (already-tracked files stay tracked; new
+  files under those trees need `git add -f`; add_subdirectory(tests) EXISTS-guarded).
+- Prior phase (closed): **M32 — CLOSED (DEC-0040, 2026-07-09, tag v1.0.33)**; R-M32-7 verified
+  PASS by the human on 2026-07-09.
 - Prior phase (closed): **M32 — CLOSED (DEC-0040; QA CONDITIONAL PASS RESP-M32-003, all
   conditions discharged; tag v1.0.33)** — both DEC-0039 defects fixed universally per `docs/m32-planner-package.md` S1-S5
   with the RESP-M32-001 D-1/D-2 ratifications applied. **(A) Raster-accurate per-line rendering +
@@ -439,7 +452,9 @@ gate applies), **C10→M32-era** (FDC flux/DMK), **F1→M33-era** (cassette), **
 (printer), **G3/G4/G5** (indefinite/on-demand). G1 closed (M29, v1.0.30); G2 closed (M30,
 pending QA/tag v1.0.31).
 
-- Updated At: 2026-07-09 (M33 CLOSED per DEC-0042, tag v1.0.34 — housekeeping: single
-  stream/build/docs-truth per the human's DEC-0041 charter; DoD M29-M32 gap repaired;
-  bootstrap-build.ps1 is THE build/test entry point; 186/186 fresh-tree gate. Coordinator
-  idle awaiting the human's M32 verification verdict and next directive.)
+- Updated At: 2026-07-09 (M34 CLOSED per DEC-0045, tag v1.0.35 — the DEC-0043 playtest defect
+  pair fixed universally: PSG/SCC band-limited box-average integration killed the Aleste 2
+  transition-beep alias; an R#1 BL render gate fixed the Metal Gear room-transition slow-fill.
+  QA Conditional Pass fully discharged; both evidence escalations independently confirmed; 4
+  Aleste PNGs regenerated from a committed recipe. 183/183 + 192/192. R-M32-7 closed PASS.
+  Coordinator idle awaiting the human's M34 live re-check and next directive.)

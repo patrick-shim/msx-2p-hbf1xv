@@ -89,6 +89,7 @@ int main() {
     //     content). FAILS pre-fix (content came out palette-0 black). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_register(vdp, 7, 0x0F);  // backdrop color 15
         set_register(vdp, 8, 0x08);  // TP clear (bit 5 = 0): transparency ON
@@ -109,6 +110,7 @@ int main() {
     //     -- palette entry 0 itself is shown (no substitution). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // GRAPHIC4
         set_register(vdp, 7, 0x0F);
         set_register(vdp, 8, 0x28);  // TP SET (bit 5 = 1): color 0 opaque
@@ -129,6 +131,7 @@ int main() {
     //     FAILS pre-fix. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         // GRAPHIC1 is the reset/default mode; R#8 reset value 0 -> TP clear.
         set_register(vdp, 4, 0x01);  // pattern table base 0x0800 (avoid table aliasing)
         set_register(vdp, 3, 0x40);  // color table base 0x1000
@@ -152,6 +155,7 @@ int main() {
     //     palFg[0]/palFg[16] split. FAILS pre-fix. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x08);  // GRAPHIC5 (base 0x10)
         set_register(vdp, 7, 0x0E);  // even half = 3, odd half = 2
         set_register(vdp, 8, 0x08);  // TP clear
@@ -173,6 +177,7 @@ int main() {
     //     fixed-decode black regardless of R#7/R#8. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0E);  // GRAPHIC7 (base 0x1C)
         set_register(vdp, 7, 0xFF);
         set_register(vdp, 8, 0x08);  // TP clear -- must still NOT substitute
@@ -189,6 +194,7 @@ int main() {
     //     register/palette state -- two renders are bit-identical. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);
         set_register(vdp, 7, 0x0F);
         set_palette(vdp, 15, 7, 7, 7);

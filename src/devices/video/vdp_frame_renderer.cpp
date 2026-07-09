@@ -395,6 +395,40 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
 }
 
 void VdpFrameRenderer::render_line(const int line, const Field field, std::span<std::uint16_t> out) const {
+    // M34 Defect B (DEC-0043; docs/m34-planner-package.md §3.2): R#1 bit6
+    // (BL, display enable) gates the ENTIRE active line. BL=0 => the line is
+    // pure backdrop -- content dispatch, sprite compositing AND the R#25 MSK
+    // step are all skipped (sprites are off when the display is off, the
+    // same bit sprite_engine.cpp:90-94 already honors -- this closes the
+    // pre-M34 internal asymmetry where sprites obeyed BL but the background
+    // did not). Grounding (both references AGREE, §3.1):
+    //   * openMSX references/openmsx-21.0/src/video/PixelRenderer.cc:608-611
+    //     (!displayEnabled => the whole line draws DRAW_BORDER) and :580-584
+    //     (sprite checking only under displayEnabled); VDP.cc:435-442
+    //     (displayEnabled derives from controlRegs[1] & 0x40).
+    //   * fMSX references/fmsx-60/source/MSX.h:216 (#define ScreenON
+    //     (VDP[1]&0x40)) with every per-line refresh in Common.h (:463,
+    //     :497, :533, ...) starting `if(!ScreenON) ClearLine(background)`.
+    // Fill color = the mode-aware border_color() (VDP.hh:211-226
+    // getBackgroundColor -- the same color the real border shows), NOT
+    // render_blank()'s undefined-mode palette-15 fallback (a different
+    // semantic, CharacterConverter.cc:368-373). Because render_line() reads
+    // R#1 LIVE and is the single per-line workhorse shared by the legacy
+    // snapshot render_frame() and the M32 scanline accumulator, the L+1
+    // write-latch (hbf1xv_machine.cpp write hook) applies to BL exactly as
+    // to every other register -- matching VDP.cc:1080-1082/:1260-1269
+    // (an R#1 bit6 change takes effect at the NEXT line; syncAtNextLine).
+    // Mid-LINE BL precision is the pre-existing D8 remainder; BL=1-mid-frame
+    // sprite-table liveness is the D9 remainder (cross-notes in the ledger).
+    if ((vdp_->control_register(1) & 0x40) == 0) {
+        const std::uint16_t bc = border_color();
+        const int w = width();
+        for (int x = 0; x < w; ++x) {
+            out[static_cast<std::size_t>(x)] = bc;
+        }
+        return;
+    }
+
     dispatch_content(line, field, out);
     composite_sprites(line, field, out);
 

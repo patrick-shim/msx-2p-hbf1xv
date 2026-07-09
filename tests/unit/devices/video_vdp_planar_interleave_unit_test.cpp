@@ -72,6 +72,7 @@ int main() {
     //     independent of any round-trip read-back (A-M21-10). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0A);  // M3+M5 -> GRAPHIC6 (base 0x14, planar)
 
         set_write_address(vdp, 0);  // logical 0 (even)
@@ -103,6 +104,7 @@ int main() {
     //     before D7 existed -- never exercised).
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0A);   // GRAPHIC6 (planar)
         set_register(vdp, 14, 0x00);
         set_write_address(vdp, 0x3FFF);
@@ -134,6 +136,7 @@ int main() {
     // --- GRAPHIC6 (SCREEN7) content decode: 4bpp planar. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0A);  // GRAPHIC6
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 512, "Graphic6_Width_Is512");
@@ -167,6 +170,7 @@ int main() {
     //     FULL renderer (not just the palette-only unit test). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x0E);  // M3+M4+M5 -> GRAPHIC7 (base 0x1C)
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 256, "Graphic7_Width_Is256");

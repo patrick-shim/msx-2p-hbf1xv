@@ -31,8 +31,17 @@ namespace sony_msx::frontend {
 //
 //   pcm = clamp_int16(psg_raw * kPsgAmplitudeScale + scc_sum * kSccAmplitudeScale)
 //
-// where scc_sum is the sum of every attached chip's mono AC sample()
+// where scc_sum is the sum of every attached chip's mono AC contribution
 // (SCC is mono: the same contribution lands on both channels).
+//
+// M34 (DEC-0043 Defect A, docs/m34-planner-package.md §2.3.6): psg_raw and
+// each SCC contribution are the chips' EXACT box averages over the advanced
+// window (PsgYm2149/SccWavetable::take_integrated_sample()), replacing the
+// aliasing point samples; the §2.3.4 fixed-point property keeps every
+// constant/silent source's contribution byte-identical to before (the M29/
+// M31 zero-source oracles survive in meaning AND, for constant signals, in
+// bytes). Sample COUNT accounting (AudioPacer, DEC-0033) is untouched --
+// this changes only how each sample's VALUE is produced.
 //
 // Amplitude constants (documented presentation policy, the same disclosed-
 // simplification class as M26's kAmplitudeScale itself):
@@ -44,11 +53,14 @@ namespace sony_msx::frontend {
 //     unit-tested at a constructed saturation input. One SCC stays inside
 //     int16 (24,800 + 7,200 = 32,000).
 //
-// HARD REGRESSION ORACLE (§2.4): with zero SCC sources attached, the output
-// is byte-identical to the pre-M29 presenter arithmetic (psg_raw * 400 per
-// channel, clamped) for ANY input sequence -- proven by a dedicated unit
-// test, and structurally evident below (a null-only source array contributes
-// an scc_sum of exactly 0 to every sample).
+// HARD REGRESSION ORACLE (M29 §2.4, re-grounded by M34 §2.5 row 3): with
+// zero SCC sources attached, the output is byte-identical to the bare-pump
+// presenter arithmetic (psg pump sample * 400 per channel, clamped) for ANY
+// input sequence -- proven by a dedicated unit test, and structurally
+// evident below (a null-only source array contributes an scc_sum of exactly
+// 0 to every sample). Since M34 both sides of that oracle compute through
+// the integrated-sample pump; the meaning -- absent/silent sources
+// contribute exactly 0 -- is unchanged.
 //
 // M31 (backlog E1, docs/m31-planner-package.md §2.2): a THIRD source -- the
 // YM2413 (OPLL) FM synthesis engine -- is added ADDITIVELY via a new

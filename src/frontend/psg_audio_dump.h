@@ -55,6 +55,11 @@ inline constexpr const char* kAudioDumpFormatTag = "HBF1XV-AUDIO-DUMP v1";
 // OWN generator state by `sample_count * cycles_per_sample` cycles as a
 // side effect (the same "pumping consumes deterministic emulated time"
 // contract PsgAudioPump::pump_samples() already documents).
+//
+// M34 (DEC-0043 Defect A): inherits the pump's integrated-sample production
+// -- each dumped sample is the exact box average over its cycle window; the
+// degenerate cycles_per_sample == 1 case (sample_rate_hz >= the system
+// clock) yields exact per-cycle levels (§2.3.6).
 [[nodiscard]] std::string serialize_psg_audio_dump(devices::audio::PsgYm2149& psg,
                                                     std::uint64_t sample_rate_hz,
                                                     std::size_t sample_count);

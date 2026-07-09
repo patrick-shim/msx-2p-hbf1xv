@@ -61,7 +61,8 @@ int main() {
     // --- TEXT1 mode selection + dimensions. ---
     {
         V9958Vdp vdp;
-        set_register(vdp, 1, 0x10);  // M1 -> TEXT1 (base 0x01)
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(vdp, 1, 0x50);  // M1 -> TEXT1 (base 0x01)
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 240, "Text1_Width_Is240");
         expect(renderer.height() == 192, "Text1_Height_Is192_IgnoresLn");
@@ -71,7 +72,8 @@ int main() {
     //     reflecting R#7. ---
     {
         V9958Vdp vdp;
-        set_register(vdp, 1, 0x10);  // TEXT1
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(vdp, 1, 0x50);  // TEXT1
         set_register(vdp, 2, 0x00);  // name table base 0x0000
         set_register(vdp, 4, 0x00);  // pattern table base 0x0000
         set_register(vdp, 7, 0xF1);  // fg=palette[15], bg=palette[1]
@@ -102,7 +104,8 @@ int main() {
     // --- Second name row (line 8..15) reads name index (line/8)*40 + col. ---
     {
         V9958Vdp vdp;
-        set_register(vdp, 1, 0x10);
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(vdp, 1, 0x50);
         set_register(vdp, 2, 0x00);
         set_register(vdp, 4, 0x00);
         set_register(vdp, 7, 0xF0);
@@ -123,7 +126,7 @@ int main() {
         V9958Vdp vdp_a;
         V9958Vdp vdp_b;
         for (auto* vdp : {&vdp_a, &vdp_b}) {
-            set_register(*vdp, 1, 0x10);
+            set_register(*vdp, 1, 0x50);
             set_register(*vdp, 7, 0xF2);
             write_vram(*vdp, 0, 0x20);
             write_vram(*vdp, 0x20 * 8, 0xAA);

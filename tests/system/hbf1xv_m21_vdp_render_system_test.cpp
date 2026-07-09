@@ -48,6 +48,8 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.debug_io_write(0x99, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        machine.debug_io_write(0x99, 0x81);  // R#1 <- 0x40
         machine.map_flat_ram();
 
         const std::array<std::uint8_t, 37> program{
@@ -76,6 +78,8 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.debug_io_write(0x99, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        machine.debug_io_write(0x99, 0x81);  // R#1 <- 0x40
         machine.map_flat_ram();
 
         const std::array<std::uint8_t, 21> program{
@@ -101,6 +105,8 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.debug_io_write(0x99, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        machine.debug_io_write(0x99, 0x81);  // R#1 <- 0x40
         machine.map_flat_ram();
 
         const std::array<std::uint8_t, 25> program{
@@ -132,6 +138,8 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        machine.debug_io_write(0x99, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        machine.debug_io_write(0x99, 0x81);  // R#1 <- 0x40
         machine.map_flat_ram();
 
         const std::array<std::uint8_t, 41> program{

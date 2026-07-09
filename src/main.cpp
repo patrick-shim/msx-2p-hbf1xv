@@ -575,10 +575,16 @@ int run_frame_dump_demo(const std::string& out_path) {
         machine.debug_io_write(0x9A, static_cast<std::uint8_t>(g3 & 7));
     };
 
-    // GRAPHIC4 mode bits (M3=1,M4=1; R#1 stays 0 from cold_boot's reset, so
+    // GRAPHIC4 mode bits (M3=1,M4=1; R#1 carries no mode bits here, so
     // M1=M2=0 -> mode base 0x0C, VdpMode::Graphic4 -- devices/video/
     // vdp_mode.h's independently re-derived base-byte formula).
     set_register(0, 0x06);
+    // M34 (DEC-0043 Defect B): R#1 bit6 BL=1 -- the render gate blanks BL=0
+    // lines (as real hardware does), so a demo scene modelling a DISPLAYED
+    // screen must enable the display like every real program does. With
+    // BL=1 the scene renders byte-identically to the pre-M34 demo output
+    // (bit6 previously had no background-render effect).
+    set_register(1, 0x40);
 
     // A vivid, hand-chosen 16-entry palette (3-bit R/G/B each), entry 0 kept
     // black (the conventional MSX2 background index).

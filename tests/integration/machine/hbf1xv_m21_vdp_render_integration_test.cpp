@@ -55,6 +55,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        set_register(machine, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
 
         set_palette(machine, 3, 5, 1, 2);
         set_palette(machine, 7, 0, 0, 0);
@@ -87,6 +88,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
+        set_register(machine, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_palette(machine, 5, 4, 4, 4);
         // Mirror-write the pattern/color table base registers too, so the
         // three content writes below (name/pattern/color) cannot alias.
@@ -120,6 +122,8 @@ int main() {
         Hbf1xvMachine machine_b;
         machine_a.cold_boot();
         machine_b.cold_boot();
+        set_register(machine_a, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
+        set_register(machine_b, 1, 0x40);
         for (auto* m : {&machine_a, &machine_b}) {
             set_palette(*m, 2, 3, 3, 3);
             set_write_address(*m, 10);

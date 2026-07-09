@@ -79,6 +79,8 @@ void fill_signature_vram(Hbf1xvMachine& m) {
 void setup_scene(Hbf1xvMachine& m, const std::uint8_t r23) {
     m.cold_boot();
     debug_set_register(m, 0, 0x06);  // GRAPHIC4
+    debug_set_register(m, 1, 0x40);  // M34: R#1 BL=1 (display enable) -- the
+                                     // render gate blanks BL=0 lines
     debug_set_register(m, 8, 0x02);  // SPD: sprites disabled
     fill_signature_vram(m);
     debug_set_register(m, 23, r23);

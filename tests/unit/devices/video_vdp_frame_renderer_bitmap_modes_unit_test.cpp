@@ -61,6 +61,7 @@ int main() {
     //     pixel. ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);  // M3+M4 -> GRAPHIC4 (base 0x0C)
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 256, "Graphic4_Width_Is256");
@@ -81,6 +82,7 @@ int main() {
     // --- GRAPHIC4 display-page selection (R#2 bits 5-6). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x06);
         set_palette(vdp, 1, 1, 0, 0);
         set_palette(vdp, 2, 0, 1, 0);
@@ -105,6 +107,7 @@ int main() {
     //     read the SAME 4 low palette registers (SDLRasterizer.cc:104-109). ---
     {
         V9958Vdp vdp;
+        set_register(vdp, 1, 0x40);  // M34: R#1 bit6 BL=1 (display enable) -- the render gate blanks BL=0 lines
         set_register(vdp, 0, 0x08);  // M5 -> GRAPHIC5 (base 0x10)
         const VdpFrameRenderer renderer(vdp);
         expect(renderer.width() == 512, "Graphic5_Width_Is512");

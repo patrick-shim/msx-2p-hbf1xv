@@ -399,6 +399,104 @@ int main() {
         expect(run() == run(), "TwoInstanceDeterminism_IdenticalSequences_IdenticalOutputs");
     }
 
+    // =====================================================================
+    // M34 additive take_integrated_sample() cases (DEC-0043 Defect A,
+    // docs/m34-planner-package.md §2.6.5). Every oracle below is dwell
+    // arithmetic authored by hand BEFORE execution (R-M34-9). Boundary
+    // convention (§2.3.3): a position step completing at cycle t changes
+    // the held output effective AFTER cycle t.
+    // =====================================================================
+
+    // --- M34: a STOPPED channel (period <= 8) holds its output constant ->
+    //     integrates to EXACTLY the held constant (negative fixed point:
+    //     power-on held output is (int8(0xFF)*15)>>4 = -1). ---
+    {
+        SccWavetable scc = make_chip();
+        scc.write(0x8F, 0x01);  // enable ch1 (period still 0 -> stopped)
+        scc.advance_cycles(81);
+        expect(scc.take_integrated_sample(81) == -1,
+               "M34_StoppedChannel_IntegratesToExactHeldConstant_Neg1");
+        // A stopped DISABLED channel contributes exactly 0.
+        scc.write(0x8F, 0x00);
+        scc.advance_cycles(81);
+        expect(scc.take_integrated_sample(81) == 0,
+               "M34_StoppedDisabledChannel_ContributesExactlyZero");
+    }
+
+    // --- M34: fast-stepping channel, period 9 (8 whole steps per 81-cycle
+    //     window, §2.6.5 hand oracle). Ch1 wave = ramp v[p] = 8p (p 0..15),
+    //     volume 15 -> held out(p) = (8p*15)>>4 = floor(7.5p):
+    //     out(0..8) = 0,7,15,22,30,37,45,52,60. Period 9 -> a position step
+    //     every 10 master cycles; the period write restarts count and
+    //     refreshes out at pos 0. Window cycles [1..81]: dwell 10 each at
+    //     out(0..7) (steps complete at cycles 10,20,...,80) + 1 cycle at
+    //     out(8): integral = 10*(0+7+15+22+30+37+45+52) + 60 = 2080+60 =
+    //     2140 -> round(2140/81) = round(26.42) = 26. Final phase: pos 8,
+    //     count 1. ---
+    {
+        SccWavetable scc = make_chip();
+        for (int i = 0; i < 32; ++i) {
+            scc.write(static_cast<std::uint8_t>(i),
+                      static_cast<std::uint8_t>((i < 16 ? 8 * i : 0)));
+        }
+        scc.write(0x8A, 0x0F);  // ch1 volume 15
+        scc.write(0x8F, 0x01);  // enable ch1
+        scc.write(0x80, 0x09);  // ch1 period 9 (running; restart + refresh)
+        scc.write(0x81, 0x00);
+        scc.advance_cycles(81);
+        expect(scc.take_integrated_sample(81) == 26,
+               "M34_Period9_EightStepsPerWindow_HandComputedDwellAverage26");
+        expect(scc.position(0) == 8 && scc.held_output(0) == 60,
+               "M34_Period9_PhaseStateMatchesBulkAdvanceSemantics");
+    }
+
+    // --- M34: enable gating inside the integral matches sample() -- the
+    //     SAME running ramp DISABLED integrates to 0 while the phase keeps
+    //     stepping. ---
+    {
+        SccWavetable scc = make_chip();
+        for (int i = 0; i < 32; ++i) {
+            scc.write(static_cast<std::uint8_t>(i),
+                      static_cast<std::uint8_t>((i < 16 ? 8 * i : 0)));
+        }
+        scc.write(0x8A, 0x0F);
+        scc.write(0x8F, 0x00);  // ch1 NOT enabled
+        scc.write(0x80, 0x09);
+        scc.write(0x81, 0x00);
+        scc.advance_cycles(81);
+        expect(scc.take_integrated_sample(81) == 0 && scc.position(0) == 8,
+               "M34_DisabledRunningChannel_IntegralZero_PhaseStillRuns");
+    }
+
+    // --- M34: constant-wave running channel is a fixed point: uniform wave
+    //     0x40 -> held (64*15)>>4 = 60 at every position; period 99 steps
+    //     never change the level -> integrated == point == 60 exactly. ---
+    {
+        SccWavetable scc = make_chip();
+        for (int i = 0; i < 32; ++i) {
+            scc.write(static_cast<std::uint8_t>(i), 0x40);
+        }
+        scc.write(0x8A, 0x0F);
+        scc.write(0x8F, 0x01);
+        scc.write(0x80, 0x63);  // period 99
+        scc.write(0x81, 0x00);
+        scc.advance_cycles(81);
+        const std::int32_t integrated = scc.take_integrated_sample(81);
+        expect(integrated == 60 && integrated == scc.sample(),
+               "M34_ConstantWaveRunning_FixedPoint_IntegratedEqualsPoint60");
+    }
+
+    // --- M34: W=0 guard (§2.3.5) + discard semantics. ---
+    {
+        SccWavetable scc = make_chip();
+        scc.write(0x8F, 0x01);  // enabled stopped ch1, held -1
+        expect(scc.take_integrated_sample(0) == 0, "M34_ZeroWindow_ReturnsZero");
+        scc.advance_cycles(40);
+        expect(scc.take_integrated_sample(0) == 0, "M34_ZeroWindowTake_DiscardsAccumulation");
+        scc.advance_cycles(81);
+        expect(scc.take_integrated_sample(81) == -1, "M34_AfterDiscard_NextWindowClean");
+    }
+
     if (g_failures != 0) {
         std::cerr << g_failures << " case(s) failed\n";
         return 1;

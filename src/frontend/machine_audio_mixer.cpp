@@ -23,14 +23,20 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
         const devices::audio::PsgYm2149::StereoSample s = pump_.pump_one_sample(psg);
 
         // SCCs: advance by the SAME per-sample delta, then take the mono AC
-        // sum (SCC fact-sheet §5). A null entry contributes exactly 0 --
-        // the zero-SCC path is therefore arithmetically identical to the
-        // pre-M29 presenter loop (the hard regression oracle, §2.4).
+        // box average over that window (M34, DEC-0043 Defect A --
+        // SccWavetable::take_integrated_sample(); the §2.3.4 fixed-point
+        // property keeps every constant-output SCC byte-identical to the
+        // pre-M34 point sample). A null entry contributes exactly 0 -- the
+        // zero-SCC path remains arithmetically identical to the pre-M29
+        // presenter loop for ANY input (the hard regression oracle, M29
+        // §2.4, re-grounded by M34: both sides of that oracle now compute
+        // through the same integrated pump, and a silent/absent source
+        // still contributes exactly 0).
         std::int32_t scc_sum = 0;
         for (devices::audio::SccWavetable* scc : sccs) {
             if (scc != nullptr) {
                 scc->advance_cycles(pump_.cycles_per_sample());
-                scc_sum += scc->sample();
+                scc_sum += scc->take_integrated_sample(pump_.cycles_per_sample());
             }
         }
 
