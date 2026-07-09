@@ -38,6 +38,12 @@ CMakeUserPresets.json
 /debug/**/*.bin
 /debug/**/*.dump
 /debug/**/*.frame
+/debug/**/*.script
+/debug/**/frame_dump
+/debug/**/emulator.out
+/debug/**/emulator.log
+# M36 playtest harness run dirs (timestamped, ephemeral capture output)
+/debug/playtest_*/
 
 # M26 exception: one real, committed decoded-FrameBuffer-capture example
 # (backlog C9's authorized debug/testing capability, docs/m26-planner-
