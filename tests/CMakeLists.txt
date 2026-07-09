@@ -1415,6 +1415,16 @@ if(SONY_MSX_ENABLE_SDL3)
     add_test(NAME frontend_sdl3_input_mapper_integration_test
         COMMAND frontend_sdl3_input_mapper_integration_test)
 
+    # --- M35-S3: F11 hotkey input mapper unit test (multi-disk hot-swap,
+    #     docs/m35-planner-package.md §5, UT-2). SDL3-gated (requires
+    #     sdl3_input_mapper.h which depends on SDL3/SDL.h).
+    add_executable(frontend_sdl3_input_mapper_disk_swap_unit_test
+        unit/frontend/sdl3_input_mapper_disk_swap_unit_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_input_mapper_disk_swap_unit_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_input_mapper_disk_swap_unit_test
+        COMMAND frontend_sdl3_input_mapper_disk_swap_unit_test)
+
     set(SONY_MSX_DISKS_DIR_ABS "${CMAKE_SOURCE_DIR}/disks")
 
     add_executable(frontend_sdl3_cli_session_integration_test
@@ -1464,6 +1474,19 @@ if(SONY_MSX_ENABLE_SDL3)
     add_test(NAME frontend_sdl3_app_input_script_integration_test
         COMMAND frontend_sdl3_app_input_script_integration_test)
 
+    # --- M35-S2/S4/S5: Multi-disk hot-swap integration tests (docs/m35-
+    #     planner-package.md §5, IT-1..IT-6). Tests boot with repeatable
+    #     --disk lists, verify disk attachment, and check regression guards.
+    add_executable(frontend_sdl3_app_multi_disk_integration_test
+        integration/frontend/sdl3_app_multi_disk_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_multi_disk_integration_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(frontend_sdl3_app_multi_disk_integration_test PRIVATE
+        SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+        SONY_MSX_DISKS_DIR="${SONY_MSX_DISKS_DIR_ABS}")
+    add_test(NAME frontend_sdl3_app_multi_disk_integration_test
+        COMMAND frontend_sdl3_app_multi_disk_integration_test)
+
     # M33/DEC-0041: stage SDL3.dll beside every SDL3-linked test executable
     # (see the sony_msx_stage_sdl3_dll definition in the root CMakeLists.txt --
     # without this, each test dies 0xc0000135 with a MODAL loader dialog that
@@ -1474,11 +1497,13 @@ if(SONY_MSX_ENABLE_SDL3)
         frontend_sdl3_video_presenter_pixel_integration_test
         frontend_sdl3_audio_presenter_integration_test
         frontend_sdl3_input_mapper_integration_test
+        frontend_sdl3_input_mapper_disk_swap_unit_test
         frontend_sdl3_cli_session_integration_test
         hbf1xv_m26_sdl3_system_test
         frontend_sdl3_app_debug_session_integration_test
         frontend_sdl3_input_mapper_key_names_consistency_integration_test
-        frontend_sdl3_app_input_script_integration_test)
+        frontend_sdl3_app_input_script_integration_test
+        frontend_sdl3_app_multi_disk_integration_test)
         sony_msx_stage_sdl3_dll(${sdl3_test_target})
     endforeach()
 endif()

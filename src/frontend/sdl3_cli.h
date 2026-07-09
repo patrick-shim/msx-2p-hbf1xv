@@ -32,9 +32,15 @@ namespace sony_msx::frontend {
 // reuse). Does NO file I/O and has NO Sdl3App/SDL3 dependency, so it is
 // directly unit-testable headlessly, without any SDL3 build (mirrors
 // cartridge_cli.h's own parse/spec-vs-load separation, A-M19-4).
+//
+// M35-S1 (multi-disk hot-swap): `--disk` is now REPEATABLE (M35-S1,
+// docs/m35-planner-package.md §3.1). A single `--disk <path>` produces
+// a list of size 1 (backward-compatible, AC-S1-2). Multiple `--disk`
+// flags accumulate in order (AC-S1-3). No `--disk` flags produce an empty
+// list (AC-S1-4, existing behavior preserved).
 struct ParsedSdl3Cli {
     std::optional<std::string> bios_dir;
-    std::optional<std::string> disk_path;
+    std::vector<std::string> disk_paths;  // M35-S1: now a vector, accumulates repeatable --disk
     std::optional<std::uint32_t> max_frames;
     bool hidden_window = false;  // --hidden-window (test/CI convenience; never SDL3-dependent to parse)
     // --border: opt-in border-box composition around the active area

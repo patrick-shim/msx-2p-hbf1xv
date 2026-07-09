@@ -1235,3 +1235,21 @@ Use one section per milestone.
   discharged (Aleste PNGs regenerated w/ committed recipe; settings.json excluded; git add -f
   applied per DEC-0044). R-M34-1 (20.7 kHz residual audibility) awaits the human's live
   re-check as its final acceptance signal.
+
+## M35 (Kickoff 2026-07-10, DEC-0048 — multi-disk hot-swap; tag target v1.0.36)
+
+- Milestone ID: M35
+- Objective: Close the standing residual "multi-disk swap UI — YS II will need it." Make the SDL3
+  `--disk` flag REPEATABLE (ordered disk-image list; first inserted at boot) and add a host hotkey
+  (proposed F11) that cycles drive A through the list at runtime, re-attaching the DiskImage to the
+  disk drive so a running title reads the newly-inserted disk on its next FDC access. Surface the
+  inserted disk (window title + stderr). Frontend-only.
+- Scope constraints: zero `src/devices/cpu/` or `src/core/` edits (ZEXALL withheld per the standing
+  cadence); additive/default-off (single `--disk` invocations byte-for-byte unchanged);
+  deterministic (input-driven swap). FDC media-change semantics are the milestone's key correctness
+  risk (planner to resolve).
+- Origin: human-authorized during live YS II play (disk1 booted, reached "INSERT DATADISK IN DRIVE
+  A - RET"). Scope override of the tentative F2/M35-era label — F2 (printer depth) re-deferred per
+  DEC-0048.
+- Status: **PLANNING** (planner-first; REQ-M35-001 issued to msx-planner). Awaiting the M35 planner
+  package (`docs/m35-planner-package.md`).

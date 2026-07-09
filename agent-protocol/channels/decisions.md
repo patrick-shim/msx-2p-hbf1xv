@@ -486,3 +486,35 @@ Use this format:
   authorization to bypass the auto-mode classifier — the assistant still will not push under auto
   mode; the human owns the push action.
 - Effective Date: 2026-07-09
+
+---
+
+- Decision ID: DEC-0048
+- Requested By: Human (2026-07-09), during live SDL3 play of YS II: the game booted from
+  `disks/games/ys2/disk1.dsk` and reached the real "INSERT DATADISK IN DRIVE A - RET" prompt; the
+  human asked how to swap disks mid-game and authorized building the feature — "yes please build
+  it. run orchestrator agent to start the proper loop."
+- Approved By: Human (scope authorization); MSX Master Agent (coordinator) recording;
+  msx-orchestration gate-validated (IDLE entry gate SATISFIED; scope-redefinition flagged).
+- Decision: OPEN **M35 — Multi-disk hot-swap** (tag target v1.0.36). SCOPE OVERRIDE: the deferred
+  backlog tentatively era-labeled M35 for **F2 (printer rendering depth)**; M35 is REDEFINED to
+  multi-disk hot-swap per the human's live directive. F2 (printer) is re-deferred to a later,
+  unassigned milestone. Scope (frontend-only): (1) make the SDL3 `--disk` flag REPEATABLE (ordered
+  list of disk images; the first is inserted at boot); (2) add a host hotkey (proposed F11) that
+  cycles drive A through the list at runtime, re-attaching the DiskImage to the disk drive so a
+  running title reads the newly-inserted disk on its next FDC access (the authentic "eject/insert
+  + press RET" action); (3) surface the currently-inserted disk (window title + stderr). Closes
+  the standing residual "multi-disk swap UI — YS II will need it." CONSTRAINTS: frontend-only —
+  zero `src/devices/cpu/` or `src/core/` edits (ZEXALL slow sweep withheld per the standing
+  cadence); additive/default-off so single-disk `--disk` invocations stay byte-for-byte unchanged;
+  deterministic (swap is input-driven, not wall-clock). Planner-first protocol proceeds: planner
+  → developer → QA → release.
+- Impacted Milestones: M35 opened (PLANNING). F2 re-deferred (backlog note applied). The
+  C10/F1/F2 numeric-era labels are noted outdated by this override.
+- Risk Notes: (1) FDC media-change: a running title may require the drive to report a media-change
+  on the next access — the planner must specify whether re-attaching a fresh DiskImage suffices
+  for YS II's read-on-RET or whether a disk-change/not-ready pulse is required (ground in
+  `references/openmsx-21.0` FDC/drive behavior; openMSX A/B if applicable). This is M35's key
+  correctness risk. (2) Multi-controller/multi-drive is OUT of scope (drive A only). (3) F11 must
+  not collide with the existing host keys (Pause/F6-F9) — confirm free.
+- Effective Date: 2026-07-09

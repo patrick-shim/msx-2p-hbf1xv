@@ -160,6 +160,14 @@ bool Sdl3InputMapper::dispatch_key_event(const SDL_Event& event, peripherals::Ke
         }
         return true;
     }
+    if (scancode == kDiskSwapScancode) {
+        // M35-S3: F11 is CONSUMED here (returns true for every down/up/repeat)
+        // so it never reaches the MSX keyboard matrix. The actual drive-A disk
+        // cycle is performed by Sdl3App::on_disk_swap_hotkey() from the app
+        // event loop on a fresh key-down (sdl3_app.cpp) -- the mapper has no
+        // disk/app handle, mirroring how the app owns the swap action.
+        return true;
+    }
 
     const std::optional<std::pair<int, int>> coord = map_scancode(scancode);
     if (!coord.has_value()) {

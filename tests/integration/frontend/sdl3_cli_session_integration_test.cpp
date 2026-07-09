@@ -83,7 +83,7 @@ sony_msx::frontend::Sdl3AppConfig config_from_args(const std::vector<std::string
     if (parsed.bios_dir.has_value()) {
         config.bios_dir = *parsed.bios_dir;
     }
-    config.disk_path = parsed.disk_path;
+    config.disk_paths = parsed.disk_paths;  // M35-S1: repeatable --disk list
     config.max_frames = parsed.max_frames;
     // M30 (backlog G2): mirror sdl3_main.cpp's own config building exactly
     // (this helper's documented contract), incl. the new type_was_explicit

@@ -740,7 +740,9 @@ int run_halnote_parity(const std::string& bios_dir, const std::string& out_path)
 // boundary" loop shape exactly (tests/CLAUDE.md's established convention),
 // zero new CPU-stepping semantics invented.
 struct DebugSessionOptions {
-    std::optional<std::string> disk_path;
+    // M35-S1: repeatable --disk list (AC-8: headless supports the same
+    // repeatable list mechanism as the SDL3 frontend).
+    std::vector<std::string> disk_paths;
     std::optional<std::string> debug_root;
     std::optional<std::string> dump_state_name;
     std::optional<std::string> trace_cpu_name;
@@ -785,7 +787,7 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
         const std::string& arg = args[i];
         if (arg == "--disk") {
             if (auto v = take_debug_session_value(args, i, "--disk", errors)) {
-                opts.disk_path = *v;
+                opts.disk_paths.push_back(*v);  // M35-S1: accumulate, not overwrite
                 ++i;
             }
         } else if (arg == "--debug-root") {
@@ -863,16 +865,21 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     }
 
     // A-M27-3 (headless previously had no --disk flag; SDL3 has one, M26):
-    // mirrors A-M26-6's Sdl3App::load_configured_assets() sequence verbatim.
-    if (opts.disk_path.has_value()) {
-        std::ifstream in(*opts.disk_path, std::ios::binary);
+    // M35-S2: mirrors Sdl3App::load_configured_assets() with repeatable
+    // disk list. Load the first disk at boot (AC-S2-1); no disk if empty
+    // (AC-S2-3).
+    if (!opts.disk_paths.empty()) {
+        std::ifstream in(opts.disk_paths[0], std::ios::binary);
         if (!in) {
-            std::cerr << "debug-session: cannot open --disk file: " << *opts.disk_path << "\n";
+            std::cerr << "debug-session: cannot open --disk file: " << opts.disk_paths[0] << "\n";
             return 2;
         }
         std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         machine.disk_image() = sony_msx::devices::fdc::DiskImage(std::move(bytes));
         machine.disk_drive().attach_image(&machine.disk_image());
+    } else {
+        // M35-S2: explicitly detach when no disk in list (safety/clarity)
+        machine.disk_drive().attach_image(nullptr);
     }
 
     if (opts.trace_cpu_name.has_value()) {

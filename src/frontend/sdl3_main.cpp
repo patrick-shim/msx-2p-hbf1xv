@@ -67,7 +67,7 @@ int main(int argc, char** argv) {
     if (parsed.bios_dir.has_value()) {
         config.bios_dir = *parsed.bios_dir;
     }
-    config.disk_path = parsed.disk_path;
+    config.disk_paths = parsed.disk_paths;  // M35-S1: repeatable --disk list
     config.max_frames = parsed.max_frames;
     config.hidden_window = parsed.hidden_window;
     config.border_enabled = parsed.border_enabled;

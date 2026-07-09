@@ -80,6 +80,7 @@ public:
     static constexpr SDL_Scancode kSpeedUpScancode = SDL_SCANCODE_F7;
     static constexpr SDL_Scancode kReshaDownScancode = SDL_SCANCODE_F8;
     static constexpr SDL_Scancode kReshaUpScancode = SDL_SCANCODE_F9;
+    static constexpr SDL_Scancode kDiskSwapScancode = SDL_SCANCODE_F11;  // M35-S3: F11 for multi-disk swap
     static constexpr int kReshaStep = 10;
     // Digital joystick axis threshold (Sint16 range -32768..32767) -- a
     // documented, first-principles simplification (no analog depth).

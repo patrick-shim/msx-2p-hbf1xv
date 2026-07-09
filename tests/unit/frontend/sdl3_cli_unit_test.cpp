@@ -42,7 +42,8 @@ void expect(const bool ok, const char* case_name) {
 int main() {
     // --- Case 1: all flags present, order-independent, plus a reused
     // cartridge flag -- proves the delegation to machine::parse_cartridge_cli
-    // genuinely works (not a stub). ---
+    // genuinely works (not a stub). M35-S1: --disk now accumulates to a
+    // vector (single entry for backward compat). ---
     {
         const std::vector<std::string> args{
             "--max-frames", "120",  "--disk",  "disks/msxdos22.dsk", "--cart1",
@@ -51,21 +52,21 @@ int main() {
         const auto parsed = parse_sdl3_cli(args);
         expect(parsed.errors.empty(), "AllFlagsPresent_NoErrors");
         expect(parsed.max_frames.has_value() && *parsed.max_frames == 120, "AllFlagsPresent_MaxFramesParsed");
-        expect(parsed.disk_path.has_value() && *parsed.disk_path == "disks/msxdos22.dsk",
-               "AllFlagsPresent_DiskPathParsed");
+        expect(parsed.disk_paths.size() == 1 && parsed.disk_paths[0] == "disks/msxdos22.dsk",
+               "AllFlagsPresent_DiskPathParsed_M35S1_SingleItemList");
         expect(parsed.bios_dir.has_value() && *parsed.bios_dir == "C:/custom/bios",
                "AllFlagsPresent_BiosDirParsed");
         expect(parsed.cartridges.slot1.path.has_value() && *parsed.cartridges.slot1.path == "roms/foo.rom",
                "AllFlagsPresent_Cart1Delegated_ToExistingCartridgeCliParser");
     }
 
-    // --- Case 2: absent flags -> std::nullopt, never a silent default value
-    // (mirrors cartridge_cli's own "absent means nullopt" contract). ---
+    // --- Case 2: absent flags -> empty disk_paths vector (M35-S1), never a
+    // default value (mirrors cartridge_cli's own "absent means absent" contract). ---
     {
         const auto parsed = parse_sdl3_cli({});
         expect(parsed.errors.empty(), "NoFlags_NoErrors");
         expect(!parsed.max_frames.has_value(), "NoFlags_MaxFramesAbsent");
-        expect(!parsed.disk_path.has_value(), "NoFlags_DiskPathAbsent");
+        expect(parsed.disk_paths.empty(), "NoFlags_DiskPathsEmpty_M35S1");
         expect(!parsed.bios_dir.has_value(), "NoFlags_BiosDirAbsent");
         expect(!parsed.hidden_window, "NoFlags_HiddenWindowDefaultsFalse");
         expect(!parsed.border_enabled, "NoFlags_BorderDefaultsFalse_BareActiveAreaPresentation");
@@ -73,11 +74,12 @@ int main() {
 
     // --- Case 3: a flag missing its required value argument is a loud,
     // recorded parse error -- never silently swallowed (mirrors
-    // cartridge_cli's take_value error policy). ---
+    // cartridge_cli's take_value error policy). M35-S1: disk_paths stays
+    // empty when error occurs. ---
     {
         const auto parsed = parse_sdl3_cli({"--disk"});
         expect(!parsed.errors.empty(), "MissingValueArgument_RecordsError");
-        expect(!parsed.disk_path.has_value(), "MissingValueArgument_DiskPathStaysAbsent");
+        expect(parsed.disk_paths.empty(), "MissingValueArgument_DiskPathsEmpty_M35S1");
     }
 
     // --- Case 4: a non-numeric --max-frames value is a loud, recorded parse
@@ -135,6 +137,40 @@ int main() {
         const auto parsed = parse_sdl3_cli({});
         expect(!parsed.cartridges.softwaredb_path.has_value(),
                "SoftwareDbFlag_Absent_Nullopt");
+    }
+
+    // --- Case 8 (M35-S1): --disk is repeatable. Multiple --disk flags
+    // accumulate in order. ---
+    {
+        const std::vector<std::string> args{
+            "--disk", "disk1.dsk",
+            "--disk", "disk2.dsk",
+            "--disk", "disk3.dsk",
+        };
+        const auto parsed = parse_sdl3_cli(args);
+        expect(parsed.errors.empty(), "RepeatableDisk_NoErrors");
+        expect(parsed.disk_paths.size() == 3, "RepeatableDisk_AccumulatesThreePaths");
+        expect(parsed.disk_paths[0] == "disk1.dsk", "RepeatableDisk_FirstPathCorrect");
+        expect(parsed.disk_paths[1] == "disk2.dsk", "RepeatableDisk_SecondPathCorrect");
+        expect(parsed.disk_paths[2] == "disk3.dsk", "RepeatableDisk_ThirdPathCorrect");
+    }
+
+    // --- Case 9 (M35-S1): order-independence -- --disk interleaved with
+    // other flags. ---
+    {
+        const std::vector<std::string> args{
+            "--disk", "d1.dsk",
+            "--max-frames", "50",
+            "--disk", "d2.dsk",
+            "--bios-dir", "my/bios",
+        };
+        const auto parsed = parse_sdl3_cli(args);
+        expect(parsed.errors.empty(), "RepeatableDisk_WithOtherFlags_NoErrors");
+        expect(parsed.disk_paths.size() == 2, "RepeatableDisk_WithOtherFlags_TwoPaths");
+        expect(parsed.disk_paths[0] == "d1.dsk" && parsed.disk_paths[1] == "d2.dsk",
+               "RepeatableDisk_WithOtherFlags_OrderPreserved");
+        expect(parsed.max_frames.has_value() && *parsed.max_frames == 50,
+               "RepeatableDisk_WithOtherFlags_MaxFramesStillWorks");
     }
 
     if (g_failures != 0) {

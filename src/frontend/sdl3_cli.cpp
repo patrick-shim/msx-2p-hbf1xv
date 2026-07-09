@@ -43,7 +43,7 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--disk") {
             if (auto value = take_value(args, i, "--disk", parsed.errors)) {
-                parsed.disk_path = *value;
+                parsed.disk_paths.push_back(*value);  // M35-S1: accumulate repeatable --disk
                 ++i;
             }
         } else if (arg == "--max-frames") {

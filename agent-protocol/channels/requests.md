@@ -1544,3 +1544,108 @@ Full 34-row deferred-backlog review; `docs/m24-implementation-report.md` with th
 - Acceptance Criteria: (a) fresh dual-config build from the ONE canonical build/ tree via tools/bootstrap-build.ps1 (do NOT create build-qa* dirs -- DEC-0041 single-build policy; reconfigure/rebuild build/ or use a git worktree if you need isolation), reproduce headless 183/183 + SDL3-ON 192/192. (b) AUDIO: independently re-derive the box-filter fixed-point math + the §2.4 sinc table; re-measure the ultrasonic oracle per-period bounds (p=0..4) AND the pre-fix discrimination; re-measure the Aleste regression burst metric pre/post; audit the executed §2.5 re-baseline table row-by-row for the anti-tautology rule (hand math must precede code; the "unchanged-expected" motion-is-a-bug rows -- loudness-ratio, 720-constant, silent-PSG fixed points -- must NOT have moved); confirm the zero-source oracles survive in MEANING; re-run/verify the openMSX audio A/B silence-property parity (or judge the recorded fallback honestly). (c) VIDEO: verify the BL gate against the cited openMSX/fMSX lines; confirm the S4 outcome-(a) MG-blanks verdict with the R#1 evidence; run the committed-PNG byte-identity sweep and independently verify BL=1 per artifact (don't assume); verify L+1 latch + accumulator BL=0 equivalence + pure-backdrop unit rows. (d) adversarial mutation checks at your discretion (e.g. revert the box integration -> ultrasonic oracle must fail; remove the BL gate -> the pure-backdrop + MG regression tests must fail). (e) hard constraints: git diff v1.0.34 EMPTY under src/devices/cpu/ + src/core/ (ZEXALL correctly withheld); no-touch audio-path diffs (AudioPacer, ym2413_synth/opll, the FM branch of the mixer) EMPTY; the 13-fixture + --frame-dump-demo R#1-bit6 re-grounding is byte-preserving (suite-proven) and hardware-honest; license isolation (no transcription from the cited references); nothing game-keyed. (f) evidence supersessions verified (fmON/fmOFF re-measured FM peak 3,780; m27 WAV/dump regenerated). Produce `docs/m34-qa-signoff.md` with the verification matrix, the two escalation verdicts, adversarial outcomes, residual-risk register, and Pass / Conditional Pass / Fail. Do NOT fix code; findings go in the sign-off. Do not commit.
 - Dependencies: docs/m34-implementation-report.md; docs/m34-planner-package.md; docs/m34-audio-ab.md; DEC-0043; RESP-M34-001.
 - Requested At: 2026-07-10T09:00:00+09:00
+
+---
+
+- Request ID: REQ-M35-001
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent
+- Milestone ID: M35 (tag target v1.0.36)
+- Type: Milestone planning package (spec + slice decomposition + acceptance criteria)
+- Scope: Produce `docs/m35-planner-package.md` for **multi-disk hot-swap** (DEC-0048; closes the
+  residual "multi-disk swap UI — YS II will need it"). FRONTEND-ONLY. The package MUST resolve:
+  (1) **CLI** — make `--disk` REPEATABLE (ordered list) in `src/frontend/sdl3_cli.cpp` (and decide
+  whether the headless `--debug-session --disk` should follow; keep it out if it adds core risk).
+  A single `--disk` must stay byte-for-byte unchanged. (2) **Runtime swap** — a host hotkey
+  (proposed F11; CONFIRM no collision with Pause/F6/F7/F8/F9) that cycles drive A through the list,
+  re-attaching a freshly-loaded DiskImage to the disk drive; specify the exact
+  `Sdl3App`/`Sdl3InputMapper` wiring and where the disk-list + current-index live. (3) **FDC
+  media-change semantics** — determine whether re-attaching a fresh `DiskImage` is sufficient for a
+  running title (YS II) to read the new disk on its next access, or whether a disk-change/not-ready
+  signal pulse via `WD2793`/`DiskDrive` is required; GROUND this in
+  `references/openmsx-21.0` FDC/drive behavior and specify an openMSX A/B if applicable. THIS IS THE
+  MILESTONE'S KEY CORRECTNESS RISK. If a media-change hook genuinely requires a `src/machine/` or
+  `src/devices/fdc/` touch, call it out explicitly with justification (it would widen scope beyond
+  pure frontend — flag for coordinator ratification rather than assuming it). (4) **UX feedback** —
+  inserted-disk name in the window title + stderr; out-of-range / disk-not-found handling.
+  (5) **Determinism** — the swap is input-driven, not wall-clock. Define slice decomposition
+  S1..SN, per-slice deterministic test obligations (unit + integration; SDL3-gated where needed),
+  the regression guard (single-disk path unchanged; unattached/absent list is a no-op), and the
+  honest A/B disposition. NO production code. NO CPU/device-core scope beyond the item-3 flag.
+- Constraints: frontend-only (`src/frontend/`; `src/machine/` or `src/devices/fdc/` ONLY if item-3
+  proves a media-change hook is genuinely required, and then only with explicit justification for
+  coordinator ratification); zero `src/devices/cpu/` or `src/core/` edits; additive/default-off;
+  deterministic. Cite `references/` for any FDC media-change behavior claim (no fabrication).
+- Dependencies: DEC-0048; `src/frontend/sdl3_cli.{h,cpp}`, `sdl3_app.{h,cpp}`,
+  `sdl3_input_mapper.{h,cpp}`; `src/devices/fdc/{disk_drive,disk_image,wd2793}.*`; the M26/M27
+  `--disk` precedent (`Sdl3App::load_configured_assets()`, `main.cpp` run_debug_session `--disk`).
+- Requested At: 2026-07-10T10:00:00+09:00
+
+---
+
+- Request ID: RESP-M35-001 (planner delivered) + REQ-M35-002 (developer dispatch)
+- From/To: MSX Planner → coordinator (RESP-M35-001); coordinator → MSX Developer (REQ-M35-002)
+- Milestone ID: M35 (tag target v1.0.36)
+- RESP-M35-001 (planner outcome): `docs/m35-planner-package.md` delivered. Design resolved:
+  repeatable `--disk` list; F11 forward-cycle hotkey (confirmed free vs Pause/F6-F9); UX via window
+  title + stderr; deterministic input-driven swap; single-disk path byte-for-byte regression-
+  guarded. **Item-3 media-change VERDICT (the key risk): re-attach a fresh DiskImage + call the
+  EXISTING `disk_drive().set_disk_changed(true)` — sufficient, NO core edits.** Grounded in
+  `references/openmsx-21.0/src/fdc/DiskChanger.cc`/`WD2793.cc`; the DSKCHG line already reads at
+  0x7FFD bit2 (`src/devices/fdc/sony_fdc.cpp:42-44`). Slices S1-S5; AC-1..AC-7; UT-1/2 + IT-1..IT-6.
+  A/B N/A by design (input-driven UI). COORDINATOR ARBITRATION: independently verified the
+  media-change API exists and is public (`disk_drive.h:82-83`, `hbf1xv_machine.h:281-284`) — the
+  frontend-only scope HOLDS, no scope-widening flag raised. Package ACCEPTED for implementation.
+- REQ-M35-002 (developer dispatch): Implement M35 per `docs/m35-planner-package.md` S1-S5 exactly.
+  (S1) repeatable `--disk` accumulation in `sdl3_cli.{h,cpp}`; (S2) config + boot-disk load in
+  `sdl3_app.{h,cpp}`; (S3) F11 detection in `sdl3_input_mapper.{h,cpp}`; (S4) runtime swap —
+  reload DiskImage → `attach_image` → `set_disk_changed(true)`; (S5) window-title + stderr feedback.
+  Add UT-1/UT-2 + IT-1..IT-6 (SDL3-gated) INCLUDING the single-disk byte-for-byte regression guard
+  and an F11-cycles-drive-A integration test. Evidence gates: build headless + SDL3-ON from the ONE
+  canonical `build/` (tools/bootstrap-build.ps1 or bare cmake, DEC-0041 single-build), ctest FAST
+  subset both configs (`-LE m24_slow_full_sweep`), `git diff` proof of ZERO `src/devices/cpu/` +
+  `src/core/` edits (ZEXALL withheld per DEC-0048). Produce `docs/m35-implementation-report.md`.
+  Do NOT commit (coordinator owns closure). If media-change needs MORE than `set_disk_changed()`,
+  STOP and escalate (scope-widening) rather than touching device core.
+- Constraints: frontend-only (`src/frontend/` + calls to existing machine/device public APIs);
+  zero `src/devices/cpu/` or `src/core/` edits; additive/default-off; deterministic.
+- Requested At: 2026-07-10T11:00:00+09:00
+
+---
+
+- Request ID: REQ-M35-003
+- From: MSX Master Agent (coordinator)
+- To: MSX QA Agent
+- Milestone ID: M35 (tag target v1.0.36)
+- Type: Regression assessment + sign-off recommendation
+- Scope: Full QA of the M35 implementation (`docs/m35-implementation-report.md` is the handoff;
+  `docs/m35-planner-package.md` + DEC-0048 are the charter). Multi-disk hot-swap, frontend-only:
+  repeatable `--disk` list; F11 cycles drive A (reload DiskImage → attach_image → set_disk_changed
+  (true)); window-title + stderr feedback. COORDINATOR NOTE — a developer round-1 defect was caught
+  and fixed at the coordinator gate (round 2): the new integration test was originally written in
+  gtest (which this project does NOT use) and a `disk_path`→`disk_paths` rename left one pre-
+  existing SDL3-gated test stale — the SDL3-ON build FAILED in round 1. Round 2 rewrote the test in
+  native style, fixed the stale ref, and added a no-disk `attach_image(nullptr)` safety fix. The
+  coordinator INDEPENDENTLY re-ran the SDL3-ON build post-fix: 194/194 green, both new M35 tests
+  (frontend_sdl3_input_mapper_disk_swap_unit_test #189, frontend_sdl3_app_multi_disk_integration_
+  test #195) pass. QA must reproduce this from a clean build, not take it on trust.
+- Acceptance Criteria: (a) fresh dual-config build from the ONE canonical build/ (headless via bare
+  cmake SDL3=OFF; SDL3-ON via `tools/bootstrap-build.ps1` which self-bootstraps SDL3 from
+  references/sdl3 — do NOT create build-qa* dirs, DEC-0041 single-build; use a git worktree if you
+  need isolation). Reproduce headless 183/183 + SDL3-ON 194/194. (b) Adversarially verify the new
+  tests genuinely discriminate: e.g. neuter the F11 swap (don't advance the index, or don't call
+  set_disk_changed) → the disk-swap/integration tests MUST fail; break the repeatable parse → the
+  CLI cases MUST fail. (c) Confirm the SINGLE-DISK + NO-DISK regression guards: a single `--disk`
+  invocation is byte-for-byte pre-M35 behavior, and the no-disk path (with the new
+  attach_image(nullptr)) is safe/unchanged. (d) Hard constraints: `git diff` proof of ZERO
+  `src/devices/cpu/` + `src/core/` edits (ZEXALL correctly withheld per DEC-0048); confirm the swap
+  uses only EXISTING public device APIs (no src/devices/fdc/ logic edits — only calls). (e) Judge
+  the media-change design honestly: is re-attach + set_disk_changed(true) faithful to the DSKCHG
+  semantics at 0x7FFD bit2 (sony_fdc.cpp:42-44) and the cited openMSX DiskChanger behavior? (f) A/B
+  disposition (N/A-by-design for an input-driven UI feature — judge whether that's honest).
+  Produce `docs/m35-qa-signoff.md` with the verification matrix, adversarial outcomes, residual-
+  risk register, and Pass / Conditional Pass / Fail. Do NOT fix code; findings go in the sign-off.
+  Do not commit.
+- Dependencies: docs/m35-implementation-report.md; docs/m35-planner-package.md; DEC-0048;
+  REQ-M35-002.
+- Requested At: 2026-07-10T12:00:00+09:00

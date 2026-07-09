@@ -94,18 +94,33 @@ bool Sdl3App::load_configured_assets() {
         return false;
     }
 
-    // A-M26-6: real disk-image loading via the existing, unmodified
-    // devices::fdc::DiskImage(bytes) constructor -- zero machine-level
-    // change required.
-    if (config_.disk_path.has_value()) {
-        std::ifstream in(*config_.disk_path, std::ios::binary);
+    // M35-S2: real disk-image loading (A-M26-6 + M35-S2). Pre-load all
+    // disks in the repeatable --disk list into memory for deterministic
+    // swapping (AC-S2-2). Load the first disk at boot (AC-S2-1). Empty
+    // list = no disk (AC-S2-3, existing behavior).
+    disk_images_.clear();
+    current_disk_index_ = 0;
+
+    for (const auto& disk_path : config_.disk_paths) {
+        std::ifstream in(disk_path, std::ios::binary);
         if (!in) {
-            last_error_ = "cannot open --disk file: " + *config_.disk_path;
+            last_error_ = "cannot open --disk file: " + disk_path;
             return false;
         }
-        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        machine_.disk_image() = devices::fdc::DiskImage(std::move(bytes));
+        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)),
+                                         std::istreambuf_iterator<char>());
+        disk_images_.push_back(std::move(bytes));
+    }
+
+    // Attach the first disk (if any) at boot, exactly as pre-M35 behavior.
+    if (!disk_images_.empty()) {
+        machine_.disk_image() = devices::fdc::DiskImage(disk_images_[0]);
         machine_.disk_drive().attach_image(&machine_.disk_image());
+        update_window_title_for_current_disk();
+        log_disk_swap();
+    } else {
+        // M35-S2: explicitly detach when no disk in list (safety/clarity)
+        machine_.disk_drive().attach_image(nullptr);
     }
 
     return true;
@@ -225,6 +240,13 @@ void Sdl3App::poll_and_dispatch_events() {
             quit_requested_ = true;
             continue;
         }
+        // M35-S3/S4: F11 hotkey for disk-swap (fresh key-down only, not repeat,
+        // not routed to MSX keyboard matrix). Consumed here; never dispatched
+        // to input_mapper (which would feed it to the machine's peripherals).
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F11 && !event.key.repeat) {
+            on_disk_swap_hotkey();
+            continue;
+        }
         input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),
                                      machine_.rensha_turbo());
     }
@@ -287,6 +309,56 @@ void Sdl3App::run_one_frame() {
     }
 
     ++frames_run_;
+}
+
+void Sdl3App::on_disk_swap_hotkey() {
+    // M35-S4: Hotkey handler for F11 disk-swap. Rotate the current disk
+    // index, load the new image from cache, re-attach it, and set the
+    // disk-changed flag (AC-S4-1..4). No-op if list <= 1 (AC-S3-3).
+    if (disk_images_.size() <= 1) {
+        return;  // No-op: empty or single-disk list
+    }
+
+    current_disk_index_ = (current_disk_index_ + 1) % disk_images_.size();
+    machine_.disk_image() = devices::fdc::DiskImage(disk_images_[current_disk_index_]);
+    machine_.disk_drive().attach_image(&machine_.disk_image());
+    machine_.disk_drive().set_disk_changed(true);  // Signal media change
+    update_window_title_for_current_disk();
+    log_disk_swap();
+}
+
+void Sdl3App::update_window_title_for_current_disk() {
+    // M35-S5: Update window title to show the current disk name (AC-S5-1,
+    // AC-S5-2). Format: "sony-msx-hbf1xv — <disk_name>" or "(no disk)".
+    std::string title = "sony-msx-hbf1xv";
+    if (!config_.disk_paths.empty() && current_disk_index_ < config_.disk_paths.size()) {
+        // Extract filename from full path (platform-independent approach)
+        const auto& disk_path = config_.disk_paths[current_disk_index_];
+        const size_t last_slash = disk_path.find_last_of("/\\");
+        const std::string disk_name =
+            (last_slash == std::string::npos) ? disk_path : disk_path.substr(last_slash + 1);
+        title += " — " + disk_name;
+    } else {
+        title += " — (no disk)";
+    }
+    if (window_) {
+        SDL_SetWindowTitle(window_, title.c_str());
+    }
+}
+
+void Sdl3App::log_disk_swap() {
+    // M35-S5: Log disk swap to stderr with human-readable feedback
+    // (AC-S5-3). Format: "Inserted disk: <name> (i/N)" or "Inserted disk: (no disk)".
+    if (!config_.disk_paths.empty() && current_disk_index_ < config_.disk_paths.size()) {
+        const auto& disk_path = config_.disk_paths[current_disk_index_];
+        const size_t last_slash = disk_path.find_last_of("/\\");
+        const std::string disk_name =
+            (last_slash == std::string::npos) ? disk_path : disk_path.substr(last_slash + 1);
+        std::cerr << "Inserted disk: " << disk_name << " (" << (current_disk_index_ + 1) << "/"
+                  << config_.disk_paths.size() << ")\n";
+    } else {
+        std::cerr << "Inserted disk: (no disk)\n";
+    }
 }
 
 int Sdl3App::run_interactive() {

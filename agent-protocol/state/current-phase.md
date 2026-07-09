@@ -6,10 +6,17 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **IDLE — M34 CLOSED (DEC-0045, 2026-07-09, tag v1.0.35); awaiting the human's
-  live re-check of the two M34 fixes (Aleste 2 transition-beep gone; Metal Gear room-transition
-  clean backdrop wipe — R-M34-1 is the final acceptance signal on the 20.7 kHz residual) and
-  next directive.** M34 fixed the DEC-0043 playtest defect pair universally: (A) PSG/SCC
+- Active Phase: **M35 PLANNING (Kickoff 2026-07-10, DEC-0048) — Multi-disk hot-swap.** Closes the
+  standing residual "multi-disk swap UI — YS II will need it," human-authorized during live YS II
+  play (disk1 booted, reached the real "INSERT DATADISK IN DRIVE A - RET" prompt). Frontend-only:
+  a repeatable `--disk` list + an F11 hotkey cycling drive A at runtime (re-attaching the DiskImage
+  so a running title reads the new disk on its next FDC access); tag target v1.0.36. Scope override
+  of the tentative F2/M35-era label (F2 printer depth re-deferred, DEC-0048). Planner engaged next
+  (REQ-M35-001 → msx-planner). Constraints: zero cpu/core edits (ZEXALL withheld), additive/
+  default-off, deterministic. Prior: **IDLE — M34 CLOSED (DEC-0045, 2026-07-09, tag v1.0.35);
+  awaiting the human's live re-check of the two M34 fixes (Aleste 2 transition-beep gone; Metal
+  Gear room-transition clean backdrop wipe — R-M34-1 is the final acceptance signal on the 20.7
+  kHz residual).** M34 fixed the DEC-0043 playtest defect pair universally: (A) PSG/SCC
   band-limited box-average integration killed the ultrasonic point-sampling alias (Aleste 2's
   period-0 silence idiom that read as the transition beep) — zero post-fix burst blocks,
   residual ~500 RMS at 20.7 kHz sub-threshold, openMSX audio A/B silence-parity; the full

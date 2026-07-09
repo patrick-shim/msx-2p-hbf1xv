@@ -48,10 +48,11 @@ struct Sdl3AppConfig {
     // M30: --softwaredb override; std::nullopt selects the CWD-relative
     // default (machine::kDefaultSoftwareDbPath).
     std::optional<std::string> softwaredb_path;
-    // Real disk-image loading (A-M26-6): reads the file's bytes and mounts
-    // them via the existing, unmodified devices::fdc::DiskImage(bytes)
-    // constructor -- zero machine-level change required.
-    std::optional<std::string> disk_path;
+    // M35-S2: Real disk-image loading (A-M26-6 + M35-S2): a repeatable
+    // --disk list (see sdl3_cli.h). Empty means no disk. First disk loads
+    // at boot (AC-S2-1). All disks are pre-loaded into memory for
+    // deterministic swapping (AC-S2-2).
+    std::vector<std::string> disk_paths;
     int window_width = 640;
     int window_height = 480;
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
@@ -169,6 +170,10 @@ public:
 private:
     void poll_and_dispatch_events();
     bool load_configured_assets();
+    // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
+    void on_disk_swap_hotkey();
+    void update_window_title_for_current_disk();
+    void log_disk_swap();
 
     Sdl3AppConfig config_;
     machine::Hbf1xvMachine machine_;
@@ -188,6 +193,13 @@ private:
     // observable effect on any pre-existing M26 run_one_frame() caller when
     // config_.input_script_path is unset.
     machine::InputScriptPlayer input_script_player_;
+
+    // M35-S2/S4: multi-disk hot-swap state. disk_images_ caches all
+    // pre-loaded disk bytes in memory (deterministic, no runtime I/O).
+    // current_disk_index_ tracks which disk is mounted. Empty list is
+    // safe (no-op swaps); single-disk is a regression guard (F11 no-op).
+    std::vector<std::vector<std::uint8_t>> disk_images_;
+    std::size_t current_disk_index_ = 0;
 
     std::uint64_t frames_run_ = 0;
 };
