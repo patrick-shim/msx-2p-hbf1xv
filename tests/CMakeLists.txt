@@ -1609,6 +1609,16 @@ if(SONY_MSX_ENABLE_SDL3)
     add_test(NAME frontend_sdl3_app_fmpac_sram_integration_test
         COMMAND frontend_sdl3_app_fmpac_sram_integration_test)
 
+    # --- M37 Slices D + E (DEC-0056): --speed initial Speed Controller level +
+    #     resizable window / 320x240 letterbox logical presentation / texture
+    #     filter threaded through Sdl3App::init(). ---
+    add_executable(frontend_sdl3_app_scaling_integration_test
+        integration/frontend/sdl3_app_scaling_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_scaling_integration_test PRIVATE sony_msx_sdl3_frontend)
+    add_test(NAME frontend_sdl3_app_scaling_integration_test
+        COMMAND frontend_sdl3_app_scaling_integration_test)
+
     # M33/DEC-0041: stage SDL3.dll beside every SDL3-linked test executable
     # (see the sony_msx_stage_sdl3_dll definition in the root CMakeLists.txt --
     # without this, each test dies 0xc0000135 with a MODAL loader dialog that
@@ -1627,7 +1637,8 @@ if(SONY_MSX_ENABLE_SDL3)
         frontend_sdl3_app_input_script_integration_test
         frontend_sdl3_app_multi_disk_integration_test
         frontend_sdl3_app_snapshot_integration_test
-        frontend_sdl3_app_fmpac_sram_integration_test)
+        frontend_sdl3_app_fmpac_sram_integration_test
+        frontend_sdl3_app_scaling_integration_test)
         sony_msx_stage_sdl3_dll(${sdl3_test_target})
     endforeach()
 endif()

@@ -48,7 +48,13 @@ namespace sony_msx::frontend {
 // genuinely true (S3 pixel-exact test), not merely plausible.
 class Sdl3VideoPresenter {
 public:
-    explicit Sdl3VideoPresenter(SDL_Renderer* renderer, bool border_enabled = false);
+    // M37 Slice E (DEC-0056): `scale_mode` selects the texture filter applied
+    // via SDL_SetTextureScaleMode each time the texture is (re)created. Default
+    // SDL_SCALEMODE_LINEAR = the renderer's own default (SDL_render.h:1260), so
+    // an unspecified filter is byte-identical to the pre-M37 presentation;
+    // SDL_SCALEMODE_NEAREST = crisp pixels (--filter nearest).
+    explicit Sdl3VideoPresenter(SDL_Renderer* renderer, bool border_enabled = false,
+                                SDL_ScaleMode scale_mode = SDL_SCALEMODE_LINEAR);
     ~Sdl3VideoPresenter();
 
     Sdl3VideoPresenter(const Sdl3VideoPresenter&) = delete;
@@ -64,6 +70,9 @@ public:
 
     [[nodiscard]] bool border_enabled() const { return border_enabled_; }
 
+    // M37 Slice E (DEC-0056): the configured texture scale mode (--filter).
+    [[nodiscard]] SDL_ScaleMode scale_mode() const { return scale_mode_; }
+
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept
     // separate from blit_frame() (see class doc comment).
     bool present();
@@ -76,6 +85,7 @@ private:
 
     SDL_Renderer* renderer_;
     bool border_enabled_ = false;
+    SDL_ScaleMode scale_mode_ = SDL_SCALEMODE_LINEAR;  // M37 Slice E (DEC-0056): --filter
     SDL_Texture* texture_ = nullptr;
     int texture_width_ = 0;
     int texture_height_ = 0;

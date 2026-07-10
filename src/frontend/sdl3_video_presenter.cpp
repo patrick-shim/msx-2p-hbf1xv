@@ -17,8 +17,9 @@
 
 namespace sony_msx::frontend {
 
-Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border_enabled)
-    : renderer_(renderer), border_enabled_(border_enabled) {}
+Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border_enabled,
+                                       const SDL_ScaleMode scale_mode)
+    : renderer_(renderer), border_enabled_(border_enabled), scale_mode_(scale_mode) {}
 
 Sdl3VideoPresenter::~Sdl3VideoPresenter() {
     if (texture_ != nullptr) {
@@ -42,6 +43,17 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_XRGB1555, SDL_TEXTUREACCESS_STREAMING, width, height);
     if (texture_ == nullptr) {
         last_error_ = SDL_GetError();
+        return false;
+    }
+    // M37 Slice E (DEC-0056): apply the configured filter (--filter) to the
+    // freshly-created texture -- SDL_SetTextureScaleMode per references/sdl3/
+    // include/SDL3/SDL_render.h:1275. Default LINEAR matches the renderer's own
+    // default (SDL_render.h:1260), so an unspecified filter is byte-identical
+    // to the pre-M37 presentation.
+    if (!SDL_SetTextureScaleMode(texture_, scale_mode_)) {
+        last_error_ = SDL_GetError();
+        SDL_DestroyTexture(texture_);
+        texture_ = nullptr;
         return false;
     }
     texture_width_ = width;

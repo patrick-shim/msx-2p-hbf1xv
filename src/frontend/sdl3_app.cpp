@@ -164,7 +164,18 @@ bool Sdl3App::init() {
     }
     sdl_initialized_ = true;
 
-    const SDL_WindowFlags flags = config_.hidden_window ? SDL_WINDOW_HIDDEN : 0;
+    // M37 Slice E (DEC-0056): the window is RESIZABLE so drag-resize scales
+    // live out of the box (references/sdl3/include/SDL3/SDL_video.h:237); still
+    // honor hidden_window (test/CI) and start fullscreen when requested
+    // (SDL_video.h:232). fullscreen_ tracks the runtime Alt+Enter toggle state.
+    SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
+    if (config_.hidden_window) {
+        flags |= SDL_WINDOW_HIDDEN;
+    }
+    if (config_.fullscreen) {
+        flags |= SDL_WINDOW_FULLSCREEN;
+    }
+    fullscreen_ = config_.fullscreen;
     if (!SDL_CreateWindowAndRenderer("sony-msx-hbf1xv", config_.window_width, config_.window_height, flags,
                                      &window_, &renderer_)) {
         last_error_ = SDL_GetError();
@@ -172,7 +183,19 @@ bool Sdl3App::init() {
         return false;
     }
 
-    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_, config_.border_enabled);
+    // M37 Slice E (DEC-0056): aspect-correct, never-distorted letterboxed
+    // scaling. 320x240 is the MSX 4:3 framing, so the picture matches today
+    // (the presenter's SDL_RenderTexture(..., nullptr, nullptr) fills this
+    // logical area; SDL letterboxes it to the actual window/fullscreen size at
+    // any --scale). Grounded in references/sdl3/include/SDL3/SDL_render.h:1574
+    // (SDL_SetRenderLogicalPresentation) + :136 (SDL_LOGICAL_PRESENTATION_LETTERBOX).
+    if (!SDL_SetRenderLogicalPresentation(renderer_, 320, 240, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
+        last_error_ = SDL_GetError();
+        shutdown();
+        return false;
+    }
+
+    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_, config_.border_enabled, config_.texture_filter);
 
     audio_presenter_ = std::make_unique<Sdl3AudioPresenter>();
     if (!audio_presenter_->init()) {
@@ -199,6 +222,17 @@ bool Sdl3App::init() {
 
     machine_.set_asset_root(config_.bios_dir);
     machine_.cold_boot();
+
+    // M37 Slice D (DEC-0056): apply the launch-time initial Sony Speed
+    // Controller level AFTER cold_boot() -- cold_boot() resets the controller
+    // to level 0 (hbf1xv_machine.cpp:316), so setting it earlier would be
+    // clobbered. std::nullopt (default) leaves it untouched -> level 0 (full
+    // speed), byte-identical to before. The F6/F7 runtime stepping
+    // (sdl3_input_mapper.cpp) is unchanged; this only sets the INITIAL value.
+    if (config_.speed_level.has_value()) {
+        machine_.pause_controller().set_speed_level(*config_.speed_level);
+    }
+
     if (!load_configured_assets()) {
         shutdown();
         return false;
@@ -312,6 +346,19 @@ void Sdl3App::poll_and_dispatch_events() {
         // F6-F9 speed/rensha + F11 disk-swap + F12 snapshot are wired).
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F10 && !event.key.repeat) {
             on_stream_toggle_hotkey();
+            continue;
+        }
+        // M37 Slice E (DEC-0056): Alt+Enter toggles fullscreen at runtime (fresh
+        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; NEVER
+        // dispatched to input_mapper_ -- RETURN is an MSX matrix key, so it must
+        // not leak into the emulated keyboard (mirrors the F10/F11/F12
+        // discipline above). Mod mask SDL_KMOD_ALT (either Alt) per
+        // references/sdl3/include/SDL3/SDL_keycode.h:344; SDL_SetWindowFullscreen
+        // per SDL_video.h:2435.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_RETURN &&
+            (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
+            fullscreen_ = !fullscreen_;
+            SDL_SetWindowFullscreen(window_, fullscreen_);
             continue;
         }
         input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),

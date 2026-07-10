@@ -247,6 +247,47 @@ int main() {
         }
     }
 
+    // --- 4. (M37 Slice E, DEC-0056) The presenter applies the configured
+    //     texture scale mode via SDL_SetTextureScaleMode (references/sdl3/
+    //     include/SDL3/SDL_render.h:1275) each time the texture is (re)created.
+    //     Verified against a LIVE renderer by reading the mode back with
+    //     SDL_GetTextureScaleMode (:1291). Default construction -> LINEAR (the
+    //     renderer's own default, byte-identical to the pre-M37 look);
+    //     explicit NEAREST (--filter nearest) -> NEAREST. This is a real
+    //     live-renderer assertion of the filter wiring, not a tautology. ---
+    {
+        SDL_Window* window = nullptr;
+        SDL_Renderer* renderer = nullptr;
+        const bool created = SDL_CreateWindowAndRenderer("m37-filter-test", frame.width, frame.height,
+                                                         SDL_WINDOW_HIDDEN, &window, &renderer);
+        expect(created, "FilterMode_CreateWindowAndRenderer_Succeeds");
+        if (created) {
+            // Default construction -> LINEAR.
+            {
+                sony_msx::frontend::Sdl3VideoPresenter presenter(renderer);
+                expect(presenter.scale_mode() == SDL_SCALEMODE_LINEAR, "FilterMode_DefaultConfiguredLinear");
+                expect(presenter.blit_frame(frame), "FilterMode_Default_BlitSucceeds");
+                SDL_ScaleMode mode = SDL_SCALEMODE_NEAREST;
+                expect(presenter.texture() != nullptr &&
+                           SDL_GetTextureScaleMode(presenter.texture(), &mode) && mode == SDL_SCALEMODE_LINEAR,
+                       "FilterMode_Default_TextureIsLinear_LiveReadback");
+            }
+            // Explicit NEAREST.
+            {
+                sony_msx::frontend::Sdl3VideoPresenter presenter(renderer, /*border_enabled=*/false,
+                                                                 SDL_SCALEMODE_NEAREST);
+                expect(presenter.scale_mode() == SDL_SCALEMODE_NEAREST, "FilterMode_NearestConfigured");
+                expect(presenter.blit_frame(frame), "FilterMode_Nearest_BlitSucceeds");
+                SDL_ScaleMode mode = SDL_SCALEMODE_LINEAR;
+                expect(presenter.texture() != nullptr &&
+                           SDL_GetTextureScaleMode(presenter.texture(), &mode) && mode == SDL_SCALEMODE_NEAREST,
+                       "FilterMode_Nearest_TextureIsNearest_LiveReadback");
+            }
+            SDL_DestroyRenderer(renderer);
+            SDL_DestroyWindow(window);
+        }
+    }
+
     SDL_Quit();
 
     if (g_failures != 0) {

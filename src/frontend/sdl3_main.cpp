@@ -28,7 +28,16 @@ void print_usage(const char* argv0) {
                  " [--max-frames <N>] [--hidden-window]"
                  " [--border] [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
                  " [--input-script <path>] [--snapshot <dir>]"
-                 " [--fmpac-sram <path>] [--no-fmpac-sram]\n"
+                 " [--fmpac-sram <path>] [--no-fmpac-sram]"
+                 " [--speed <0..7>] [--scale <1..8>] [--filter <nearest|linear>] [--fullscreen]\n"
+                 "\n"
+                 "--speed <0..7> sets the initial Sony Speed Controller level (0 = full speed,\n"
+                 "default; 7 = maximum slow-motion -- a CPU slow-down duty cycle, NOT a turbo).\n"
+                 "F6/F7 still step it at runtime. --scale <N> opens the window at 320N x 240N\n"
+                 "(default 2 = 640x480); the window is resizable and the picture is aspect-correct\n"
+                 "letterboxed at any size / fullscreen. --filter picks the scaling filter (default\n"
+                 "linear = smooth; nearest = crisp pixels). --fullscreen starts fullscreen and\n"
+                 "Alt+Enter toggles fullscreen at runtime.\n"
                  "\n"
                  "--snapshot <dir> sets the debug-snapshot output root (default debug/); press\n"
                  "F12 in-session to write a comprehensive per-component snapshot to\n"
@@ -90,6 +99,19 @@ int main(int argc, char** argv) {
     config.input_script_path = parsed.input_script_path;
     config.snapshot_dir = parsed.snapshot_dir;  // M36 Phase 3: --snapshot <dir>
     config.stream_light = parsed.stream_light;  // DEC-0052: F10 arms lightweight mode
+    // M37 Slice D (DEC-0056): --speed <0..7> launch-time initial Speed
+    // Controller level (std::nullopt -> untouched, level 0/full speed).
+    config.speed_level = parsed.speed_level;
+    // M37 Slice E (DEC-0056): --fullscreen / --filter / --scale window scaling.
+    config.fullscreen = parsed.fullscreen;
+    config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
+                                ? SDL_SCALEMODE_NEAREST
+                                : SDL_SCALEMODE_LINEAR;
+    // --scale N -> 320N x 240N window; absent keeps the default 640x480 (= scale 2).
+    if (parsed.scale.has_value()) {
+        config.window_width = 320 * *parsed.scale;
+        config.window_height = 240 * *parsed.scale;
+    }
     // M36 FM-PAC SRAM persistence: override/opt-out of the auto-derived
     // <fmpac-cart>.rom.sram default (default persistence is automatic).
     config.fmpac_sram_path = parsed.fmpac_sram_path;

@@ -22,6 +22,7 @@
 
 #include "devices/fdc/disk_image.h"
 #include "frontend/psg_audio_dump.h"
+#include "frontend/sdl3_cli.h"  // M37 Slice D (DEC-0056): shared parse_speed_level() validator
 #include "machine/cartridge_cli.h"
 #include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
@@ -1411,6 +1412,42 @@ int main(int argc, char** argv) {
     if (const int rc = load_cartridges_from_args(machine, args); rc != 0) {
         return rc;
     }
+
+    // M37 Slice D (DEC-0056): optional --speed <0..7> launch-time initial Sony
+    // Speed Controller level -- headless parity with the SDL3 frontend. Uses the
+    // SAME shared validator (parse_speed_level, one range policy) and is applied
+    // AFTER cold_boot() (which resets the controller to level 0), BEFORE the run
+    // loop below. Absent --speed leaves the controller untouched (level 0, full
+    // speed), byte-identical to before. An out-of-range/non-numeric/missing value
+    // is a loud parse error + non-zero exit (mirrors the --max-frames policy).
+    {
+        std::vector<std::string> speed_errors;
+        std::optional<int> speed_level;
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            if (args[i] != "--speed") {
+                continue;
+            }
+            if (i + 1 >= args.size()) {
+                speed_errors.push_back("main: --speed requires a value argument");
+                break;
+            }
+            int level = 0;
+            if (sony_msx::frontend::parse_speed_level(args[i + 1], level, speed_errors, "main")) {
+                speed_level = level;
+            }
+            ++i;
+        }
+        for (const std::string& err : speed_errors) {
+            std::cerr << err << "\n";
+        }
+        if (!speed_errors.empty()) {
+            return 2;
+        }
+        if (speed_level.has_value()) {
+            machine.pause_controller().set_speed_level(*speed_level);
+        }
+    }
+
     machine.run_frame();
 
     std::cout << "sony-msx-hbf1xv headless scaffold\n";

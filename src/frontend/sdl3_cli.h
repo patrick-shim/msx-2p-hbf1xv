@@ -22,6 +22,13 @@
 
 namespace sony_msx::frontend {
 
+// M37 Slice E (DEC-0056): --filter <nearest|linear> texture scale mode.
+// DEFAULT Linear -- the "smooth" look the human asked for (DEC-0056), which
+// is also the SDL3 renderer's own default texture scale mode
+// (references/sdl3/include/SDL3/SDL_render.h:1260), so an absent --filter is
+// byte-identical to the pre-M37 presentation. Nearest = crisp pixels.
+enum class TextureFilter { Nearest, Linear };
+
 // Pure argv parser for the SDL3 frontend's own flags (M26-S2/S7,
 // docs/m26-planner-package.md §2.8): `--bios-dir <path>`, `--disk <path>`
 // (A-M26-6), `--max-frames <N>` (a bounded, non-interactive run length for
@@ -86,6 +93,25 @@ struct ParsedSdl3Cli {
     // the headless --fmpac-sram flag, src/main.cpp).
     std::optional<std::string> fmpac_sram_path;
     bool fmpac_sram_disabled = false;
+    // M37 Slice D (DEC-0056): --speed <0..7> launch-time initial Sony Speed
+    // Controller level (devices::chipset::Mb670836PauseController). Range is
+    // validated against [0, kMaxSpeedLevel] via parse_speed_level() below;
+    // std::nullopt (default) leaves the controller untouched -> level 0 (full
+    // speed), byte-identical to today. The SDL3 F6/F7 runtime stepping is
+    // unchanged; --speed only sets the INITIAL value. Out-of-range/non-numeric/
+    // missing-value push a message into `.errors` (mirrors --max-frames).
+    std::optional<int> speed_level;
+    // M37 Slice E (DEC-0056): --scale <N> initial window size = 320N x 240N.
+    // Clamped to [1, 8]; out-of-range/non-numeric/missing push into `.errors`.
+    // std::nullopt (default) keeps the 640x480 window (= scale 2), non-regressive.
+    // The parser only records N; sdl3_main.cpp maps it to window_width/height.
+    std::optional<int> scale;
+    // M37 Slice E (DEC-0056): --filter <nearest|linear>; DEFAULT Linear (see
+    // TextureFilter). A bad value pushes into `.errors`; absent stays Linear.
+    TextureFilter filter = TextureFilter::Linear;
+    // M37 Slice E (DEC-0056): --fullscreen starts the window fullscreen
+    // (Alt+Enter toggles at runtime). Bare boolean flag; default false.
+    bool fullscreen = false;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).
@@ -93,5 +119,16 @@ struct ParsedSdl3Cli {
 };
 
 [[nodiscard]] ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args);
+
+// M37 Slice D (DEC-0056): shared `--speed` value validator, so the range
+// policy [0, Mb670836PauseController::kMaxSpeedLevel] has ONE implementation
+// consumed by BOTH parse_sdl3_cli() (above) and src/main.cpp's headless
+// default run path (--speed parity, headless + SDL3). Parses `value` as an
+// integer; on success sets `out_level` and returns true; on a non-integer or
+// out-of-range value it appends a diagnostic (prefixed with `context`, e.g.
+// "sdl3_cli" or "main") to `errors` and returns false. No SDL3 dependency --
+// headlessly unit-testable.
+[[nodiscard]] bool parse_speed_level(const std::string& value, int& out_level,
+                                     std::vector<std::string>& errors, const char* context);
 
 }  // namespace sony_msx::frontend

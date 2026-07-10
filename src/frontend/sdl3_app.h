@@ -135,6 +135,25 @@ struct Sdl3AppConfig {
     // byte-for-byte identical to before.
     std::optional<std::string> fmpac_sram_path;
     bool fmpac_sram_disabled = false;
+
+    // M37 Slice D (DEC-0056): launch-time initial Sony Speed Controller level
+    // (Mb670836PauseController). std::nullopt (default) leaves the controller
+    // untouched -> level 0 (full speed), byte-identical to before. Applied in
+    // init() AFTER cold_boot() (which resets the controller). The F6/F7
+    // runtime stepping is unchanged; this only sets the INITIAL value.
+    std::optional<int> speed_level;
+
+    // M37 Slice E (DEC-0056): start the window fullscreen. Default false =
+    // windowed (byte-identical to before). Alt+Enter toggles at runtime.
+    bool fullscreen = false;
+
+    // M37 Slice E (DEC-0056): texture scale mode fed to the video presenter
+    // (--filter). Default SDL_SCALEMODE_LINEAR = the renderer's own default
+    // (references/sdl3/include/SDL3/SDL_render.h:1260), the "smooth" look and
+    // byte-identical to before; SDL_SCALEMODE_NEAREST = crisp pixels.
+    // window_width/window_height above are set from --scale N (320N x 240N) by
+    // sdl3_main.cpp; the default stays 640x480 (= scale 2).
+    SDL_ScaleMode texture_filter = SDL_SCALEMODE_LINEAR;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real
@@ -264,6 +283,9 @@ private:
     // M36 Phase 3: set by F12 (on_snapshot_hotkey), serviced + cleared at the
     // end of run_one_frame() so the capture happens at a clean frame boundary.
     bool snapshot_requested_ = false;
+    // M37 Slice E (DEC-0056): tracked fullscreen state for the Alt+Enter
+    // runtime toggle. Seeded from config_.fullscreen in init().
+    bool fullscreen_ = false;
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
