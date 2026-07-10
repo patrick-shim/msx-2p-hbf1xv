@@ -48,6 +48,10 @@ struct ParsedSdl3Cli {
     // edge-to-edge (human-decided presentation preference, docs/konami-
     // splash-regression-investigation.md).
     bool border_enabled = false;
+    // M36-S-c: --disk-writable opt-in host-file disk-save persistence. Default
+    // OFF = in-memory-only (never clobbers a real .dsk); a dirty writable image
+    // flushes on shutdown and before a swap discards it.
+    bool disk_writable = false;
     machine::ParsedCartridgeCli cartridges;
     // M27-S4/S7 additive debug/scripted-input flags (docs/m27-planner-
     // package.md §2.2/§2.4, items 1/3/4): `--dump-state`/`--trace-cpu`/
@@ -60,6 +64,13 @@ struct ParsedSdl3Cli {
     std::optional<std::string> trace_cpu_filename;
     std::optional<std::string> event_log_filename;
     std::optional<std::string> input_script_path;
+    // M36 Phase 3 (DEC-0051): --snapshot <dir> enables the comprehensive debug
+    // snapshot and overrides the output root (<dir>/snapshot/<id>/). F12
+    // in-session capture is ALWAYS active (read-only, harmless); this flag only
+    // controls where captures land. std::nullopt by default -- a hard
+    // regression guard: every pre-existing parse_sdl3_cli() case stays green
+    // unmodified (mirrors the M27 dump_state_filename additive field).
+    std::optional<std::string> snapshot_dir;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).

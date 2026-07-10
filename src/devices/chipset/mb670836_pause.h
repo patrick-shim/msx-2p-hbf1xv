@@ -95,6 +95,10 @@ public:
     // the manual button OR the Speed Controller's current duty-cycle window.
     [[nodiscard]] bool cpu_should_pause() const;
 
+    // M36 Phase 3 debug snapshot: the internal VBlank frame counter, for a
+    // restore-ready snapshot (planner §2.4 item 12). const, ZERO behavior change.
+    [[nodiscard]] std::uint64_t frame_index() const { return frame_index_; }
+
 private:
     bool engaged_ = false;
     int speed_level_ = 0;

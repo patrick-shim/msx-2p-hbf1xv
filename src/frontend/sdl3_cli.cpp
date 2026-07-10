@@ -64,6 +64,8 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             parsed.hidden_window = true;
         } else if (arg == "--border") {
             parsed.border_enabled = true;
+        } else if (arg == "--disk-writable") {
+            parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
         } else if (arg == "--dump-state") {
             if (auto value = take_value(args, i, "--dump-state", parsed.errors)) {
                 parsed.dump_state_filename = *value;
@@ -82,6 +84,11 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
         } else if (arg == "--input-script") {
             if (auto value = take_value(args, i, "--input-script", parsed.errors)) {
                 parsed.input_script_path = *value;
+                ++i;
+            }
+        } else if (arg == "--snapshot") {
+            if (auto value = take_value(args, i, "--snapshot", parsed.errors)) {
+                parsed.snapshot_dir = *value;  // M36 Phase 3: snapshot output root
                 ++i;
             }
         }

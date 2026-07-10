@@ -169,6 +169,50 @@ int main() {
                "Read0x7FFD_Bit2_RestoresWhenAcknowledged");
     }
 
+    // --- M36 Bug B: DSKCHG at 0x7FFD is a READ-AND-CLEAR one-shot. Real hardware +
+    //     openMSX reset the disk-changed line on read: DiskChanger::diskChanged()
+    //     returns the flag then clears it (references/openmsx-21.0/src/fdc/
+    //     DiskChanger.cc:95-100), reached via the MUTATING readMem path
+    //     (PhilipsFDC.cc:37). Simulate an F11 hot-swap (set_disk_changed) then
+    //     prove the register read reports "changed" EXACTLY ONCE and reverts to
+    //     "not changed" on the next read with no further swap -- so a swapped
+    //     medium can no longer latch DSKCHG forever (the YS II building-entry
+    //     DI;HALT freeze can no longer occur). ---
+    {
+        Fixture f;
+        f.sony_fdc.mem_write(0x7FFD, 0x00);
+        f.drive.set_disk_changed(true);  // hot-swap latches DSKCHG.
+
+        // The const peek getter reports "changed" and is STABLE -- calling it
+        // repeatedly does NOT clear the latch (snapshot/debug inspection path,
+        // Phase-3 determinism: a state dump must not consume the one-shot).
+        expect(f.drive.disk_changed(), "Dskchg_ConstPeek_ReportsChanged");
+        expect(f.drive.disk_changed(), "Dskchg_ConstPeek_StableDoesNotClear");
+
+        // First register read: DSKCHG asserted (bit2 == 0, active-low).
+        expect((f.sony_fdc.mem_read(0x7FFD) & 0x04) == 0,
+               "Dskchg_OneShot_FirstReadReportsChanged");
+        // The register read consumed the one-shot -> latch is now clear.
+        expect(!f.drive.disk_changed(), "Dskchg_OneShot_RegisterReadClearedLatch");
+        // Second register read WITHOUT any further swap: reverts to "not changed".
+        expect((f.sony_fdc.mem_read(0x7FFD) & 0x04) != 0,
+               "Dskchg_OneShot_SecondReadRevertsToNotChanged");
+    }
+
+    // --- M36 Bug B regression: single-disk games (NO swap) are unaffected. With
+    //     disk_changed_ never set, the read-and-clear is a no-op: the register
+    //     always reads "not changed" (bit2 == 1) across repeated reads, exactly as
+    //     before the fix. ---
+    {
+        Fixture f;
+        f.sony_fdc.mem_write(0x7FFD, 0x00);
+        for (int i = 0; i < 4; ++i) {
+            expect((f.sony_fdc.mem_read(0x7FFD) & 0x04) != 0,
+                   "Dskchg_NoSwap_AlwaysReadsNotChanged");
+        }
+        expect(!f.drive.disk_changed(), "Dskchg_NoSwap_LatchStaysClear");
+    }
+
     // --- 0x7FFE is unused: always reads 0xFF. ---
     {
         Fixture f;

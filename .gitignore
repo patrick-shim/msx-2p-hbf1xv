@@ -44,6 +44,16 @@ CMakeUserPresets.json
 /debug/**/emulator.log
 # M36 playtest harness run dirs (timestamped, ephemeral capture output)
 /debug/playtest_*/
+# M36 Phase 3 comprehensive debug snapshots (per-component captures under
+# debug/snapshot/<id>/ -- deterministic but regenerable runtime output; the
+# blanket dir ignore also catches arbitrary-extension files like manifest.txt).
+/debug/snapshot/
+# DEC-0052 live stream-capture output: per-frame snapshot bundles under
+# debug/snapshot/stream_<id>/ (already caught by /debug/snapshot/ above) and the
+# per-instruction trace ring dump debug/traces/stream_<id>_trace.txt (already
+# caught by /debug/**/*.txt above). Listed explicitly for discoverability.
+/debug/snapshot/stream_*/
+/debug/traces/stream_*_trace.txt
 
 # M26 exception: one real, committed decoded-FrameBuffer-capture example
 # (backlog C9's authorized debug/testing capability, docs/m26-planner-

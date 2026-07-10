@@ -182,6 +182,29 @@ public:
     [[nodiscard]] std::uint8_t channel_amplitude(int channel) const;  // resolved 0..31
     [[nodiscard]] bool channel_audible(int channel) const;
 
+    // --- M36 Phase 3 debug snapshot: additive read-only view of the RAW
+    //     generator state (tone/noise/envelope counters, LFSR, sub-step
+    //     residual, box-average integrals) for a restore-ready snapshot. ONE
+    //     struct-returning accessor keeps the header additive-but-compact and
+    //     leaves the private Tone/Noise/Envelope structs encapsulated
+    //     (docs/m36-phase3-planner-package.md §2.4 item 5). Non-perturbing. ---
+    struct GeneratorSnapshot {
+        std::array<int, 3> tone_count{};
+        std::array<int, 3> tone_output{};
+        int noise_count = 0;
+        std::uint32_t noise_lfsr = 0;
+        int noise_output = 0;
+        int envelope_count = 0;
+        int envelope_step = 0;
+        int envelope_attack = 0;
+        bool envelope_hold = false;
+        bool envelope_alternate = false;
+        bool envelope_holding = false;
+        std::uint64_t cycle_residual = 0;
+        std::array<std::uint64_t, 3> level_dwell_integral{};
+    };
+    [[nodiscard]] GeneratorSnapshot generator_snapshot() const;
+
     // Test-only: single-step the envelope state machine (bypasses the clock
     // divider) to exercise the shape logic deterministically.
     void debug_step_envelope(int steps);

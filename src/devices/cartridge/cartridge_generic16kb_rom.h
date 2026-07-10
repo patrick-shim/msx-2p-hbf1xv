@@ -53,6 +53,8 @@ public:
     void mem_write(core::BusAddress address, core::BusData value) override;
 
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
+    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
 
 private:
     void set_logical_bank(int bank, unsigned block16k);

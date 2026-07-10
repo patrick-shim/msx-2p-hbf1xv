@@ -13,6 +13,9 @@
 
 #include "devices/fdc/disk_image.h"
 
+#include <fstream>
+#include <ios>
+
 namespace sony_msx::devices::fdc {
 
 DiskImage::DiskImage() : data_(synthesize()) {}
@@ -122,6 +125,11 @@ bool DiskImage::write_lba(const std::uint32_t lba, const std::uint8_t* in) {
     for (std::uint32_t j = 0; j < kSectorSize; ++j) {
         data_[base + j] = in[j];
     }
+    // Mark the image dirty so an explicit, opt-in flush() (never the emulation
+    // step) can later persist it. `dirty_` is pure new bookkeeping and is
+    // invisible to emulation, so this leaves the default (no host path) path
+    // byte-for-byte unchanged.
+    dirty_ = true;
     return true;
 }
 
@@ -146,6 +154,26 @@ std::uint8_t DiskImage::byte_at(const std::uint32_t offset) const {
         return 0xFF;
     }
     return data_[offset];
+}
+
+bool DiskImage::flush() {
+    if (host_path_.empty()) {
+        return false;  // no host-file persistence configured -> nothing to do
+    }
+    // Binary + trunc: write the exact `data_` bytes verbatim (no translation),
+    // a pure function of the final in-memory image. Deterministic: two runs
+    // that produced identical `data_` write byte-identical files.
+    std::ofstream file(host_path_, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return false;
+    }
+    file.write(reinterpret_cast<const char*>(data_.data()),
+               static_cast<std::streamsize>(data_.size()));
+    if (!file) {
+        return false;
+    }
+    dirty_ = false;
+    return true;
 }
 
 }  // namespace sony_msx::devices::fdc

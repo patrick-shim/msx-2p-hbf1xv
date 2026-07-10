@@ -173,6 +173,24 @@ public:
     // (docs/m32-planner-package.md §2.3/§2.5).
     [[nodiscard]] int raster_display_line() const;
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     internal two-write latch protocol, VRAM read-ahead/access state, the
+    //     status/IRQ/field flags, and the blink countdown. Every accessor is a
+    //     const return of an already-existing private member -- ZERO behavior
+    //     change (docs/m36-phase3-planner-package.md §2.4 item 3). These make
+    //     the snapshot restore-ready without touching any emulation path. ---
+    [[nodiscard]] std::uint8_t data_latch() const { return data_latch_; }
+    [[nodiscard]] bool register_data_stored() const { return register_data_stored_; }
+    [[nodiscard]] bool palette_data_stored() const { return palette_data_stored_; }
+    [[nodiscard]] bool write_access() const { return write_access_; }
+    [[nodiscard]] std::uint8_t cpu_vram_data() const { return cpu_vram_data_; }
+    [[nodiscard]] std::uint8_t status_reg0() const { return status_reg0_; }
+    [[nodiscard]] bool eo_field() const { return eo_field_; }
+    [[nodiscard]] bool irq_vertical() const { return irq_vertical_; }
+    [[nodiscard]] bool irq_horizontal() const { return irq_horizontal_; }
+    [[nodiscard]] bool irq_level() const { return irq_level_; }
+    [[nodiscard]] int blink_countdown() const { return blink_countdown_; }
+
 private:
     // #98 VRAM data path.
     void vram_data_write(std::uint8_t value);

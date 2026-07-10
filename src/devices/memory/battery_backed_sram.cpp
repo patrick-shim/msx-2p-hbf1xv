@@ -26,6 +26,10 @@ std::size_t BatteryBackedSram::size() const {
     return bytes_.size();
 }
 
+const std::uint8_t* BatteryBackedSram::data() const {
+    return bytes_.data();
+}
+
 std::uint8_t BatteryBackedSram::read(const std::size_t offset) const {
     return bytes_[offset];
 }

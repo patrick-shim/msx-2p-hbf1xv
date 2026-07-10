@@ -306,6 +306,28 @@ std::uint8_t PsgYm2149::channel_amplitude(const int channel) const {
     return resolved_amplitude(channel);
 }
 
+PsgYm2149::GeneratorSnapshot PsgYm2149::generator_snapshot() const {
+    // M36 Phase 3: a flat, restore-ready copy of the raw generator state. Pure
+    // read (no advance/mutation) -- the snapshot never perturbs emulation.
+    GeneratorSnapshot s;
+    for (std::size_t i = 0; i < 3; ++i) {
+        s.tone_count[i] = tone_[i].count;
+        s.tone_output[i] = tone_[i].output;
+        s.level_dwell_integral[i] = level_dwell_integral_[i];
+    }
+    s.noise_count = noise_.count;
+    s.noise_lfsr = noise_.lfsr;
+    s.noise_output = noise_.output;
+    s.envelope_count = envelope_.count;
+    s.envelope_step = envelope_.step;
+    s.envelope_attack = envelope_.attack;
+    s.envelope_hold = envelope_.hold;
+    s.envelope_alternate = envelope_.alternate;
+    s.envelope_holding = envelope_.holding;
+    s.cycle_residual = cycle_residual_;
+    return s;
+}
+
 void PsgYm2149::advance_cycles(const std::uint64_t delta_cpu_cycles) {
     // M34 dwell walk (docs/m34-planner-package.md §2.3.1): the level of each
     // channel is piecewise-constant between generator steps, so the exact

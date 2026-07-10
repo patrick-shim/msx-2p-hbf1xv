@@ -166,6 +166,61 @@ int main() {
         }
     }
 
+    // --- R-M35-1 (M36-S-f): the F11 swap MUST advance the mounted disk index.
+    // Mutation B in M35 QA (hard-coding current_disk_index_ to 0) previously
+    // did NOT kill any test because IT-2 only checked image()!=nullptr. This
+    // case drives the deterministic swap seam directly (no SDL event injection)
+    // and asserts the index actually rotates 0 -> 1 -> 0 and the media-change
+    // signal is raised -- so an index-stuck-at-0 mutation now FAILS the test.
+    {
+        const std::vector<std::string> disk_paths{std::string(SONY_MSX_DISKS_DIR) + "/msxdos22.dsk",
+                                                   std::string(SONY_MSX_DISKS_DIR) + "/msxdos23.dsk"};
+        sony_msx::frontend::Sdl3AppConfig config = make_test_config(disk_paths);
+        sony_msx::frontend::Sdl3App app(config);
+
+        const bool init_ok = app.init();
+        expect(init_ok, "DiskSwapAdvances_InitSuccess");
+
+        if (init_ok) {
+            // Boots on disk 0.
+            expect(app.current_disk_index() == 0, "DiskSwapAdvances_BootIndexIsZero");
+            const auto* image0 = app.machine().disk_drive().image();
+            expect(image0 != nullptr, "DiskSwapAdvances_BootImageAttached");
+
+            // F11 -> advance to disk 1, media-change asserted, fresh image.
+            app.swap_to_next_disk();
+            expect(app.current_disk_index() == 1, "DiskSwapAdvances_IndexBecomesOne");
+            expect(app.machine().disk_drive().disk_changed(),
+                   "DiskSwapAdvances_MediaChangeSignalled");
+            expect(app.machine().disk_drive().image() == &app.machine().disk_image(),
+                   "DiskSwapAdvances_NewImageAttached");
+
+            // M36 Bug B: DSKCHG must be a READ-AND-CLEAR one-shot end-to-end. The
+            // const peek is STABLE (does not clear -- snapshot path); the mutating
+            // take_disk_changed() is the exact accessor SonyFdc::mem_read(0x7FFD)
+            // uses (references/openmsx-21.0/src/fdc/DiskChanger.cc:95-100 via
+            // readMem PhilipsFDC.cc:37). After a swap the game's DSKCHG re-check
+            // reads "changed" ONCE then the latch reverts to "not changed" -- so a
+            // swapped medium no longer latches DSKCHG forever (the building-entry
+            // DI;HALT freeze). Previously R-M35-1 only checked the const flag was
+            // set and never covered the clear-on-read media-change semantics.
+            expect(app.machine().disk_drive().disk_changed(),
+                   "DiskSwapAdvances_DskchgConstPeekStable");  // still set, peek didn't clear
+            expect(app.machine().disk_drive().take_disk_changed(),
+                   "DiskSwapAdvances_DskchgReadReportsChanged");
+            expect(!app.machine().disk_drive().disk_changed(),
+                   "DiskSwapAdvances_DskchgClearedAfterRead");
+            expect(!app.machine().disk_drive().take_disk_changed(),
+                   "DiskSwapAdvances_DskchgSecondReadNotChanged");
+
+            // F11 again -> wrap back to disk 0 (2-disk list is modular).
+            app.swap_to_next_disk();
+            expect(app.current_disk_index() == 0, "DiskSwapAdvances_IndexWrapsToZero");
+
+            app.shutdown();
+        }
+    }
+
     // --- IT-3: Media-change signal (S4) ---
 
     // Case 1: disk_changed() flag is initially false at boot (fresh disk).

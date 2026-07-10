@@ -68,6 +68,7 @@ add_library(sony_msx_core STATIC
     src/devices/cartridge/cartridge_ascii16kb_rom.cpp
     src/devices/cartridge/cartridge_konami_rom.cpp
     src/devices/cartridge/cartridge_konami_scc_rom.cpp
+    src/devices/cartridge/cartridge_fmpac_rom.cpp
     src/devices/cartridge/cartridge_slot.cpp
     src/devices/halnote/halnote_rom.cpp
     src/devices/kanji/kanji_font_rom.cpp
@@ -94,6 +95,7 @@ add_library(sony_msx_core STATIC
     src/machine/cpm_bdos_harness.cpp
     src/machine/memory_region.cpp
     src/machine/debug_dump.cpp
+    src/machine/debug_snapshot.cpp
     src/machine/debug_event_log.cpp
     src/machine/frame_dump.cpp
     src/machine/input_script.cpp

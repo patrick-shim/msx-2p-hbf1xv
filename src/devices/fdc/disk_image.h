@@ -15,6 +15,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 
 namespace sony_msx::devices::fdc {
@@ -79,10 +80,40 @@ public:
     [[nodiscard]] bool present() const { return present_; }
     void set_present(bool present) { present_ = present; }
 
+    // ----- Optional host-file write-back persistence (M36-S-c) -----
+    //
+    // OFF BY DEFAULT and completely additive: an image with no host path
+    // behaves byte-for-byte as before (writes stay in the in-memory `data_`,
+    // never touching any host file). Host persistence is opt-in ONLY -- the
+    // `--disk-writable` CLI path calls set_host_path() so `flush()` writes the
+    // final `data_` back to that `.dsk`.
+    //
+    // Determinism (planner §2.2, hard requirement): flush() is WRITE-ONLY
+    // output. It never re-reads the host file into emulation state -- emulation
+    // reads `data_` only, loaded once at attach. A flush is a pure function of
+    // the final `data_`, so two identical scripted write runs produce
+    // byte-identical output files. flush() is called ONLY from an explicit,
+    // opt-in path (shutdown / eject / pre-swap-discard) -- NEVER woven into the
+    // emulation step (that would perturb the deterministic disk subsystem and
+    // the committed tests/parity/m16_boot.dsk fixture).
+    void set_host_path(std::filesystem::path path) { host_path_ = std::move(path); }
+    [[nodiscard]] const std::filesystem::path& host_path() const { return host_path_; }
+
+    // True once any sector write has landed in `data_` since load/last flush.
+    [[nodiscard]] bool dirty() const { return dirty_; }
+
+    // Write the current `data_` back to the associated host path. Returns false
+    // when there is no host path (nothing to persist) or on any I/O failure;
+    // on success clears the dirty flag. Never mutates emulation-visible state
+    // (`data_`, geometry) and never reads the host file back.
+    bool flush();
+
 private:
     std::vector<std::uint8_t> data_;
     bool write_protected_ = false;
     bool present_ = true;
+    std::filesystem::path host_path_;  // empty => no host-file persistence
+    bool dirty_ = false;
 };
 
 }  // namespace sony_msx::devices::fdc

@@ -13,6 +13,7 @@
 
 #include "machine/hbf1xv_machine.h"
 
+#include <array>
 #include <fstream>
 #include <ios>
 #include <system_error>
@@ -256,10 +257,10 @@ void Hbf1xvMachine::wire_bus() {
 void Hbf1xvMachine::cold_boot() {
     scheduler_.reset();
     // Main RAM power-on content (A-5): the XML alternating 00/FF initialContent,
-    // NOT all-zero (Sony_HB-F1XV.xml:129; openMSX Ram::clear, Ram.cc:37-78). The
-    // FM-PAC SRAM remains zero-initialized (no initialContent).
+    // NOT all-zero (Sony_HB-F1XV.xml:129; openMSX Ram::clear, Ram.cc:37-78).
+    // (M36, DEC-0050: the speculative internal FM-PAC `sram_` region was
+    // removed -- battery SRAM is a peripheral, on the external FM-PAC cartridge.)
     initialize_dram_pattern();
-    sram_.clear();
 
     // The V9958 VDP resets its own state, including clearing its 128 KB VRAM to
     // zero (matching the retired vram_.clear()), reloading the boot palette, and
@@ -492,6 +493,21 @@ void Hbf1xvMachine::on_vsync_boundary() {
     // cycles_since_last_vsync()/vdp_cycle_position() can report a raster
     // position relative to it. Does not affect scheduling/CPU timing.
     last_vsync_cycle_ = elapsed_cycles();
+
+    // DEC-0052 live stream-capture: at this clean frame boundary (frame_count_
+    // incremented, id stable) write one full per-component snapshot bundle into
+    // <debug_root>/snapshot/stream_<id>/<frame-id>/ -- the frame-by-frame state
+    // evolution. GUARDED -- disarmed => byte-for-byte unchanged for every caller.
+    // On a HALT that finalized mid-frame, stream_active_ is already false, so the
+    // crash frame is captured once (by finalize) and NOT duplicated here.
+    if (stream_active_) {
+        const std::vector<std::string> notes = {
+            "stream_id=" + stream_id_,
+            "stream_frame=1",
+            "instructions_seen=" + debug_format::to_dec(stream_seq_),
+        };
+        write_snapshot("stream_" + stream_id_ + "/" + snapshot_id(), notes);
+    }
 }
 
 void Hbf1xvMachine::run_frame() {
@@ -559,6 +575,19 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     const std::uint16_t pre_pc = cpu_.state().regs().pc;
     const std::uint8_t opcode0 = bus_.read(pre_pc);
 
+    // DEC-0052 live stream-capture: snapshot the PRE-execution CPU record and the
+    // current #A8 primary-slot select BEFORE cpu_.step() mutates the registers.
+    // GUARDED -- when the stream is disarmed this whole block is skipped, so the
+    // default path is byte-for-byte unchanged. Non-perturbing: opcode0 is the
+    // byte already fetched above, and debug_io_read(#A8) is the same non-
+    // perturbing PPI-port-A read the Phase-3 snapshot uses.
+    devices::cpu::Z80aTraceRecord stream_pre_record;
+    std::uint8_t stream_a8 = 0;
+    if (stream_active_) {
+        stream_pre_record = capture_stream_pre_record(pre_pc, opcode0);
+        stream_a8 = debug_io_read(0xA8);
+    }
+
     // The Z80 core publishes datasheet T-states unchanged (M9 timing oracles stay
     // valid); the S1985 adds +1 T-state per M1 opcode-fetch cycle (fact-sheet §8;
     // A-4 / risk R-3). The MSX-accurate machine time is datasheet + M1 wait, and
@@ -587,6 +616,34 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
         if (!halted_before && cpu_.state().halted()) {
             debug_event_log_.record(DebugEventType::Halt, stamp,
                                     "PC=" + debug_format::to_hex(pre_pc, 4));
+        }
+    }
+
+    // DEC-0052 live stream-capture: commit this instruction's record into the
+    // bounded ring, then AUTO-STOP + finalize on a crash signature. Guarded --
+    // disarmed => untouched default path. TWO triggers (mutually exclusive via
+    // else-if; either finalize disarms so on_vsync_boundary never double-writes):
+    //   (a) the HALT transition (a clean Z80 HALT crash), and
+    //   (b) a STACK RUNAWAY -- SP underflowing kStreamStackFloor. The M36 Bug B
+    //       YS-II building-entry crash is NOT a HALT: PC derails into data,
+    //       garbage CALLs push the stack down ~2 KB/frame until it collapses into
+    //       an RST-38 loop (PC=0x0038, HALT=0). SP<0x4000 is unreachable in normal
+    //       execution (the YS-II stack lives ~0xDAxx), so it is an unambiguous
+    //       runaway. Firing here still keeps the derail inside the 1M-record ring
+    //       (~2.8 s ~= ~170 frames); the RST-38 loop reaches SP<0x4000 within a
+    //       handful of frames of the derail (~2 KB/frame), so the derail
+    //       (frame ~2683) is comfortably retained. Read SP through the existing
+    //       const accessor (cpu_.state().regs().sp) -- ZERO src/devices/cpu/ edit.
+    if (stream_active_) {
+        stream_pre_record.instr_tstates = tstates;
+        stream_pre_record.cumulative_tstates = elapsed_cycles();  // machine time (incl. M1 wait)
+        push_stream_record(stream_pre_record, stream_a8);
+        if (!halted_before && cpu_.state().halted()) {
+            finalize_stream_capture("finalize_reason=halt", "HALT_");  // dump ring + snapshot + disarm
+        } else if (cpu_.state().regs().sp < kStreamStackFloor) {
+            finalize_stream_capture(
+                "finalize_reason=sp_underflow sp=" + debug_format::to_hex(cpu_.state().regs().sp, 4),
+                "CRASH_");
         }
     }
 
@@ -780,10 +837,6 @@ std::size_t Hbf1xvMachine::dram_size() const {
     return dram_.size();
 }
 
-std::size_t Hbf1xvMachine::sram_size() const {
-    return sram_.size();
-}
-
 const MemoryRegion& Hbf1xvMachine::dram() const {
     return dram_;
 }
@@ -884,13 +937,25 @@ devices::fdc::DiskImage& Hbf1xvMachine::disk_image() {
 
 devices::cartridge::CartridgeLoadResult Hbf1xvMachine::load_cartridge(
     const int slot_number, const devices::cartridge::CartridgeMapperType type, std::vector<std::uint8_t> image) {
+    devices::cartridge::CartridgeLoadResult result =
+        devices::cartridge::CartridgeLoadResult::InvalidSlotNumber;
     if (slot_number == 1) {
-        return cartridge_slot1_.load(type, std::move(image));
+        result = cartridge_slot1_.load(type, std::move(image));
+    } else if (slot_number == 2) {
+        result = cartridge_slot2_.load(type, std::move(image));
     }
-    if (slot_number == 2) {
-        return cartridge_slot2_.load(type, std::move(image));
+    // M36 (DEC-0050): on a successful FM-PAC insertion, load its battery SRAM
+    // from the configured .sram path (mirrors the M20 Halnote load-at-setup:
+    // absent file -> deterministic zero state, never fabricated). The load is
+    // a single, fixed, load-at-insertion read -- no per-step host I/O, so
+    // determinism is preserved.
+    if (result == devices::cartridge::CartridgeLoadResult::Ok &&
+        type == devices::cartridge::CartridgeMapperType::FmPac && !fmpac_sram_path_.empty()) {
+        if (devices::cartridge::CartridgeFmPacRom* cart = fmpac(slot_number)) {
+            (void)cart->load_sram(fmpac_sram_path_);
+        }
     }
-    return devices::cartridge::CartridgeLoadResult::InvalidSlotNumber;
+    return result;
 }
 
 void Hbf1xvMachine::unload_cartridge(const int slot_number) {
@@ -1074,12 +1139,48 @@ bool Hbf1xvMachine::flush_halnote_sram() const {
     return halnote_.sram().save(halnote_sram_path_);
 }
 
-const MemoryRegion& Hbf1xvMachine::sram() const {
-    return sram_;
+devices::cartridge::CartridgeFmPacRom* Hbf1xvMachine::fmpac(const int slot_number) {
+    // Mirror scc_chip(): non-null exactly when the named bay holds an FmPac
+    // cartridge. The static_cast is type-safe by construction -- FmPac is the
+    // only mapper whose mapper_type() reports FmPac (cartridge_slot.cpp).
+    devices::cartridge::CartridgeSlot* slot = nullptr;
+    if (slot_number == 1) {
+        slot = &cartridge_slot1_;
+    } else if (slot_number == 2) {
+        slot = &cartridge_slot2_;
+    } else {
+        return nullptr;
+    }
+    if (!slot->loaded() || slot->mapper_type() != devices::cartridge::CartridgeMapperType::FmPac) {
+        return nullptr;
+    }
+    return static_cast<devices::cartridge::CartridgeFmPacRom*>(slot->mapper());
 }
 
-MemoryRegion& Hbf1xvMachine::sram() {
-    return sram_;
+const devices::cartridge::CartridgeFmPacRom* Hbf1xvMachine::fmpac(const int slot_number) const {
+    return const_cast<Hbf1xvMachine*>(this)->fmpac(slot_number);
+}
+
+void Hbf1xvMachine::set_fmpac_sram_path(std::filesystem::path path) {
+    fmpac_sram_path_ = std::move(path);
+}
+
+const std::filesystem::path& Hbf1xvMachine::fmpac_sram_path() const {
+    return fmpac_sram_path_;
+}
+
+bool Hbf1xvMachine::flush_fmpac_sram() const {
+    if (fmpac_sram_path_.empty()) {
+        return false;
+    }
+    // Save whichever bay holds an FM-PAC (slot 1 preferred, then slot 2).
+    if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(1)) {
+        return cart->save_sram(fmpac_sram_path_);
+    }
+    if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(2)) {
+        return cart->save_sram(fmpac_sram_path_);
+    }
+    return false;
 }
 
 void Hbf1xvMachine::set_event_logging_enabled(const bool enabled) {
@@ -1112,7 +1213,18 @@ std::string Hbf1xvMachine::serialize_state_dump() const {
     out.push_back('\n');
     out += debug_dump::serialize_cpu(cpu_.state());
     out += debug_dump::serialize_region("DRAM", dram_.data(), dram_.size());
-    out += debug_dump::serialize_region("SRAM", sram_.data(), sram_.size());
+    // M36 (DEC-0050): the bare HB-F1XV has NO internal SRAM (built-in MSX-MUSIC
+    // is SRAM-less). The SRAM section reflects an inserted FM-PAC peripheral
+    // cartridge's 8 KB battery SRAM when present, and is empty (size=0)
+    // otherwise -- matching real hardware ("NO S-RAM AVAILABLE" on a bare
+    // machine). Slot 1 preferred, then slot 2.
+    if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(1)) {
+        out += debug_dump::serialize_region("SRAM", cart->sram().data(), cart->sram().size());
+    } else if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(2)) {
+        out += debug_dump::serialize_region("SRAM", cart->sram().data(), cart->sram().size());
+    } else {
+        out += debug_dump::serialize_region("SRAM", nullptr, 0);
+    }
     // VRAM now lives in the VDP device (M14-S1 migration, A-5). The dump reads it
     // through the VDP's const VRAM accessor; the boot content is still all-zero
     // (the VDP clears VRAM at reset), so the M10/M13 dump golden is unchanged (R-3).
@@ -1133,6 +1245,25 @@ bool Hbf1xvMachine::write_text_file(const std::filesystem::path& directory, cons
     // Binary mode so '\n' is written verbatim (no CRLF translation) — keeps the
     // on-disk bytes identical across platforms and byte-stable across runs.
     std::ofstream file(path, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return false;
+    }
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    return static_cast<bool>(file);
+}
+
+bool Hbf1xvMachine::append_text_file(const std::filesystem::path& directory,
+                                     const std::string& filename, const std::string& text) {
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec) {
+        return false;
+    }
+    const std::filesystem::path path = directory / filename;
+    // Binary + append: '\n' written verbatim, each call adds to the end (the
+    // per-stream FDC log grows one line per sector read). Determinism across
+    // identical armed runs is preserved by removing any stale log at arm time.
+    std::ofstream file(path, std::ios::binary | std::ios::app);
     if (!file) {
         return false;
     }
@@ -1163,6 +1294,329 @@ std::string Hbf1xvMachine::serialize_frame_dump(const devices::video::Field fiel
 
 bool Hbf1xvMachine::write_frame_dump(const std::string& filename, const devices::video::Field field) {
     return write_text_file(debug_root_ / "frames", filename, serialize_frame_dump(field));
+}
+
+// --- M36 Phase 3 comprehensive debug snapshot (DEC-0051) --------------------
+
+const devices::chipset::MapperIo& Hbf1xvMachine::mapper_io() const {
+    return mapper_io_;
+}
+
+std::string Hbf1xvMachine::snapshot_id() const {
+    // Deterministic frame/cycle stamp. Zero-padding only LENGTHENS the field
+    // (never truncates), so long runs stay unambiguous. No wall-clock/RNG.
+    auto pad = [](std::uint64_t value, std::size_t width) {
+        std::string s = debug_format::to_dec(value);
+        while (s.size() < width) {
+            s.insert(s.begin(), '0');
+        }
+        return s;
+    };
+    return "f" + pad(frame_count_, 6) + "_c" + pad(elapsed_cycles(), 16);
+}
+
+debug_snapshot::Snapshot Hbf1xvMachine::serialize_snapshot(
+    const std::string& id, const std::vector<std::string>& caller_notes) {
+    debug_snapshot::Snapshot snap;
+    snap.id = id;
+
+    // cpu.txt -- CPU full (incl WZ/Q + interrupt/ei-delay/pending, the delta
+    // over the golden serialize_cpu; the golden dump is NOT edited).
+    snap.files.push_back(
+        {"cpu.txt", debug_snapshot::frame_file(debug_snapshot::cpu_section(cpu_.state()))});
+
+    // memory.txt -- 64 KB DRAM + the 4 mapper segment registers (raw + the
+    // 0x80|seg&0x1F readback via the non-perturbing debug_io_read seam).
+    {
+        std::array<std::uint8_t, 4> readback{};
+        for (std::size_t p = 0; p < 4; ++p) {
+            readback[p] = debug_io_read(static_cast<std::uint16_t>(0xFC + p));
+        }
+        std::string body = debug_snapshot::dram_section(dram_) +
+                           debug_snapshot::mapper_section(mapper_io_, readback);
+        snap.files.push_back({"memory.txt", debug_snapshot::frame_file(body)});
+    }
+
+    // vram.txt -- 128 KB VRAM.
+    snap.files.push_back(
+        {"vram.txt", debug_snapshot::frame_file(debug_snapshot::vram_section(vdp_.vram()))});
+
+    // vdp.txt -- the full V9958 register/status/latch/palette/mode/IRQ/command
+    // set.
+    snap.files.push_back(
+        {"vdp.txt", debug_snapshot::frame_file(debug_snapshot::vdp_section(
+                        vdp_, cycles_since_last_vsync(), vdp_cycle_position()))});
+
+    // audio.txt -- built-in PSG + built-in OPLL (+ inserted FM-PAC OPLL, if any).
+    {
+        const devices::cartridge::CartridgeFmPacRom* fm = (fmpac(1) != nullptr) ? fmpac(1) : fmpac(2);
+        snap.files.push_back(
+            {"audio.txt",
+             debug_snapshot::frame_file(debug_snapshot::audio_section(psg_, ym2413_, fm))});
+    }
+
+    // rtc.txt
+    snap.files.push_back(
+        {"rtc.txt", debug_snapshot::frame_file(debug_snapshot::rtc_section(rtc_))});
+
+    // fdc.txt -- WD2793 + drive + disk.
+    snap.files.push_back(
+        {"fdc.txt", debug_snapshot::frame_file(debug_snapshot::fdc_section(
+                        fdc_, disk_drive_, disk_image_, elapsed_cycles()))});
+
+    // chipset.txt -- S1985 + slots (#A8/#FFFF/expanded) + sysctrl (#F4/#F5) +
+    // clock counters + pause/speed/Ren-Sha.
+    {
+        std::array<std::uint8_t, 4> subslots{};
+        std::array<bool, 4> expanded{};
+        for (int p = 0; p < 4; ++p) {
+            subslots[static_cast<std::size_t>(p)] = debug_sub_slot_register(p);
+            expanded[static_cast<std::size_t>(p)] = slot_expanded(p);
+        }
+        std::string body;
+        body += debug_snapshot::s1985_section(s1985_engine_);
+        body += debug_snapshot::slots_section(debug_io_read(0xA8), subslots, expanded);
+        body += debug_snapshot::sysctrl_section(debug_io_read(0xF4), debug_io_read(0xF5));
+        body += debug_snapshot::clock_section(elapsed_cycles(), frame_count_, frame_cycles_per_frame(),
+                                              cycles_since_last_vsync(), vdp_cycle_position());
+        body += debug_snapshot::pause_rensha_section(pause_controller_, rensha_turbo_);
+        snap.files.push_back({"chipset.txt", debug_snapshot::frame_file(body)});
+    }
+
+    // cartridges.txt -- external bays 1/2 (+ their banks/FM-PAC/SCC) + Halnote +
+    // best-effort Kanji/printer/cassette.
+    {
+        std::string body;
+        body += debug_snapshot::cartridge_section("CART1", cartridge_slot1_, fmpac(1), scc_chip(1));
+        body += debug_snapshot::cartridge_section("CART2", cartridge_slot2_, fmpac(2), scc_chip(2));
+        body += debug_snapshot::halnote_section(halnote_);
+        body += debug_snapshot::peripherals_section(kanji_font_rom_, printer_, cassette_);
+        snap.files.push_back({"cartridges.txt", debug_snapshot::frame_file(body)});
+    }
+
+    // manifest.txt -- built LAST (so it indexes + checksums the component files),
+    // then inserted at the FRONT of the ordered list. Deterministic: file sizes
+    // and FNV-1a checksums are pure functions of the (deterministic) content;
+    // caller_notes (e.g. the frontend multi-disk index, planner A4) are appended
+    // verbatim. NO wall-clock is embedded.
+    {
+        std::string body;
+        body += "[SNAPSHOT]\n";
+        body += "ID=" + id + "\n";
+        body += "FRAME=" + debug_format::to_dec(frame_count_) + "\n";
+        body += "CYCLE=" + debug_format::to_dec(elapsed_cycles()) + "\n";
+        body += "COMPONENTS=" + debug_format::to_dec(snap.files.size()) + "\n";
+        body += "[FILES]\n";
+        for (const debug_snapshot::SnapshotFile& f : snap.files) {
+            body += "FILE=" + f.name + " size=" + debug_format::to_dec(f.content.size()) +
+                    " crc=" + debug_format::to_hex(debug_snapshot::checksum(f.content), 8) + "\n";
+        }
+        if (!caller_notes.empty()) {
+            body += "[NOTES]\n";
+            for (const std::string& note : caller_notes) {
+                body += note + "\n";
+            }
+        }
+        snap.files.insert(snap.files.begin(),
+                          debug_snapshot::SnapshotFile{"manifest.txt", debug_snapshot::frame_file(body)});
+    }
+
+    return snap;
+}
+
+bool Hbf1xvMachine::write_snapshot(const std::string& id,
+                                   const std::vector<std::string>& caller_notes) {
+    const debug_snapshot::Snapshot snap = serialize_snapshot(id, caller_notes);
+    const std::filesystem::path dir = debug_root_ / "snapshot" / id;
+    bool ok = true;
+    for (const debug_snapshot::SnapshotFile& f : snap.files) {
+        ok = write_text_file(dir, f.name, f.content) && ok;
+    }
+    if (event_logging_enabled_) {
+        debug_event_log_.record(DebugEventType::Dump, elapsed_cycles(), "SNAPSHOT=" + id);
+    }
+    return ok;
+}
+
+// --- DEC-0052 live stream-capture ------------------------------------------
+
+void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::string& stream_id) {
+    if (enabled) {
+        if (stream_active_) {
+            return;  // already armed; ignore a redundant ON
+        }
+        stream_id_ = stream_id.empty() ? snapshot_id() : stream_id;
+        stream_ring_.clear();
+        stream_ring_head_ = 0;
+        stream_seq_ = 0;
+        stream_active_ = true;
+        // DEC-0052: install the FDC per-sector-read logger (default-off otherwise)
+        // and remove any stale log from a prior armed run at this same id, so the
+        // append-mode log is rebuilt byte-identically by an identical armed run.
+        std::error_code ec;
+        std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_fdc.log"), ec);
+        fdc_.set_sector_read_observer(&fdc_stream_observer_);
+    } else {
+        // Manual OFF (e.g. the frontend F10 toggle-off): finalize into a distinct
+        // MANUAL_ bundle so the reason is self-evident vs a crash finalize.
+        finalize_stream_capture("finalize_reason=manual", "MANUAL_");  // no-op if not armed
+    }
+}
+
+bool Hbf1xvMachine::stream_capture_active() const {
+    return stream_active_;
+}
+
+const std::string& Hbf1xvMachine::stream_capture_id() const {
+    return stream_id_;
+}
+
+std::size_t Hbf1xvMachine::stream_trace_ring_size() const {
+    return stream_ring_.size();
+}
+
+devices::cpu::Z80aTraceRecord Hbf1xvMachine::capture_stream_pre_record(
+    const std::uint16_t pre_pc, const std::uint8_t opcode0) const {
+    // Reuse the M27 Z80aTraceRecord convention: PRE-execution register/opcode
+    // snapshot taken at the instruction boundary. instr/cumulative T-states are
+    // filled by the caller AFTER the step retires.
+    const devices::cpu::Z80aState& s = cpu_.state();
+    const devices::cpu::Z80aRegisters& r = s.regs();
+    devices::cpu::Z80aTraceRecord rec;
+    rec.sequence = stream_seq_;
+    rec.pc = pre_pc;
+    rec.opcode_bytes[0] = opcode0;
+    rec.opcode_length = 1;  // first opcode byte only (already-fetched; non-perturbing)
+    rec.a = r.a();
+    rec.f = r.f();
+    rec.b = r.b();
+    rec.c = r.c();
+    rec.d = r.d();
+    rec.e = r.e();
+    rec.h = r.h();
+    rec.l = r.l();
+    rec.af = r.af;
+    rec.bc = r.bc;
+    rec.de = r.de;
+    rec.hl = r.hl;
+    rec.af_shadow = r.af_shadow;
+    rec.bc_shadow = r.bc_shadow;
+    rec.de_shadow = r.de_shadow;
+    rec.hl_shadow = r.hl_shadow;
+    rec.ix = r.ix;
+    rec.iy = r.iy;
+    rec.sp = r.sp;
+    rec.i = r.i;
+    rec.r = r.r;
+    rec.iff1 = s.iff1();
+    rec.iff2 = s.iff2();
+    rec.im = s.interrupt_mode();
+    return rec;
+}
+
+void Hbf1xvMachine::push_stream_record(const devices::cpu::Z80aTraceRecord& record,
+                                       const std::uint8_t a8) {
+    if (stream_ring_.size() < kStreamTraceRingCapacity) {
+        stream_ring_.push_back(StreamTraceEntry{record, a8});
+    } else {
+        // Full: overwrite the oldest and advance the head (bounded memory).
+        stream_ring_[stream_ring_head_] = StreamTraceEntry{record, a8};
+        stream_ring_head_ = (stream_ring_head_ + 1) % kStreamTraceRingCapacity;
+    }
+    ++stream_seq_;
+}
+
+std::string Hbf1xvMachine::serialize_stream_trace() const {
+    // Oldest -> newest. When the ring has not yet wrapped, head_ is 0 and this is
+    // a plain [0, size) walk; once wrapped, size == capacity and head_ marks the
+    // oldest entry, so the modulo walks the ring in age order.
+    std::string out;
+    const std::size_t n = stream_ring_.size();
+    for (std::size_t i = 0; i < n; ++i) {
+        const std::size_t idx = (stream_ring_head_ + i) % n;
+        const StreamTraceEntry& e = stream_ring_[idx];
+        out += CpuTraceSink::format_record(e.cpu);  // reuse the M27 formatter verbatim
+        out += " A8=" + debug_format::to_hex(e.a8, 2);
+        out.push_back('\n');
+    }
+    return out;
+}
+
+void Hbf1xvMachine::finalize_stream_capture(const std::string& reason_note,
+                                            const std::string& bundle_prefix) {
+    if (!stream_active_) {
+        return;
+    }
+    // (a) Dump the per-instruction ring oldest->newest to a human-readable trace.
+    write_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_trace.txt",
+                    serialize_stream_trace());
+
+    // (b) One FINAL full snapshot capturing the crash end-state, filed under the
+    //     stream directory next to the per-frame bundles. `reason_note` (verbatim
+    //     "finalize_reason=..." line) makes the cause self-evident; `bundle_prefix`
+    //     (HALT_ / CRASH_ / MANUAL_) distinguishes the bundle directory.
+    const std::vector<std::string> notes = {
+        "stream_id=" + stream_id_,
+        reason_note,
+        "stream_finalize=1",
+        "halt=" + std::string(cpu_.state().halted() ? "1" : "0"),
+        "ring_entries=" + debug_format::to_dec(stream_ring_.size()),
+        "instructions_seen=" + debug_format::to_dec(stream_seq_),
+    };
+    write_snapshot("stream_" + stream_id_ + "/" + bundle_prefix + snapshot_id(), notes);
+
+    // (c) Uninstall the FDC observer + disarm -- subsequent reads/steps/frames are
+    //     no-ops until re-armed (default-off restored).
+    fdc_.set_sector_read_observer(nullptr);
+    stream_active_ = false;
+}
+
+std::uint32_t Hbf1xvMachine::crc32(const std::uint8_t* data, const std::size_t size) {
+    // Standard IEEE-802.3 / zlib CRC-32 (reflected input/output, reflected poly
+    // 0xEDB88320 = reflect(0x04C11DB7), init 0xFFFFFFFF, final XOR 0xFFFFFFFF).
+    // Bitwise (no table) -- deterministic, self-contained, and byte-for-byte
+    // equal to python zlib.crc32 / binascii.crc32 (verified against the standard
+    // check value 0xCBF43926 for "123456789"), so the human's raw-.dsk tooling
+    // diffs our returned sector bytes directly.
+    std::uint32_t crc = 0xFFFFFFFFu;
+    for (std::size_t i = 0; i < size; ++i) {
+        crc ^= data[i];
+        for (int bit = 0; bit < 8; ++bit) {
+            const std::uint32_t mask = (crc & 1u) != 0u ? 0xEDB88320u : 0u;
+            crc = (crc >> 1) ^ mask;
+        }
+    }
+    return crc ^ 0xFFFFFFFFu;
+}
+
+void Hbf1xvMachine::log_stream_fdc_read(const std::uint8_t command, const std::uint8_t track,
+                                        const std::uint8_t side, const std::uint8_t sector,
+                                        const std::uint8_t* data, const std::size_t size) {
+    // Defensive: the observer is installed only while armed, but stay silent if a
+    // finalize raced in. Non-perturbing: reads the already-fetched bytes, CRCs
+    // them, appends one line -- no emulation/scheduler/CPU effect.
+    if (!stream_active_) {
+        return;
+    }
+    const std::uint32_t lba = devices::fdc::DiskImage::chs_to_lba(track, side, sector);
+    std::string line = "frame=" + debug_format::to_dec(frame_count_);
+    line += " cmd=" + debug_format::to_hex(command, 2);
+    line += " track=" + debug_format::to_dec(track);
+    line += " side=" + debug_format::to_dec(side);
+    line += " sector=" + debug_format::to_dec(sector);
+    line += " lba=" + debug_format::to_dec(lba);
+    line += " crc=" + debug_format::to_hex(crc32(data, size), 8);
+    line.push_back('\n');
+    append_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_fdc.log", line);
+}
+
+void Hbf1xvMachine::FdcStreamObserver::on_sector_read(const std::uint8_t command,
+                                                      const std::uint8_t track,
+                                                      const std::uint8_t side,
+                                                      const std::uint8_t sector,
+                                                      const std::uint8_t* data,
+                                                      const std::size_t size) {
+    machine_.log_stream_fdc_read(command, track, side, sector, data, size);
 }
 
 }  // namespace sony_msx::machine

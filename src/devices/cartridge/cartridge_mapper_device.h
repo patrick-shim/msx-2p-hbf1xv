@@ -18,6 +18,8 @@
 
 namespace sony_msx::devices::cartridge {
 
+class CartridgeRomWindow;  // fwd (defined in cartridge_rom_window.h)
+
 // Family-local interface (M19-S2), the same X-pattern already used by
 // RtcClockSource/FdcClockSource/CassetteClockSource (each defined inside its
 // own device family, not in src/core/ -- src/CLAUDE.md: "Do not place device
@@ -38,6 +40,15 @@ public:
     virtual void reset() = 0;
 
     [[nodiscard]] virtual CartridgeMapperType mapper_type() const = 0;
+
+    // M36 Phase 3 debug snapshot (planner §2.4 item 13): the mapper's owned
+    // 8-slot ROM window, so the snapshot can dump bank state GENERICALLY
+    // without RTTI dispatch. Default nullptr; the window-based mappers
+    // (Mirrored/Generic8kB/Generic16kB/Ascii8kB/Ascii16kB/Konami/KonamiSCC)
+    // override it to return their owned window. FM-PAC keeps the default (it is
+    // dumped via its own [FMPAC.*] sections). Additive read-only, no behavior
+    // change.
+    [[nodiscard]] virtual const CartridgeRomWindow* rom_window() const { return nullptr; }
 };
 
 }  // namespace sony_msx::devices::cartridge

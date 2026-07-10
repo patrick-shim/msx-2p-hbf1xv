@@ -139,13 +139,13 @@ int main() {
         return 1;
     }
 
-    // --- SRAM region: all-zero, folded, 8 KiB framing. ---
-    const std::string expected_sram =
-        "[SRAM] size=8192\n"
-        "00000000 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n"
-        "*\n"
-        "00001FF0 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00\n";
-    if (!expect_true(contains(dump, expected_sram), "Dump_SramRegion_FoldedHexExact")) {
+    // --- SRAM region: M36 (DEC-0050) -- the bare HB-F1XV has NO internal
+    //     SRAM, so the section is EMPTY (size=0, no hex lines) and sits
+    //     immediately before [VRAM]. It reflects an inserted FM-PAC peripheral
+    //     cartridge's 8 KB SRAM only when present (covered by the FM-PAC
+    //     integration test). ---
+    if (!expect_true(contains(dump, "[SRAM] size=0\n[VRAM]"), "Dump_SramRegion_EmptyOnBareMachine")) {
+        std::cerr << "  --- expected empty [SRAM] size=0 immediately before [VRAM] ---\n";
         return 1;
     }
 

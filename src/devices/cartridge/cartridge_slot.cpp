@@ -17,6 +17,7 @@
 
 #include "devices/cartridge/cartridge_ascii16kb_rom.h"
 #include "devices/cartridge/cartridge_ascii8kb_rom.h"
+#include "devices/cartridge/cartridge_fmpac_rom.h"
 #include "devices/cartridge/cartridge_generic16kb_rom.h"
 #include "devices/cartridge/cartridge_generic8kb_rom.h"
 #include "devices/cartridge/cartridge_konami_rom.h"
@@ -76,6 +77,15 @@ CartridgeLoadResult CartridgeSlot::load(const CartridgeMapperType type, std::vec
                 return CartridgeLoadResult::ImageSizeInvalidForMapperType;
             }
             candidate = std::make_unique<CartridgeKonamiScc>(std::move(image));
+            break;
+        case CartridgeMapperType::FmPac:
+            // M36 (DEC-0050): the external Panasonic FM-PAC peripheral
+            // cartridge -- the same uniform validate -> construct -> reset ->
+            // install contract.
+            if (!CartridgeFmPacRom::is_valid_image_size(image.size())) {
+                return CartridgeLoadResult::ImageSizeInvalidForMapperType;
+            }
+            candidate = std::make_unique<CartridgeFmPacRom>(std::move(image));
             break;
     }
 

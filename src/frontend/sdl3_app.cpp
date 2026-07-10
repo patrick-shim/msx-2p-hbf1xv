@@ -115,6 +115,11 @@ bool Sdl3App::load_configured_assets() {
     // Attach the first disk (if any) at boot, exactly as pre-M35 behavior.
     if (!disk_images_.empty()) {
         machine_.disk_image() = devices::fdc::DiskImage(disk_images_[0]);
+        // M36-S-c: opt-in host-file write-back. Default false leaves this
+        // byte-for-byte unchanged (no host path -> flush() is a no-op).
+        if (config_.disk_writable && current_disk_index_ < config_.disk_paths.size()) {
+            machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+        }
         machine_.disk_drive().attach_image(&machine_.disk_image());
         update_window_title_for_current_disk();
         log_disk_swap();
@@ -161,6 +166,13 @@ bool Sdl3App::init() {
     // ordering exactly.
     if (config_.event_log_filename.has_value()) {
         machine_.set_event_logging_enabled(true);
+    }
+
+    // M36 Phase 3: route snapshot output to <dir>/snapshot/<id>/ when
+    // --snapshot <dir> is given (default: the machine's "debug" root). Set
+    // before cold_boot so any F12 capture lands in the configured place.
+    if (config_.snapshot_dir.has_value()) {
+        machine_.set_debug_root(*config_.snapshot_dir);
     }
 
     machine_.set_asset_root(config_.bios_dir);
@@ -216,6 +228,11 @@ void Sdl3App::flush_debug_session_outputs() {
 }
 
 void Sdl3App::shutdown() {
+    // M36-S-c: persist any pending writable-disk writes before tearing down.
+    // No-op unless disk-writable bound a host path (default behavior unchanged).
+    if (initialized_ && !disk_images_.empty()) {
+        machine_.disk_image().flush();
+    }
     audio_presenter_.reset();
     video_presenter_.reset();
     if (renderer_ != nullptr) {
@@ -247,6 +264,24 @@ void Sdl3App::poll_and_dispatch_events() {
             on_disk_swap_hotkey();
             continue;
         }
+        // M36 Phase 3: F12 hotkey for a comprehensive debug snapshot (fresh
+        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; NEVER
+        // dispatched to input_mapper_ (which would leak it into the MSX keyboard
+        // matrix) -- mirrors the F11 disk-swap discipline. No collision: F11 is
+        // the only other host hotkey wired.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F12 && !event.key.repeat) {
+            on_snapshot_hotkey();
+            continue;
+        }
+        // DEC-0052: F10 hotkey toggles live stream-capture (fresh key-down only,
+        // not a repeat). Consumed HERE as a HOST hotkey; NEVER dispatched to
+        // input_mapper_ (which would leak it into the MSX keyboard matrix) --
+        // mirrors the F11/F12 discipline. No collision: F10 is unbound (only
+        // F6-F9 speed/rensha + F11 disk-swap + F12 snapshot are wired).
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F10 && !event.key.repeat) {
+            on_stream_toggle_hotkey();
+            continue;
+        }
         input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),
                                      machine_.rensha_turbo());
     }
@@ -269,6 +304,19 @@ void Sdl3App::run_one_frame() {
         input_script_player_.apply_due(machine_.elapsed_cycles(), machine_.keyboard());
     }
     machine_.on_vsync_boundary();
+
+    // M36 Phase 3: service a pending F12 snapshot request at this clean frame
+    // boundary -- the deterministic id (frame_count()/elapsed_cycles()) is now
+    // stable. Read-only; never perturbs emulation. The manifest carries the
+    // frontend multi-disk index (planner A4) as a caller note.
+    if (snapshot_requested_) {
+        snapshot_requested_ = false;
+        const std::vector<std::string> notes = {
+            "disk_index=" + std::to_string(current_disk_index_),
+            "disk_count=" + std::to_string(disk_images_.size()),
+        };
+        machine_.write_snapshot(machine_.snapshot_id(), notes);
+    }
 
     if (video_presenter_) {
         const auto frame = machine_.render_frame();  // Always Field::Progressive (§1.2).
@@ -319,12 +367,60 @@ void Sdl3App::on_disk_swap_hotkey() {
         return;  // No-op: empty or single-disk list
     }
 
+    // M36-S-c/R9: before discarding the outgoing image, persist and cache its
+    // writes so they are not lost (and a swap-back sees them). Guarded on
+    // disk_writable so the default path stays byte-for-byte pre-M36.
+    if (config_.disk_writable) {
+        machine_.disk_image().flush();  // no-op if no host path / not dirty
+        if (current_disk_index_ < disk_images_.size()) {
+            disk_images_[current_disk_index_] = machine_.disk_image().data();
+        }
+    }
+
     current_disk_index_ = (current_disk_index_ + 1) % disk_images_.size();
     machine_.disk_image() = devices::fdc::DiskImage(disk_images_[current_disk_index_]);
+    if (config_.disk_writable && current_disk_index_ < config_.disk_paths.size()) {
+        machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+    }
     machine_.disk_drive().attach_image(&machine_.disk_image());
     machine_.disk_drive().set_disk_changed(true);  // Signal media change
     update_window_title_for_current_disk();
     log_disk_swap();
+}
+
+void Sdl3App::on_snapshot_hotkey() {
+    // M36 Phase 3: request a comprehensive debug snapshot. The actual capture is
+    // DEFERRED to the end of run_one_frame() (after on_vsync_boundary()) so the
+    // machine is always at a clean frame boundary and the deterministic id
+    // (frame_count()) is stable -- exactly the safe, non-perturbing capture
+    // point (planner §4.1). Setting a flag keeps this handler O(1).
+    snapshot_requested_ = true;
+}
+
+void Sdl3App::on_stream_toggle_hotkey() {
+    // DEC-0052: F10 toggles live stream-capture at the machine level. Arming is
+    // side-effect-free at this instant (per-frame bundles + the trace ring only
+    // begin accumulating on the following frames/instructions); finalizing dumps
+    // the trace ring + a final snapshot. Both are non-perturbing to emulation.
+    if (machine_.stream_capture_active()) {
+        machine_.set_stream_capture_enabled(false);  // manual OFF -> finalize
+        std::cerr << "Stream capture OFF (finalized).\n";
+    } else {
+        // Stamp the stream id from the current deterministic frame/cycle id so an
+        // identical run toggling at the same frame yields identical stream paths.
+        const std::string stream_id = machine_.snapshot_id();
+        machine_.set_stream_capture_enabled(true, stream_id);
+        std::cerr << "Stream capture ON: stream_" << stream_id << "\n";
+    }
+}
+
+bool Sdl3App::flush_current_disk() {
+    // M36-S-c: explicit write-back of the mounted disk. A genuine no-op unless
+    // disk-writable bound a host path (default: no host path -> flush() false).
+    if (!initialized_ || disk_images_.empty()) {
+        return false;
+    }
+    return machine_.disk_image().flush();
 }
 
 void Sdl3App::update_window_title_for_current_disk() {

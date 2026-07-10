@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <vector>
 
@@ -20,6 +21,26 @@
 #include "devices/fdc/fdc_clock_source.h"
 
 namespace sony_msx::devices::fdc {
+
+// DEC-0052 stream-capture: a lightweight, NON-PERTURBING observer of completed
+// sector reads. The machine installs one ONLY while live stream-capture is armed
+// (default null => the whole notify path is skipped => byte-for-byte identical
+// FDC behaviour AND timing). It is called synchronously from begin_read_sector
+// the instant the 512 sector bytes have landed in the read buffer, BEFORE any
+// DRQ byte transfer, so the observer sees the exact bytes the drive returned for
+// the sector. Contract: an implementation MUST NOT mutate FDC/drive/timing state,
+// issue reads, or advance any clock -- it only inspects the supplied bytes (e.g.
+// to CRC + log them). It is a pure diagnostic sink, isolated from emulation.
+class FdcSectorReadObserver {
+public:
+    virtual ~FdcSectorReadObserver() = default;
+    // command = the WD2793 command register that drove this read (Type II/III);
+    // track/side = the drive's current physical head position; sector = 1-based
+    // SR; data/size = the sector payload just read (size == DiskImage::kSectorSize).
+    virtual void on_sector_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                                std::uint8_t sector, const std::uint8_t* data,
+                                std::size_t size) = 0;
+};
 
 // WD2793 floppy-disk controller core (M16-S2/S3). The HB-F1XV physical chip is
 // the Fujitsu MB89311, register- and command-compatible with the Western Digital
@@ -71,6 +92,14 @@ public:
     void attach_clock_source(FdcClockSource* source) { clock_ = source; }
     void attach_drive(DiskDrive* drive) { drive_ = drive; }
 
+    // DEC-0052 stream-capture: install (non-null) / remove (nullptr) the
+    // non-perturbing sector-read observer. Default null => zero behaviour change;
+    // reset() deliberately does NOT clear it (it is an externally-owned lifecycle
+    // pointer, like clock_/drive_ above, managed by the installing machine).
+    void set_sector_read_observer(FdcSectorReadObserver* observer) {
+        sector_read_observer_ = observer;
+    }
+
     void reset();
 
     // Register writes (Command/Track/Sector/Data at Sony 0x7FF8-0x7FFB).
@@ -111,6 +140,37 @@ public:
         return read_sector_completions_ok_;
     }
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     FSM (phase / direction / INTRQ-DRQ pending / index-IRQ arm / HLD /
+    //     timing deadlines / transfer-buffer cursor / write-track parser).
+    //     const returns of existing members, ZERO behavior change (planner
+    //     §2.4 item 9). Deliberately plain member reads -- they do NOT sync()
+    //     the FSM, so they cannot mutate/advance controller state (unlike the
+    //     public register reads); the snapshot stays non-perturbing. The enum
+    //     phase returns a numeric code (self-describing snapshot). ---
+    [[nodiscard]] std::uint8_t data_register() const { return data_reg_; }
+    [[nodiscard]] std::uint8_t phase_code() const { return static_cast<std::uint8_t>(phase_); }
+    [[nodiscard]] bool direction_in() const { return direction_in_; }
+    [[nodiscard]] bool intrq_pending() const { return intrq_pending_; }
+    [[nodiscard]] bool immediate_irq() const { return immediate_irq_; }
+    [[nodiscard]] bool index_irq_armed() const { return index_irq_armed_; }
+    [[nodiscard]] std::uint64_t index_irq_deadline() const { return index_irq_deadline_; }
+    [[nodiscard]] bool hld_active() const { return hld_active_; }
+    [[nodiscard]] std::uint64_t hld_since() const { return hld_since_; }
+    [[nodiscard]] std::uint64_t busy_until() const { return busy_until_; }
+    [[nodiscard]] std::uint64_t drq_deadline() const { return drq_deadline_; }
+    [[nodiscard]] std::uint64_t last_sync() const { return last_sync_; }
+    [[nodiscard]] int data_index() const { return data_index_; }
+    [[nodiscard]] int data_available() const { return data_available_; }
+    [[nodiscard]] std::uint8_t write_sector_num() const { return write_sector_num_; }
+    [[nodiscard]] int wt_a1_run() const { return wt_a1_run_; }
+    [[nodiscard]] bool wt_expect_id() const { return wt_expect_id_; }
+    [[nodiscard]] int wt_id_count() const { return wt_id_count_; }
+    [[nodiscard]] std::uint8_t wt_id(int index) const { return wt_id_[static_cast<std::size_t>(index)]; }
+    [[nodiscard]] bool wt_in_data() const { return wt_in_data_; }
+    [[nodiscard]] int wt_data_count() const { return wt_data_count_; }
+    [[nodiscard]] std::uint8_t wt_sector_num() const { return wt_sector_num_; }
+
 private:
     enum class Phase : std::uint8_t {
         Idle,
@@ -145,6 +205,9 @@ private:
 
     FdcClockSource* clock_ = nullptr;
     DiskDrive* drive_ = nullptr;
+    // DEC-0052 stream-capture sink (default null => never notified). Externally
+    // owned; see set_sector_read_observer.
+    FdcSectorReadObserver* sector_read_observer_ = nullptr;
 
     std::uint8_t status_ = 0;  // sticky bits; dynamic bits recomputed on read
     std::uint8_t command_reg_ = 0;

@@ -6,15 +6,29 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M36 PLANNING (Kickoff 2026-07-10, DEC-0049) — Playtest/live-QA agent, then two
-  live-playtest bugs.** Per the human's ratified decisions after live YS II play: (1) BUILD A
+- Active Phase: **M36 PHASE 2 — DEVELOPER (Kickoff 2026-07-10, DEC-0049; Phase 2A REFRAMED by
+  DEC-0050; tag target v1.0.37).** Phase 1 (the reusable msx-playtest observe-act-replay harness)
+  is DONE and committed as CHECKPOINT d522804 — coordinator-verified (boot→MSX Disk BASIC + YS II
+  title genuinely vision-read; two Phase-1 defects found, wrapper stderr bug fixed); its tooling QA
+  is DEFERRED to the single M36-closure QA sign-off (coordinator verification is NOT a QA
+  substitute). The Phase-2 gate PASSED (msx-orchestration). The DEC-0050-aligned Phase-2 planner
+  package is delivered (docs/m36-phase2-planner-package.md, RESP-M36-003); the developer is
+  dispatched for slices S-a..S-f (REQ-M36-004): S-a agent-frontmatter enabler; **S-b Bug B fix
+  [MANDATORY — "building interiors load"]**; S-c disk-save persistence; S-d FM-PAC peripheral
+  cartridge; S-e reconcile the speculative internal sram_; S-f R-M35-1. FM-PAC asset roms/fmpac.rom
+  provided by the human (both save paths achievable this cycle; a signature-valid non-canonical
+  FM-PAC variant, validate functionally). Original Phase-1 kickoff intent retained below for
+  history: Per the human's ratified decisions after live YS II play: (1) BUILD A
   PLAYTEST/LIVE-QA AGENT + COMMAND FIRST — hybrid design: headless `--input-script` drive +
   `--dump-frame` PNG capture read by a vision-capable opus agent (deterministic, regression-able)
   PLUS optional real-window spot-checks; the agent works alongside planner/developer/qa to simulate
-  a human player. (2) THEN fix the two bugs the human found: **(A) FM-PAC SRAM "NO S-RAM AVAILABLE"**
-  — the 8 KB FM-PAC battery-SRAM storage exists (hbf1xv_machine.h:176-179) but the access/unlock
-  protocol (0x5FFE/0x5FFF magic → SRAM window at 0x4000-0x5FFD) appears unimplemented, so YS II
-  can't detect it; **(B) black screen on building entry** — the active area goes blank while UI
+  a human player. (2) THEN fix the two bugs the human found: **(A) FM-PAC SRAM "NO S-RAM AVAILABLE" — REFRAMED BY DEC-0050**
+  — the HB-F1XV built-in FM is MSX-MUSIC (OPLL + BIOS, NO SRAM), so "NO S-RAM AVAILABLE" on a bare
+  machine is CORRECT hardware behavior. The FM-PAC's 8 KB battery SRAM (window 0x4000-0x5FFD,
+  0x5FFE/0x5FFF magic unlock, 0x7FF6 enable, 0x7FF7 bank) is a PERIPHERAL CARTRIDGE (new
+  CartridgeMapperType::FmPac, loadable via `--cart roms/fmpac.rom`). The speculative internal
+  `sram_` (hbf1xv_machine.h:176-179) is an inaccuracy to remove. Save persistence: FM-PAC SRAM save
+  (cart inserted) AND/OR disk save (host-file write-back — an implement task); **(B) black screen on building entry** — the active area goes blank while UI
   persists and the game stops, needs deterministic repro (disk-read-fail vs VDP blank). ALL FOUR
   agents now on **opus** (developer/qa/planner/orchestration). Prior: **M35 CLOSED (DEC-0049,
   2026-07-10, tag v1.0.36) — multi-disk hot-swap, LIVE human-validated (F11 swapped disk1→disk2 in

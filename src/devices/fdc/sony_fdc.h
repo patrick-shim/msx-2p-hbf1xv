@@ -38,7 +38,8 @@ namespace sony_msx::devices::fdc {
 //   0x3FFA R/W sector            (:31-32,139-140)
 //   0x3FFB R/W data              (:33-34,142-143)
 //   0x3FFC R=sideReg  W=side select (bit0)          (:77-80,145-149)
-//   0x3FFD R=driveReg&~4, bit2=0 iff disk changed (DSKCHG);
+//   0x3FFD R=driveReg&~4, bit2=0 iff disk changed (DSKCHG); READING CLEARS the
+//          DSKCHG one-shot (mutating readMem PhilipsFDC.cc:37 -> DiskChanger.cc:95-100);
 //          W=drive-select(bits1..0)+motor-on(bit7)   (:35-41,81-94,151-172)
 //   0x3FFE R=0xFF (unused)                            (:95-97)
 //   0x3FFF R: bit6=!INTRQ, bit7=!DTRQ (ACTIVE-LOW), rest pulled to 1 (:42-55,98-113)

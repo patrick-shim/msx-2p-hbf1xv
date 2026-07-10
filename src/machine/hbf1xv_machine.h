@@ -34,6 +34,7 @@
 #include "devices/chipset/system_bus.h"
 #include "devices/chipset/reset_status_register.h"
 #include "devices/chipset/system_control.h"
+#include "devices/cartridge/cartridge_fmpac_rom.h"
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/cartridge/cartridge_slot.h"
 #include "devices/cpu/cpu_bus_client.h"
@@ -56,6 +57,7 @@
 #include "devices/video/vdp_scanline_accumulator.h"
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
+#include "machine/debug_snapshot.h"
 #include "machine/memory_region.h"
 #include "machine/rom_asset_loader.h"
 #include "peripherals/cassette_interface.h"
@@ -163,22 +165,24 @@ public:
     [[nodiscard]] const CpuTraceSink& cpu_trace() const;
     CpuTraceSink& cpu_trace();
 
-    // Minimum INERT memory regions (M10-S2). These are pure storage byte
-    // buffers, sized to the strict Target Machine Specification. They are
-    // deterministically zero-initialized at cold_boot and expose read/write/
-    // load/dump via their MemoryRegion accessors. They carry NO device
-    // behavior (no slot/mapper decoding, no V9958 VDP semantics, no FM-PAC
-    // battery/mapper behavior, no I/O bus) — those are separate milestones
-    // (planner DP-1/DP-2/DP-3).
+    // Minimum INERT memory region (M10-S2). A pure storage byte buffer sized
+    // to the strict Target Machine Specification, deterministically
+    // zero-initialized at cold_boot, exposing read/write/load/dump via its
+    // MemoryRegion accessors. It carries NO device behavior (no slot/mapper
+    // decoding, no V9958 VDP semantics, no I/O bus).
     //
     // - DRAM = 64 KB main RAM. This is the same store the CPU sees over the
     //   bus; load_memory/read_memory below are the CPU-visible aliases.
-    // - SRAM = FM-PAC battery SRAM inert region.
-    //   Assumption: the strict spec table lists no SRAM capacity; the standard
-    //   Panasonic FM-PAC carries 8 KB of battery-backed SRAM, so kSramBytes is
-    //   set to 8 KB. Verification action: confirm the FM-PAC SRAM capacity
-    //   against the real device datasheet / an FM-PAC ROM+SRAM dump when the
-    //   FM-PAC device milestone (planner DP-3) is implemented.
+    //
+    // NO internal SRAM (M36, DEC-0050): the earlier speculative 8 KB `sram_`
+    // region was removed. The HB-F1XV's built-in FM is MSX-MUSIC (OPLL +
+    // APRLOPLL BIOS, NO SRAM) -- grounded in
+    // references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml (`<MSX-MUSIC>`
+    // with no `<sramname>`). Battery SRAM is a PERIPHERAL: it belongs to the
+    // external, insertable Panasonic FM-PAC CARTRIDGE (fmpac() /
+    // CartridgeFmPacRom), not the bare machine. So a bare HB-F1XV correctly
+    // reports "NO S-RAM AVAILABLE"; the state dump's SRAM section reflects an
+    // inserted FM-PAC's SRAM when present and is empty otherwise.
     //
     // The 128 KB VRAM MIGRATED to the V9958 VDP device (M14-S1). It is no longer
     // an inert machine MemoryRegion: the CPU reaches it ONLY through the VDP I/O
@@ -186,15 +190,11 @@ public:
     // now live in devices::video::VdpVram (VdpVram::kVramBytes); access it via
     // vdp().vram().
     static constexpr std::size_t kDramBytes = 64 * 1024;
-    static constexpr std::size_t kSramBytes = 8 * 1024;
 
     [[nodiscard]] std::size_t dram_size() const;
-    [[nodiscard]] std::size_t sram_size() const;
 
     [[nodiscard]] const MemoryRegion& dram() const;
     MemoryRegion& dram();
-    [[nodiscard]] const MemoryRegion& sram() const;
-    MemoryRegion& sram();
 
     // The V9958 VDP device (M14). Owns the 128 KB VRAM and answers ports
     // #98-#9B (+ the S1985 #9C-#9F mirror). Debug tooling reaches VRAM via
@@ -315,6 +315,25 @@ public:
     [[nodiscard]] devices::audio::SccWavetable* scc_chip(int slot_number);
     [[nodiscard]] const devices::audio::SccWavetable* scc_chip(int slot_number) const;
 
+    // FM-PAC peripheral cartridge accessor (M36, DEC-0050). Returns the given
+    // bay's owned CartridgeFmPacRom when that bay currently holds an FmPac
+    // cartridge, else nullptr -- mirroring scc_chip()'s shape exactly
+    // (type-safe: FmPac is the only mapper reporting mapper_type()==FmPac).
+    // With no FM-PAC cart inserted the machine behaves byte-identically to
+    // before (regression null). Used by tests, the state dump, and the
+    // .sram-persistence plumbing.
+    [[nodiscard]] devices::cartridge::CartridgeFmPacRom* fmpac(int slot_number);
+    [[nodiscard]] const devices::cartridge::CartridgeFmPacRom* fmpac(int slot_number) const;
+
+    // FM-PAC 8 KB battery-SRAM .sram persistence (M36). Mirrors the M20
+    // Halnote set_halnote_sram_path/flush_halnote_sram pattern EXACTLY. Set
+    // the path BEFORE load_cartridge(FmPac) so the SRAM loads on insertion
+    // (absent file -> deterministic zero state, never fabricated).
+    // flush_fmpac_sram() saves whichever inserted FM-PAC's SRAM to the path.
+    void set_fmpac_sram_path(std::filesystem::path path);
+    [[nodiscard]] const std::filesystem::path& fmpac_sram_path() const;
+    bool flush_fmpac_sram() const;
+
     // S1985 16-byte backup-RAM .sram persistence (M15-S5, backlog C4). Set the
     // file path BEFORE cold_boot to load it (absent -> deterministic zero state,
     // preserving the M11 golden). flush_backup_ram writes the current 16 bytes.
@@ -389,9 +408,135 @@ public:
     bool write_frame_dump(const std::string& filename,
                           devices::video::Field field = devices::video::Field::Progressive);
 
+    // --- M36 Phase 3 comprehensive debug SNAPSHOT (DEC-0051,
+    //     docs/m36-phase3-planner-package.md). A SEPARATE artifact from the
+    //     golden-locked serialize_state_dump() (M10/M13/M14): it captures the
+    //     EXACT current state of EVERY machine component (§2.3 inventory) into a
+    //     per-component typed dump, versioned "HBF1XV-SNAPSHOT v1" and designed
+    //     RESTORE-READY (restore itself is a future milestone). CAPTURE-ONLY +
+    //     ADDITIVE + read-only w.r.t. emulation: it advances neither the CPU nor
+    //     the scheduler and issues no debug_io_write; it consumes NO RNG and NO
+    //     wall-clock for content, so an identical run to the same frame produces
+    //     byte-identical snapshot CONTENT (auditable determinism). ---
+
+    // The #FC-#FF memory-mapper segment registers (planner §2.4 item 2). const
+    // read-only accessor mirroring s1985()/ppi().
+    [[nodiscard]] const devices::chipset::MapperIo& mapper_io() const;
+
+    // Deterministic snapshot id: "f<frame_count>_c<elapsed_cycles>" (both
+    // deterministic machine counters). An identical run to the same frame
+    // boundary yields the identical id and byte-identical content (§3.2).
+    [[nodiscard]] std::string snapshot_id() const;
+
+    // Build the full snapshot bundle (manifest + per-component files) for the
+    // given id. `caller_notes` are appended verbatim to the manifest (e.g. the
+    // frontend's multi-disk index -- planner Assumption A4: a FRONTEND concept
+    // added by the CALLER, not machine state). NOT const: it uses the
+    // non-perturbing debug_io_read seam (#F4/#F5/#A8) which is declared
+    // non-const, but it is non-perturbing to CPU/memory/clock state.
+    [[nodiscard]] debug_snapshot::Snapshot serialize_snapshot(
+        const std::string& id, const std::vector<std::string>& caller_notes = {});
+
+    // Write the snapshot bundle to <debug_root>/snapshot/<id>/<file> (one file
+    // per component + manifest.txt), creating the directory. Returns true iff
+    // every file wrote. Non-perturbing to CPU/memory/clock state.
+    bool write_snapshot(const std::string& id, const std::vector<std::string>& caller_notes = {});
+
+    // --- DEC-0052 live STREAM-CAPTURE (crash-trajectory diagnostic; ADDITIVE,
+    //     DEFAULT-OFF). Extends the M36 Phase-3 snapshot + the M10/M27
+    //     CPU-trace facility to record the temporal trajectory INTO a
+    //     control-flow crash (the M36 Bug B YS-II building-entry HALT). Armed
+    //     at a chosen moment (F10 in the SDL frontend, or set_stream_capture_
+    //     enabled() at the machine level); while armed it
+    //       (1) writes a full per-component snapshot bundle at EVERY frame
+    //           boundary (end of on_vsync_boundary()) into
+    //           <debug_root>/snapshot/stream_<id>/<frame-id>/ -- the
+    //           frame-by-frame state evolution, and
+    //       (2) keeps a BOUNDED per-instruction trace ring (the most-recent N
+    //           records) captured around step_cpu_instruction().
+    //     The instant the CPU enters HALT (the crash), it AUTO-STOPS: dumps the
+    //     ring oldest->newest to <debug_root>/traces/stream_<id>_trace.txt,
+    //     writes ONE final snapshot (stream_<id>/HALT_<frame-id>/), then
+    //     disarms. A manual OFF finalizes the same way.
+    //
+    //     Zero-cost + byte-identical when OFF: every hook is behind an
+    //     `if (stream_active_)` guard, consumes NO RNG/wall-clock, and does not
+    //     advance/perturb the CPU or scheduler (the ring records are built from
+    //     the SAME non-perturbing const getters the Phase-3 snapshot uses; the
+    //     #A8 slot select comes from the non-perturbing debug_io_read seam).
+    //     The hook lives entirely at the MACHINE level (step_cpu_instruction /
+    //     on_vsync_boundary) -- src/devices/cpu/ + src/core/ are UNTOUCHED
+    //     (ZEXALL withheld). ---
+    //
+    //     DEC-0052 enhancement (M36 Bug B): the finalize trigger ALSO fires on a
+    //     STACK RUNAWAY, not only on HALT. The YS-II building-entry crash is not a
+    //     clean Z80 HALT -- PC derails into a data region, garbage CALLs push the
+    //     stack down ~2 KB/frame until it collapses into an RST-38 loop
+    //     (PC=0x0038, HALT=0), which the HALT-only trigger never caught. When the
+    //     stack pointer underflows kStreamStackFloor (an address normal execution
+    //     never reaches -- the YS-II stack lives ~0xDAxx), the capture finalizes
+    //     itself into a distinct CRASH_ bundle (see finalize_stream_capture). ---
+    static constexpr std::size_t kStreamTraceRingCapacity = 1u << 20;  // 1,048,576 records
+
+    // DEC-0052 stack-runaway finalize floor. SP < this is an UNAMBIGUOUS runaway:
+    // the YS-II stack lives ~0xDAxx and normal MSX execution never runs the stack
+    // below 0x4000, whereas the RST-38 crash loop drives SP down hard right after
+    // the derail. Firing here -- a few frames after the derail -- still keeps the
+    // derail inside the 1M-record ring: at the observed ~2 KB/frame stack drop the
+    // RST-38 loop reaches SP<0x4000 within a handful of frames of the derail, and
+    // the ring holds ~1M instructions (~2.8 s ~= ~170 frames), so the derail
+    // (frame ~2683) is comfortably retained when the trigger fires.
+    static constexpr std::uint16_t kStreamStackFloor = 0x4000;
+
+    // Arm (enabled=true) / finalize (enabled=false) the stream capture. Arming
+    // clears the ring and stamps the stream id (defaults to snapshot_id() at the
+    // arm moment when stream_id is empty). Finalizing dumps the ring + writes the
+    // final snapshot + disarms (a no-op if not currently armed). Arming twice is a
+    // no-op.
+    void set_stream_capture_enabled(bool enabled, const std::string& stream_id = std::string{});
+    [[nodiscard]] bool stream_capture_active() const;
+    [[nodiscard]] const std::string& stream_capture_id() const;
+    // Records currently held in the ring (<= kStreamTraceRingCapacity). For tests.
+    [[nodiscard]] std::size_t stream_trace_ring_size() const;
+    // Deterministic oldest->newest serialization of the ring -- the SAME text
+    // finalize dumps to disk. Pure/const; reuses CpuTraceSink::format_record.
+    [[nodiscard]] std::string serialize_stream_trace() const;
+
 private:
     static bool write_text_file(const std::filesystem::path& directory, const std::string& filename,
                                 const std::string& text);
+    // Like write_text_file but APPENDS (never truncates) -- the DEC-0052 FDC
+    // sector-read log accumulates one line per read while streaming. Determinism
+    // is preserved by removing any stale log at arm time (set_stream_capture_
+    // enabled), so an identical armed run rebuilds a byte-identical log.
+    static bool append_text_file(const std::filesystem::path& directory,
+                                 const std::string& filename, const std::string& text);
+
+    // --- DEC-0052 stream-capture internals (all genuine no-ops unless armed). ---
+    // Standard IEEE-802.3 / zlib CRC-32 (reflected, poly 0xEDB88320, init/final
+    // ~0) of a byte range -- the FDC log's integrity anchor for diffing our
+    // returned disk bytes against the raw .dsk (matches python zlib.crc32). Pure
+    // function of the bytes (no wall-clock/RNG).
+    [[nodiscard]] static std::uint32_t crc32(const std::uint8_t* data, std::size_t size);
+    // Append one deterministic line describing a completed FDC sector read to
+    // <debug_root>/traces/stream_<id>_fdc.log while streaming (called via the
+    // FdcStreamObserver installed on fdc_). Non-perturbing: it only inspects the
+    // already-read bytes + writes a host file; no emulation/scheduler/CPU effect.
+    void log_stream_fdc_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                             std::uint8_t sector, const std::uint8_t* data, std::size_t size);
+    // Build a PRE-execution trace record from the live CPU state, REUSING the M27
+    // Z80aTraceRecord convention. Const w.r.t. the machine (read-only getters).
+    [[nodiscard]] devices::cpu::Z80aTraceRecord capture_stream_pre_record(
+        std::uint16_t pre_pc, std::uint8_t opcode0) const;
+    // Push a completed record (+ its #A8 primary-slot select) into the bounded
+    // ring, evicting the oldest once full.
+    void push_stream_record(const devices::cpu::Z80aTraceRecord& record, std::uint8_t a8);
+    // Dump the ring + write one final snapshot, uninstall the FDC observer, then
+    // disarm (stream_active_=false). `reason_note` is the verbatim
+    // "finalize_reason=..." manifest [NOTES] line (self-evident crash cause);
+    // `bundle_prefix` distinguishes the finalize bundle directory (HALT_ vs the
+    // stack-runaway CRASH_ vs the manual MANUAL_).
+    void finalize_stream_capture(const std::string& reason_note, const std::string& bundle_prefix);
 
     // Wire the slot/I/O decode fabric and S1985 layer onto the buses. Called
     // once from the constructor (static composition; per-boot volatile state is
@@ -452,6 +597,23 @@ private:
 
     private:
         devices::cpu::Z80aCpu& cpu_;
+    };
+
+    // DEC-0052 stream-capture FDC observer adapter. Installed on fdc_ ONLY while
+    // stream_active_ (set_stream_capture_enabled arms it, finalize_stream_capture
+    // removes it); default-null on fdc_ => zero behaviour change. Forwards each
+    // completed sector read to log_stream_fdc_read(), which appends one line to
+    // the per-stream FDC log so the human can diff our returned disk bytes against
+    // the raw .dsk. Non-perturbing (see FdcSectorReadObserver's contract).
+    class FdcStreamObserver final : public devices::fdc::FdcSectorReadObserver {
+    public:
+        explicit FdcStreamObserver(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_sector_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                            std::uint8_t sector, const std::uint8_t* data,
+                            std::size_t size) override;
+
+    private:
+        Hbf1xvMachine& machine_;
     };
 
     // Deterministic emulated-cycle clock source for the RTC (X4). Returns the
@@ -556,7 +718,6 @@ private:
 
     core::Scheduler scheduler_;
     MemoryRegion dram_{kDramBytes};
-    MemoryRegion sram_{kSramBytes};
 
     // S1985 "MSX-ENGINE" chipset + full system bus (M11). The machine owns the
     // decode fabrics and the residual engine layer; the CPU talks to SystemBus.
@@ -613,6 +774,7 @@ private:
     devices::rtc::Rp5c01 rtc_;  // #B4/#B5
     std::filesystem::path backup_ram_path_;
     std::filesystem::path halnote_sram_path_;  // M20, mirrors backup_ram_path_ exactly
+    std::filesystem::path fmpac_sram_path_;    // M36, mirrors halnote_sram_path_ exactly
 
     // CPU-addressable memory devices (M13). The mapper RAM consumes mapper_io_'s
     // live segments; the ROM devices are read-only windows over the loaded images.
@@ -724,6 +886,23 @@ private:
     // duty-cycle window is advanced by exactly ONE added line inside
     // run_frame(), alongside the existing vdp_.on_vsync() call.
     devices::chipset::Mb670836PauseController pause_controller_;
+
+    // --- DEC-0052 live stream-capture state (default-off; see the public API). ---
+    // One ring entry = the reused M27 per-instruction record + the #A8 primary-
+    // slot select at that instruction (the slot field is NOT part of the CPU-core
+    // record type, so it is carried alongside here -- no src/devices/cpu/ edit).
+    struct StreamTraceEntry {
+        devices::cpu::Z80aTraceRecord cpu;  // pre-execution register/opcode snapshot
+        std::uint8_t a8 = 0;                // #A8 primary-slot select at capture
+    };
+    bool stream_active_ = false;
+    std::string stream_id_;
+    std::uint64_t stream_seq_ = 0;              // absolute instruction index since arm
+    std::vector<StreamTraceEntry> stream_ring_;  // grows to kStreamTraceRingCapacity, then wraps
+    std::size_t stream_ring_head_ = 0;           // index of the oldest entry once the ring is full
+    // FDC per-sector-read logger adapter (installed on fdc_ only while armed). Only
+    // holds a reference to *this, so declaration order vs fdc_ is irrelevant.
+    FdcStreamObserver fdc_stream_observer_{*this};
 };
 
 }  // namespace sony_msx::machine

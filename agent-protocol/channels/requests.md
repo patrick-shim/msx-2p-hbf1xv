@@ -1722,3 +1722,50 @@ Full 34-row deferred-backlog review; `docs/m24-implementation-report.md` with th
 - Dependencies: `docs/m36-planner-package.md`; DEC-0049; the M27 tooling (`--debug-session`,
   `--input-script`, `src/machine/frame_dump.*`, `tools/frame-to-png.py`, `src/peripherals/msx_key_names.*`).
 - Requested At: 2026-07-10T14:00:00+09:00
+
+---
+
+- Request ID: REQ-M36-003
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent (opus)
+- Milestone ID: M36 (Phase 2; tag target v1.0.37)
+- Type: Milestone planning package -- Phase 2 addendum (DEC-0050 reframe) [dispatched live; back-filled to channel]
+- Scope: Produce docs/m36-phase2-planner-package.md, SUPERSEDING the machine-level-SRAM framing of docs/m36-planner-package.md per DEC-0050 (built-in FM = MSX-MUSIC, no SRAM; FM-PAC SRAM = peripheral cartridge; disk-save = implement task; internal sram_ = inaccuracy). System-wide review FIRST for each work item (FM-PAC peripheral cartridge; disk-write persistence; Bug B repro-first) grounded in references/openmsx-21.0 (MSXFmPac.cc, fdc/), then slice with ordering justified by the completion criterion. Fold in the msx-playtest agent frontmatter enabler + the R-M35-1 ride-along. Device-level only (no cpu/core -> ZEXALL withheld); additive/default-off. NO production code.
+- Coordinator asset/provenance updates sent mid-task: roms/fmpac.rom provided (FM-PAC real-software validation UNBLOCKED); its SHA1 (2dc4517e) is a signature-valid NON-CANONICAL FM-PAC variant -- validate functionally, not by hash-match.
+- Dependencies: DEC-0049; DEC-0050; docs/m36-planner-package.md; references/openmsx-21.0/src/sound/MSXFmPac.cc + src/fdc/*; src/devices/fdc/{disk_image,disk_drive,wd2793,sony_fdc}.*; src/machine/hbf1xv_machine.*; the committed Phase-1 harness.
+- Requested At: 2026-07-10T15:00:00+09:00
+
+---
+
+- Request ID: REQ-M36-004
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent (opus)
+- Milestone ID: M36 (Phase 2; tag target v1.0.37)
+- Type: Implementation + verification -- PHASE 2 (slices S-a .. S-f)
+- Scope: Implement M36 Phase 2 per docs/m36-phase2-planner-package.md in priority order. S-a: add YAML frontmatter to .claude/agents/msx-playtest.md (mirror msx-qa.md). S-b (MANDATORY): REPRO-FIRST Bug B (black-screen-on-building-entry) driving YS II from disks/games/ys2/disk1.dsk via tools/playtest-capture.ps1 + vision-reading PNGs + a state dump, root-cause (FDC read-fail vs VDP blank vs mapper) with deterministic evidence, then a UNIVERSAL fix -- ESCALATION RULE: STOP and report if navigation stalls (needs a human hint) OR if the fix would touch src/core/ or the VDP core render path. S-c: disk-save persistence via an EXPLICIT --disk-writable opt-in (host-file flush on eject/exit, NEVER in the emulation step; default in-memory/write-protected unchanged) + a formatted-blank-720KB disk asset/tool. S-d: new CartridgeMapperType::FmPac (SRAM window 0x4000-0x5FFD, magic 0x5FFE/0x5FFF, enable 0x7FF6, bank 0x7FF7, OPLL 0x7FF4/5 per MSXFmPac.cc), loadable via --cart roms/fmpac.rom, 8KB battery SRAM reusing BatteryBackedSram; coexist with #A8 + memory-mapper + other carts; do NOT regress built-in MSX-MUSIC; functional (not hash-match) validation. S-e: remove/relocate the speculative internal sram_ per section 2.4's consumer list without breaking the state dump/memory-region tests. S-f: strengthen the R-M35-1 multi_disk integration test to assert the disk index advances. Evidence gates (validate-assets, checksum, build, ctest fast-subset with ZEXALL withheld + git-diff proof of zero cpu/core edits); msx-playtest completion verification (vision-read PNGs proving building interiors LOAD + at least one save path persisting); additive/default-off byte-for-byte for single --disk/no-cart. Produce docs/m36-phase2-implementation-report.md. Do NOT commit (coordinator owns closure).
+- Constraints: feedback_system_wide_review_first + feedback_universal_fixes_only + feedback_slow_test_cadence + feedback_single_build_repo_hygiene.
+- Dependencies: docs/m36-phase2-planner-package.md; DEC-0050; roms/fmpac.rom; references/openmsx-21.0 (MSXFmPac.cc, fdc/); the M17 BatteryBackedSram; the committed Phase-1 harness.
+- Requested At: 2026-07-10T15:50:00+09:00
+
+---
+
+- Request ID: REQ-M36-005
+- From: MSX Master Agent (coordinator)
+- To: MSX Planner Agent (opus)
+- Milestone ID: M36 (Phase 3; tag target v1.0.37) [dispatched live; back-filled]
+- Type: Milestone planning package -- Phase 3 (comprehensive debug snapshot, DEC-0051)
+- Scope: Produce docs/m36-phase3-planner-package.md for a NEW live-triggerable debug snapshot (F12 in SDL3 + --snapshot on both exes) capturing EVERY component's exact state to debug/snapshot/<id>/. Capture-only, restore-ready format, additive/read-only, deterministic content. System-wide component->state->access inventory FIRST; enumerate the additive const getters needed; slice; per-slice deterministic test obligations + an adversarial cross-run determinism test. Extend the existing serialize_state_dump()/--dump-state; do NOT edit the golden state-dump serializer. Zero cpu/core edits (ZEXALL withheld). NO production code.
+- Dependencies: DEC-0051; src/machine/hbf1xv_machine.* (serialize_state_dump), src/machine/debug_dump.*, src/main.cpp (--dump-state/--debug-session), src/frontend/sdl3_app.* (F11), all src/devices/*.
+- Requested At: 2026-07-10T19:00:00+09:00
+
+---
+
+- Request ID: REQ-M36-006
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent (opus)
+- Milestone ID: M36 (Phase 3; tag target v1.0.37)
+- Type: Implementation + verification -- PHASE 3 (snapshot, S1-S5)
+- Scope: Implement docs/m36-phase3-planner-package.md S1-S5: new src/machine/debug_snapshot.{h,cpp} (serialize_snapshot/write_snapshot, HBF1XV-SNAPSHOT v1, restore-ready typed fields) capturing every component to debug/snapshot/<id>/; the 13 additive const getters (§2.4, read-only); F12 in sdl3_app (verify no F11 collision) + --snapshot <dir> on both exes (additive/default-off); .gitignore /debug/snapshot/. Do NOT edit the golden serialize_cpu/serialize_region/serialize_state_dump or src/devices/cpu/ or src/core/ (ZEXALL withheld, prove via git diff). Deterministic content (byte-identical cross-run to same frame). VERIFY END-TO-END: build + full ctest (report count incl. the adversarial determinism system test w/ SHA); actually run a capture and read it back (comprehensive + sane); AC-7 = a real YS II snapshot if feasible (disk1 + --swap-disk-frame + debug/m36_ysii_repro scripts), else a known-good BIOS->BASIC run (disclosed). Produce docs/m36-phase3-implementation-report.md. Do NOT commit.
+- Constraints: additive/read-only; zero cpu/core; deterministic; feedback_system_wide_review_first + feedback_single_build_repo_hygiene.
+- Dependencies: docs/m36-phase3-planner-package.md; DEC-0051; the existing state-dump foundation; the Phase-2 uncommitted tree.
+- Requested At: 2026-07-10T19:50:00+09:00

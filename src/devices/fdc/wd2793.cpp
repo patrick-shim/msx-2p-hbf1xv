@@ -423,6 +423,16 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
         end_command(t);
         return;
     }
+    // DEC-0052 stream-capture: notify the (non-perturbing) observer of the
+    // COMPLETED sector read -- the 512 bytes are now in buffer_ and no DRQ
+    // transfer has begun. Default null => skipped => byte-for-byte identical FDC
+    // behaviour + timing (nothing below reads the observer's result). track/side
+    // come from the drive's current head position; the observer only inspects.
+    if (sector_read_observer_ != nullptr) {
+        sector_read_observer_->on_sector_read(command_reg_, drive_->physical_track(),
+                                              drive_->side(), sector_reg_, buffer_.data(),
+                                              buffer_.size());
+    }
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
     drq_deadline_ = t + kReadStartCycles;

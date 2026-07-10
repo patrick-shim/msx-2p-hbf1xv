@@ -27,7 +27,11 @@ void print_usage(const char* argv0) {
                  " [--cart2 <path>] [--cart2-type <name>|auto] [--softwaredb <path>]"
                  " [--max-frames <N>] [--hidden-window]"
                  " [--border] [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
-                 " [--input-script <path>]\n"
+                 " [--input-script <path>] [--snapshot <dir>]\n"
+                 "\n"
+                 "--snapshot <dir> sets the debug-snapshot output root (default debug/); press\n"
+                 "F12 in-session to write a comprehensive per-component snapshot to\n"
+                 "<dir>/snapshot/<id>/ (F12 is always active; read-only, never perturbs the run).\n"
                  "\n"
                  "--cartN-type is optional (M30): when omitted (or 'auto') the mapper type is\n"
                  "auto-identified -- softwaredb SHA1 match first, then a bank-write heuristic.\n"
@@ -71,10 +75,12 @@ int main(int argc, char** argv) {
     config.max_frames = parsed.max_frames;
     config.hidden_window = parsed.hidden_window;
     config.border_enabled = parsed.border_enabled;
+    config.disk_writable = parsed.disk_writable;  // M36-S-c
     config.dump_state_filename = parsed.dump_state_filename;
     config.trace_cpu_filename = parsed.trace_cpu_filename;
     config.event_log_filename = parsed.event_log_filename;
     config.input_script_path = parsed.input_script_path;
+    config.snapshot_dir = parsed.snapshot_dir;  // M36 Phase 3: --snapshot <dir>
     // M30 (backlog G2): carry the parser's type_was_explicit through so a
     // type-less --cartN triggers auto-identification inside
     // load_configured_assets() (the ONE shared resolver); an explicit

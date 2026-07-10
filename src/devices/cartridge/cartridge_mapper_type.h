@@ -51,6 +51,18 @@ enum class CartridgeMapperType {
     // (cartridge_konami_scc_rom.h). Canonical openMSX display string
     // "KonamiSCC" (RomInfo.cc:24).
     KonamiSCC,
+    // M36 (DEC-0050): the external Panasonic FM-PAC peripheral cartridge
+    // (cartridge_fmpac_rom.h) -- ROM-bank window + 8 KB battery SRAM + magic
+    // unlock, grounded verbatim-behavior (never verbatim-code) in
+    // references/openmsx-21.0/src/sound/MSXFmPac.cc. NOTE ON THE NAME STRING:
+    // unlike the seven types above, FM-PAC is NOT an openMSX RomInfo RomType
+    // -- it is a full MSXDevice (`REGISTER_MSXDEVICE(MSXFmPac, "FM-PAC")`,
+    // MSXFmPac.cc:162) installed via the `fmpac` extension XML, with no entry
+    // in RomInfo.cc's RomType name table (verified: `grep FMPAC RomInfo.cc` is
+    // empty). So there is no RomType string to transcribe; "FMPAC" below is a
+    // project-chosen CLI token consistent with the openMSX extension name
+    // `fmpac.xml`, disclosed honestly (not asserted as a RomInfo RomType).
+    FmPac,
 };
 
 // Case-insensitive parse of one of the canonical name strings above. Returns

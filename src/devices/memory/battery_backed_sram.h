@@ -54,6 +54,10 @@ public:
 
     [[nodiscard]] std::size_t size() const;
 
+    // Contiguous read-only view of the store (for deterministic dumps, e.g.
+    // the machine state dump's SRAM section). Never null for a non-empty store.
+    [[nodiscard]] const std::uint8_t* data() const;
+
     [[nodiscard]] std::uint8_t read(std::size_t offset) const;
     void write(std::size_t offset, std::uint8_t value);
 

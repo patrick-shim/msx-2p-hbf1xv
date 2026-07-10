@@ -146,6 +146,15 @@ public:
     // Debug-only register readback (A-M17-6), NOT CPU-bus-reachable.
     [[nodiscard]] std::uint8_t register_value(std::uint8_t addr) const;
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     address latch + E2 write-timing gate state. const returns of existing
+    //     members, ZERO behavior change
+    //     (docs/m36-phase3-planner-package.md §2.4 item 6). ---
+    [[nodiscard]] std::uint8_t address_latch() const { return latch_; }
+    [[nodiscard]] bool has_last_write() const { return has_last_write_; }
+    [[nodiscard]] bool last_write_was_address() const { return last_write_was_address_; }
+    [[nodiscard]] std::uint64_t last_write_cycle() const { return last_write_cycle_; }
+
     // --- M31 (backlog E1): FM synthesis surface, wholly additive. ---
     // Deterministic advance in 3.58 MHz MASTER cycles: the owned synth
     // executes one native FM sample tick per 72 cycles (3.579545 MHz / 72 =

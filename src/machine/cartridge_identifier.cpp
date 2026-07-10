@@ -16,6 +16,7 @@
 #include <cstring>
 #include <utility>
 
+#include "devices/cartridge/cartridge_fmpac_rom.h"
 #include "machine/sha1.h"
 
 namespace sony_msx::machine {
@@ -196,6 +197,30 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
         }
     }
 
+    // M36 (DEC-0050) -- FM-PAC BIOS signature. Checked before the small-image
+    // plain-ROM rule below (a 16 KB FM-PAC BIOS is < 64 KB and would otherwise
+    // fall through to Mirrored and mis-detect). Positive SIGNATURE detection
+    // (facts of the FM-PAC BIOS format, not license-sensitive data): "AB"
+    // cart header at 0, "PAC2OPLL" detect marker at 0x18 (grounded in the real
+    // roms/fmpac.rom + references/openmsx-21.0/share/extensions/fmpac.xml's own
+    // note that FM-PAC dumps vary in the mapped-register region). Size must be
+    // a valid 1..4-bank FM-PAC image.
+    {
+        static constexpr char kFmPacMarker[] = "PAC2OPLL";
+        static constexpr std::size_t kFmPacMarkerOffset = 0x18;
+        static constexpr std::size_t kFmPacMarkerSize = 8;
+        const bool valid_fmpac_size =
+            devices::cartridge::CartridgeFmPacRom::is_valid_image_size(image.size());
+        if (valid_fmpac_size && image.size() >= kFmPacMarkerOffset + kFmPacMarkerSize &&
+            image[0] == 'A' && image[1] == 'B' &&
+            std::memcmp(image.data() + kFmPacMarkerOffset, kFmPacMarker, kFmPacMarkerSize) == 0) {
+            ident.type = CartridgeMapperType::FmPac;
+            ident.method = CartridgeIdentificationMethod::SignatureFmPac;
+            ident.detail = "FM-PAC signature (PAC2OPLL@0x18)";
+            return ident;
+        }
+    }
+
     // §2.3 step 2 -- size < 0x10000: plain-ROM rule -> Mirrored. openMSX's
     // PAGE2 refinement for <= 16 KB "AB" images (RomFactory.cc:97-108) is a
     // DISCLOSED simplification here (planner §1.3): our Mirrored device
@@ -278,6 +303,12 @@ std::string format_cartridge_identification_message(const int slot_number,
             return "cartridge: " + slot_flag + ": no softwaredb match [sha1=" + ident.sha1_hex +
                    "]; " + ident.detail + " -> Mirrored (plain-ROM rule); pass " + slot_flag +
                    "-type to override";
+
+        case CartridgeIdentificationMethod::SignatureFmPac:
+            // M36: FM-PAC BIOS signature match (positive, high-confidence).
+            return "cartridge: " + slot_flag + ": no softwaredb match [sha1=" + ident.sha1_hex +
+                   "]; " + ident.detail + " -> FMPAC (FM-PAC peripheral cartridge); pass " +
+                   slot_flag + "-type to override";
     }
     return "";
 }

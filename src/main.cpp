@@ -764,6 +764,29 @@ struct DebugSessionOptions {
     //     (to <debug_root>/frames/<name>).
     std::optional<std::uint32_t> frames;
     std::optional<std::string> dump_frame_name;
+    // M36-S-c: opt-in host-file disk-save persistence. Default false =
+    // in-memory-only (byte-for-byte the pre-M36 behavior; never clobbers a
+    // real .dsk). When set, each mounted disk gets its host path bound and a
+    // dirty image is flushed at end-of-run (and before a scripted swap).
+    bool disk_writable = false;
+    // M36 deterministic repro/testing enabler: swap to the NEXT disk in the
+    // repeatable --disk list at this frame (frame-loop mode only). Reuses the
+    // M35 multi-disk cache + swap semantics headlessly so a two-disk game
+    // (e.g. YS II's "INSERT DATADISK" prompt) can be driven deterministically
+    // without the SDL3 window / F11.
+    std::optional<std::uint32_t> swap_disk_frame;
+    // M36-S-d: FM-PAC peripheral cartridge battery-SRAM .sram persistence.
+    // When set, the machine loads this .sram on FM-PAC insertion (absent file
+    // -> deterministic zero state) and flushes it back at end-of-run.
+    std::optional<std::string> fmpac_sram_path;
+    // M36 Phase 3 (DEC-0051): comprehensive debug snapshot. --snapshot <dir>
+    // enables the capture and sets the output root (<dir>/snapshot/<id>/);
+    // --snapshot-frame <N> (frame-loop mode) captures at that specific frame
+    // for a deterministic mid-run capture (default: capture once at end-of-run).
+    // Additive + default-off: absent flags leave every prior invocation
+    // byte-for-byte unchanged (no snapshot dir created, no file written).
+    std::optional<std::string> snapshot_dir;
+    std::optional<std::uint32_t> snapshot_frame;
 };
 
 std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
@@ -825,6 +848,28 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
                 opts.dump_frame_name = *v;
                 ++i;
             }
+        } else if (arg == "--disk-writable") {
+            opts.disk_writable = true;  // boolean flag, no value
+        } else if (arg == "--swap-disk-frame") {
+            if (auto v = take_debug_session_value(args, i, "--swap-disk-frame", errors)) {
+                opts.swap_disk_frame = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--fmpac-sram") {
+            if (auto v = take_debug_session_value(args, i, "--fmpac-sram", errors)) {
+                opts.fmpac_sram_path = *v;
+                ++i;
+            }
+        } else if (arg == "--snapshot") {
+            if (auto v = take_debug_session_value(args, i, "--snapshot", errors)) {
+                opts.snapshot_dir = *v;
+                ++i;
+            }
+        } else if (arg == "--snapshot-frame") {
+            if (auto v = take_debug_session_value(args, i, "--snapshot-frame", errors)) {
+                opts.snapshot_frame = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
         }
         // Any other argument (--cart1/--cart1-type/--cart2/--cart2-type) is
         // left untouched for load_cartridges_from_args()'s own delegated
@@ -848,6 +893,12 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (opts.debug_root.has_value()) {
         machine.set_debug_root(*opts.debug_root);
     }
+    // M36 Phase 3: --snapshot <dir> sets the snapshot output root; the capture
+    // lands under <dir>/snapshot/<id>/. Takes precedence over --debug-root for a
+    // dedicated snapshot run.
+    if (opts.snapshot_dir.has_value()) {
+        machine.set_debug_root(*opts.snapshot_dir);
+    }
     // R-M27-2 (a real, easy-to-get-wrong sequencing constraint): event
     // logging MUST be enabled BEFORE cold_boot() to capture the Reset event
     // (hbf1xv_machine.h:306-309's own documented ordering requirement).
@@ -860,22 +911,39 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         std::cerr << "debug-session: " << note << "\n";
     }
 
+    // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
+    // freshly-inserted FM-PAC loads its battery SRAM on insertion.
+    if (opts.fmpac_sram_path.has_value()) {
+        machine.set_fmpac_sram_path(*opts.fmpac_sram_path);
+    }
+
     if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
         return rc;
     }
 
     // A-M27-3 (headless previously had no --disk flag; SDL3 has one, M26):
     // M35-S2: mirrors Sdl3App::load_configured_assets() with repeatable
-    // disk list. Load the first disk at boot (AC-S2-1); no disk if empty
+    // disk list. M36: cache ALL disks in memory (deterministic, no runtime
+    // I/O) so a scripted --swap-disk-frame can rotate them exactly like the
+    // SDL3 F11 path. Load the first disk at boot (AC-S2-1); no disk if empty
     // (AC-S2-3).
-    if (!opts.disk_paths.empty()) {
-        std::ifstream in(opts.disk_paths[0], std::ios::binary);
+    std::vector<std::vector<std::uint8_t>> disk_cache;
+    std::size_t current_disk_index = 0;
+    for (const std::string& disk_path : opts.disk_paths) {
+        std::ifstream in(disk_path, std::ios::binary);
         if (!in) {
-            std::cerr << "debug-session: cannot open --disk file: " << opts.disk_paths[0] << "\n";
+            std::cerr << "debug-session: cannot open --disk file: " << disk_path << "\n";
             return 2;
         }
-        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-        machine.disk_image() = sony_msx::devices::fdc::DiskImage(std::move(bytes));
+        disk_cache.emplace_back((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    }
+    if (!disk_cache.empty()) {
+        machine.disk_image() = sony_msx::devices::fdc::DiskImage(disk_cache[0]);
+        // M36-S-c: opt-in host-file write-back (default false -> no host path,
+        // flush() a no-op, byte-for-byte pre-M36 behavior).
+        if (opts.disk_writable) {
+            machine.disk_image().set_host_path(opts.disk_paths[0]);
+        }
         machine.disk_drive().attach_image(&machine.disk_image());
     } else {
         // M35-S2: explicitly detach when no disk in list (safety/clarity)
@@ -902,6 +970,27 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
+    // M36 Phase 3: deterministic comprehensive debug-snapshot capture. Default
+    // OFF -- only fires when --snapshot <dir> is present, so a run without the
+    // flag is byte-for-byte identical to before (no dir created, no file
+    // written). The manifest carries the multi-disk index (frontend/headless
+    // concept, planner A4) as a caller note.
+    bool snapshot_taken = false;
+    auto capture_snapshot = [&]() {
+        std::vector<std::string> notes = {
+            "disk_index=" + std::to_string(current_disk_index),
+            "disk_count=" + std::to_string(disk_cache.size()),
+        };
+        const std::string sid = machine.snapshot_id();
+        if (machine.write_snapshot(sid, notes)) {
+            std::cerr << "debug-session: wrote snapshot " << machine.debug_root().string()
+                      << "/snapshot/" << sid << "\n";
+        } else {
+            std::cerr << "debug-session: failed to write snapshot " << sid << "\n";
+        }
+        snapshot_taken = true;
+    };
+
     std::uint32_t steps = 0;
     if (opts.frames.has_value()) {
         // M32 frame-loop mode: the real production drive shape
@@ -911,6 +1000,25 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         // the frame count and the input script's cycle stamps.
         const std::uint64_t target = machine.frame_cycles_per_frame();
         for (std::uint32_t frame = 0; frame < *opts.frames; ++frame) {
+            // M36: deterministic scripted disk swap at a frame boundary (the
+            // headless analogue of the SDL3 F11 swap), for driving a two-disk
+            // game past its "insert data disk" prompt reproducibly.
+            if (opts.swap_disk_frame.has_value() && frame == *opts.swap_disk_frame &&
+                disk_cache.size() > 1) {
+                if (opts.disk_writable) {
+                    machine.disk_image().flush();
+                    disk_cache[current_disk_index] = machine.disk_image().data();
+                }
+                current_disk_index = (current_disk_index + 1) % disk_cache.size();
+                machine.disk_image() = sony_msx::devices::fdc::DiskImage(disk_cache[current_disk_index]);
+                if (opts.disk_writable) {
+                    machine.disk_image().set_host_path(opts.disk_paths[current_disk_index]);
+                }
+                machine.disk_drive().attach_image(&machine.disk_image());
+                machine.disk_drive().set_disk_changed(true);
+                std::cerr << "debug-session: swapped to disk " << current_disk_index << " (\""
+                          << opts.disk_paths[current_disk_index] << "\") at frame " << frame << "\n";
+            }
             const std::uint64_t start = machine.elapsed_cycles();
             while (machine.elapsed_cycles() - start < target) {
                 machine.step_cpu_instruction();
@@ -918,6 +1026,13 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                 ++steps;
             }
             machine.on_vsync_boundary();
+            // M36 Phase 3: deterministic mid-run capture at the requested frame
+            // boundary (the same post-on_vsync_boundary() point --dump-frame /
+            // --swap-disk-frame already use).
+            if (opts.snapshot_dir.has_value() && opts.snapshot_frame.has_value() &&
+                frame == *opts.snapshot_frame) {
+                capture_snapshot();
+            }
         }
     } else {
         while (steps < max_steps && !machine.cpu().state().halted()) {
@@ -925,6 +1040,26 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
             script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
             ++steps;
         }
+    }
+
+    // M36-S-c: persist any pending writable-disk writes back to the host .dsk
+    // (opt-in only; no-op when --disk-writable was absent -> no host path).
+    if (opts.disk_writable && !disk_cache.empty()) {
+        if (machine.disk_image().flush()) {
+            std::cerr << "debug-session: flushed writable disk to \""
+                      << opts.disk_paths[current_disk_index] << "\"\n";
+        }
+    }
+
+    // M36-S-d: persist the FM-PAC battery SRAM back to its .sram file.
+    if (opts.fmpac_sram_path.has_value() && machine.flush_fmpac_sram()) {
+        std::cerr << "debug-session: flushed FM-PAC SRAM to \"" << *opts.fmpac_sram_path << "\"\n";
+    }
+
+    // M36 Phase 3: end-of-run comprehensive snapshot (unless a mid-run
+    // --snapshot-frame capture already fired).
+    if (opts.snapshot_dir.has_value() && !snapshot_taken) {
+        capture_snapshot();
     }
 
     if (opts.dump_frame_name.has_value() && !machine.write_frame_dump(*opts.dump_frame_name)) {
@@ -1176,7 +1311,16 @@ int main(int argc, char** argv) {
                          " [--cart1-type <T>|auto] [--cart2 <path>] [--cart2-type <T>|auto]"
                          " [--softwaredb <path>] [--debug-root <path>]"
                          " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
-                         " [--input-script <path>] [--frames <N>] [--dump-frame <name>]\n"
+                         " [--input-script <path>] [--frames <N>] [--dump-frame <name>]"
+                         " [--disk-writable] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
+                         " [--snapshot <dir>] [--snapshot-frame <N>]\n"
+                         "  --snapshot <dir> writes a comprehensive per-component debug snapshot\n"
+                         "  to <dir>/snapshot/<id>/ (default: once at end-of-run); --snapshot-frame\n"
+                         "  <N> captures at that frame boundary in --frames mode instead.\n"
+                         "  --disk-writable persists disk writes back to the host .dsk at exit\n"
+                         "  (opt-in; default in-memory-only). --swap-disk-frame <N> hot-swaps to\n"
+                         "  the next --disk at frame N (repeatable --disk list). --fmpac-sram\n"
+                         "  <path> loads/saves an inserted FM-PAC cartridge's 8 KB battery SRAM.\n"
                          "  --frames drives N frames via the real frame loop (VBlank delivered;\n"
                          "  <max_steps> ignored, HALT does not stop the run); --dump-frame writes\n"
                          "  the decoded frame to <debug_root>/frames/<name> after the run (M32).\n"

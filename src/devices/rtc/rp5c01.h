@@ -80,6 +80,25 @@ public:
     [[nodiscard]] std::uint8_t peek_register(std::uint8_t block, std::uint8_t reg) const;
     [[nodiscard]] std::uint8_t mode_register() const;
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     write-only test/reset registers + the decoded internal time counters
+    //     + last-tick anchor, for a restore-ready snapshot. const returns of
+    //     existing members, ZERO behavior change (planner §2.4 item 8). These
+    //     do NOT advance time (unlike sync_time()); they read the last-synced
+    //     stored state, so the snapshot stays non-perturbing. ---
+    [[nodiscard]] std::uint8_t test_register() const { return test_reg_; }
+    [[nodiscard]] std::uint8_t reset_register() const { return reset_reg_; }
+    [[nodiscard]] unsigned fraction() const { return fraction_; }
+    [[nodiscard]] unsigned seconds() const { return seconds_; }
+    [[nodiscard]] unsigned minutes() const { return minutes_; }
+    [[nodiscard]] unsigned hours() const { return hours_; }
+    [[nodiscard]] unsigned day_week() const { return day_week_; }
+    [[nodiscard]] unsigned days() const { return days_; }
+    [[nodiscard]] unsigned months() const { return months_; }
+    [[nodiscard]] unsigned years() const { return years_; }
+    [[nodiscard]] unsigned leap_year() const { return leap_year_; }
+    [[nodiscard]] std::uint64_t last_rtc_ticks() const { return last_rtc_ticks_; }
+
 private:
     void sync_time();  // advance decoded time from the clock source (read-only)
     [[nodiscard]] std::uint8_t peek_port(std::uint8_t port) const;

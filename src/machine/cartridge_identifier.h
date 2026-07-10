@@ -39,10 +39,11 @@ namespace sony_msx::machine {
 inline constexpr const char* kDefaultSoftwareDbPath = "references/openmsx-21.0/share/softwaredb.xml";
 
 enum class CartridgeIdentificationMethod {
-    ExplicitFlag,        // --cartN-type VALUE given: today's behavior, untouched
-    SoftwareDbSha1,      // exact SHA1 match in the softwaredb
-    HeuristicBankScan,   // bank-select-write scan (>= 64 KB images)
-    SmallImagePlainRule  // < 64 KB, or == 64 KB without an "AB" header
+    ExplicitFlag,         // --cartN-type VALUE given: today's behavior, untouched
+    SoftwareDbSha1,       // exact SHA1 match in the softwaredb
+    HeuristicBankScan,    // bank-select-write scan (>= 64 KB images)
+    SmallImagePlainRule,  // < 64 KB, or == 64 KB without an "AB" header
+    SignatureFmPac        // M36: FM-PAC BIOS signature ("PAC2OPLL"@0x18) match
 };
 
 struct CartridgeIdentification {

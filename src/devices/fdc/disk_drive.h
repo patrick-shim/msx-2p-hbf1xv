@@ -79,8 +79,37 @@ public:
 
     // Disk-changed latch (Sony DSKCHG at 0x7FFD bit2, 0 = changed). Set true when
     // the mounted medium is (deterministically) swapped; cleared once acknowledged.
+    //
+    // disk_changed() is the NON-clearing const PEEK for snapshot/debug/inspection
+    // paths (debug_snapshot.cpp fdc_section) -- it MUST NOT perturb the latch, so a
+    // state dump never consumes the one-shot (Phase-3 determinism guarantee).
     [[nodiscard]] bool disk_changed() const { return disk_changed_; }
     void set_disk_changed(bool changed) { disk_changed_ = changed; }
+
+    // Read-and-CLEAR DSKCHG one-shot: returns the current latch and clears it.
+    // Models real hardware + openMSX, where READING the disk-changed line resets
+    // it (references/openmsx-21.0/src/fdc/DiskChanger.cc:95-100 -- diskChanged()
+    // returns the flag then sets diskChangedFlag=false). This is the MUTATING
+    // accessor the FDC register read at 0x7FFD uses (mirroring the mutating
+    // readMem path PhilipsFDC.cc:37, as opposed to the const peekMem :90). Without
+    // it a swapped medium keeps DSKCHG asserted forever, so a game that re-checks
+    // the disk after a swap (e.g. YS II's building-interior loader) sees a
+    // perpetually-"changed" medium, retries/aborts (Force Interrupt) and drops
+    // into DI;HALT -- the universal media-change freeze (M36 Bug B).
+    [[nodiscard]] bool take_disk_changed() {
+        const bool changed = disk_changed_;
+        disk_changed_ = false;
+        return changed;
+    }
+
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     raw motor latch + delayed motor-off timer (planner §2.4 item 10).
+    //     motor_on(now) stays the EFFECTIVE accessor; these expose the raw
+    //     underlying state so the snapshot is restore-ready. const, ZERO
+    //     behavior change. ---
+    [[nodiscard]] bool motor_latched() const { return motor_on_; }
+    [[nodiscard]] bool motor_off_pending() const { return motor_off_pending_; }
+    [[nodiscard]] std::uint64_t motor_off_deadline() const { return motor_off_deadline_; }
 
     // Sector access at the current physical track + side latch.
     bool read_sector(std::uint8_t sector, std::uint8_t* out) const;

@@ -96,6 +96,40 @@ public:
     // Deterministic power-on reset.
     void reset();
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     command working-register file + event-driven transfer FSM. const
+    //     returns of existing members, ZERO behavior change
+    //     (docs/m36-phase3-planner-package.md §2.4 item 4). Enum-valued fields
+    //     return their numeric code so the snapshot stays self-describing
+    //     without exposing the private LogicalOp/TransferKind enums. ---
+    [[nodiscard]] std::uint8_t status_byte() const { return status_; }
+    [[nodiscard]] int scr_mode() const { return scr_mode_; }
+    [[nodiscard]] unsigned sx() const { return sx_; }
+    [[nodiscard]] unsigned sy() const { return sy_; }
+    [[nodiscard]] unsigned dx() const { return dx_; }
+    [[nodiscard]] unsigned dy() const { return dy_; }
+    [[nodiscard]] unsigned nx() const { return nx_; }
+    [[nodiscard]] unsigned ny() const { return ny_; }
+    [[nodiscard]] unsigned asx() const { return asx_; }
+    [[nodiscard]] std::uint8_t arg() const { return arg_; }
+    [[nodiscard]] std::uint8_t cmd() const { return cmd_; }
+    [[nodiscard]] bool transfer_pending() const { return transfer_pending_; }
+    [[nodiscard]] std::uint8_t transfer_kind_code() const {
+        return static_cast<std::uint8_t>(transfer_kind_);
+    }
+    [[nodiscard]] unsigned transfer_adx() const { return transfer_adx_; }
+    [[nodiscard]] unsigned transfer_dy() const { return transfer_dy_; }
+    [[nodiscard]] unsigned transfer_dx_start() const { return transfer_dx_start_; }
+    [[nodiscard]] unsigned transfer_anx() const { return transfer_anx_; }
+    [[nodiscard]] unsigned transfer_tmp_nx() const { return transfer_tmp_nx_; }
+    [[nodiscard]] unsigned transfer_tmp_ny() const { return transfer_tmp_ny_; }
+    [[nodiscard]] int transfer_tx() const { return transfer_tx_; }
+    [[nodiscard]] int transfer_ty() const { return transfer_ty_; }
+    [[nodiscard]] std::uint8_t transfer_op_code() const {
+        return static_cast<std::uint8_t>(transfer_op_);
+    }
+    [[nodiscard]] bool transfer_transparent() const { return transfer_transparent_; }
+
 private:
     static constexpr std::uint8_t kTr = 0x80;
     static constexpr std::uint8_t kBd = 0x10;

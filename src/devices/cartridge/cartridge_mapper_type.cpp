@@ -42,6 +42,11 @@ std::optional<CartridgeMapperType> parse_cartridge_mapper_type(const std::string
     // the exact "Konami" compare (iequals requires equal length, so there is
     // no prefix ambiguity either way; order kept for readability).
     if (iequals(name, "KonamiSCC")) return CartridgeMapperType::KonamiSCC;
+    // M36 (DEC-0050): the external Panasonic FM-PAC peripheral cartridge. Not
+    // an openMSX RomType -- the token mirrors the openMSX `fmpac` extension
+    // name (see the enum comment in the header). Also accept the hyphenated
+    // "FM-PAC" device spelling for user convenience.
+    if (iequals(name, "FMPAC") || iequals(name, "FM-PAC")) return CartridgeMapperType::FmPac;
     return std::nullopt;
 }
 
@@ -54,6 +59,7 @@ std::string_view to_string(const CartridgeMapperType type) {
         case CartridgeMapperType::Ascii16kB: return "ASCII16";
         case CartridgeMapperType::Konami: return "Konami";
         case CartridgeMapperType::KonamiSCC: return "KonamiSCC";
+        case CartridgeMapperType::FmPac: return "FMPAC";
     }
     return "Mirrored";  // unreachable for a valid enumerator; keeps -Wreturn-type quiet
 }

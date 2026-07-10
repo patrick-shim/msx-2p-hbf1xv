@@ -53,6 +53,13 @@ struct Sdl3AppConfig {
     // at boot (AC-S2-1). All disks are pre-loaded into memory for
     // deterministic swapping (AC-S2-2).
     std::vector<std::string> disk_paths;
+    // M36-S-c: opt-in host-file disk-save persistence. Default false =
+    // in-memory-only, byte-for-byte the pre-M36 behavior (never clobbers a
+    // real .dsk). When true, each mounted disk gets its host `.dsk` path bound
+    // for write-back; a dirty writable image is flushed on shutdown and before
+    // a swap discards it. Game disks stay effectively read-only unless the
+    // user opts in; the SAVE target is a writable data disk.
+    bool disk_writable = false;
     int window_width = 640;
     int window_height = 480;
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
@@ -93,6 +100,14 @@ struct Sdl3AppConfig {
     // init() time and driven once per step_cpu_instruction() call inside
     // run_one_frame()'s existing CPU sub-loop (item 3, §2.4).
     std::optional<std::string> input_script_path;
+
+    // M36 Phase 3 (DEC-0051): comprehensive debug snapshot. F12 in-session
+    // ALWAYS triggers a capture (read-only + harmless); --snapshot <dir>
+    // overrides the output root to <dir>/snapshot/<id>/. std::nullopt default =
+    // captures land under the machine's default "debug/snapshot/" root.
+    // Additive: no capture ever happens unless F12 is pressed, so a run that
+    // never presses F12 is byte-for-byte identical to before.
+    std::optional<std::string> snapshot_dir;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real
@@ -155,6 +170,34 @@ public:
     // automatically once at run_interactive()'s own loop-exit point.
     void flush_debug_session_outputs();
 
+    // M36-S-f (R-M35-1): the deterministic disk-swap seam behind the F11
+    // hotkey, exposed publicly so an integration test can assert the mounted
+    // disk index advances (0 -> 1 -> ... -> wrap) WITHOUT SDL event injection.
+    // Rotates to the next cached disk (no-op for a <=1-disk list); when
+    // disk-writable is enabled it flushes the outgoing dirty image first.
+    void swap_to_next_disk() { on_disk_swap_hotkey(); }
+    [[nodiscard]] std::size_t current_disk_index() const { return current_disk_index_; }
+
+    // M36 Phase 3: the F12 snapshot-request seam, exposed publicly so an
+    // integration test can drive a capture WITHOUT SDL event injection (mirrors
+    // swap_to_next_disk()'s R-M35-1 precedent exactly). Sets the deferred-capture
+    // flag; the actual write happens at the end of the next run_one_frame().
+    void request_snapshot() { on_snapshot_hotkey(); }
+    [[nodiscard]] bool snapshot_requested() const { return snapshot_requested_; }
+
+    // DEC-0052: the F10 live stream-capture toggle seam, exposed publicly so an
+    // integration test can arm/finalize a stream WITHOUT SDL event injection
+    // (mirrors request_snapshot()/swap_to_next_disk()). Flips the machine-level
+    // stream capture: ON stamps a deterministic stream id (the current
+    // snapshot_id()); OFF finalizes (dumps the trace ring + a final snapshot).
+    void request_stream_toggle() { on_stream_toggle_hotkey(); }
+    [[nodiscard]] bool stream_capture_active() const { return machine_.stream_capture_active(); }
+
+    // M36-S-c: explicit flush of the mounted disk's writes back to its host
+    // `.dsk` (no-op unless disk-writable was set + a host path is bound).
+    // Called on shutdown; also directly callable after a bounded run.
+    bool flush_current_disk();
+
     [[nodiscard]] machine::Hbf1xvMachine& machine() { return machine_; }
     [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return machine_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
@@ -172,6 +215,16 @@ private:
     bool load_configured_assets();
     // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
     void on_disk_swap_hotkey();
+    // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot
+    // serviced at the END of run_one_frame() (a clean frame boundary + a stable
+    // deterministic id). Consumed as a HOST hotkey, NEVER routed to the MSX
+    // keyboard matrix (mirrors on_disk_swap_hotkey's F11 discipline exactly).
+    void on_snapshot_hotkey();
+    // DEC-0052: F10 hotkey handler -- toggles live stream-capture ON/OFF at the
+    // machine level. Consumed as a HOST hotkey, NEVER routed to the MSX keyboard
+    // matrix (mirrors on_disk_swap_hotkey/on_snapshot_hotkey discipline; F10 is
+    // otherwise unbound -- only F6-F9/F11/F12 are wired).
+    void on_stream_toggle_hotkey();
     void update_window_title_for_current_disk();
     void log_disk_swap();
 
@@ -181,6 +234,9 @@ private:
     bool sdl_initialized_ = false;
     bool initialized_ = false;
     bool quit_requested_ = false;
+    // M36 Phase 3: set by F12 (on_snapshot_hotkey), serviced + cleared at the
+    // end of run_one_frame() so the capture happens at a clean frame boundary.
+    bool snapshot_requested_ = false;
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;

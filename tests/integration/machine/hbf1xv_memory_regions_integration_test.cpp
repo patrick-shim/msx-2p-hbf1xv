@@ -15,9 +15,14 @@
 //
 // Cross-boundary deterministic coverage for the M10-S2 INERT memory regions.
 // Verifies that the CPU-visible DRAM aliases (load_memory/read_memory) and the
-// bus stay coherent with the DRAM MemoryRegion, that the inert VRAM/SRAM
-// regions survive a load -> dump -> reload round-trip through the machine, and
-// that running the CPU never perturbs the inert VRAM/SRAM regions.
+// bus stay coherent with the DRAM MemoryRegion, that the inert VRAM region
+// survives a load -> dump -> reload round-trip through the machine, and that
+// running the CPU never perturbs the inert VRAM region.
+//
+// M36 (DEC-0050): the speculative internal 8 KB `sram_` region was REMOVED
+// (battery SRAM is a peripheral -- the external FM-PAC cartridge). This suite
+// therefore exercises DRAM + VRAM only; FM-PAC SRAM persistence has its own
+// dedicated integration test.
 
 #include <cstddef>
 #include <cstdint>
@@ -63,18 +68,15 @@ int main() {
     }
     expect(dram_alias_ok, "LoadMemory_DramRegionAndReadMemory_Coherent");
 
-    // Snapshot inert regions before running the CPU.
-    machine.sram().write(0x0010, 0xAB);
+    // Snapshot the inert VRAM region before running the CPU.
     machine.vdp().vram().write(0x4000, 0xCD);
-    const std::vector<std::uint8_t> sram_before = machine.sram().dump();
     const std::vector<std::uint8_t> vram_before = machine.vdp().vram().dump();
 
-    // Run the loaded program to HALT; inert regions must be untouched.
+    // Run the loaded program to HALT; the inert VRAM region must be untouched.
     for (int steps = 0; steps < 8 && !machine.cpu().state().halted(); ++steps) {
         machine.step_cpu_instruction();
     }
     expect(machine.cpu().state().halted(), "RunProgram_ReachesHalt");
-    expect(machine.sram().dump() == sram_before, "RunProgram_SramRegion_Unperturbed");
     expect(machine.vdp().vram().dump() == vram_before, "RunProgram_VramRegion_Unperturbed");
 
     // Load -> dump -> reload round-trip across the machine boundary (VRAM).
@@ -96,11 +98,11 @@ int main() {
     Hbf1xvMachine machine_b;
     machine_a.cold_boot();
     machine_b.cold_boot();
-    const std::uint8_t sram_bytes[] = {0x01, 0x23, 0x45, 0x67, 0x89};
-    machine_a.sram().load(0x100, sram_bytes, sizeof(sram_bytes));
-    machine_b.sram().load(0x100, sram_bytes, sizeof(sram_bytes));
-    expect(machine_a.sram().dump() == machine_b.sram().dump(),
-           "TwoMachines_SameSramLoad_ByteIdenticalDump");
+    const std::uint8_t vram_bytes[] = {0x01, 0x23, 0x45, 0x67, 0x89};
+    machine_a.vdp().vram().load(0x100, vram_bytes, sizeof(vram_bytes));
+    machine_b.vdp().vram().load(0x100, vram_bytes, sizeof(vram_bytes));
+    expect(machine_a.vdp().vram().dump() == machine_b.vdp().vram().dump(),
+           "TwoMachines_SameVramLoad_ByteIdenticalDump");
     expect(machine_a.dram().dump() == machine_b.dram().dump(),
            "TwoMachines_ColdBootDram_ByteIdenticalDump");
 

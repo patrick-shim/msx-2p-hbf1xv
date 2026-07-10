@@ -65,6 +65,14 @@ public:
     // Test/debug view of the backup-RAM store.
     [[nodiscard]] std::uint8_t backup_byte(std::uint8_t index) const;
 
+    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    //     address / rotating-pattern / color registers (planner §2.4 item 11).
+    //     const returns of existing members, ZERO behavior change. ---
+    [[nodiscard]] std::uint8_t address_register() const { return address_; }
+    [[nodiscard]] std::uint8_t pattern_register() const { return pattern_; }
+    [[nodiscard]] std::uint8_t color1_register() const { return color1_; }
+    [[nodiscard]] std::uint8_t color2_register() const { return color2_; }
+
     // Battery-backed backup-RAM .sram persistence (M15-S5, backlog C4).
     //
     // openMSX saves the 16-byte backup RAM as an SRAM persistency file

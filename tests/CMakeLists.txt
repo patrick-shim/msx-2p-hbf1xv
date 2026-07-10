@@ -1065,6 +1065,36 @@ target_link_libraries(machine_hbf1xv_m29_konami_scc_integration_test PRIVATE son
 add_test(NAME machine_hbf1xv_m29_konami_scc_integration_test
     COMMAND machine_hbf1xv_m29_konami_scc_integration_test)
 
+# --- M36 (DEC-0050): FM-PAC peripheral cartridge + disk-save persistence -----
+add_executable(devices_cartridge_fmpac_rom_unit_test
+    unit/devices/cartridge/cartridge_fmpac_rom_unit_test.cpp
+)
+target_link_libraries(devices_cartridge_fmpac_rom_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_cartridge_fmpac_rom_unit_test COMMAND devices_cartridge_fmpac_rom_unit_test)
+
+add_executable(devices_disk_image_writeback_unit_test
+    unit/devices/fdc/disk_image_writeback_unit_test.cpp
+)
+target_link_libraries(devices_disk_image_writeback_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_disk_image_writeback_unit_test COMMAND devices_disk_image_writeback_unit_test)
+
+add_executable(machine_hbf1xv_m36_fmpac_cartridge_integration_test
+    integration/machine/hbf1xv_m36_fmpac_cartridge_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m36_fmpac_cartridge_integration_test PRIVATE sony_msx_core)
+target_compile_definitions(machine_hbf1xv_m36_fmpac_cartridge_integration_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+            SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+add_test(NAME machine_hbf1xv_m36_fmpac_cartridge_integration_test
+    COMMAND machine_hbf1xv_m36_fmpac_cartridge_integration_test)
+
+add_executable(machine_hbf1xv_m36_disk_save_persist_integration_test
+    integration/machine/hbf1xv_m36_disk_save_persist_integration_test.cpp
+)
+target_link_libraries(machine_hbf1xv_m36_disk_save_persist_integration_test PRIVATE sony_msx_core)
+add_test(NAME machine_hbf1xv_m36_disk_save_persist_integration_test
+    COMMAND machine_hbf1xv_m36_disk_save_persist_integration_test)
+
 add_executable(hbf1xv_m29_scc_system_test
     system/hbf1xv_m29_scc_system_test.cpp
 )
@@ -1374,6 +1404,59 @@ target_link_libraries(machine_hbf1xv_m34_bl_latch_integration_test PRIVATE sony_
 add_test(NAME machine_hbf1xv_m34_bl_latch_integration_test
     COMMAND machine_hbf1xv_m34_bl_latch_integration_test)
 
+# --- M36 Phase 3 comprehensive debug snapshot (DEC-0051, docs/m36-phase3-
+#     planner-package.md). Per-slice typed-field exactness (S1 core/memory/
+#     clock/slots + golden-unchanged + no-op guard, S2 VDP, S3 audio, S4
+#     FDC/RTC/chipset/cartridge), the parse-regression guard, and the S5
+#     adversarial cross-run determinism system test. ------------------------
+add_executable(machine_debug_snapshot_core_unit_test
+    unit/machine/debug_snapshot_core_unit_test.cpp
+)
+target_link_libraries(machine_debug_snapshot_core_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_debug_snapshot_core_unit_test COMMAND machine_debug_snapshot_core_unit_test)
+
+add_executable(machine_debug_snapshot_vdp_unit_test
+    unit/machine/debug_snapshot_vdp_unit_test.cpp
+)
+target_link_libraries(machine_debug_snapshot_vdp_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_debug_snapshot_vdp_unit_test COMMAND machine_debug_snapshot_vdp_unit_test)
+
+add_executable(machine_debug_snapshot_audio_unit_test
+    unit/machine/debug_snapshot_audio_unit_test.cpp
+)
+target_link_libraries(machine_debug_snapshot_audio_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_debug_snapshot_audio_unit_test COMMAND machine_debug_snapshot_audio_unit_test)
+
+add_executable(machine_debug_snapshot_devices_unit_test
+    unit/machine/debug_snapshot_devices_unit_test.cpp
+)
+target_link_libraries(machine_debug_snapshot_devices_unit_test PRIVATE sony_msx_core)
+add_test(NAME machine_debug_snapshot_devices_unit_test COMMAND machine_debug_snapshot_devices_unit_test)
+
+add_executable(frontend_sdl3_cli_snapshot_unit_test
+    unit/frontend/sdl3_cli_snapshot_unit_test.cpp
+)
+target_link_libraries(frontend_sdl3_cli_snapshot_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_sdl3_cli_snapshot_unit_test COMMAND frontend_sdl3_cli_snapshot_unit_test)
+
+add_executable(hbf1xv_m36_snapshot_determinism_system_test
+    system/hbf1xv_m36_snapshot_determinism_system_test.cpp
+)
+target_link_libraries(hbf1xv_m36_snapshot_determinism_system_test PRIVATE sony_msx_core)
+target_compile_definitions(hbf1xv_m36_snapshot_determinism_system_test
+    PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+add_test(NAME hbf1xv_m36_snapshot_determinism_system_test
+    COMMAND hbf1xv_m36_snapshot_determinism_system_test)
+
+# --- DEC-0052 live stream-capture (F10): per-frame bundles + auto-stop-on-HALT
+#     trace ring, end-to-end against real on-disk output + determinism oracle. ---
+add_executable(hbf1xv_m36_stream_capture_system_test
+    system/hbf1xv_m36_stream_capture_system_test.cpp
+)
+target_link_libraries(hbf1xv_m36_stream_capture_system_test PRIVATE sony_msx_core)
+add_test(NAME hbf1xv_m36_stream_capture_system_test
+    COMMAND hbf1xv_m36_stream_capture_system_test)
+
 # --- M26-S2..S8: SDL3-dependent tests (compiled/registered ONLY under
 #     -DSONY_MSX_ENABLE_SDL3=ON, docs/m26-planner-package.md §2.1/§3). The
 #     default headless (-DSONY_MSX_ENABLE_SDL3=OFF) ctest suite is completely
@@ -1487,6 +1570,16 @@ if(SONY_MSX_ENABLE_SDL3)
     add_test(NAME frontend_sdl3_app_multi_disk_integration_test
         COMMAND frontend_sdl3_app_multi_disk_integration_test)
 
+    # --- M36 Phase 3: F12 snapshot path via the Sdl3App (DEC-0051, slice S5). ---
+    add_executable(frontend_sdl3_app_snapshot_integration_test
+        integration/frontend/sdl3_app_snapshot_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_snapshot_integration_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(frontend_sdl3_app_snapshot_integration_test
+        PRIVATE SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}")
+    add_test(NAME frontend_sdl3_app_snapshot_integration_test
+        COMMAND frontend_sdl3_app_snapshot_integration_test)
+
     # M33/DEC-0041: stage SDL3.dll beside every SDL3-linked test executable
     # (see the sony_msx_stage_sdl3_dll definition in the root CMakeLists.txt --
     # without this, each test dies 0xc0000135 with a MODAL loader dialog that
@@ -1503,7 +1596,8 @@ if(SONY_MSX_ENABLE_SDL3)
         frontend_sdl3_app_debug_session_integration_test
         frontend_sdl3_input_mapper_key_names_consistency_integration_test
         frontend_sdl3_app_input_script_integration_test
-        frontend_sdl3_app_multi_disk_integration_test)
+        frontend_sdl3_app_multi_disk_integration_test
+        frontend_sdl3_app_snapshot_integration_test)
         sony_msx_stage_sdl3_dll(${sdl3_test_target})
     endforeach()
 endif()

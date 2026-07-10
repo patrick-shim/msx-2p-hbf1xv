@@ -89,6 +89,8 @@ public:
 
     // Debug/test seams (mirror the M19 window() seam).
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
+    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
     [[nodiscard]] const audio::SccWavetable& scc() const { return scc_; }
     [[nodiscard]] audio::SccWavetable& scc() { return scc_; }
     [[nodiscard]] bool scc_enabled() const { return scc_enabled_; }
