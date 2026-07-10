@@ -488,13 +488,40 @@ public:
     // (frame ~2683) is comfortably retained when the trigger fires.
     static constexpr std::uint16_t kStreamStackFloor = 0x4000;
 
+    // --- DEC-0052 "stream-light" mode (M36 Bug B long-session upstream hunt). A
+    //     LIGHTWEIGHT streaming variant for a LONG armed session (YS-II game
+    //     start -> walking to a building -> entering it) that the heavy per-frame
+    //     snapshot bundle would bog down. When light mode is armed:
+    //       (a) the per-vsync full-snapshot bundle is SUPPRESSED, replaced by a
+    //           COARSE anchor snapshot every kStreamLightSnapshotInterval frames
+    //           (~2 s) plus the existing crash/HALT/manual finalize snapshot, and
+    //       (b) a per-event WATCHLOG (<debug_root>/traces/stream_<id>_watch.log)
+    //           records the decisive-but-RARE upstream events over the whole
+    //           session: CPU memory writes to the IM1/RST-38 ISR-vector bytes
+    //           0x0039/0x003A and the sound-arm flag 0xA5E1 (via the mapper-RAM
+    //           write observer), and writes to VDP register R#1 (via the VDP
+    //           register-write observer). Because those events are rare, the
+    //           watchlog overhead is negligible over a long session.
+    //     The heavy per-frame mode remains the DEFAULT when light is off (§3.3);
+    //     the ring + its HALT/SP-underflow auto-finalize are unchanged (the ring
+    //     stays at kStreamTraceRingCapacity = 1<<20 ~= 2.8 s -- the WATCHLOG, not
+    //     the ring, is the whole-session upstream record, so the ring width need
+    //     not grow). ---
+    static constexpr std::uint32_t kStreamLightSnapshotInterval = 120;  // frames (~2 s)
+
     // Arm (enabled=true) / finalize (enabled=false) the stream capture. Arming
     // clears the ring and stamps the stream id (defaults to snapshot_id() at the
-    // arm moment when stream_id is empty). Finalizing dumps the ring + writes the
-    // final snapshot + disarms (a no-op if not currently armed). Arming twice is a
+    // arm moment when stream_id is empty). `light` selects the lightweight mode
+    // above (default false = the heavy per-frame-snapshot mode, byte-for-byte the
+    // pre-DEC-0052-light behavior). Finalizing dumps the ring + writes the final
+    // snapshot + disarms (a no-op if not currently armed). Arming twice is a
     // no-op.
-    void set_stream_capture_enabled(bool enabled, const std::string& stream_id = std::string{});
+    void set_stream_capture_enabled(bool enabled, const std::string& stream_id = std::string{},
+                                    bool light = false);
     [[nodiscard]] bool stream_capture_active() const;
+    // Whether the currently-armed capture is in the lightweight mode (false when
+    // disarmed or armed heavy). For tests/diagnostics.
+    [[nodiscard]] bool stream_capture_light() const;
     [[nodiscard]] const std::string& stream_capture_id() const;
     // Records currently held in the ring (<= kStreamTraceRingCapacity). For tests.
     [[nodiscard]] std::size_t stream_trace_ring_size() const;
@@ -524,6 +551,16 @@ private:
     // already-read bytes + writes a host file; no emulation/scheduler/CPU effect.
     void log_stream_fdc_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
                              std::uint8_t sector, const std::uint8_t* data, std::size_t size);
+    // DEC-0052 stream-light WATCHLOG appenders (called via the mapper-RAM /
+    // VDP register-write observers below while streaming). Each appends one
+    // deterministic line to <debug_root>/traces/stream_<id>_watch.log for a
+    // WATCHED event only (all others are silently ignored, so the per-write /
+    // per-register-write overhead is a few comparisons). Non-perturbing: read
+    // deterministic machine counters (frame_count_, elapsed_cycles(), the
+    // current-instruction PC stream_pc_) + append a host file; no emulation/
+    // scheduler/CPU effect. `address` is the CPU-visible write address.
+    void log_stream_mem_write(std::uint16_t address, std::uint8_t value);
+    void log_stream_vdp_register(std::uint8_t reg, std::uint8_t value);
     // Build a PRE-execution trace record from the live CPU state, REUSING the M27
     // Z80aTraceRecord convention. Const w.r.t. the machine (read-only getters).
     [[nodiscard]] devices::cpu::Z80aTraceRecord capture_stream_pre_record(
@@ -611,6 +648,33 @@ private:
         void on_sector_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
                             std::uint8_t sector, const std::uint8_t* data,
                             std::size_t size) override;
+
+    private:
+        Hbf1xvMachine& machine_;
+    };
+
+    // DEC-0052 stream-light mapper-RAM write observer. Installed on ram_mapper_
+    // ONLY while streaming (set_stream_capture_enabled arms it, finalize removes
+    // it); default-null on the device => zero behaviour change. Forwards each
+    // CPU RAM write to log_stream_mem_write(), which appends a watchlog line for
+    // the WATCHED addresses (0x0039/0x003A/0xA5E1) only. Non-perturbing.
+    class MemWatchObserver final : public devices::memory::MemWriteObserver {
+    public:
+        explicit MemWatchObserver(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_mem_write(core::BusAddress address, core::BusData value) override;
+
+    private:
+        Hbf1xvMachine& machine_;
+    };
+
+    // DEC-0052 stream-light VDP control-register-write observer. Installed on
+    // vdp_ ONLY while streaming; default-null => zero behaviour change. Forwards
+    // each R#0..R#31 write to log_stream_vdp_register(), which appends a watchlog
+    // line for R#1 only. Non-perturbing.
+    class VdpRegWatchObserver final : public devices::video::VdpRegisterWriteObserver {
+    public:
+        explicit VdpRegWatchObserver(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_register_write(std::uint8_t reg, std::uint8_t value) override;
 
     private:
         Hbf1xvMachine& machine_;
@@ -896,6 +960,15 @@ private:
         std::uint8_t a8 = 0;                // #A8 primary-slot select at capture
     };
     bool stream_active_ = false;
+    // DEC-0052 stream-light: whether the armed capture is the lightweight
+    // variant (per-frame bundles suppressed -> coarse anchors + watchlog).
+    bool stream_light_ = false;
+    // DEC-0052 stream-light: the PC of the instruction currently executing,
+    // stamped at the top of step_cpu_instruction() while armed. The mapper-RAM /
+    // VDP register-write observers fire DURING cpu_.step() (before the scheduler
+    // ticks), so the watchlog reports this instruction's PC and the cycle count
+    // at instruction START -- both deterministic.
+    std::uint16_t stream_pc_ = 0;
     std::string stream_id_;
     std::uint64_t stream_seq_ = 0;              // absolute instruction index since arm
     std::vector<StreamTraceEntry> stream_ring_;  // grows to kStreamTraceRingCapacity, then wraps
@@ -903,6 +976,10 @@ private:
     // FDC per-sector-read logger adapter (installed on fdc_ only while armed). Only
     // holds a reference to *this, so declaration order vs fdc_ is irrelevant.
     FdcStreamObserver fdc_stream_observer_{*this};
+    // DEC-0052 stream-light watchlog observer adapters (installed on ram_mapper_
+    // / vdp_ only while armed). Only hold a reference to *this.
+    MemWatchObserver mem_watch_observer_{*this};
+    VdpRegWatchObserver vdp_reg_watch_observer_{*this};
 };
 
 }  // namespace sony_msx::machine

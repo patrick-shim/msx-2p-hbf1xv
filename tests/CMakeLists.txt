@@ -356,6 +356,14 @@ add_executable(devices_v9958_status_irq_unit_test
 target_link_libraries(devices_v9958_status_irq_unit_test PRIVATE sony_msx_core)
 add_test(NAME devices_v9958_status_irq_unit_test COMMAND devices_v9958_status_irq_unit_test)
 
+# M36 Bug B: IE0/IE1 register-write /INT re-evaluation (YS II crash fix).
+add_executable(devices_v9958_ie0_register_write_irq_unit_test
+    unit/devices/video_v9958_ie0_register_write_irq_unit_test.cpp
+)
+target_link_libraries(devices_v9958_ie0_register_write_irq_unit_test PRIVATE sony_msx_core)
+add_test(NAME devices_v9958_ie0_register_write_irq_unit_test
+    COMMAND devices_v9958_ie0_register_write_irq_unit_test)
+
 add_executable(devices_vdp_vr_hr_raster_status_unit_test
     unit/devices/video_vdp_vr_hr_raster_status_unit_test.cpp
 )
@@ -1580,6 +1588,19 @@ if(SONY_MSX_ENABLE_SDL3)
     add_test(NAME frontend_sdl3_app_snapshot_integration_test
         COMMAND frontend_sdl3_app_snapshot_integration_test)
 
+    # --- M36: FM-PAC battery-SRAM persistence via the Sdl3App (auto-derived
+    #     <cart>.rom.sram default + --fmpac-sram/--no-fmpac-sram). Proves the
+    #     SDL3 build persists FM-PAC saves across quit/reload (round-trip). ---
+    add_executable(frontend_sdl3_app_fmpac_sram_integration_test
+        integration/frontend/sdl3_app_fmpac_sram_integration_test.cpp
+    )
+    target_link_libraries(frontend_sdl3_app_fmpac_sram_integration_test PRIVATE sony_msx_sdl3_frontend)
+    target_compile_definitions(frontend_sdl3_app_fmpac_sram_integration_test PRIVATE
+        SONY_MSX_BIOS_DIR="${SONY_MSX_BIOS_DIR_ABS}"
+        SONY_MSX_ROMS_DIR="${SONY_MSX_ROMS_DIR_ABS}")
+    add_test(NAME frontend_sdl3_app_fmpac_sram_integration_test
+        COMMAND frontend_sdl3_app_fmpac_sram_integration_test)
+
     # M33/DEC-0041: stage SDL3.dll beside every SDL3-linked test executable
     # (see the sony_msx_stage_sdl3_dll definition in the root CMakeLists.txt --
     # without this, each test dies 0xc0000135 with a MODAL loader dialog that
@@ -1597,7 +1618,8 @@ if(SONY_MSX_ENABLE_SDL3)
         frontend_sdl3_input_mapper_key_names_consistency_integration_test
         frontend_sdl3_app_input_script_integration_test
         frontend_sdl3_app_multi_disk_integration_test
-        frontend_sdl3_app_snapshot_integration_test)
+        frontend_sdl3_app_snapshot_integration_test
+        frontend_sdl3_app_fmpac_sram_integration_test)
         sony_msx_stage_sdl3_dll(${sdl3_test_target})
     endforeach()
 endif()

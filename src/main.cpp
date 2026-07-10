@@ -787,6 +787,13 @@ struct DebugSessionOptions {
     // byte-for-byte unchanged (no snapshot dir created, no file written).
     std::optional<std::string> snapshot_dir;
     std::optional<std::uint32_t> snapshot_frame;
+    // DEC-0052 stream-light (M36 Bug B long-session upstream hunt): --stream-light
+    // arms the machine-level live stream-capture in the LIGHTWEIGHT mode for the
+    // whole run (per-frame snapshot bundles suppressed -> coarse anchors + the
+    // per-event watchlog stream_<id>_watch.log). Default OFF = no stream capture
+    // (byte-for-byte the pre-DEC-0052 behavior). Headless analogue of the SDL3 F10
+    // toggle, for a deterministic, reproducible light capture without a window.
+    bool stream_light = false;
 };
 
 std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
@@ -870,6 +877,8 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
                 opts.snapshot_frame = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
                 ++i;
             }
+        } else if (arg == "--stream-light") {
+            opts.stream_light = true;  // DEC-0052: arm lightweight stream capture (boolean flag)
         }
         // Any other argument (--cart1/--cart1-type/--cart2/--cart2-type) is
         // left untouched for load_cartridges_from_args()'s own delegated
@@ -991,6 +1000,17 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         snapshot_taken = true;
     };
 
+    // DEC-0052 stream-light: arm the lightweight live stream-capture for the
+    // whole run (headless analogue of the SDL3 F10 toggle). Armed AFTER
+    // debug_root/disk/cart setup so the watchlog + coarse anchors land under the
+    // configured root. Default OFF -> no arming, byte-for-byte the pre-DEC-0052
+    // behavior. A step-mode run auto-finalizes on HALT/SP-underflow; a frames-mode
+    // run is finalized manually at end-of-run below.
+    if (opts.stream_light) {
+        machine.set_stream_capture_enabled(true, std::string{}, /*light=*/true);
+        std::cerr << "debug-session: stream-light armed: stream_" << machine.stream_capture_id() << "\n";
+    }
+
     std::uint32_t steps = 0;
     if (opts.frames.has_value()) {
         // M32 frame-loop mode: the real production drive shape
@@ -1040,6 +1060,15 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
             script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
             ++steps;
         }
+    }
+
+    // DEC-0052 stream-light: finalize a still-armed capture (a frames-mode run
+    // that never HALTed / underflowed the stack). Dumps the trace ring + a final
+    // MANUAL_ snapshot; the watch.log was appended incrementally during the run.
+    if (opts.stream_light && machine.stream_capture_active()) {
+        machine.set_stream_capture_enabled(false);
+        std::cerr << "debug-session: stream-light finalized: stream_" << machine.stream_capture_id()
+                  << " (watch.log under " << machine.debug_root().string() << "/traces)\n";
     }
 
     // M36-S-c: persist any pending writable-disk writes back to the host .dsk

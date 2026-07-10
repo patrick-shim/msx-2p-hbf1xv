@@ -23,6 +23,20 @@
 
 namespace sony_msx::devices::memory {
 
+// DEC-0052 (M36 stream-light): non-perturbing CPU-memory-write observer. When
+// installed (non-null) it is notified on every mem_write() with the CPU-VISIBLE
+// address (the 16-bit address the CPU wrote -- NOT the folded physical segment
+// offset), so a diagnostic can watch specific addresses (e.g. the 0x0038 IM1/
+// RST-38 JP-target bytes). Default-null => zero behaviour change; like the
+// WD2793 FdcSectorReadObserver it is an externally-owned lifecycle pointer,
+// isolated from emulation (an implementation MUST NOT mutate memory/mapper/CPU/
+// clock state -- it only inspects the supplied address+value, e.g. to log them).
+class MemWriteObserver {
+public:
+    virtual ~MemWriteObserver() = default;
+    virtual void on_mem_write(core::BusAddress address, core::BusData value) = 0;
+};
+
 // 64 KB memory-mapper RAM device occupying slot 3-0, pages 0-3 (M13-S1).
 //
 // This is the CPU RAM backing for the HB-F1XV (Sony_HB-F1XV.xml:125-130,
@@ -62,9 +76,17 @@ public:
     core::BusData mem_read(core::BusAddress address) override;
     void mem_write(core::BusAddress address, core::BusData value) override;
 
+    // DEC-0052 stream-light: install (non-null) / remove (nullptr) the
+    // non-perturbing memory-write observer. Default null => zero behaviour
+    // change (mirrors Wd2793::set_sector_read_observer exactly); it is an
+    // externally-owned lifecycle pointer, managed by the installing machine.
+    void set_write_observer(MemWriteObserver* observer) { write_observer_ = observer; }
+
 private:
     machine::MemoryRegion& ram_;
     const chipset::MapperIo& mapper_io_;
+    // DEC-0052 stream-light: externally-owned; default null => no-op.
+    MemWriteObserver* write_observer_ = nullptr;
 };
 
 }  // namespace sony_msx::devices::memory

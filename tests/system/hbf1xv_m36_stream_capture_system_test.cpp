@@ -260,6 +260,9 @@ int main() {
     const fs::path root_c = base / "C";
     const fs::path root_d = base / "D";
     const fs::path root_e = base / "E";
+    const fs::path root_f = base / "F";              // DEC-0052 stream-light watchlog
+    const fs::path root_g_light = base / "G_light";  // light coarse-anchor suppression
+    const fs::path root_g_heavy = base / "G_heavy";  // heavy per-frame contrast
 
     // --- Run A: armed. ---
     Hbf1xvMachine a;
@@ -442,6 +445,101 @@ int main() {
         std::cout << "sp-underflow bundle written; sp=" << std::hex
                   << e.cpu().state().regs().sp << std::dec
                   << " ring=" << e.stream_trace_ring_size() << "\n";
+    }
+
+    // --- Run F (DEC-0052 stream-light): a LIGHT-mode armed run produces a
+    //     per-event WATCHLOG for the decisive upstream events (memory writes to
+    //     0x0039/0x003A/0xA5E1 + a write to VDP R#1) and does NOT emit a per-frame
+    //     bundle (the HALT is immediate, in frame 0); the HALT finalize bundle is
+    //     still written. Proves the watchlog + no-heavy-per-frame contract. ---
+    {
+        // 4 decisive writes then HALT. Layout (flat RAM, PC=0):
+        //   0000 LD A,E3 / 0002 LD (0039),A  -> mem watch (pc=0002)
+        //   0005 LD A,A5 / 0007 LD (003A),A  -> mem watch (pc=0007)
+        //   000A LD A,01 / 000C LD (A5E1),A  -> mem watch (pc=000C)
+        //   000F LD A,40 / 0011 OUT (99),A   -> #99 data latch 0x40
+        //   0013 LD A,81 / 0015 OUT (99),A   -> R#1 = 0x40 (vdp watch, pc=0015)
+        //   0017 HALT
+        const std::array<std::uint8_t, 24> watch_prog{
+            0x3E, 0xE3, 0x32, 0x39, 0x00, 0x3E, 0xA5, 0x32, 0x3A, 0x00, 0x3E, 0x01,
+            0x32, 0xE1, 0xA5, 0x3E, 0x40, 0xD3, 0x99, 0x3E, 0x81, 0xD3, 0x99, 0x76,
+        };
+        Hbf1xvMachine f;
+        f.cold_boot();
+        f.set_debug_root(root_f);
+        f.map_flat_ram();
+        f.load_memory(0x0000, watch_prog.data(), static_cast<std::uint32_t>(watch_prog.size()));
+        f.set_stream_capture_enabled(true, std::string{}, /*light=*/true);
+        expect(f.stream_capture_light(), "Light_Armed_IsLight");
+        const std::string sid = f.stream_capture_id();
+
+        int guard = 0;
+        while (!f.cpu().state().halted() && guard < 100000) {
+            f.step_cpu_instruction();
+            ++guard;
+        }
+        expect(f.cpu().state().halted(), "Light_Watch_ReachesHalt");
+        expect(!f.stream_capture_active(), "Light_Watch_FinalizedOnHalt");
+
+        const fs::path watch_log = root_f / "traces" / ("stream_" + sid + "_watch.log");
+        const std::string wl = read_file(watch_log);
+        expect(!wl.empty(), "Light_WatchLog_NonEmpty");
+        expect(wl.find("pc=0002 WRITE addr=0039 val=E3") != std::string::npos, "Light_WatchLog_Vec0039");
+        expect(wl.find("pc=0007 WRITE addr=003A val=A5") != std::string::npos, "Light_WatchLog_Vec003A");
+        expect(wl.find("pc=000C WRITE addr=A5E1 val=01") != std::string::npos, "Light_WatchLog_SoundArm");
+        expect(wl.find("pc=0015 VDP R1=40") != std::string::npos, "Light_WatchLog_VdpR1");
+        expect(wl.find("frame=0") != std::string::npos, "Light_WatchLog_HasFrame");
+
+        const fs::path stream_dir_f = root_f / "snapshot" / ("stream_" + sid);
+        expect(count_frame_bundles(stream_dir_f) == 0, "Light_NoPerFrameBundle");
+        bool halt_bundle_f = false;
+        if (fs::exists(stream_dir_f)) {
+            for (const auto& entry : fs::directory_iterator(stream_dir_f)) {
+                if (entry.is_directory() &&
+                    entry.path().filename().string().rfind("HALT_", 0) == 0 &&
+                    fs::exists(entry.path() / "manifest.txt")) {
+                    halt_bundle_f = true;
+                }
+            }
+        }
+        expect(halt_bundle_f, "Light_HaltBundle_Written");
+        std::cout << "light watch.log:\n" << wl;
+    }
+
+    // --- Run G (DEC-0052 stream-light): the per-frame-snapshot SUPPRESSION +
+    //     coarse-anchor interval, directly contrasted against heavy mode over the
+    //     SAME frame boundaries. Driven purely by on_vsync_boundary() (frame_count_
+    //     is the anchor driver) so the ring/trace stay tiny. LIGHT: 121 boundaries
+    //     -> exactly ONE coarse anchor (the frame-120 bundle). HEAVY: 5 boundaries
+    //     -> a per-frame bundle EVERY frame. ---
+    {
+        Hbf1xvMachine gl;
+        gl.cold_boot();
+        gl.set_debug_root(root_g_light);
+        gl.set_stream_capture_enabled(true, std::string{}, /*light=*/true);
+        const std::string sid_l = gl.stream_capture_id();
+        for (int i = 0; i < 121; ++i) {
+            gl.on_vsync_boundary();  // frame_count_ 1..121; anchor fires only at 120
+        }
+        const fs::path stream_dir_gl = root_g_light / "snapshot" / ("stream_" + sid_l);
+        expect(count_frame_bundles(stream_dir_gl) == 1, "Light_CoarseAnchor_ExactlyOne");
+        gl.set_stream_capture_enabled(false);  // manual finalize (MANUAL_ bundle)
+        expect(!gl.stream_capture_active(), "Light_Coarse_Finalized");
+
+        Hbf1xvMachine gh;
+        gh.cold_boot();
+        gh.set_debug_root(root_g_heavy);
+        gh.set_stream_capture_enabled(true, std::string{}, /*light=*/false);  // heavy
+        const std::string sid_h = gh.stream_capture_id();
+        for (int i = 0; i < 5; ++i) {
+            gh.on_vsync_boundary();
+        }
+        const fs::path stream_dir_gh = root_g_heavy / "snapshot" / ("stream_" + sid_h);
+        expect(count_frame_bundles(stream_dir_gh) == 5, "Heavy_PerFrameBundle_EveryFrame");
+        gh.set_stream_capture_enabled(false);
+        std::cout << "light coarse anchors=" << count_frame_bundles(stream_dir_gl)
+                  << " (of 121 boundaries); heavy per-frame bundles="
+                  << count_frame_bundles(stream_dir_gh) << " (of 5 boundaries)\n";
     }
 
     if (g_failures != 0) {

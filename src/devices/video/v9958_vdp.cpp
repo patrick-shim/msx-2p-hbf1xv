@@ -94,6 +94,10 @@ void V9958Vdp::attach_render_sync(VdpRenderSyncListener* const listener) {
     render_sync_ = listener;
 }
 
+void V9958Vdp::attach_register_write_observer(VdpRegisterWriteObserver* const observer) {
+    register_write_observer_ = observer;
+}
+
 // --- core::IoDevice ---------------------------------------------------------
 
 core::BusData V9958Vdp::io_read(const core::BusAddress port) {
@@ -320,11 +324,64 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         }
         return;
     }
+
+    // M36 Bug B: capture the OLD value BEFORE committing so the IE0/IE1
+    // register-write /INT re-evaluation below (cases 0/1) can compute
+    // `change = old ^ new` -- openMSX's `changeRegister` does exactly this
+    // (references/openmsx-21.0/src/video/VDP.cc:1170-1198: it commits the new
+    // value, then re-evaluates the IE0/IE1 interrupt lines against `change`).
+    const std::uint8_t old_value = control_regs_[reg];
     control_regs_[reg] = value;
+    const std::uint8_t change = static_cast<std::uint8_t>(old_value ^ value);
+
+    // DEC-0052 stream-light watchlog hook (default-off): notify the diagnostic
+    // observer of this R#0..R#31 control-register write. No-op unless installed
+    // (only while a stream capture is armed); the machine filters for R#1.
+    if (register_write_observer_ != nullptr) {
+        register_write_observer_->on_register_write(reg, value);
+    }
 
     switch (reg) {
-    case 0:   // M3..M5 + IE1 (line-int enable, gates S#1 FH)
-    case 1:   // M1..M2 + IE0 (VBlank-int enable)
+    case 0:  // M3..M5 + IE1 (R#0 bit4, line-int enable, gates S#1 FH)
+        // M36 Bug B: an R#0 write that TOGGLES IE1 re-evaluates the horizontal
+        // /INT on the write itself (VDP.cc:1177-1185). Only the CLEAR edge acts
+        // here: IE1 off must immediately de-assert a held line /INT, exactly as
+        // openMSX does `irqHorizontal.reset()` (VDP.cc:1182). The SET edge is
+        // left to the existing per-step line-match poll
+        // (Hbf1xvMachine::poll_line_interrupt -> V9958Vdp::on_line_match), our
+        // analogue of openMSX's `scheduleHScan(time)` (VDP.cc:1180): it asserts
+        // irq_horizontal_ at the next (R#19-R#23) match-line crossing while IE1
+        // is on, so enabling IE1 mid-frame arms rather than instantly fires.
+        if (change & 0x10) {
+            if (!(value & 0x10)) {
+                irq_horizontal_ = false;
+            }
+            update_irq();
+        }
+        recompute_mode();
+        break;
+    case 1:  // M1..M2 + IE0 (R#1 bit5, VBlank-int enable)
+        // M36 Bug B (the YS II building-interior crash): an R#1 write that
+        // TOGGLES IE0 re-evaluates the vertical /INT on the write itself -- the
+        // path the pre-fix code MISSED (it only called recompute_mode(), so a
+        // held /INT survived an IE0-clear until the next S#0 read, letting the
+        // ISR's later EI re-fire forever -> nested-VBLANK stack overflow).
+        // openMSX VDP.cc:1186-1198:
+        //   IE0 set  -> re-assert ONLY if F is already pending (their documented
+        //               Andonis/Zanac case, VDP.cc:1189-1194);
+        //   IE0 clear-> de-assert immediately (VDP.cc:1196, irqVertical.reset()).
+        if (change & 0x20) {
+            if (value & 0x20) {
+                if (status_reg0_ & 0x80) {  // F pending
+                    irq_vertical_ = true;
+                }
+            } else {
+                irq_vertical_ = false;  // IE0 cleared -> /INT de-asserts now
+            }
+            update_irq();
+        }
+        recompute_mode();
+        break;
     case 25:  // YJK/YAE mode bits
         recompute_mode();
         break;

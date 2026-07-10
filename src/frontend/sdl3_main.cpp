@@ -27,11 +27,19 @@ void print_usage(const char* argv0) {
                  " [--cart2 <path>] [--cart2-type <name>|auto] [--softwaredb <path>]"
                  " [--max-frames <N>] [--hidden-window]"
                  " [--border] [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
-                 " [--input-script <path>] [--snapshot <dir>]\n"
+                 " [--input-script <path>] [--snapshot <dir>]"
+                 " [--fmpac-sram <path>] [--no-fmpac-sram]\n"
                  "\n"
                  "--snapshot <dir> sets the debug-snapshot output root (default debug/); press\n"
                  "F12 in-session to write a comprehensive per-component snapshot to\n"
                  "<dir>/snapshot/<id>/ (F12 is always active; read-only, never perturbs the run).\n"
+                 "\n"
+                 "FM-PAC battery SRAM persists AUTOMATICALLY when an inserted cartridge is an\n"
+                 "FM-PAC: the save file defaults to <cart-rom-path>.sram (e.g. roms/fmpac.rom ->\n"
+                 "roms/fmpac.rom.sram), loaded on insert and flushed on exit -- matching a real\n"
+                 "FM-PAC's battery-backed SRAM. --fmpac-sram <path> overrides the default path;\n"
+                 "--no-fmpac-sram keeps the SRAM in-memory-only (no host file). All three are\n"
+                 "no-ops when no FM-PAC cartridge is inserted.\n"
                  "\n"
                  "--cartN-type is optional (M30): when omitted (or 'auto') the mapper type is\n"
                  "auto-identified -- softwaredb SHA1 match first, then a bank-write heuristic.\n"
@@ -81,6 +89,11 @@ int main(int argc, char** argv) {
     config.event_log_filename = parsed.event_log_filename;
     config.input_script_path = parsed.input_script_path;
     config.snapshot_dir = parsed.snapshot_dir;  // M36 Phase 3: --snapshot <dir>
+    config.stream_light = parsed.stream_light;  // DEC-0052: F10 arms lightweight mode
+    // M36 FM-PAC SRAM persistence: override/opt-out of the auto-derived
+    // <fmpac-cart>.rom.sram default (default persistence is automatic).
+    config.fmpac_sram_path = parsed.fmpac_sram_path;
+    config.fmpac_sram_disabled = parsed.fmpac_sram_disabled;
     // M30 (backlog G2): carry the parser's type_was_explicit through so a
     // type-less --cartN triggers auto-identification inside
     // load_configured_assets() (the ONE shared resolver); an explicit

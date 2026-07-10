@@ -66,6 +66,17 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             parsed.border_enabled = true;
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
+        } else if (arg == "--stream-light") {
+            parsed.stream_light = true;  // DEC-0052: F10 arms lightweight mode
+        } else if (arg == "--fmpac-sram") {
+            // M36 FM-PAC SRAM persistence: explicit override of the auto-derived
+            // <fmpac-cart>.rom.sram default (mirrors headless --fmpac-sram).
+            if (auto value = take_value(args, i, "--fmpac-sram", parsed.errors)) {
+                parsed.fmpac_sram_path = *value;
+                ++i;
+            }
+        } else if (arg == "--no-fmpac-sram") {
+            parsed.fmpac_sram_disabled = true;  // M36: opt out of FM-PAC .sram persistence
         } else if (arg == "--dump-state") {
             if (auto value = take_value(args, i, "--dump-state", parsed.errors)) {
                 parsed.dump_state_filename = *value;

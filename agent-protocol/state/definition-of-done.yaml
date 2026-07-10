@@ -646,7 +646,7 @@ milestone_records:
     notes: "CLOSED 2026-07-10 (DEC-0049), tagged v1.0.36. Multi-disk hot-swap -- LIVE human-validated: booted YS II from disk1, hit the real INSERT-DATADISK-IN-DRIVE-A prompt, pressed F11 (title -> disk2.dsk, stderr logged the swap), pressed RET, game read disk 2 and continued into gameplay. Repeatable --disk (ordered list, first inserted at boot) + an F11 host hotkey cycling drive A through the list at runtime, re-attaching the DiskImage. Frontend-only; zero cpu/core edits. Residual R-M35-1: strengthen the multi_disk integration test to assert the disk index advances (mutation B did not kill it) -- carried into M36. Follow-on M36 (playtest agent + the two live-playtest bugs)."
 
   M36:
-    status: in_progress
+    status: done
     planning:
       spec_defined: true                 # docs/m36-planner-package.md (Phase 1+2) + docs/m36-phase2-planner-package.md (Phase 2 addendum, DEC-0050-aligned, supersedes the machine-level-SRAM framing)
       scope_in_scope_only: true
@@ -654,14 +654,15 @@ milestone_records:
       acceptance_criteria_defined: true
       risks_logged: true
     implementation:
-      code_changes_scoped_to_milestone: false   # Phase 1 harness DONE + committed as checkpoint d522804 (additive tooling only); Phase 2 (S-a..S-f) dispatched to developer (REQ-M36-004) -- IN PROGRESS
-      unit_tests_added_or_updated: false
-      integration_tests_added_or_updated: false
+      code_changes_scoped_to_milestone: true   # Phase 1 harness + Phase 2 device work + Phase 3 debug tooling + Bug B VDP fix + SDL3 FM-PAC SRAM persistence; ZERO src/devices/cpu / src/core edits at every gate
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
       build_flow_referenced: true
     regression_qa:
-      regression_matrix_updated: false
-      impacted_areas_covered: false
-      blocker_risks_resolved_or_accepted: false
-      signoff_decision_recorded: false   # Phase-1 tooling QA DEFERRED to the single M36-closure QA sign-off (coordinator verification is NOT a QA substitute)
-    overall_done: false
-    notes: "IN PROGRESS. Phase 1 (reusable msx-playtest observe-act-replay harness) DONE + committed as CHECKPOINT d522804 (no tag): .claude/agents/msx-playtest.md, .claude/commands/msx-playtest.md, tools/playtest-capture.ps1; coordinator-verified boot->MSX Disk BASIC (1000f) + YS II title (800f); two Phase-1 defects found (wrapper NativeCommandError fixed). DEC-0050 REFRAMED Phase 2A: the HB-F1XV built-in FM is MSX-MUSIC (OPLL + BIOS, no SRAM) so NO-S-RAM-AVAILABLE on a bare machine is CORRECT hardware; the FM-PAC 8KB battery SRAM is a PERIPHERAL cartridge. Phase 2 (docs/m36-phase2-planner-package.md, RESP-M36-003): S-a agent-frontmatter enabler; S-b Bug B (building-entry black screen) repro->fix [MANDATORY completion item]; S-c disk-save persistence + formatted-blank-disk tool; S-d FM-PAC peripheral cartridge (CartridgeMapperType::FmPac; roms/fmpac.rom provided by the human, a signature-valid non-canonical FM-PAC variant); S-e reconcile/remove the speculative internal sram_; S-f strengthen the R-M35-1 multi_disk test. Device-level + additive-CLI only -> ZERO cpu/core edits -> ZEXALL withheld. Gate PASSED (msx-orchestration). Tag target v1.0.37, gated on Bug B fixed + at least one save path persisting + QA sign-off (must cover Phase-1 tooling)."
+      regression_matrix_updated: true   # clean-rebuild 207/207 (Bug B) then 208/208 (with FM-PAC persistence); ZEXALL correctly withheld (zero cpu/core edits)
+      impacted_areas_covered: true      # Bug B unit test (non-vacuous) + interrupt-seam regressions (interrupt_ack, v9958_status_irq, m26_vsync, m32_line_interrupt, m34_bl_latch); FM-PAC round-trip; disk-save; DSKCHG; snapshot + stream determinism
+      blocker_risks_resolved_or_accepted: true   # Bug B FIXED (VDP IE0/IE1 /INT re-eval, openMSX-grounded + runtime A/B + LIVE human validation); R3 A/B waiver recorded (DEC-0054); residuals R-A..R-E non-blocking
+      signoff_decision_recorded: true   # QA PASS (docs/m36-qa-signoff-final.md), covers Phase-1 tooling too
+    # Closed by coordinator release decision (DEC-0054, 2026-07-10); git tag v1.0.37.
+    overall_done: true
+    notes: "CLOSED 2026-07-10 (DEC-0054), tagged v1.0.37. YS II FULLY PLAYABLE like real hardware -- building interiors LOAD (Bug B FIXED) and saves PERSIST (FM-PAC SRAM auto-save + disk write-back), LIVE human-validated on the real SDL3 build. Bug B was a real V9958 interrupt-accuracy bug: change_register did not re-evaluate /INT on an IE1/IE0 register write, so YS II's building-load ISR clearing IE0 left our /INT asserted -> the ISR's EI re-fired into a nested-VBLANK stack overflow. Fixed per openMSX VDP.cc:1177-1198 (SUPERSEDES DEC-0053's 'VDP correct' conclusion); pinned by the F10 lightweight-watch-mode capture. SDL3 FM-PAC SRAM persistence added (auto-save <cart>.sram). QA PASS (docs/m36-qa-signoff-final.md): 207/207 then 208/208, zero cpu/core, source parity line-for-line, non-vacuous mutation, independent openMSX VDP-IRQ runtime A/B (0->1->0->1 on the genuine Sony_HB-F1XV). R3 A/B waiver recorded. Residual non-blocking: R-A WD2793 read rotational latency (accuracy backlog), R-B commit a tools/ VDP-IRQ probe, R-C/D/E FM-PAC minor. Original plan retained below. Phase 1 (reusable msx-playtest observe-act-replay harness) DONE + committed as CHECKPOINT d522804 (no tag): .claude/agents/msx-playtest.md, .claude/commands/msx-playtest.md, tools/playtest-capture.ps1; coordinator-verified boot->MSX Disk BASIC (1000f) + YS II title (800f); two Phase-1 defects found (wrapper NativeCommandError fixed). DEC-0050 REFRAMED Phase 2A: the HB-F1XV built-in FM is MSX-MUSIC (OPLL + BIOS, no SRAM) so NO-S-RAM-AVAILABLE on a bare machine is CORRECT hardware; the FM-PAC 8KB battery SRAM is a PERIPHERAL cartridge. Phase 2 (docs/m36-phase2-planner-package.md, RESP-M36-003): S-a agent-frontmatter enabler; S-b Bug B (building-entry black screen) repro->fix [MANDATORY completion item]; S-c disk-save persistence + formatted-blank-disk tool; S-d FM-PAC peripheral cartridge (CartridgeMapperType::FmPac; roms/fmpac.rom provided by the human, a signature-valid non-canonical FM-PAC variant); S-e reconcile/remove the speculative internal sram_; S-f strengthen the R-M35-1 multi_disk test. Device-level + additive-CLI only -> ZERO cpu/core edits -> ZEXALL withheld. Gate PASSED (msx-orchestration). Tag target v1.0.37, gated on Bug B fixed + at least one save path persisting + QA sign-off (must cover Phase-1 tooling)."

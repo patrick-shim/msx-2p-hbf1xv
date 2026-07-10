@@ -14,6 +14,7 @@
 #include "frontend/sdl3_app.h"
 
 #include <exception>
+#include <filesystem>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -78,6 +79,27 @@ bool Sdl3App::load_configured_assets() {
             last_error_ = resolution.messages.empty() ? "unsupported cartridge mapper type"
                                                       : resolution.messages.back();
             return false;
+        }
+        // M36 FM-PAC SRAM persistence: a real FM-PAC always battery-persists, so
+        // bind its .sram host file BEFORE the cartridge is inserted -- the
+        // machine loads the SRAM on insertion (hbf1xv_machine.cpp load_cartridge,
+        // guarded on FmPac + a non-empty path), so setting it here makes the
+        // load-on-insert restore work exactly like the headless --fmpac-sram
+        // path (src/main.cpp:923-926 sets it before load_cartridges_from_args).
+        // resolution.type is authoritative here (auto-identification already
+        // resolved), so THIS is the point we know a bay is an FM-PAC and which
+        // ROM path derives its default save. Default (no override, not disabled)
+        // derives <cart>.rom -> <cart>.rom.sram so the save lands beside the
+        // cart, matching a real FM-PAC. --fmpac-sram overrides; --no-fmpac-sram
+        // opts out (in-memory-only). Non-FM-PAC carts never touch this path, so
+        // a non-FM-PAC run is byte-for-byte unchanged.
+        if (resolution.type == devices::cartridge::CartridgeMapperType::FmPac &&
+            !config_.fmpac_sram_disabled) {
+            const std::filesystem::path sram_path =
+                config_.fmpac_sram_path.has_value()
+                    ? std::filesystem::path(*config_.fmpac_sram_path)
+                    : std::filesystem::path(*path + ".sram");
+            machine_.set_fmpac_sram_path(sram_path);
         }
         const CartridgeLoadResult result = machine_.load_cartridge(slot_number, resolution.type, image);
         if (result != CartridgeLoadResult::Ok) {
@@ -232,6 +254,16 @@ void Sdl3App::shutdown() {
     // No-op unless disk-writable bound a host path (default behavior unchanged).
     if (initialized_ && !disk_images_.empty()) {
         machine_.disk_image().flush();
+    }
+    // M36 FM-PAC SRAM persistence: save the inserted FM-PAC's 8 KB battery SRAM
+    // to its bound .sram host file (mirrors the --disk-writable flush above and
+    // the headless --fmpac-sram flush-on-exit, src/main.cpp:1083-1086). A genuine
+    // no-op when no FM-PAC is inserted or no path was bound -- flush_fmpac_sram()
+    // returns false -- so a non-FM-PAC run is byte-for-byte unchanged. Guarded on
+    // initialized_ so a failed-init teardown never writes (matches the disk flush).
+    if (initialized_ && machine_.flush_fmpac_sram()) {
+        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_.fmpac_sram_path().string()
+                  << "\"\n";
     }
     audio_presenter_.reset();
     video_presenter_.reset();
@@ -408,9 +440,13 @@ void Sdl3App::on_stream_toggle_hotkey() {
     } else {
         // Stamp the stream id from the current deterministic frame/cycle id so an
         // identical run toggling at the same frame yields identical stream paths.
+        // DEC-0052 stream-light: arm the lightweight mode when --stream-light was
+        // given, so a LONG armed session (YS-II game start -> building entry) is
+        // not bogged down by the heavy per-frame snapshot I/O.
         const std::string stream_id = machine_.snapshot_id();
-        machine_.set_stream_capture_enabled(true, stream_id);
-        std::cerr << "Stream capture ON: stream_" << stream_id << "\n";
+        machine_.set_stream_capture_enabled(true, stream_id, config_.stream_light);
+        std::cerr << "Stream capture ON: stream_" << stream_id
+                  << (config_.stream_light ? " (light)" : " (heavy)") << "\n";
     }
 }
 

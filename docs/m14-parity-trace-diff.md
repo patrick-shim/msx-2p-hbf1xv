@@ -1,6 +1,6 @@
 # M14-S6 openMSX V9958 VDP Parity Trace Diff (Sony HB-F1XV)
 
-- Captured (UTC): 2026-07-06T02:21:41Z
+- Captured (UTC): 2026-07-10T06:43:05Z
 - Reference: openMSX on WSL, machine `Sony_HB-F1XV` (genuine V9958).
 - Program: `tests/parity/m14_vdp_probe.bin` at base 0xC000; VRAM read-back = 256 bytes.
 - A = this emulator (`--vdp-parity`); B = openMSX (`physical VRAM` / `VDP regs` / `VRAM pointer` debuggables).

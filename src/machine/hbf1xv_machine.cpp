@@ -500,13 +500,34 @@ void Hbf1xvMachine::on_vsync_boundary() {
     // evolution. GUARDED -- disarmed => byte-for-byte unchanged for every caller.
     // On a HALT that finalized mid-frame, stream_active_ is already false, so the
     // crash frame is captured once (by finalize) and NOT duplicated here.
+    //
+    // DEC-0052 stream-light: in the lightweight mode the heavy per-frame bundle
+    // is SUPPRESSED (its per-frame ~200 KB I/O is what bogs a long armed session
+    // down); instead a COARSE anchor snapshot is written every
+    // kStreamLightSnapshotInterval frames (~2 s) as a periodic recovery point.
+    // The crash/HALT/manual finalize snapshot is written separately (unaffected).
+    // HEAVY mode (stream_light_ == false) keeps the every-frame bundle exactly as
+    // before -- byte-for-byte unchanged for every pre-light caller.
     if (stream_active_) {
-        const std::vector<std::string> notes = {
-            "stream_id=" + stream_id_,
-            "stream_frame=1",
-            "instructions_seen=" + debug_format::to_dec(stream_seq_),
-        };
-        write_snapshot("stream_" + stream_id_ + "/" + snapshot_id(), notes);
+        const bool write_bundle =
+            !stream_light_ || (frame_count_ % kStreamLightSnapshotInterval == 0);
+        if (write_bundle) {
+            // Heavy-mode notes are kept byte-for-byte identical to the pre-light
+            // path (the default path's regression oracle); light coarse anchors
+            // add a self-identifying note so a diagnostic can tell a periodic
+            // anchor apart from a heavy per-frame bundle.
+            std::vector<std::string> notes = {
+                "stream_id=" + stream_id_,
+                "stream_frame=1",
+                "instructions_seen=" + debug_format::to_dec(stream_seq_),
+            };
+            if (stream_light_) {
+                notes.push_back("stream_light=1");
+                notes.push_back("light_anchor_interval=" +
+                                debug_format::to_dec(kStreamLightSnapshotInterval));
+            }
+            write_snapshot("stream_" + stream_id_ + "/" + snapshot_id(), notes);
+        }
     }
 }
 
@@ -586,6 +607,10 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     if (stream_active_) {
         stream_pre_record = capture_stream_pre_record(pre_pc, opcode0);
         stream_a8 = debug_io_read(0xA8);
+        // DEC-0052 stream-light: stamp this instruction's PC for the watchlog.
+        // The mapper-RAM / VDP register-write observers fire DURING cpu_.step()
+        // below and read this to report which instruction performed the write.
+        stream_pc_ = pre_pc;
     }
 
     // The Z80 core publishes datasheet T-states unchanged (M9 timing oracles stay
@@ -1440,12 +1465,15 @@ bool Hbf1xvMachine::write_snapshot(const std::string& id,
 
 // --- DEC-0052 live stream-capture ------------------------------------------
 
-void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::string& stream_id) {
+void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::string& stream_id,
+                                              const bool light) {
     if (enabled) {
         if (stream_active_) {
             return;  // already armed; ignore a redundant ON
         }
         stream_id_ = stream_id.empty() ? snapshot_id() : stream_id;
+        stream_light_ = light;
+        stream_pc_ = cpu_.state().regs().pc;
         stream_ring_.clear();
         stream_ring_head_ = 0;
         stream_seq_ = 0;
@@ -1456,6 +1484,18 @@ void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::st
         std::error_code ec;
         std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_fdc.log"), ec);
         fdc_.set_sector_read_observer(&fdc_stream_observer_);
+        // DEC-0052 stream-light: the mapper-RAM + VDP register-write WATCHLOG
+        // observers are a LIGHT-mode-only capability, so the HEAVY F10 path stays
+        // byte-for-byte the prior M36 stream behavior (no watch.log). Clear any
+        // stale watch.log too (same determinism rationale as the fdc.log). All
+        // observers are removed in finalize_stream_capture, so a disarmed machine
+        // is byte-for-byte the pre-DEC-0052 default regardless.
+        if (stream_light_) {
+            std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_watch.log"),
+                                    ec);
+            ram_mapper_.set_write_observer(&mem_watch_observer_);
+            vdp_.attach_register_write_observer(&vdp_reg_watch_observer_);
+        }
     } else {
         // Manual OFF (e.g. the frontend F10 toggle-off): finalize into a distinct
         // MANUAL_ bundle so the reason is self-evident vs a crash finalize.
@@ -1465,6 +1505,10 @@ void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::st
 
 bool Hbf1xvMachine::stream_capture_active() const {
     return stream_active_;
+}
+
+bool Hbf1xvMachine::stream_capture_light() const {
+    return stream_active_ && stream_light_;
 }
 
 const std::string& Hbf1xvMachine::stream_capture_id() const {
@@ -1565,9 +1609,14 @@ void Hbf1xvMachine::finalize_stream_capture(const std::string& reason_note,
     };
     write_snapshot("stream_" + stream_id_ + "/" + bundle_prefix + snapshot_id(), notes);
 
-    // (c) Uninstall the FDC observer + disarm -- subsequent reads/steps/frames are
-    //     no-ops until re-armed (default-off restored).
+    // (c) Uninstall every observer + disarm -- subsequent reads/steps/frames are
+    //     no-ops until re-armed (default-off restored). DEC-0052 stream-light:
+    //     the mapper-RAM + VDP register-write watchlog observers are removed here
+    //     too, and stream_light_ is cleared so a following heavy arm is unaffected.
     fdc_.set_sector_read_observer(nullptr);
+    ram_mapper_.set_write_observer(nullptr);
+    vdp_.attach_register_write_observer(nullptr);
+    stream_light_ = false;
     stream_active_ = false;
 }
 
@@ -1617,6 +1666,59 @@ void Hbf1xvMachine::FdcStreamObserver::on_sector_read(const std::uint8_t command
                                                       const std::uint8_t* data,
                                                       const std::size_t size) {
     machine_.log_stream_fdc_read(command, track, side, sector, data, size);
+}
+
+// --- DEC-0052 stream-light WATCHLOG ----------------------------------------
+
+void Hbf1xvMachine::log_stream_mem_write(const std::uint16_t address, const std::uint8_t value) {
+    // Defensive: the observer is installed only while armed, but stay silent if a
+    // finalize raced in. Watch ONLY the decisive M36 Bug B upstream addresses --
+    // the IM1/RST-38 ISR-vector JP-target bytes (0x0039 low, 0x003A high; e.g.
+    // minimal ISR A5E3 vs full ISR A5F5) and the sound-arm flag (0xA5E1). These
+    // CPU-visible writes are RARE, so the per-write comparison overhead is
+    // negligible over a long armed session. Deterministic content (machine
+    // counters only; no RNG/wall-clock).
+    if (!stream_active_) {
+        return;
+    }
+    if (address != 0x0039 && address != 0x003A && address != 0xA5E1) {
+        return;
+    }
+    std::string line = "frame=" + debug_format::to_dec(frame_count_);
+    line += " cyc=" + debug_format::to_dec(elapsed_cycles());
+    line += " pc=" + debug_format::to_hex(stream_pc_, 4);
+    line += " WRITE addr=" + debug_format::to_hex(address, 4);
+    line += " val=" + debug_format::to_hex(value, 2);
+    line.push_back('\n');
+    append_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_watch.log", line);
+}
+
+void Hbf1xvMachine::log_stream_vdp_register(const std::uint8_t reg, const std::uint8_t value) {
+    // Watch ONLY VDP register R#1 -- the display/IE0 register (IE0 = bit5). The
+    // machine funnels every R#0..R#31 control-register write here via the VDP
+    // observer, so filter to R#1. Deterministic content (machine counters only).
+    if (!stream_active_) {
+        return;
+    }
+    if (reg != 1) {
+        return;
+    }
+    std::string line = "frame=" + debug_format::to_dec(frame_count_);
+    line += " cyc=" + debug_format::to_dec(elapsed_cycles());
+    line += " pc=" + debug_format::to_hex(stream_pc_, 4);
+    line += " VDP R1=" + debug_format::to_hex(value, 2);
+    line.push_back('\n');
+    append_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_watch.log", line);
+}
+
+void Hbf1xvMachine::MemWatchObserver::on_mem_write(const core::BusAddress address,
+                                                   const core::BusData value) {
+    machine_.log_stream_mem_write(address, value);
+}
+
+void Hbf1xvMachine::VdpRegWatchObserver::on_register_write(const std::uint8_t reg,
+                                                           const std::uint8_t value) {
+    machine_.log_stream_vdp_register(reg, value);
 }
 
 }  // namespace sony_msx::machine

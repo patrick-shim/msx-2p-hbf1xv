@@ -6,9 +6,18 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M36 — WIP CHECKPOINT COMMITTED (af44cb3, 2026-07-10, DEC-0049/0050/0051/0052; NOT
-  yet tagged). Phase 2 + Phase 3 DONE; the mandatory Bug B (YS II building-interior black screen)
-  ROOT-CAUSED but OPEN.** Phase 1 (msx-playtest harness) committed d522804. Phase 2 (DEC-0050,
+- Active Phase: **M36 CLOSED (tag v1.0.37, 2026-07-10, DEC-0054). YS II FULLY PLAYABLE like real
+  hardware — building interiors LOAD (Bug B FIXED) and saves PERSIST (FM-PAC SRAM auto-save +
+  disk write-back), LIVE human-validated on the real SDL3 build.** BUG B was a real V9958
+  interrupt-accuracy bug: `change_register` did not re-evaluate /INT on an IE1/IE0 register write,
+  so YS II's building-load ISR clearing IE0 left our /INT asserted → the ISR's EI re-fired into a
+  nested-VBLANK stack overflow. Fixed per openMSX VDP.cc:1177-1198 (SUPERSEDES DEC-0053's "VDP
+  correct" conclusion); pinned by the human's F10 lightweight-watch-mode capture. SDL3 FM-PAC SRAM
+  persistence added (auto-save <cart>.sram). QA PASS (docs/m36-qa-signoff-final.md; 207/207 then
+  208/208, zero cpu/core, source parity + independent openMSX VDP-IRQ runtime A/B + live human
+  validation). R3 A/B waiver recorded (DEC-0054). Residual non-blocking: R-A WD2793 read rotational
+  latency (accuracy backlog), R-B commit a tools/ VDP-IRQ probe, R-C/D/E FM-PAC minor. Historical
+  M36 detail retained below. Phase 1 (msx-playtest harness) committed d522804. Phase 2 (DEC-0050,
   device-level): S-a agent-frontmatter enabler; S-c disk-save persistence (DiskImage host-file
   flush, opt-in --disk-writable, tools/format-blank-disk.ps1); S-d FM-PAC peripheral cartridge
   (CartridgeMapperType::FmPac per MSXFmPac.cc, loadable via --cart roms/fmpac.rom, functional

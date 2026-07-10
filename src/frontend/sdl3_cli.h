@@ -71,6 +71,21 @@ struct ParsedSdl3Cli {
     // regression guard: every pre-existing parse_sdl3_cli() case stays green
     // unmodified (mirrors the M27 dump_state_filename additive field).
     std::optional<std::string> snapshot_dir;
+    // DEC-0052 stream-light: --stream-light arms the F10 live stream-capture in
+    // the LIGHTWEIGHT mode (per-frame snapshot bundles suppressed -> coarse
+    // anchors + the per-event watchlog) for a LONG armed session. Default OFF =
+    // the heavy every-frame F10 mode (byte-for-byte the prior behavior).
+    bool stream_light = false;
+    // M36 FM-PAC SRAM persistence (SDL3 side): a real FM-PAC always
+    // battery-persists, so the SDL3 build auto-derives the SRAM host file from
+    // the inserted FM-PAC cart's ROM path (<cart>.rom -> <cart>.rom.sram) with
+    // NO opt-in flag. --fmpac-sram <path> OVERRIDES that derived default;
+    // std::nullopt (default) = derive from the cart path. --no-fmpac-sram opts
+    // OUT entirely (in-memory-only, never touches the host filesystem). Both are
+    // complete no-ops unless a loaded cartridge resolves to an FM-PAC (mirrors
+    // the headless --fmpac-sram flag, src/main.cpp).
+    std::optional<std::string> fmpac_sram_path;
+    bool fmpac_sram_disabled = false;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).

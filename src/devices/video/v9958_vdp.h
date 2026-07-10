@@ -60,6 +60,21 @@ public:
     virtual void on_before_state_change() = 0;
 };
 
+// DEC-0052 (M36 stream-light): non-perturbing control-register-write observer.
+// Notified from change_register() for every R#0..R#31 control-register write
+// (the single funnel for BOTH the #99 two-write and the #9B indirect protocols)
+// with (reg, value), so a diagnostic can watch a specific register (e.g. R#1,
+// the display/IE0 register; IE0 = bit5). Command-engine registers R#32..R#46 do
+// NOT notify (they return before the funnel). Default-null => byte-identical
+// no-op (X-pattern of VdpClockSource/VdpRenderSyncListener; reset() does NOT
+// clear it -- externally-owned lifecycle pointer). An implementation MUST NOT
+// mutate VDP state or advance any clock.
+class VdpRegisterWriteObserver {
+public:
+    virtual ~VdpRegisterWriteObserver() = default;
+    virtual void on_register_write(std::uint8_t reg, std::uint8_t value) = 0;
+};
+
 // Yamaha V9958 VDP — register / VRAM / status / interrupt CONTRACT (M14).
 //
 // This device delivers the externally observable behavior a program drives
@@ -110,6 +125,11 @@ public:
     // Wire the render-sync listener (M32-S1, see VdpRenderSyncListener
     // above). Nullptr (the default) detaches -- byte-identical no-op.
     void attach_render_sync(VdpRenderSyncListener* listener);
+
+    // DEC-0052 stream-light: wire the control-register-write observer (see
+    // VdpRegisterWriteObserver above). Nullptr (the default) detaches --
+    // byte-identical no-op. Not cleared by reset().
+    void attach_register_write_observer(VdpRegisterWriteObserver* observer);
 
     // --- core::IoDevice (dispatch on port & 0x03; the S1985 mirror #9C-#9F
     //     collapses to the same 0..3, A-2). ---
@@ -248,6 +268,10 @@ private:
     // Render-sync listener (M32-S1). Nullptr by default (byte-identical
     // no-op); attached by the machine in wire_bus().
     VdpRenderSyncListener* render_sync_ = nullptr;
+
+    // DEC-0052 stream-light control-register-write observer. Nullptr by default
+    // (byte-identical no-op); installed only while a stream capture is armed.
+    VdpRegisterWriteObserver* register_write_observer_ = nullptr;
 
     // Blink countdown state (M21-S2, backlog D6; VDP.cc:600-608/1040-1057).
     // Frames remaining at the current blink phase; 0 = stable (no further

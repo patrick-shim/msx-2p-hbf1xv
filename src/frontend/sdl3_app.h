@@ -108,6 +108,33 @@ struct Sdl3AppConfig {
     // Additive: no capture ever happens unless F12 is pressed, so a run that
     // never presses F12 is byte-for-byte identical to before.
     std::optional<std::string> snapshot_dir;
+
+    // DEC-0052 stream-light (M36 Bug B long-session upstream hunt): when true,
+    // the F10 live stream-capture toggle arms the LIGHTWEIGHT mode (per-frame
+    // snapshot bundles suppressed -> coarse anchors + the per-event watchlog),
+    // suitable for a LONG armed session that the heavy per-frame I/O would bog
+    // down. Default false = the heavy every-frame mode (byte-for-byte the prior
+    // F10 behavior). Set from the `--stream-light` CLI flag.
+    bool stream_light = false;
+
+    // M36 FM-PAC SRAM persistence (SDL3 side): a real FM-PAC always
+    // battery-persists, so this is AUTOMATIC by default (no opt-in flag). When a
+    // loaded cartridge resolves to an FM-PAC, load_configured_assets() binds a
+    // .sram host file so the SRAM loads on insertion and flushes on shutdown --
+    // mirroring the headless --fmpac-sram path (src/main.cpp) and the
+    // --disk-writable flush discipline above.
+    //   * fmpac_sram_path == std::nullopt (default): auto-derive the path from
+    //     the FM-PAC cart's ROM path (<cart>.rom -> <cart>.rom.sram), so a save
+    //     lands beside the cart, exactly like a real FM-PAC battery.
+    //   * fmpac_sram_path set (--fmpac-sram <path>): OVERRIDE the derived path.
+    //   * fmpac_sram_disabled (--no-fmpac-sram): opt OUT entirely -- no path is
+    //     bound, so the SRAM stays in-memory-only and never touches the host
+    //     filesystem.
+    // All three are complete no-ops when no inserted cartridge is an FM-PAC
+    // (flush_fmpac_sram() returns false harmlessly): a non-FM-PAC run is
+    // byte-for-byte identical to before.
+    std::optional<std::string> fmpac_sram_path;
+    bool fmpac_sram_disabled = false;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real

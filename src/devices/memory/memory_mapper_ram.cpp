@@ -41,6 +41,12 @@ core::BusData MemoryMapperRam::mem_read(const core::BusAddress address) {
 void MemoryMapperRam::mem_write(const core::BusAddress address, const core::BusData value) {
     const std::uint8_t segment = mapper_io_.segment(page_of(address));
     ram_.write(physical_address(segment, address), value);
+    // DEC-0052 stream-light watchlog hook (default-off): notify with the
+    // CPU-VISIBLE address, never the folded physical offset. No-op unless an
+    // observer is installed (only while a stream capture is armed).
+    if (write_observer_ != nullptr) {
+        write_observer_->on_mem_write(address, value);
+    }
 }
 
 }  // namespace sony_msx::devices::memory

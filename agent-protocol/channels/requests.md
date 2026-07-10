@@ -1798,3 +1798,12 @@ Full 34-row deferred-backlog review; `docs/m24-implementation-report.md` with th
 - Type: Read-only Bug-B device-timing A/B audit (autonomous, human away)
 - Scope: Pin the upstream divergence -- audit WD2793 completion timing + VDP command-engine S#2 vs references/openmsx-21.0 for the operations YS II does during the interior load (the CALL 8003 load span frames 2427-2445), and find the deciding branch in the existing F10 trace (debug/snapshot/traces/stream_f002253_...); propose a grounded device-level fix + how to verify (existing FDC/VDP tests + the human's end-to-end re-run). No src/ edits, no build.
 - Requested At: 2026-07-10T21:35:00+09:00
+
+---
+
+- Request ID: REQ-M36-013..016 (consolidated closure dispatches, coordinator-driven live; back-filled)
+- From: MSX Master Agent (coordinator) -> MSX Developer/QA Agents (opus)
+- Milestone ID: M36 (closure; tag v1.0.37)
+- Type: Implementation + verification + final sign-off (dispatched live during the human-in-the-loop closure; back-filled to channel)
+- Scope: (013) Bug B fix -- V9958Vdp::change_register IE0/IE1 register-write /INT re-evaluation (grounded VDP.cc:1177-1198) + non-vacuous unit test + interrupt-seam regression + openMSX VDP-IRQ A/B. (014) F10 lightweight watch mode (--stream-light: watchlog of 0x0039/A5E1/VDP-R1 writes + light per-frame suppression) -- the tool that captured the Bug B evidence. (015) SDL3 FM-PAC SRAM persistence (auto-save <cart>.sram + load-on-insert + flush-on-exit + --fmpac-sram/--no-fmpac-sram) + round-trip integration test. (016) Final M36 QA sign-off for the v1.0.37 release (Bug B fix + tooling + R2/R3 disposition) -> docs/m36-qa-signoff-final.md = PASS. All device/frontend-level, additive, zero cpu/core (ZEXALL withheld). Delivered per RESP-M36-007.
+- Requested At: 2026-07-10 (multiple dispatches through the closure)
