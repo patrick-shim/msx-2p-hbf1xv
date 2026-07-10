@@ -191,3 +191,7 @@ Desktop.ini
 /references/
 /tests/
 /tools/
+
+# AI assistant memory files — local-only, hidden from the remote (owner request)
+/CLAUDE.md
+/src/CLAUDE.md

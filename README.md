@@ -2,54 +2,39 @@
 
 Production-oriented **Sony HB-F1XV (MSX2+, 1988)** emulator in C++: a cycle-aware,
 deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RAM, PSG,
-Konami SCC, YM2413 FM/MSX-MUSIC, RTC, WD2793-family FDC with 720 KB 3.5" floppy, full
-slot/mapper fabric) plus an optional SDL3 desktop frontend. The authoritative hardware
-target and all operating rules live in [`CLAUDE.md`](CLAUDE.md).
+Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
+full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-## Current status (2026-07-10)
+Current release: **v1.0.38**.
 
-- **Milestones M0–M37 are closed**; git tags `v1.0.11`…`v1.0.38` mark the closure line
-  (`v1.0.NN` = milestone `MNN` through M28; `v1.0.29` tagged the live-playtesting hardening
-  arc DEC-0028..DEC-0034, so tags offset milestone numbers by one from M29 on: M29=v1.0.30 …
-  M37=v1.0.38). `v1.0.32` was declared the production candidate; **`v1.0.38` (M37, "post-M36
-  hardening") is the current release** — a committed openMSX VDP-IRQ A/B probe, an inserted
-  FM-PAC cartridge's OPLL mixed into machine audio, WD2793 read-sector rotational read
-  latency, a `--speed` Sony Speed Controller CLI, SDL3 window scaling/fullscreen, and a
-  `--capture` gate on the F10 hotkey — LIVE human-validated ("YS II loads and plays
-  perfectly, SRAM works perfectly, screen looks good").
-- **Authoritative live status:** [`agent-protocol/state/current-phase.md`](agent-protocol/state/current-phase.md)
-  (active phase), [`state/milestones.md`](agent-protocol/state/milestones.md),
-  [`state/deferred-backlog.md`](agent-protocol/state/deferred-backlog.md) (open backlog),
-  and [`channels/decisions.md`](agent-protocol/channels/decisions.md) (DEC-NNNN history).
-  Always trust those over any README snapshot.
-- Working today, per the closed-milestone record under `docs/`: real Sony BIOS cold boot to
-  the MSX2+ logo and BASIC; MSX-DOS / Disk BASIC boot from `.dsk` images, including
-  multi-disk hot-swap (F11); cartridge loading with universal mapper auto-identification
-  (softwaredb SHA1 match, then a bank-write heuristic), plus an FM-PAC peripheral cartridge
-  (battery-backed SRAM saves, its OPLL mixed into machine audio); sprites + V9958 command
-  engine with per-line raster rendering; live PSG + Konami SCC + built-in MSX-MUSIC YM2413
-  FM audio; WD2793 FDC with index-pulse-relative read-sector rotational latency; keyboard/
-  joystick, Ren-Sha Turbo, hardware PAUSE and the Speed Controller (`--speed <0..7>`); an
-  SDL3 window that resizes/scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter) with a
-  `--capture`-gated F10 live stream-capture hotkey; ZEXALL/ZEXDOC clean (durable log
-  `docs/m31-rc-zexall-log.txt`; zero `src/devices/cpu/`/`src/core/` edits since, so the
-  suite has correctly stayed withheld at every later milestone gate per the standing
-  slow-test-cadence policy).
+## What works today
 
-## Build and test (the single way)
+- Real Sony BIOS cold boot to the MSX2+ logo and BASIC.
+- MSX-DOS / Disk BASIC boot from `.dsk` images, including multi-disk hot-swap (F11).
+- Cartridge loading with automatic mapper identification (software-database SHA-1 match, then
+  a bank-write heuristic), plus an FM-PAC peripheral cartridge (battery-backed SRAM saves,
+  its OPLL mixed into the machine audio).
+- Sprites and the V9958 command engine with per-line raster rendering.
+- Live audio: PSG, Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
+- WD2793 FDC with index-pulse-relative read-sector rotational latency.
+- Keyboard / joystick, Ren-Sha Turbo, the hardware PAUSE button, and the Speed Controller.
+- An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
+  with a `--capture`-gated F10 live capture hotkey.
+- Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
 
-**Single-build policy (DEC-0041): there is exactly ONE build tree — `build/`.** Never create
-per-agent or per-purpose trees. Bootstrap everything with:
+## Build and test
+
+There is one build tree, `build/`. Bootstrap it:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/bootstrap-build.ps1 -RunTests
 ```
 
-This builds SDL3 once from the vendored `references/sdl3/` source into `build/_sdl3_install`
-(only if missing), configures the canonical `build/` tree with `-DSONY_MSX_ENABLE_SDL3=ON`
-(the superset: both executables + all tests), builds Debug, and runs `ctest`.
+This builds SDL3 once from the vendored SDL3 source into `build/_sdl3_install` (only if it is
+missing), configures `build/` with `-DSONY_MSX_ENABLE_SDL3=ON` (the superset: both
+executables plus all tests), builds Debug, and runs `ctest`.
 
-Manual equivalent (see `CLAUDE.md` "Build & test flow"):
+Manual equivalent:
 
 ```powershell
 cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=ON "-DCMAKE_PREFIX_PATH=build/_sdl3_install"
@@ -57,16 +42,20 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-- Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the SAME tree with
+- Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
   `-DSONY_MSX_ENABLE_SDL3=OFF`.
-- Fast subset: `ctest --test-dir build -C Debug -LE m24_slow_full_sweep` — excludes the
-  ~30-minute ZEXALL/ZEXDOC sweep, which runs only at release-candidate checkpoints or after
-  direct `src/devices/cpu/` / `src/core/` edits.
+- Fast subset: `ctest --test-dir build -C Debug -LE m24_slow_full_sweep` excludes the
+  ~30-minute ZEXALL / ZEXDOC sweep.
 - Executables land in `build/Debug/`: `sony_msx_headless.exe`, `sony_msx_sdl3.exe`.
+
+Requirements: CMake, a C++20-capable MSVC toolchain (Visual Studio 2022+ with the "Desktop
+development with C++" workload), and PowerShell. No separate SDL3 install is needed — it is
+built from the bundled source.
 
 ## Run
 
-Run from the repository root (asset paths and the default softwaredb path are CWD-relative).
+Run from the repository root (asset paths and the default software-database path are
+resolved relative to the current directory).
 
 **SDL3 frontend** (real window, throttled real-time loop, live audio/input):
 
@@ -76,26 +65,23 @@ build\Debug\sony_msx_sdl3.exe --cart1 roms\aleste.rom          # cartridge, mapp
 build\Debug\sony_msx_sdl3.exe --disk disks\msxdos22.dsk        # MSX-DOS boot floppy
 ```
 
-Flags (all verified in `src/frontend/sdl3_main.cpp` / `src/frontend/sdl3_cli.cpp`):
-`--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, first
-disk inserted at boot, F11 cycles drive A through the rest at runtime), `--cart1 <path>`,
-`--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`,
-`--softwaredb <path>` (default `references/openmsx-21.0/share/softwaredb.xml`),
-`--max-frames <N>`, `--hidden-window`, `--border`, `--disk-writable` (persist disk writes
-back to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
-`--input-script <path>`, `--snapshot <dir>` (F12 comprehensive debug-snapshot output root,
-default `debug/`), `--fmpac-sram <path>` / `--no-fmpac-sram` (override/opt-out of the
-FM-PAC battery-SRAM auto-persistence, which otherwise saves to `<cart-rom-path>.sram`),
-`--speed <0..7>` (initial Sony Speed Controller level — a CPU slow-down duty cycle, not a
-turbo; 0 = full speed, the default; F6/F7 still step it at runtime), `--scale <1..8>`
-(initial window size `320N x 240N`, default `3` = 960×720; the window is resizable and the
-picture stays aspect-correct letterboxed at any size), `--filter <nearest|linear>` (texture
-scaling filter, default `linear`), `--fullscreen` (Alt+Enter toggles at runtime),
-`--capture <on|off>` (default `off`; gates the F10 live stream-capture hotkey so a
-mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are unaffected),
-`--stream-light` (F10's lightweight capture mode, relevant once `--capture on`), `--help`.
-`--cartN-type` omitted (or `auto`) triggers auto-identification; an explicit type is
-honored byte-for-byte.
+Flags:
+`--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, the
+first disk inserted at boot, F11 cycles drive A through the rest at runtime), `--cart1 <path>`,
+`--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`, `--softwaredb <path>`,
+`--max-frames <N>`, `--hidden-window`, `--border`, `--disk-writable` (persist disk writes back
+to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
+`--input-script <path>`, `--snapshot <dir>`, `--fmpac-sram <path>` / `--no-fmpac-sram`
+(override / opt out of the FM-PAC battery-SRAM auto-persistence, which otherwise saves to
+`<cart-rom-path>.sram`), `--speed <0..7>` (initial Speed Controller level — a CPU slow-down
+duty cycle, not a turbo; 0 = full speed, the default; F6/F7 still step it at runtime),
+`--scale <1..8>` (initial window size `320N x 240N`, default `3` = 960×720; the window is
+resizable and the picture stays aspect-correct letterboxed at any size),
+`--filter <nearest|linear>` (texture scaling filter, default `linear`), `--fullscreen`
+(Alt+Enter toggles at runtime), `--capture <on|off>` (default `off`; gates the F10 live
+capture hotkey so a mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are
+unaffected), `--stream-light`, `--help`. A `--cartN-type` of `auto` (or omitted) triggers
+auto-identification; an explicit type is honored byte-for-byte.
 
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 
@@ -106,65 +92,33 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.d
 
 `--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--cart1/--cart1-type`,
 `--cart2/--cart2-type`, `--softwaredb`, `--debug-root`, `--dump-state`, `--trace-cpu`,
-`--event-log`, `--input-script`, `--frames <N>` (drive N real frames; `<max_steps>` then
-ignored), `--dump-frame <name>`, `--disk-writable`, `--swap-disk-frame <N>`,
-`--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>` (F12-style comprehensive
-debug snapshot), `--stream-light`. The plain (no-subcommand) headless boot mode additionally
-accepts `--speed <0..7>` (same Sony Speed Controller CLI as the SDL3 frontend). Other
-single-purpose headless modes (each prints usage): `--cpm-run`, `--parity-trace`,
-`--bios-boot-trace`, `--frame-dump-demo`, `--audio-dump-demo`, and the per-milestone parity
-probes (`--vdp-parity`, `--vdp-render-parity`, `--sprite-cmd-parity`, `--ym2413-parity`,
-`--halnote-parity`).
-Debug output lands under `debug/` (see [`debug/README.md`](debug/README.md)).
+`--event-log`, `--input-script`, `--frames <N>`, `--dump-frame <name>`, `--disk-writable`,
+`--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
+and `--stream-light`. The plain (no-subcommand) boot mode additionally accepts
+`--speed <0..7>`. Other single-purpose modes each print their own usage.
 
 ## Repository layout
 
-- `src/` — emulator source; folder boundaries in [`src/CLAUDE.md`](src/CLAUDE.md)
-  (`core`, `devices`, `peripherals`, `machine`, `frontend`).
-- `tests/` — deterministic unit/integration/system tests + `tests/parity/` fixtures;
-  conventions in [`tests/CLAUDE.md`](tests/CLAUDE.md).
-- `tools/` — PowerShell/Python automation (build bootstrap, evidence gates, A/B harnesses,
-  converters); index in [`tools/README.md`](tools/README.md).
-- `docs/` — frozen milestone packages/reports/sign-offs + investigation reports; taxonomy in
-  [`docs/README.md`](docs/README.md).
-- `agent-protocol/` — multi-agent coordination: live state (`state/`), append-only channels
-  (`channels/`), canonical baseline/guardrails text.
-- `references/` — read-only grounding sources (openMSX 21.0, fMSX 6.0, SDL3, fact sheets,
-  ZEXALL). Never copied into `src/` (license isolation).
-- `bios/`, `roms/`, `disks/` — local, legally-sourced development assets (see below);
-  `bios/` contents documented in [`bios/README.md`](bios/README.md).
-- `debug/` — runtime debug output (traces/logs/frames/sounds); mostly gitignored, with
-  committed evidence exceptions ([`debug/README.md`](debug/README.md)).
-- `.claude/` — agents, commands, workflow, and settings for the orchestration.
-- `build/` — the one canonical CMake tree (gitignored; recreate any time with
+- `src/` — emulator source (`core`, `devices`, `peripherals`, `machine`, `frontend`).
+- `bios/`, `roms/`, `disks/` — local, legally-sourced development assets (see below).
+- `build/` — the CMake build tree (gitignored; recreate any time with
   `tools/bootstrap-build.ps1`).
 
 ## Assets (BIOS / ROM / disk policy)
 
 `bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (cartridge images), and `disks/`
-(MSX-DOS system disks + `disks/games/` floppy sets, e.g. the two-disk YS II) are local,
-legally-sourced development assets. **They remain third-party IP; this project asserts no
-redistribution rights.** Per **DEC-0047** the repository owner has made an informed decision to
-host this repo publicly with `bios/` included (`roms/`/`disks/` content is untracked, but their
-binaries remain in pre-`b5efd29` history). That public-exposure risk is the owner's accepted
-responsibility; contributors must still not claim redistribution rights or fabricate provenance.
-Validate and checksum with:
+(MSX-DOS system disks plus `disks/games/` floppy sets) are local, legally-sourced development
+assets. **They remain third-party intellectual property; this project asserts no
+redistribution rights and makes no provenance claim.** The repository is hosted publicly with
+`bios/` included as the owner's informed, accepted-risk decision (`roms/` and `disks/`
+binaries are untracked). Validate the required assets with:
 
 ```powershell
 ./tools/validate-assets.ps1
-./tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt
 ```
 
-## Reference A/B validation
+## License
 
-openMSX (at `/usr/bin/openmsx` inside WSL) is the primary behavior reference; fMSX 6.0 is
-the independent cross-reference. Behavior-affecting milestones carry A/B evidence produced
-by the `tools/openmsx-*.ps1` harnesses and recorded as `docs/m<N>-parity-trace-diff.md`
-(smoke: `tools/openmsx-ab-smoke.ps1` → `docs/openmsx-ab-smoke.md`).
-
-## Multi-agent workflow
-
-The repository runs a Claude Code native orchestration — Human → Coordinator →
-`msx-planner` / `msx-developer` / `msx-qa` specialists, planner-first, with QA sign-off
-gating every milestone. Full rules in [`CLAUDE.md`](CLAUDE.md); protocol data in
-[`agent-protocol/`](agent-protocol/README.md).
+The emulator source is provided for personal, non-commercial reference and educational study
+(see the notice at the top of each source file). Proprietary BIOS / ROM / disk assets are the
+property of their respective rights holders and are **not** licensed by this project.
