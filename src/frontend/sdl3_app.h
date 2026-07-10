@@ -310,6 +310,16 @@ private:
     std::size_t current_disk_index_ = 0;
 
     std::uint64_t frames_run_ = 0;
+
+    // M39-A Fix B (digitized-voice fix): interleaved sync-before-change audio
+    // production cursor. Samples are produced DURING the CPU-step loop over
+    // absolute machine-cycle boundaries so the PSG software-PCM voice survives
+    // (boundary[k] = k * kSystemClockHz / kSampleRateHz, exact accounting that
+    // matches the AudioPacer's sample count). Persist across frames.
+    std::uint64_t audio_sample_index_ = 1;
+    std::uint64_t audio_prev_boundary_ = 0;
+    std::uint64_t audio_next_boundary_ = 0;  // set in init() from the sample rate
+    std::vector<std::int16_t> audio_frame_pcm_;  // reused per-frame scratch buffer
 };
 
 }  // namespace sony_msx::frontend

@@ -100,4 +100,45 @@ bool write_psg_audio_dump(const std::filesystem::path& debug_root, const std::st
     return static_cast<bool>(file);
 }
 
+std::string serialize_pcm_audio_dump(const std::vector<std::int16_t>& pcm_stereo,
+                                     const std::uint64_t sample_rate_hz) {
+    const std::size_t sample_count = pcm_stereo.size() / 2;
+    std::vector<std::uint8_t> pcm;
+    pcm.reserve(pcm_stereo.size() * 2);
+    for (const std::int16_t value : pcm_stereo) {
+        const auto u = static_cast<std::uint16_t>(value);
+        pcm.push_back(static_cast<std::uint8_t>(u & 0xFF));
+        pcm.push_back(static_cast<std::uint8_t>((u >> 8) & 0xFF));
+    }
+
+    std::string out;
+    out += kAudioDumpFormatTag;
+    out.push_back('\n');
+    out += "[AUDIO] sample_rate=" + machine::debug_format::to_dec(sample_rate_hz) +
+           " channels=2 bits=16 samples=" +
+           machine::debug_format::to_dec(static_cast<std::uint64_t>(sample_count)) + "\n";
+    out += machine::debug_dump::serialize_region("PCM", pcm.empty() ? nullptr : pcm.data(), pcm.size());
+    out += "[END]\n";
+    return out;
+}
+
+bool write_pcm_audio_dump(const std::filesystem::path& debug_root, const std::string& filename,
+                          const std::vector<std::int16_t>& pcm_stereo,
+                          const std::uint64_t sample_rate_hz) {
+    const std::string text = serialize_pcm_audio_dump(pcm_stereo, sample_rate_hz);
+
+    const std::filesystem::path directory = debug_root / "sounds";
+    std::error_code ec;
+    std::filesystem::create_directories(directory, ec);
+    if (ec) {
+        return false;
+    }
+    std::ofstream file(directory / filename, std::ios::binary | std::ios::trunc);
+    if (!file) {
+        return false;
+    }
+    file.write(text.data(), static_cast<std::streamsize>(text.size()));
+    return static_cast<bool>(file);
+}
+
 }  // namespace sony_msx::frontend

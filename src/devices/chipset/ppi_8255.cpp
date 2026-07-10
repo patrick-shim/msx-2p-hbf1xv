@@ -50,7 +50,10 @@ void Ppi8255::write_control(const std::uint8_t value) {
         control_ = value;
         return;
     }
-    // Bit set/reset on a single port-C bit (I8255.cc:330-340).
+    // Bit set/reset on a single port-C bit (I8255.cc:330-340). Bit 7
+    // (key-click) can be driven this way as well as by a full #AA write, so
+    // both paths must emit the M39-A click edge.
+    const std::uint8_t prev_latch_c = latch_c_;
     const std::uint8_t bit = static_cast<std::uint8_t>((value & kBitNr) >> 1);
     const std::uint8_t mask = static_cast<std::uint8_t>(1u << bit);
     if (value & kSetReset) {
@@ -58,6 +61,20 @@ void Ppi8255::write_control(const std::uint8_t value) {
     } else {
         latch_c_ = static_cast<std::uint8_t>(latch_c_ & ~mask);
     }
+    emit_click_edge_if_toggled(prev_latch_c);
+}
+
+void Ppi8255::emit_click_edge_if_toggled(const std::uint8_t prev_latch_c) {
+    // openMSX MSXPPI.cc:128-130: click fires on `(prevBits ^ value) & 8` of the
+    // port-C high nibble -- i.e. a change of the full port-C bit 7. Edge-only,
+    // stamped with the current scheduler cycle. No-op unless BOTH seams wired.
+    if (click_sink_ == nullptr || cycle_source_ == nullptr) {
+        return;
+    }
+    if (((prev_latch_c ^ latch_c_) & 0x80) == 0) {
+        return;
+    }
+    click_sink_->on_click_edge(cycle_source_->current_cycle(), (latch_c_ & 0x80) != 0);
 }
 
 core::BusData Ppi8255::io_read(const core::BusAddress port) {
@@ -83,9 +100,12 @@ void Ppi8255::io_write(const core::BusAddress port, const core::BusData value) {
     case 1:
         latch_b_ = value;               // #A9 port B latch (inert on MSX)
         break;
-    case 2:
+    case 2: {
+        const std::uint8_t prev_latch_c = latch_c_;
         latch_c_ = value;               // #AA port C (row select / LED / cassette)
+        emit_click_edge_if_toggled(prev_latch_c);  // M39-A key-click 1-bit DAC
         break;
+    }
     case 3:
         write_control(value);           // #AB control
         break;

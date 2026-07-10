@@ -162,6 +162,12 @@ void PsgYm2149::reset() {
     address_ = 0;
     cycle_residual_ = 0;
     level_dwell_integral_.fill(0);
+    // M39-A Fix B: the sync cursor returns to 0 alongside the scheduler's own
+    // cold-boot reset to cycle 0, so sync-before-change cycle stamps stay
+    // aligned across a cold boot (audio_sync_enabled_ is a wiring config the
+    // frontend owns -- preserved, like the ClickDac capture flag). Set BEFORE
+    // the write_register loop below so its (no-op at cycle 0) syncs are inert.
+    last_sync_cycle_ = 0;
     for (auto& t : tone_) {
         t.reset();
     }
@@ -171,6 +177,18 @@ void PsgYm2149::reset() {
     for (std::uint8_t reg = 0; reg < kRegisterCount; ++reg) {
         write_register(reg, 0);
     }
+}
+
+void PsgYm2149::sync_to_cycle(const std::uint64_t now) {
+    // M39-A Fix B: advance the box-average integral + generator to absolute
+    // machine cycle `now` using the CURRENT register state. Monotonic + inert
+    // when disabled -- so the batch advance_cycles + take oracle path is
+    // byte-for-byte unchanged. Reuses the M34 advance_cycles integral.
+    if (!audio_sync_enabled_ || now <= last_sync_cycle_) {
+        return;
+    }
+    advance_cycles(now - last_sync_cycle_);
+    last_sync_cycle_ = now;
 }
 
 void PsgYm2149::attach_port_source(PsgPortSource* source) {
@@ -223,6 +241,16 @@ void PsgYm2149::io_write(const core::BusAddress port, const core::BusData value)
 void PsgYm2149::write_register(const std::uint8_t reg, std::uint8_t value) {
     const std::uint8_t index = reg & 0x0F;
 
+    // M39-A Fix B (sync-before-change): BEFORE this write mutates any register/
+    // generator/volume state, advance the box-average integral up to the write
+    // cycle using the CURRENT (pre-write) state -- so each sub-frame volume/tone
+    // is integrated for its true duration and the software-PCM voice survives
+    // the once-per-frame batch. Inert unless the frontend enabled sync AND wired
+    // the cycle source (default disabled -> every existing oracle unchanged).
+    if (audio_sync_enabled_ && audio_cycle_source_ != nullptr) {
+        sync_to_cycle(audio_cycle_source_->current_cycle());
+    }
+
     if (index == R_ENABLE) {
         // MSX forces port A input (bit6=0) and port B output (bit7=1)
         // (fact-sheet §2 "Critical R7 note"; AY8910.cc:598-603 ignorePortDirections).
@@ -264,6 +292,13 @@ void PsgYm2149::write_register(const std::uint8_t reg, std::uint8_t value) {
         break;
     default:
         break;
+    }
+
+    // M39-A Step 1: passive register-write diagnostic (non-perturbing -- the
+    // register store + generator state above are already committed; the
+    // observer only inspects reg/value). Reports the software-PCM write rate.
+    if (write_observer_ != nullptr) {
+        write_observer_->on_register_write(index, value);
     }
 }
 

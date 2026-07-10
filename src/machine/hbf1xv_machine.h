@@ -21,6 +21,7 @@
 
 #include "core/bus.h"
 #include "core/scheduler.h"
+#include "devices/audio/click_dac.h"
 #include "devices/audio/psg_ym2149.h"
 #include "devices/audio/scc_wavetable.h"
 #include "devices/audio/ym2413_opll.h"
@@ -223,6 +224,14 @@ public:
     // them over the M11 IoBus at #A0-A2 / #B4/B5 / #A8-AB / #F5.
     [[nodiscard]] const devices::audio::PsgYm2149& psg() const;
     devices::audio::PsgYm2149& psg();
+    // MSX 1-bit key-click DAC on PPI port-C bit 7 (M39-A digitized-voice fix).
+    // An ADDITIVE, band-limited mixer source fed cycle-stamped bit-7 edges from
+    // the PPI seam. Capture is DISABLED by default (byte-identical to pre-M39
+    // for every non-audio path); the SDL3 frontend and the headless audio-dump
+    // path enable it. The frontend audio mixer advances/samples it in lockstep
+    // with the other generators.
+    [[nodiscard]] const devices::audio::ClickDac& click_dac() const;
+    devices::audio::ClickDac& click_dac();
     // YM2413 (OPLL) register-accurate device (M17), answering the real
     // MSX-MUSIC I/O ports #7C/#7D alongside the unmodified M13 fmmusic_rom_
     // at slot 3-3 page 1 (A-M17-1/A-M17-2 -- no memory-space register overlay,
@@ -628,6 +637,45 @@ private:
         devices::cpu::Z80aCpu& cpu_;
     };
 
+    // M39-A key-click 1-bit-DAC seam adapters. PpiClickAdapter forwards each
+    // port-C bit-7 EDGE from the PPI into the additive ClickDac mixer source;
+    // PpiCycleClock stamps the edge with the scheduler cycle (X-pattern of the
+    // RtcClock/FdcClock adapters -- read-only, never perturbs CPU timing). Both
+    // hold only a reference to *this / scheduler_, so declaration order is
+    // irrelevant; they are attached to ppi_ in wire_bus().
+    class PpiClickAdapter final : public devices::chipset::ClickEdgeSink {
+    public:
+        explicit PpiClickAdapter(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_click_edge(std::uint64_t cycle, bool level) override {
+            machine_.click_dac_.record_edge(cycle, level);
+        }
+
+    private:
+        Hbf1xvMachine& machine_;
+    };
+
+    class PpiCycleClock final : public devices::chipset::PpiCycleSource {
+    public:
+        explicit PpiCycleClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t current_cycle() const override { return scheduler_.total_cycles(); }
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
+    // M39-A Fix B: cycle-stamp source for the PSG sync-before-change seam
+    // (returns scheduler cycles read-only, X-pattern of the clock adapters).
+    // Attached to psg_ in wire_bus(); the frontend enables/disables the sync
+    // via psg().set_audio_sync_enabled(), so this attach is inert by default.
+    class PsgCycleClock final : public devices::audio::PsgCycleSource {
+    public:
+        explicit PsgCycleClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
+        [[nodiscard]] std::uint64_t current_cycle() const override { return scheduler_.total_cycles(); }
+
+    private:
+        const core::Scheduler& scheduler_;
+    };
+
     // DEC-0052 stream-capture FDC observer adapter. Installed on fdc_ only
     // while stream_active_ (set_stream_capture_enabled arms it,
     // finalize_stream_capture removes it); default-null on fdc_ => zero
@@ -814,6 +862,13 @@ private:
     // answered by real devices (M15). The #F5 system-control register gates the
     // RTC CLOCK-IC. rtc_clock_ feeds the RTC deterministic emulated time.
     devices::audio::PsgYm2149 psg_;
+    // M39-A MSX 1-bit key-click DAC (additive band-limited mixer source). Fed
+    // cycle-stamped port-C bit-7 edges via ppi_click_adapter_/ppi_cycle_clock_
+    // (attached to ppi_ in wire_bus). Capture disabled by default.
+    devices::audio::ClickDac click_dac_;
+    PpiClickAdapter ppi_click_adapter_{*this};
+    PpiCycleClock ppi_cycle_clock_{scheduler_};
+    PsgCycleClock psg_cycle_clock_{scheduler_};  // M39-A Fix B sync-before-change
     // YM2413 (OPLL) register-accurate device (M17, backlog B3) on #7C/#7D --
     // an IoDevice attached alongside the unmodified M13 fmmusic_rom_ (below).
     // ym2413_clock_ feeds the M28-S1 (E2) write-timing gate READ-ONLY; the

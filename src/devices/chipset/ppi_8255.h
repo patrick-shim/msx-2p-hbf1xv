@@ -32,6 +32,29 @@ public:
     [[nodiscard]] virtual std::uint8_t keyboard_row(int row) const = 0;
 };
 
+// Sink for port-C bit-7 (key-click / 1-bit DAC) EDGES (M39-A digitized-voice
+// fix). The PPI fires on_click_edge() ONLY when bit 7 actually toggles (the
+// openMSX `(prevBits ^ value) & 8` edge trigger, MSXPPI.cc:128-130), stamping
+// the change with the current scheduler cycle. Nullable + default-unattached
+// -> zero behaviour change (the click DAC is an ADDITIVE mixer source). The
+// concrete sink is the machine's ClickDac adapter; Ppi8255 stays pure/testable
+// and its #A8 slot-select path is byte-untouched.
+class ClickEdgeSink {
+public:
+    virtual ~ClickEdgeSink() = default;
+    // level: true = 0xFF (click asserted), false = 0x80 (idle).
+    virtual void on_click_edge(std::uint64_t cycle, bool level) = 0;
+};
+
+// Deterministic emulated-cycle source for cycle-stamping the click edges
+// above (X-pattern of the machine's RtcClock/FdcClock adapters). Returns the
+// scheduler's total cycles READ-ONLY; never perturbs CPU T-state accounting.
+class PpiCycleSource {
+public:
+    virtual ~PpiCycleSource() = default;
+    [[nodiscard]] virtual std::uint64_t current_cycle() const = 0;
+};
+
 // Full i8255-compatible PPI on ports #A8-#AB (M15-S4, expands the M11
 // PpiSlotSelect per change X1). Grounding: fact-sheet §3; openMSX
 // references/openmsx-21.0/src/I8255.cc + MSXPPI.cc (behaviour reference, never
@@ -67,6 +90,12 @@ public:
 
     void reset();
 
+    // M39-A: attach the key-click 1-bit-DAC edge sink + its cycle source
+    // (both nullable; default-unattached preserves pre-M39 behaviour exactly).
+    // A bit-7 toggle fires the sink ONLY when BOTH are attached.
+    void attach_click_sink(ClickEdgeSink* sink) { click_sink_ = sink; }
+    void attach_cycle_source(PpiCycleSource* source) { cycle_source_ = source; }
+
     core::BusData io_read(core::BusAddress port) override;
     void io_write(core::BusAddress port, core::BusData value) override;
 
@@ -82,12 +111,17 @@ private:
     [[nodiscard]] std::uint8_t read_port_b() const;
     [[nodiscard]] std::uint8_t read_port_c() const;
     void write_control(std::uint8_t value);
+    // M39-A: emit a click edge if bit 7 of port C changed between prev_latch_c
+    // and the current latch_c_, and both the sink and cycle source are wired.
+    void emit_click_edge_if_toggled(std::uint8_t prev_latch_c);
 
     PpiSlotSelect port_a_;  // #A8 — reused verbatim (X1 preservation)
     KeyboardRowSource& keyboard_;
     std::uint8_t latch_b_ = 0;
     std::uint8_t latch_c_ = 0;
     std::uint8_t control_ = kResetControl;
+    ClickEdgeSink* click_sink_ = nullptr;    // M39-A key-click 1-bit DAC edges
+    PpiCycleSource* cycle_source_ = nullptr;  // M39-A edge cycle-stamp source
 };
 
 }  // namespace sony_msx::devices::chipset

@@ -17,6 +17,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "devices/audio/psg_ym2149.h"
 #include "frontend/audio_pacer.h"
@@ -134,6 +135,17 @@ public:
                              devices::audio::Ym2413Opll* fm, std::uint64_t total_elapsed_cycles);
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
                              devices::audio::Ym2413Opll* fm, const MachineAudioMixer::FmSources& fm_pacs,
+                             std::uint64_t total_elapsed_cycles);
+
+    // M39-A Fix B: push a buffer of ALREADY-PRODUCED interleaved stereo samples
+    // (2*N int16), applying the SAME AudioPacer backpressure/silence-prime
+    // policy as pump_and_push_paced but WITHOUT mixing -- the caller
+    // (Sdl3App::run_one_frame) produced them sub-frame-accurately via
+    // MachineAudioMixer::produce_synced_sample so the software-PCM voice
+    // survives. The produced count matches the pacer's exact-accounting count
+    // by construction (both floor(elapsed*44100/3579545)), so the trim/prime
+    // decision applies unchanged. Empty buffer / no stream -> no-op.
+    void push_produced_paced(const std::vector<std::int16_t>& produced,
                              std::uint64_t total_elapsed_cycles);
 
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }

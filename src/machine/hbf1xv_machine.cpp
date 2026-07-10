@@ -150,6 +150,22 @@ void Hbf1xvMachine::wire_bus() {
     io_bus_.attach(0xA1, &psg_);
     io_bus_.attach(0xA2, &psg_);
 
+    // M39-A: route PPI port-C bit-7 (key-click 1-bit DAC) edges into the
+    // additive ClickDac mixer source, cycle-stamped off the scheduler. Both
+    // seams are default-inert until click_dac_ capture is enabled (frontend /
+    // audio-dump), so this attach changes no existing behaviour (idle-byte
+    // identity): bit 7 = 0 at reset -> no edges -> the mixer's click term is
+    // exactly 0. The #A8 slot-select path is byte-untouched.
+    ppi_.attach_click_sink(&ppi_click_adapter_);
+    ppi_.attach_cycle_source(&ppi_cycle_clock_);
+
+    // M39-A Fix B: cycle-stamp source for the PSG sync-before-change seam (the
+    // CONFIRMED digitized-voice fix -- software-PCM volume writes). Inert until
+    // the frontend enables sync via psg().set_audio_sync_enabled(); with sync
+    // off, write_register() does not sync, so every existing oracle is
+    // byte-identical.
+    psg_.attach_audio_cycle_source(&psg_cycle_clock_);
+
     // Cassette interface (M18-S3, backlog C7): read-only motor/output
     // derivation from ppi_ (bound by reference at construction, cassette_
     // {ppi_}); its deterministic synthetic-tape input model advances
@@ -290,6 +306,11 @@ void Hbf1xvMachine::cold_boot() {
     joystick_.reset();
     ppi_.reset();
     psg_.reset();
+    // M39-A: clear the 1-bit-DAC edge timeline/integrator (capture-enabled
+    // wiring config is preserved -- the frontend sets it once). consumed_cycle_
+    // returns to 0 alongside the scheduler reset above, so edge cycle stamps
+    // stay aligned across a cold boot.
+    click_dac_.reset();
     ym2413_.reset();  // M17: zeroes all 64 registers + the address latch (A-M17-4)
     system_control_.reset();
     // Cold power-up clears the #F4 reset-status latch (bit 7 clear = cold
@@ -1029,6 +1050,14 @@ const devices::audio::PsgYm2149& Hbf1xvMachine::psg() const {
 
 devices::audio::PsgYm2149& Hbf1xvMachine::psg() {
     return psg_;
+}
+
+const devices::audio::ClickDac& Hbf1xvMachine::click_dac() const {
+    return click_dac_;
+}
+
+devices::audio::ClickDac& Hbf1xvMachine::click_dac() {
+    return click_dac_;
 }
 
 const devices::audio::Ym2413Opll& Hbf1xvMachine::ym2413() const {

@@ -13,6 +13,7 @@
 
 #include "frontend/sdl3_app.h"
 
+#include <array>
 #include <exception>
 #include <filesystem>
 #include <fstream>
@@ -217,6 +218,17 @@ bool Sdl3App::init() {
     machine_.set_asset_root(config_.bios_dir);
     machine_.cold_boot();
 
+    // M39-A: enable the two additive-voice seams for real-time playback --
+    // (Fix B, CONFIRMED) the PSG sync-before-change path that makes software-PCM
+    // voice (Aleste 2, Laydock) audible, and (Fix A infra) the 1-bit key-click
+    // DAC capture (keyclicks). Both are inert until driven; enabled here AFTER
+    // cold_boot (which resets the sync cursor / click latch). The interleaved
+    // audio production below (run_one_frame) drives the PSG sync.
+    machine_.psg().set_audio_sync_enabled(true);
+    machine_.psg().reset_audio_sync(machine_.elapsed_cycles());
+    machine_.click_dac().set_capture_enabled(true);
+    audio_next_boundary_ = Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
+
     // M37 Slice D (DEC-0056): apply the launch-time initial Sony Speed
     // Controller level AFTER cold_boot() -- cold_boot() resets the controller
     // to level 0 (hbf1xv_machine.cpp:316), so setting it earlier would be
@@ -372,12 +384,42 @@ void Sdl3App::run_one_frame() {
     // double-count hazard).
     const std::uint64_t frame_start_cycle = machine_.elapsed_cycles();
     const std::uint64_t target = machine_.frame_cycles_per_frame();
+    // M39-A Fix B: produce audio samples INTERLEAVED with CPU stepping (over
+    // absolute machine-cycle boundaries) so the PSG sync-before-change writes
+    // land at their true sub-frame position -- the digitized-voice fix. Samples
+    // accumulate in audio_frame_pcm_ and are pushed (paced) after the frame.
+    audio_frame_pcm_.clear();
+    const bool produce_audio = static_cast<bool>(audio_presenter_);
+    const auto fmpac_opll = [](devices::cartridge::CartridgeFmPacRom* cart) {
+        return cart != nullptr ? &cart->opll() : nullptr;
+    };
+    const auto emit_due_audio = [&]() {
+        const std::uint64_t now = machine_.elapsed_cycles();
+        while (audio_next_boundary_ <= now) {
+            const std::uint64_t window = audio_next_boundary_ - audio_prev_boundary_;
+            const std::array<std::int16_t, 2> smp = audio_presenter_->mixer().produce_synced_sample(
+                machine_.psg(),
+                MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
+                &machine_.ym2413(),
+                MachineAudioMixer::FmSources{fmpac_opll(machine_.fmpac(1)), fmpac_opll(machine_.fmpac(2))},
+                &machine_.click_dac(), audio_next_boundary_, window);
+            audio_frame_pcm_.push_back(smp[0]);
+            audio_frame_pcm_.push_back(smp[1]);
+            audio_prev_boundary_ = audio_next_boundary_;
+            ++audio_sample_index_;
+            audio_next_boundary_ =
+                audio_sample_index_ * Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
+        }
+    };
     while (machine_.elapsed_cycles() - frame_start_cycle < target) {
         machine_.step_cpu_instruction();
         // M27-S7 (item 3, §2.4): driven through the EXACT same CPU sub-loop
         // the headless --debug-session mode's own loop uses. A genuine
         // no-op when input_script_player_ is empty (the default).
         input_script_player_.apply_due(machine_.elapsed_cycles(), machine_.keyboard());
+        if (produce_audio) {
+            emit_due_audio();
+        }
     }
     machine_.on_vsync_boundary();
 
@@ -428,14 +470,12 @@ void Sdl3App::run_one_frame() {
         // cartridge are additional mixed sources (nullptr when no FM-PAC is
         // present), so with none inserted the mix is byte-identical to v1.0.36.
         // This is what makes FM-PAC music (e.g. SRAM-save games) audible.
-        const auto fmpac_opll = [](devices::cartridge::CartridgeFmPacRom* cart) {
-            return cart != nullptr ? &cart->opll() : nullptr;
-        };
-        audio_presenter_->pump_and_push_paced(
-            machine_.psg(), MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
-            &machine_.ym2413(),
-            MachineAudioMixer::FmSources{fmpac_opll(machine_.fmpac(1)), fmpac_opll(machine_.fmpac(2))},
-            machine_.elapsed_cycles());
+        // M39-A Fix B: push the sub-frame-accurate samples produced during the
+        // step loop above (the voice is in there now), paced with the same
+        // AudioPacer backpressure/silence-prime policy the batch path used --
+        // the interleaved production count matches the pacer's exact-accounting
+        // count by construction (both floor(elapsed*44100/3579545)).
+        audio_presenter_->push_produced_paced(audio_frame_pcm_, machine_.elapsed_cycles());
     }
 
     ++frames_run_;

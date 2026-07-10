@@ -42,6 +42,28 @@ public:
     virtual void write_port_b(std::uint8_t value) = 0;
 };
 
+// Passive observer of PSG register writes (M39-A Step 1 diagnostic tooling).
+// Fires on every write to a selected register (the #A1 data path). PURELY
+// PASSIVE: it inspects (reg, value) only and must never mutate PSG state, so
+// determinism is preserved. Used to measure the R8/R9/R10 (channel-volume)
+// software-PCM write RATE at the Aleste-2/Laydock voice window, to distinguish
+// the 1-bit-DAC voice hypothesis (Fix A) from a PSG software-PCM one (Fix B).
+// Nullable + default-unattached -> zero behaviour change.
+class PsgWriteObserver {
+public:
+    virtual ~PsgWriteObserver() = default;
+    virtual void on_register_write(std::uint8_t reg, std::uint8_t value) = 0;
+};
+
+// Deterministic emulated-cycle source for the M39-A Fix-B sync-before-change
+// seam (X-pattern of the machine's RtcClock/FdcClock adapters). Returns the
+// scheduler's total cycles READ-ONLY; never perturbs CPU T-state accounting.
+class PsgCycleSource {
+public:
+    virtual ~PsgCycleSource() = default;
+    [[nodiscard]] virtual std::uint64_t current_cycle() const = 0;
+};
+
 // YM2149 PSG numeric/register-accurate sample model (M15-S1, backlog B1).
 //
 // Ports (fact-sheet §2; openMSX references/openmsx-21.0/src/sound/MSXPSG.cc):
@@ -74,6 +96,49 @@ public:
 
     // Inject the joystick/keyboard-layout/cassette source that backs R14/R15.
     void attach_port_source(PsgPortSource* source);
+
+    // M39-A Step 1: attach a passive register-write observer (nullable,
+    // default-unattached). Fires on every write_register(); non-perturbing.
+    void attach_write_observer(PsgWriteObserver* observer) { write_observer_ = observer; }
+
+    // ------------------------------------------------------------------
+    // M39-A Fix B: sync-before-change seam (the digitized-voice fix). The
+    // CONFIRMED voice mechanism (Aleste 2 "(c)1989 COMPILE" voice, Laydock
+    // speech) is PSG SOFTWARE-PCM: the game hammers a channel-volume register
+    // (R8/R9/R10) hundreds of times per frame (~312/frame measured) so the
+    // volume sequence IS the PCM waveform. The M34 box-average is produced ONCE
+    // PER FRAME in a batch (frontend mixer, advance_cycles + take at end-of-
+    // frame using END-OF-FRAME register state), so every SUB-FRAME volume
+    // change collapses to the final value and the voice is silent.
+    //
+    // sync-before-change (the audio analogue of the M32 VDP render-sync seam,
+    // references/openmsx-21.0/src/video/PixelRenderer.cc:549-571): BEFORE a
+    // register write mutates any generator/volume state, advance the box-average
+    // integral up to the write's cycle using the CURRENT (pre-write) state -- so
+    // each sub-frame volume is integrated for its true sub-frame duration. The
+    // frontend then TAKES per output sample over machine-cycle windows (the
+    // interleaved production path), and the integral already carries the real
+    // PCM waveform. No shadow registers: the integration is real-time.
+    //
+    // BYTE-IDENTITY: DISABLED by default -- write_register() does not sync, so
+    // every existing PSG/mixer oracle (which drives the batch advance_cycles +
+    // take path directly) is byte-for-byte unchanged. The frontend enables it
+    // ONLY on the interleaved production path (SDL3 audio + the headless
+    // --audio-sync dump). GROUNDED in the same M34 integral this class already
+    // owns (reuses advance_cycles()).
+    void attach_audio_cycle_source(PsgCycleSource* source) { audio_cycle_source_ = source; }
+    void set_audio_sync_enabled(bool enabled) { audio_sync_enabled_ = enabled; }
+    [[nodiscard]] bool audio_sync_enabled() const { return audio_sync_enabled_; }
+    // Advance the box-average integral + generator to absolute machine cycle
+    // `now` using the CURRENT register state (advance_cycles(now -
+    // last_sync_cycle_)). Monotonic: a `now` at or before the last sync is a
+    // no-op. No-op entirely when sync is disabled.
+    void sync_to_cycle(std::uint64_t now);
+    // Reset the sync cursor to `cycle` WITHOUT advancing (frontend frame/stream
+    // alignment). Used when (re)starting interleaved production.
+    void reset_audio_sync(std::uint64_t cycle) { last_sync_cycle_ = cycle; }
+    [[nodiscard]] std::uint64_t last_sync_cycle() const { return last_sync_cycle_; }
+    // ------------------------------------------------------------------
 
     // Bus-independent register access (used by the machine wiring and tests).
     void write_address(std::uint8_t reg);   // #A0
@@ -262,6 +327,11 @@ private:
     // uint64 overflow for any realistic window.
     std::array<std::uint64_t, 3> level_dwell_integral_{};
     PsgPortSource* port_source_ = nullptr;
+    PsgWriteObserver* write_observer_ = nullptr;  // M39-A Step 1 diagnostic
+    // M39-A Fix B sync-before-change (default DISABLED -> byte-identical).
+    PsgCycleSource* audio_cycle_source_ = nullptr;
+    bool audio_sync_enabled_ = false;
+    std::uint64_t last_sync_cycle_ = 0;  // absolute machine cycle of last sync
 };
 
 }  // namespace sony_msx::devices::audio

@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "devices/audio/click_dac.h"
 #include "devices/audio/psg_ym2149.h"
 #include "devices/audio/scc_wavetable.h"
 #include "devices/audio/ym2413_opll.h"
@@ -196,6 +197,34 @@ public:
     // ~3,780 at k = 21).
     static constexpr int kFmAmplitudeScale = 21;
 
+    // M39-A (digitized-voice fix): the MSX 1-bit key-click DAC on PPI port-C
+    // bit 7 -- a FIFTH additive source, the ONLY sub-frame audio path on a bare
+    // HB-F1XV (games bit-bang bit 7 as PWM/PDM to synthesize sampled speech;
+    // Aleste 2 "(c)1989 COMPILE" voice, Laydock speech). See ClickDac for the
+    // openMSX KeyClick->DACSound grounding + the AC-coupled box reconstruction.
+    //
+    // AMPLITUDE (same PER-CHANNEL-loudness method as kFmAmplitudeScale). The
+    // machine XML balances this exact machine's PSG:keyclick at 21000:16000
+    // (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:63
+    // <volume>21000</volume>; MSXPPI/KeyClick registers its DACSound8U with the
+    // default 16000 -- KeyClick.cc:5-8 / the machine's <PPI> has no explicit
+    // <volume>, so the SoundDevice default 16000 applies). Our full-scale PSG
+    // per-channel unit is 31 * kPsgAmplitudeScale = 12,400 PCM. The keyclick
+    // 1-bit DAC swings only 0x80..0xFF (128 of the 256 8-bit codes), peak
+    // 0x7F/0x80 = 127/128 of half-scale (DACSound8U.cc:17-20 value-0x80).
+    // Therefore, for a full-scale AC click sample (|ClickDac output| == kUnit):
+    //
+    //   kClickAmplitudeScale = round(12,400 * (16000/21000) * (127/128))
+    //                        = round(9,447.62 * 0.992188)
+    //                        = round(9,373.8) = 9,374
+    //
+    // The ClickDac returns a signed fixed-point sample in [-kUnit, +kUnit]
+    // (kUnit = full scale); the mixer normalizes by kUnit, so a full-scale
+    // click contributes +-9,374 PCM per (mono) rail. A HELD level contributes
+    // ~0 (the ClickDac's DC-blocker), and an idle (never-toggled) bit 7
+    // contributes EXACTLY 0 -- the byte-identity oracle below.
+    static constexpr int kClickAmplitudeScale = 9374;
+
     // 0..2 attached chips; nullptr entries are skipped (the "no SCC cart
     // loaded" regression null, Hbf1xvMachine::scc_chip()'s own contract).
     using SccSources = std::array<devices::audio::SccWavetable*, 2>;
@@ -238,6 +267,36 @@ public:
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
         const FmSources& fm_pacs, std::size_t sample_count) const;
+
+    // M39-A: the FIVE-source overload adding the 1-bit key-click DAC. A nullptr
+    // click contributes exactly 0 to every sample (the pre-M39 4-source overload
+    // delegates here with click = nullptr and stays byte-behaviour identical);
+    // an attached-but-idle ClickDac (no bit-7 toggles) ALSO contributes exactly
+    // 0 (idle byte-identity). A non-null click is advanced by cycles_per_sample
+    // per pair, exactly like every other generator (DEC-0033 lockstep).
+    [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
+        devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
+        const FmSources& fm_pacs, devices::audio::ClickDac* click, std::size_t sample_count) const;
+
+    // M39-A Fix B (the digitized-voice fix): produce ONE mixed stereo sample on
+    // the INTERLEAVED production path, using the SAME mixing law as the batch
+    // overloads but driven by MACHINE cycles instead of the fixed 81-cycle step.
+    // The caller (SDL3 run_one_frame / the headless --audio-sync dump) weaves
+    // this into its CPU-step loop so the PSG's sync-before-change writes
+    // (psg.sync_to_cycle at each register write) land at their true sub-frame
+    // position: `sample_boundary_cycle` is this sample's absolute machine-cycle
+    // boundary and `window_cycles` = boundary - previous-boundary (the exact-
+    // accounting ~81.16-cycle window, so the sample COUNT tracks machine time).
+    //   - PSG: sync_to_cycle(boundary) finalizes the sub-frame-accurate integral,
+    //     then take_integrated_sample(window). (The voice now survives.)
+    //   - SCC/FM/FM-PAC/click: advance_cycles(window) + take, exactly as the
+    //     batch path but over the true machine-cycle window (the click DAC's
+    //     absolute-cycle edge timeline stays perfectly aligned -- no drift).
+    // Byte-identity of the batch oracles is untouched (this is a separate path).
+    [[nodiscard]] std::array<std::int16_t, 2> produce_synced_sample(
+        devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
+        const FmSources& fm_pacs, devices::audio::ClickDac* click,
+        std::uint64_t sample_boundary_cycle, std::uint64_t window_cycles) const;
 
     [[nodiscard]] const PsgAudioPump& pump() const { return pump_; }
     [[nodiscard]] std::uint64_t cycles_per_sample() const { return pump_.cycles_per_sample(); }

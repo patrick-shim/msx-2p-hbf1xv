@@ -48,6 +48,7 @@ add_library(sony_msx_core STATIC
     src/devices/chipset/system_control.cpp
     src/devices/chipset/mb670836_pause.cpp
     src/devices/audio/psg_ym2149.cpp
+    src/devices/audio/click_dac.cpp
     src/devices/audio/scc_wavetable.cpp
     src/devices/audio/ym2413_opll.cpp
     src/devices/audio/ym2413_synth.cpp

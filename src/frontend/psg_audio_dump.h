@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <string>
+#include <vector>
 
 #include "devices/audio/psg_ym2149.h"
 
@@ -89,5 +90,19 @@ inline constexpr const char* kAudioDumpFormatTag = "HBF1XV-AUDIO-DUMP v1";
 bool write_psg_audio_dump(const std::filesystem::path& debug_root, const std::string& filename,
                            devices::audio::PsgYm2149& psg, std::uint64_t sample_rate_hz,
                            std::size_t sample_count);
+
+// M39-A: serialize an ALREADY-MIXED interleaved signed-16-bit stereo PCM buffer
+// (2 * sample_count int16 values, [left,right] pairs) into the SAME
+// "HBF1XV-AUDIO-DUMP v1" text format as serialize_psg_audio_dump() -- reused by
+// the headless --audio-dump voice-window capture, which mixes the FULL machine
+// audio (PSG + SCC + built-in FM + FM-PAC + the M39 1-bit-DAC click) per frame
+// via MachineAudioMixer rather than pumping the PSG in isolation. Deterministic:
+// pure serialization of the provided bytes (no gain/filter/resample), reusing
+// machine::debug_dump::serialize_region()'s folded-hex routine. Converts to a
+// real WAV via tools/audio-dump-to-wav.py, exactly like the PSG dump.
+[[nodiscard]] std::string serialize_pcm_audio_dump(const std::vector<std::int16_t>& pcm_stereo,
+                                                   std::uint64_t sample_rate_hz);
+bool write_pcm_audio_dump(const std::filesystem::path& debug_root, const std::string& filename,
+                          const std::vector<std::int16_t>& pcm_stereo, std::uint64_t sample_rate_hz);
 
 }  // namespace sony_msx::frontend

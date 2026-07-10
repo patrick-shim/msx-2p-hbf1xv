@@ -146,4 +146,43 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
     }
 }
 
+void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& produced,
+                                             const std::uint64_t total_elapsed_cycles) {
+    // M39-A Fix B: identical pacing to pump_and_push_paced (silence-prime FIRST,
+    // then trim to the queue cap), but the samples were ALREADY produced sub-
+    // frame-accurately by the caller (so the software-PCM voice is in `produced`)
+    // -- no batch mix here, which is what would have collapsed the voice.
+    if (stream_ == nullptr) {
+        return;
+    }
+    const int queued_bytes = SDL_GetAudioStreamQueued(stream_);
+    const std::uint64_t queued_samples =
+        queued_bytes > 0 ? static_cast<std::uint64_t>(queued_bytes) / kBytesPerSampleFrame : 0;
+
+    const AudioPacingDecision decision = pacer_.plan(total_elapsed_cycles, queued_samples);
+
+    if (decision.silence_samples_to_push > 0) {
+        const std::vector<std::int16_t> silence(
+            static_cast<std::size_t>(decision.silence_samples_to_push) * 2, std::int16_t{0});
+        if (!SDL_PutAudioStreamData(stream_, silence.data(),
+                                    static_cast<int>(silence.size() * sizeof(std::int16_t)))) {
+            last_error_ = SDL_GetError();
+        }
+    }
+
+    if (decision.samples_to_push == 0 || produced.empty()) {
+        return;
+    }
+    // The interleaved production count matches the pacer's samples_to_pump by
+    // construction; clamp defensively so a boundary-rounding off-by-one can
+    // never over-read the buffer.
+    const std::size_t available_pairs = produced.size() / 2;
+    const std::size_t push_pairs =
+        std::min(static_cast<std::size_t>(decision.samples_to_push), available_pairs);
+    const auto push_bytes = static_cast<int>(push_pairs * 2 * sizeof(std::int16_t));
+    if (!SDL_PutAudioStreamData(stream_, produced.data(), push_bytes)) {
+        last_error_ = SDL_GetError();
+    }
+}
+
 }  // namespace sony_msx::frontend

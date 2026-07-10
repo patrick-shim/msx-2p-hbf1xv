@@ -11,6 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
+#include <array>
 #include <cstdint>
 #include <cstdlib>
 #include <fstream>
@@ -20,7 +21,9 @@
 #include <utility>
 #include <vector>
 
+#include "devices/audio/psg_ym2149.h"
 #include "devices/fdc/disk_image.h"
+#include "frontend/machine_audio_mixer.h"  // M39-A: full-machine audio mix for --audio-dump
 #include "frontend/psg_audio_dump.h"
 #include "frontend/sdl3_cli.h"  // M37 Slice D (DEC-0056): shared parse_speed_level() validator
 #include "machine/cartridge_cli.h"
@@ -762,6 +765,38 @@ struct DebugSessionOptions {
     // the pre-DEC-0052 behavior). Headless analogue of the SDL3 F10 toggle,
     // for a deterministic, reproducible light capture without a window.
     bool stream_light = false;
+    // M39-A Step 1 confirmation diagnostic. --io-observe <out.csv> writes a
+    // per-frame CSV of the PPI port-C bit-7 (1-bit-DAC) EDGE rate and the PSG
+    // R8/R9/R10 (software-PCM volume) write rate, over the --frames run --
+    // distinguishing the 1-bit-DAC voice hypothesis (Fix A: bit-7 edges >> 60/
+    // frame) from a PSG software-PCM one (Fix B: R8/R9/R10 hammered). Counting
+    // only (O(1) memory/frame), so it does not OOM like --trace-cpu. Enables
+    // click-DAC capture for the run.
+    std::optional<std::string> io_observe_name;
+    // M39-A Step 3 validation. --audio-dump <name> mixes the FULL machine audio
+    // (PSG + SCC + built-in FM + FM-PAC + the M39 1-bit-DAC click) every frame
+    // via MachineAudioMixer -- the same law the SDL3 frontend uses -- and writes
+    // the voice-window PCM to <debug_root>/sounds/<name> ("HBF1XV-AUDIO-DUMP
+    // v1", -> WAV via tools/audio-dump-to-wav.py). --frames mode only. Enables
+    // click-DAC capture unless --audio-no-click (the BEFORE/no-click A/B leg,
+    // click term forced 0). --audio-from/--audio-to bound the appended frame
+    // window (all generators still advance every frame to stay in lockstep).
+    std::optional<std::string> audio_dump_name;
+    bool audio_no_click = false;
+    std::optional<std::uint32_t> audio_from;
+    std::optional<std::uint32_t> audio_to;
+    // M39-A Fix B: --audio-sync switches --audio-dump from the once-per-frame
+    // BATCH mix (the pre-fix behavior -- the BEFORE leg, sub-frame PSG volume
+    // writes collapse, voice silent) to the INTERLEAVED sync-before-change
+    // production (the AFTER leg -- samples produced during CPU stepping over
+    // machine-cycle windows, so the software-PCM voice survives). One build, one
+    // A/B: BEFORE = --audio-dump, AFTER = --audio-dump --audio-sync.
+    bool audio_sync = false;
+    // M39-A: isolate the PSG in the --audio-dump (drop SCC/FM/FM-PAC/click), so
+    // the BEFORE(batch)/AFTER(sync) A/B differs ONLY in the PSG production
+    // method -- cleanly exposing the software-PCM voice without the SCC music
+    // (which Aleste 2 plays loudly) masking it.
+    bool audio_psg_only = false;
 };
 
 std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
@@ -847,12 +882,53 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
             }
         } else if (arg == "--stream-light") {
             opts.stream_light = true;  // DEC-0052: arm lightweight stream capture (boolean flag)
+        } else if (arg == "--io-observe") {
+            if (auto v = take_debug_session_value(args, i, "--io-observe", errors)) {
+                opts.io_observe_name = *v;  // M39-A Step 1 diagnostic CSV path
+                ++i;
+            }
+        } else if (arg == "--audio-dump") {
+            if (auto v = take_debug_session_value(args, i, "--audio-dump", errors)) {
+                opts.audio_dump_name = *v;  // M39-A Step 3 voice-window PCM dump
+                ++i;
+            }
+        } else if (arg == "--audio-no-click") {
+            opts.audio_no_click = true;  // M39-A: BEFORE leg -- click term forced 0
+        } else if (arg == "--audio-sync") {
+            opts.audio_sync = true;  // M39-A Fix B: interleaved sync-before-change (AFTER leg)
+        } else if (arg == "--audio-psg-only") {
+            opts.audio_psg_only = true;  // M39-A: isolate the PSG voice for a clean A/B
+        } else if (arg == "--audio-from") {
+            if (auto v = take_debug_session_value(args, i, "--audio-from", errors)) {
+                opts.audio_from = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--audio-to") {
+            if (auto v = take_debug_session_value(args, i, "--audio-to", errors)) {
+                opts.audio_to = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
         }
         // Any other argument (--cart1/--cart1-type/--cart2/--cart2-type) is
         // left untouched for load_cartridges_from_args()'s own parser below.
     }
     return opts;
 }
+
+// M39-A Step 1: passive PSG register-write counter. Counts writes to the
+// channel-volume registers R8/R9/R10 (the software-PCM path a Fix-B voice would
+// hammer) and total register writes -- read per-frame by --io-observe to report
+// the write RATE. Non-perturbing (inspection only).
+struct PsgWriteCounter final : public sony_msx::devices::audio::PsgWriteObserver {
+    std::uint64_t vol_writes = 0;    // R8 (0x08) / R9 (0x09) / R10 (0x0A)
+    std::uint64_t total_writes = 0;
+    void on_register_write(const std::uint8_t reg, std::uint8_t /*value*/) override {
+        ++total_writes;
+        if (reg == 0x08 || reg == 0x09 || reg == 0x0A) {
+            ++vol_writes;
+        }
+    }
+};
 
 int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps,
                       const std::vector<std::string>& cli_args) {
@@ -978,6 +1054,87 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         std::cerr << "debug-session: stream-light armed: stream_" << machine.stream_capture_id() << "\n";
     }
 
+    // --- M39-A digitized-voice diagnostic (Step 1) + validation (Step 3) ---
+    // Both need the port-C bit-7 (1-bit-DAC) edge capture ON; the BEFORE leg
+    // (--audio-no-click) keeps it OFF so the click term is exactly 0.
+    const bool click_capture =
+        (opts.io_observe_name.has_value() || opts.audio_dump_name.has_value()) && !opts.audio_no_click;
+    if (click_capture) {
+        machine.click_dac().set_capture_enabled(true);
+    }
+    if ((opts.io_observe_name.has_value() || opts.audio_dump_name.has_value()) && !opts.frames.has_value()) {
+        std::cerr << "debug-session: --io-observe/--audio-dump require --frames mode (no output)\n";
+    }
+
+    PsgWriteCounter psg_write_counter;
+    if (opts.io_observe_name.has_value()) {
+        machine.psg().attach_write_observer(&psg_write_counter);
+    }
+    std::string io_observe_csv;
+    std::uint64_t prev_click_edges = 0;
+    std::uint64_t prev_psg_vol = 0;
+    std::uint64_t prev_psg_total = 0;
+    if (opts.io_observe_name.has_value()) {
+        io_observe_csv = "frame,click_bit7_edges,psg_vol_writes,psg_total_writes\n";
+    }
+
+    // Step 3: a MachineAudioMixer mixing the FULL machine audio (the same law +
+    // 81-cycle step the SDL3 frontend uses). BATCH mode (BEFORE) mixes once per
+    // frame with exact-accounting sample count; --audio-sync (AFTER) produces
+    // samples INTERLEAVED with CPU stepping over machine-cycle windows so the
+    // PSG sync-before-change voice survives.
+    constexpr std::uint64_t kAudioRateHz = 44100;
+    constexpr std::uint64_t kAudioSysHz = 3579545;
+    const bool audio_dump = opts.audio_dump_name.has_value();
+    const bool audio_sync_dump = audio_dump && opts.audio_sync;
+    sony_msx::frontend::MachineAudioMixer audio_mixer(kAudioSysHz / kAudioRateHz);
+    std::vector<std::int16_t> audio_pcm;
+    std::uint64_t audio_emitted = 0;             // BATCH: samples emitted so far
+    std::uint64_t audio_sample_index = 1;        // SYNC: next sample's index (boundary = idx*sys/rate)
+    std::uint64_t audio_prev_boundary = 0;       // SYNC: previous sample boundary cycle
+    std::uint64_t audio_next_boundary = kAudioSysHz / kAudioRateHz;  // SYNC: next boundary
+    const auto fmpac_opll = [](sony_msx::devices::cartridge::CartridgeFmPacRom* cart) {
+        return cart != nullptr ? &cart->opll() : nullptr;
+    };
+    if (audio_sync_dump) {
+        // Enable the PSG sync-before-change seam (the CONFIRMED Fix B). Aligned
+        // to the current machine cycle so absolute-cycle sample boundaries and
+        // the sync cursor share the same origin.
+        machine.psg().set_audio_sync_enabled(true);
+        machine.psg().reset_audio_sync(machine.elapsed_cycles());
+    }
+    // M39-A Fix B interleaved production: emit every audio sample whose absolute
+    // machine-cycle boundary has been reached, weaving per-sample takes into the
+    // CPU-step loop so the PSG sync-before-change writes land at their true
+    // sub-frame position. Called after each instruction.
+    const bool psg_only = opts.audio_psg_only;
+    const auto emit_synced_audio = [&](const std::uint32_t frame) {
+        const std::uint64_t now = machine.elapsed_cycles();
+        while (audio_next_boundary <= now) {
+            const std::uint64_t window = audio_next_boundary - audio_prev_boundary;
+            const std::array<std::int16_t, 2> smp = audio_mixer.produce_synced_sample(
+                machine.psg(),
+                psg_only ? sony_msx::frontend::MachineAudioMixer::SccSources{nullptr, nullptr}
+                         : sony_msx::frontend::MachineAudioMixer::SccSources{machine.scc_chip(1),
+                                                                             machine.scc_chip(2)},
+                psg_only ? nullptr : &machine.ym2413(),
+                psg_only ? sony_msx::frontend::MachineAudioMixer::FmSources{nullptr, nullptr}
+                         : sony_msx::frontend::MachineAudioMixer::FmSources{
+                               fmpac_opll(machine.fmpac(1)), fmpac_opll(machine.fmpac(2))},
+                (opts.audio_no_click || psg_only) ? nullptr : &machine.click_dac(),
+                audio_next_boundary, window);
+            const std::uint32_t from = opts.audio_from.value_or(0);
+            const std::uint32_t to = opts.audio_to.value_or(*opts.frames);
+            if (frame >= from && frame <= to) {
+                audio_pcm.push_back(smp[0]);
+                audio_pcm.push_back(smp[1]);
+            }
+            audio_prev_boundary = audio_next_boundary;
+            ++audio_sample_index;
+            audio_next_boundary = audio_sample_index * kAudioSysHz / kAudioRateHz;
+        }
+    };
+
     std::uint32_t steps = 0;
     if (opts.frames.has_value()) {
         // M32 frame-loop mode: the real production drive shape
@@ -1011,8 +1168,48 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                 machine.step_cpu_instruction();
                 script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
                 ++steps;
+                // M39-A Fix B: interleaved sub-frame-accurate audio production.
+                if (audio_sync_dump) {
+                    emit_synced_audio(frame);
+                }
             }
             machine.on_vsync_boundary();
+            // M39-A Step 1: per-frame edge/write-rate diagnostic row (deltas).
+            if (opts.io_observe_name.has_value()) {
+                const std::uint64_t edges = machine.click_dac().edge_count();
+                io_observe_csv += std::to_string(frame) + "," +
+                                  std::to_string(edges - prev_click_edges) + "," +
+                                  std::to_string(psg_write_counter.vol_writes - prev_psg_vol) + "," +
+                                  std::to_string(psg_write_counter.total_writes - prev_psg_total) + "\n";
+                prev_click_edges = edges;
+                prev_psg_vol = psg_write_counter.vol_writes;
+                prev_psg_total = psg_write_counter.total_writes;
+            }
+            // M39-A Step 3 (BATCH / BEFORE leg only -- the interleaved AFTER leg
+            // produces samples inside the step loop above): mix this frame's
+            // audio (exact-accounting count) to keep every generator -- incl. the
+            // 1-bit DAC -- in lockstep; append only within the frame window.
+            if (audio_dump && !audio_sync_dump) {
+                const std::uint64_t total_target = machine.elapsed_cycles() * kAudioRateHz / kAudioSysHz;
+                const std::size_t n =
+                    total_target > audio_emitted ? static_cast<std::size_t>(total_target - audio_emitted) : 0;
+                audio_emitted += n;
+                std::vector<std::int16_t> frame_pcm = audio_mixer.mix_interleaved_stereo(
+                    machine.psg(),
+                    psg_only ? sony_msx::frontend::MachineAudioMixer::SccSources{nullptr, nullptr}
+                             : sony_msx::frontend::MachineAudioMixer::SccSources{machine.scc_chip(1),
+                                                                                 machine.scc_chip(2)},
+                    psg_only ? nullptr : &machine.ym2413(),
+                    psg_only ? sony_msx::frontend::MachineAudioMixer::FmSources{nullptr, nullptr}
+                             : sony_msx::frontend::MachineAudioMixer::FmSources{
+                                   fmpac_opll(machine.fmpac(1)), fmpac_opll(machine.fmpac(2))},
+                    (opts.audio_no_click || psg_only) ? nullptr : &machine.click_dac(), n);
+                const std::uint32_t from = opts.audio_from.value_or(0);
+                const std::uint32_t to = opts.audio_to.value_or(*opts.frames);
+                if (frame >= from && frame <= to) {
+                    audio_pcm.insert(audio_pcm.end(), frame_pcm.begin(), frame_pcm.end());
+                }
+            }
             // M36 Phase 3: deterministic mid-run capture at the requested frame
             // boundary (the same post-on_vsync_boundary() point --dump-frame /
             // --swap-disk-frame already use).
@@ -1050,6 +1247,32 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     // M36-S-d: persist the FM-PAC battery SRAM back to its .sram file.
     if (opts.fmpac_sram_path.has_value() && machine.flush_fmpac_sram()) {
         std::cerr << "debug-session: flushed FM-PAC SRAM to \"" << *opts.fmpac_sram_path << "\"\n";
+    }
+
+    // M39-A Step 1: write the per-frame edge/write-rate diagnostic CSV.
+    if (opts.io_observe_name.has_value()) {
+        std::ofstream csv(*opts.io_observe_name, std::ios::binary | std::ios::trunc);
+        if (!csv) {
+            std::cerr << "debug-session: cannot write --io-observe " << *opts.io_observe_name << "\n";
+            return 2;
+        }
+        csv.write(io_observe_csv.data(), static_cast<std::streamsize>(io_observe_csv.size()));
+        std::cerr << "debug-session: wrote io-observe CSV " << *opts.io_observe_name
+                  << " total_click_bit7_edges=" << prev_click_edges
+                  << " total_psg_vol_writes=" << prev_psg_vol
+                  << " total_psg_writes=" << prev_psg_total << "\n";
+    }
+
+    // M39-A Step 3: write the voice-window full-machine audio dump.
+    if (audio_dump) {
+        if (!sony_msx::frontend::write_pcm_audio_dump(machine.debug_root(), *opts.audio_dump_name,
+                                                      audio_pcm, kAudioRateHz)) {
+            std::cerr << "debug-session: failed to write --audio-dump " << *opts.audio_dump_name << "\n";
+            return 2;
+        }
+        std::cerr << "debug-session: wrote audio dump " << machine.debug_root().string() << "/sounds/"
+                  << *opts.audio_dump_name << " samples=" << (audio_pcm.size() / 2)
+                  << (opts.audio_no_click ? " (no-click/BEFORE)" : " (click on/AFTER)") << "\n";
     }
 
     // M36 Phase 3: end-of-run comprehensive snapshot (unless a mid-run
