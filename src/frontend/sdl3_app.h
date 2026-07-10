@@ -67,19 +67,17 @@ struct Sdl3AppConfig {
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
     // interactive session.
     bool hidden_window = false;
-    // Border-canvas composition (default ON, M39-B): the video presenter
-    // places the active area at its raster-true openMSX-matching position
-    // inside the live R#7-colored 320x240 / 640x240 canvas
-    // (frontend/border_composer.h). This is the ONLY present that matches
-    // openMSX's vertical framing + per-pixel aspect for BOTH 192- and 212-line
-    // modes -- the bare edge-to-edge present (border_enabled == false, the
-    // pre-M39-B default, still reachable via --no-border) vertically squishes
-    // 212-line content (stretching 256x212 to fill 320x240 = 1.25x H but only
-    // 1.132x V) and jams the active area to the window's top edge with no
-    // border headroom (docs/m39-fix-plans.md Issue 1). R#18-neutral software is
-    // byte-identical either way; the composed canvas is a strict superset of
-    // the correct 4:3 geometry.
-    bool border_enabled = true;
+    // Border-canvas composition (default OFF, M39-D human preference revert):
+    // the DEFAULT present is the bare edge-to-edge active area -- the Sony-
+    // original look, with the active display filling the window and no framing
+    // border. When true (opt-in via --border) the video presenter places the
+    // active area at its raster-true openMSX-matching position inside the live
+    // R#7-colored 320x240 / 640x240 canvas (frontend/border_composer.h): active
+    // top row 24 @192-line / 14 @212-line, matching openMSX's vertical framing.
+    // R#18-neutral software is byte-identical either way. 7fac03d had defaulted
+    // this ON; the human prefers the Sony edge-to-edge default, so it reverts to
+    // false and --border becomes the active opt-in again (docs/m39-fix-plans.md).
+    bool border_enabled = false;
     // A bounded, non-interactive run length for headless/manual-verification
     // use (§2.3). std::nullopt (the default) means run_interactive() only
     // stops on SDL_EVENT_QUIT.

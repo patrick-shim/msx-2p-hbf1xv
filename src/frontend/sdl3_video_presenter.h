@@ -36,11 +36,12 @@ namespace sony_msx::frontend {
 // (composition copies pixel values, never converts them).
 //
 // The CONSTRUCTOR default is false (bare) -- direct/test construction stays byte-for-byte
-// the pre-border presentation. The SDL3 APP, however, defaults border ON (M39-B,
-// Sdl3AppConfig::border_enabled = true): the composed canvas is the ONLY present that
-// matches openMSX's vertical framing + per-pixel aspect for BOTH 192- and 212-line modes
-// (the bare present vertically squishes 212-line content and drops the border headroom).
-// `--no-border` selects the bare present at the app level.
+// the pre-border presentation. The SDL3 APP also defaults border OFF (M39-D,
+// Sdl3AppConfig::border_enabled = false): the bare edge-to-edge active area is the Sony-
+// original default look per the human's explicit preference. `--border` opts into the
+// composed canvas, which matches openMSX's vertical framing for BOTH 192- and 212-line
+// modes; `--no-border` is the explicit off (matches the default). (7fac03d/M39-B had
+// briefly defaulted this ON; M39-D reverts it to the human-chosen Sony default.)
 //
 // `blit_frame()`/`present()` are split (rather than one combined call) so a test can read
 // back the texture's presented pixel data via `SDL_RenderReadPixels` between the two steps

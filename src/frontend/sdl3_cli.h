@@ -47,18 +47,19 @@ struct ParsedSdl3Cli {
     std::optional<std::uint32_t> max_frames;
     bool hidden_window = false;  // --hidden-window (test/CI convenience; never SDL3-dependent to parse)
     // Border-canvas composition around the active area (border_composer.h).
-    // Default ON (M39-B): the active area is placed at its raster-true
-    // openMSX-matching position inside the live R#7-colored 320x240 / 640x240
-    // canvas -- the ONLY presentation that matches openMSX's vertical framing
-    // AND per-pixel aspect for BOTH 192- and 212-line modes (a 212-line active
-    // area is 20 lines TALLER than a 192-line one and eats into the border; it
-    // must NOT be squished to fill the same height). Measured vs openMSX 19.1
-    // Sony_HB-F1XV: active top row = 24 (192-line) / 14 (212-line), the exact
-    // border_geometry() y0 anchors (docs/m39-fix-plans.md Issue 1). `--no-border`
-    // opts back into the bare active area presented edge-to-edge (the pre-M39-B
-    // default; correct 4:3 only for 192-line, vertically squished for 212-line).
-    // `--border` is still accepted and is now a no-op alias for the default.
-    bool border_enabled = true;
+    // Default OFF (M39-D, human preference revert): the DEFAULT present is the
+    // bare edge-to-edge active area -- the Sony-original look (the active display
+    // fills the window with no framing border). `--border` OPTS IN to the
+    // openMSX-matching framed canvas, which places the active area at its
+    // raster-true position (active top row 24 @192-line / 14 @212-line, the
+    // border_geometry() y0 anchors measured vs openMSX 19.1 Sony_HB-F1XV) inside
+    // the live R#7-colored 320x240 / 640x240 canvas. `--no-border` is the
+    // explicit off (matches the default). Last-wins on a linear scan. Note:
+    // 7fac03d had made the framed canvas the default and turned --border into a
+    // no-op alias; per the human's explicit preference the default reverts to
+    // the Sony edge-to-edge look and --border is restored as the active opt-in
+    // (a deliberate preference revert, NOT a weakening).
+    bool border_enabled = false;
     // M36-S-c: --disk-writable opts into host-file disk-save persistence.
     // Default OFF = in-memory-only (never clobbers a real .dsk); a dirty
     // writable image flushes on shutdown and before a swap discards it.

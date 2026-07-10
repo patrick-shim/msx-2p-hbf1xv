@@ -89,10 +89,13 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
         } else if (arg == "--hidden-window") {
             parsed.hidden_window = true;
         } else if (arg == "--border") {
-            parsed.border_enabled = true;  // M39-B: now a no-op alias for the default (border ON)
+            // M39-D (human preference revert): the active OPT-IN to the openMSX-
+            // matching framed canvas (the default is now the bare Sony edge-to-
+            // edge present). Last-wins vs a later --no-border on the linear scan.
+            parsed.border_enabled = true;
         } else if (arg == "--no-border") {
-            // M39-B: opt back into the bare active-area-edge-to-edge present
-            // (the pre-M39-B default). Last-wins vs an earlier --border, since
+            // M39-D: explicit OFF -- the bare edge-to-edge active-area present
+            // (matches the default). Last-wins vs an earlier --border, since
             // this is a plain linear scan (mirrors the other boolean flags).
             parsed.border_enabled = false;
         } else if (arg == "--disk-writable") {
