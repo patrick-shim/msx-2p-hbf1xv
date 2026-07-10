@@ -29,6 +29,15 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
 std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
     devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* const fm,
     const std::size_t sample_count) const {
+    // M37: byte-behaviour identical delegation (an all-null FmSources
+    // contributes an exact 0 fm_pac term to every sample -- the M37 hard
+    // regression oracle; the built-in-OPLL + PSG + SCC mix is untouched).
+    return mix_interleaved_stereo(psg, sccs, fm, FmSources{nullptr, nullptr}, sample_count);
+}
+
+std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
+    devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* const fm,
+    const FmSources& fm_pacs, const std::size_t sample_count) const {
     std::vector<std::int16_t> pcm;
     pcm.reserve(sample_count * 2);
     for (std::size_t i = 0; i < sample_count; ++i) {
@@ -65,14 +74,32 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
             fm_term = fm->fm_sample() * kFmAmplitudeScale;
         }
 
+        // FM-PAC (M37 Slice B): each inserted external FM-PAC cartridge owns
+        // its OWN, second YM2413 OPLL. Advance every non-null one by the SAME
+        // per-sample delta as the built-in `fm` (identical 9:8 decimation
+        // cadence) and sum their mono native samples, then apply the SAME
+        // kFmAmplitudeScale (reused, not a new scaling). An all-null fm_pacs
+        // (no FM-PAC inserted) sums to exactly 0 -> byte-identical to the
+        // pre-M37 mix for ANY input (the M37 hard regression oracle). FM-PAC
+        // output is mono, so like SCC/FM the same term lands on both channels.
+        std::int32_t fm_pac_sum = 0;
+        for (devices::audio::Ym2413Opll* fm_pac : fm_pacs) {
+            if (fm_pac != nullptr) {
+                fm_pac->advance_cycles(pump_.cycles_per_sample());
+                fm_pac_sum += fm_pac->fm_sample();
+            }
+        }
+        const std::int32_t fm_pac_term = fm_pac_sum * kFmAmplitudeScale;
+
         const std::int32_t scc_term = scc_sum * kSccAmplitudeScale;
-        // The clamp is REQUIRED (R-M29-4 / R-M31-4): two SCCs + a loud PSG
-        // exceed int16, and so can a loud FM mix (see header arithmetic).
-        // SCC and FM are mono -- the same terms land on both channels.
-        const std::int32_t left =
-            std::clamp(s.left * kPsgAmplitudeScale + scc_term + fm_term, -32768, 32767);
-        const std::int32_t right =
-            std::clamp(s.right * kPsgAmplitudeScale + scc_term + fm_term, -32768, 32767);
+        // The clamp is REQUIRED (R-M29-4 / R-M31-4, extended M37): two SCCs +
+        // a loud PSG exceed int16, and so can a loud built-in-FM + FM-PAC mix
+        // (see header arithmetic). SCC and FM/FM-PAC are mono -- the same
+        // terms land on both channels.
+        const std::int32_t left = std::clamp(
+            s.left * kPsgAmplitudeScale + scc_term + fm_term + fm_pac_term, -32768, 32767);
+        const std::int32_t right = std::clamp(
+            s.right * kPsgAmplitudeScale + scc_term + fm_term + fm_pac_term, -32768, 32767);
         pcm.push_back(static_cast<std::int16_t>(left));
         pcm.push_back(static_cast<std::int16_t>(right));
     }

@@ -144,11 +144,21 @@ public:
     // source (the pacer still only decides HOW MANY samples; DEC-0033
     // untouched). The narrower overloads forward with fm = nullptr, whose
     // mixed output is byte-identical to v1.0.31 (the M31 hard oracle).
+    //
+    // M37 Slice B (DEC-0055): the fm_pacs overload adds 0..2 inserted external
+    // FM-PAC cartridge OPLLs as ADDITIVE sources beyond the built-in `fm` --
+    // each advanced by the same per-sample cycle delta and mixed with the same
+    // scale (the pacer still only decides HOW MANY samples; DEC-0033
+    // untouched). The narrower overloads forward with an all-null FmSources,
+    // whose mixed output is byte-identical to v1.0.36 (the M37 hard oracle).
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, std::uint64_t total_elapsed_cycles);
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
                              std::uint64_t total_elapsed_cycles);
     void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
                              devices::audio::Ym2413Opll* fm, std::uint64_t total_elapsed_cycles);
+    void pump_and_push_paced(devices::audio::PsgYm2149& psg, const MachineAudioMixer::SccSources& sccs,
+                             devices::audio::Ym2413Opll* fm, const MachineAudioMixer::FmSources& fm_pacs,
+                             std::uint64_t total_elapsed_cycles);
 
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }

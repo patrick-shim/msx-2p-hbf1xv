@@ -1197,6 +1197,14 @@ target_link_libraries(frontend_machine_audio_mixer_fm_unit_test PRIVATE sony_msx
 add_test(NAME frontend_machine_audio_mixer_fm_unit_test
     COMMAND frontend_machine_audio_mixer_fm_unit_test)
 
+# M37 Slice B (DEC-0055): inserted FM-PAC cartridge OPLL mixed additively.
+add_executable(frontend_machine_audio_mixer_fmpac_unit_test
+    unit/frontend/machine_audio_mixer_fmpac_unit_test.cpp
+)
+target_link_libraries(frontend_machine_audio_mixer_fmpac_unit_test PRIVATE sony_msx_core)
+add_test(NAME frontend_machine_audio_mixer_fmpac_unit_test
+    COMMAND frontend_machine_audio_mixer_fmpac_unit_test)
+
 add_executable(machine_hbf1xv_m31_fm_title_probe_integration_test
     integration/machine/hbf1xv_m31_fm_title_probe_integration_test.cpp
 )

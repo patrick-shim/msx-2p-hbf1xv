@@ -89,6 +89,17 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
                                              const MachineAudioMixer::SccSources& sccs,
                                              devices::audio::Ym2413Opll* const fm,
                                              const std::uint64_t total_elapsed_cycles) {
+    // Pre-M37 signature preserved verbatim: no FM-PAC source (byte-identical
+    // output to v1.0.36 -- the mixer's M37 hard regression oracle).
+    pump_and_push_paced(psg, sccs, fm, MachineAudioMixer::FmSources{nullptr, nullptr},
+                        total_elapsed_cycles);
+}
+
+void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
+                                             const MachineAudioMixer::SccSources& sccs,
+                                             devices::audio::Ym2413Opll* const fm,
+                                             const MachineAudioMixer::FmSources& fm_pacs,
+                                             const std::uint64_t total_elapsed_cycles) {
     if (stream_ == nullptr) {
         return;
     }
@@ -119,11 +130,12 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
     }
 
     // ALWAYS pump the full batch: EVERY generator's (PSG + attached SCCs' +
-    // FM's) notion of time stays in lockstep with the machine's elapsed
-    // cycles even when the pushed output is trimmed by backpressure
-    // (M29-S5/M31-S5; the DEC-0033 invariant extended uniformly).
+    // built-in FM's + inserted FM-PAC OPLLs') notion of time stays in lockstep
+    // with the machine's elapsed cycles even when the pushed output is trimmed
+    // by backpressure (M29-S5/M31-S5/M37-SliceB; the DEC-0033 invariant
+    // extended uniformly).
     const std::vector<std::int16_t> pcm = mixer_.mix_interleaved_stereo(
-        psg, sccs, fm, static_cast<std::size_t>(decision.samples_to_pump));
+        psg, sccs, fm, fm_pacs, static_cast<std::size_t>(decision.samples_to_pump));
 
     if (decision.samples_to_push == 0) {
         return;

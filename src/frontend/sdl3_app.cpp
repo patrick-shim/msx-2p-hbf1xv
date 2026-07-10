@@ -383,9 +383,21 @@ void Sdl3App::run_one_frame() {
         // real FM synthesis (backlog E1). A silent (never-keyed) OPLL
         // contributes exactly 0 to every sample (the M31 hard oracle), so
         // FM-less software sounds byte-identical to v1.0.31.
+        //
+        // M37 Slice B (DEC-0055): the OPLL(s) of any inserted external FM-PAC
+        // cartridge are ADDITIONAL mixed sources -- queried fresh each frame
+        // (nullptr when a bay holds no FM-PAC cart), so with no FM-PAC inserted
+        // the mixed output is byte-identical to v1.0.36 (the M37 hard oracle).
+        // This is what makes FM-PAC music (e.g. SRAM-save games) actually
+        // audible, alongside the SRAM the cartridge already provides.
+        const auto fmpac_opll = [](devices::cartridge::CartridgeFmPacRom* cart) {
+            return cart != nullptr ? &cart->opll() : nullptr;
+        };
         audio_presenter_->pump_and_push_paced(
             machine_.psg(), MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
-            &machine_.ym2413(), machine_.elapsed_cycles());
+            &machine_.ym2413(),
+            MachineAudioMixer::FmSources{fmpac_opll(machine_.fmpac(1)), fmpac_opll(machine_.fmpac(2))},
+            machine_.elapsed_cycles());
     }
 
     ++frames_run_;

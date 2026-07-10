@@ -98,6 +98,38 @@ namespace sony_msx::frontend {
 // output is byte-identical to the v1.0.31 3-arg arithmetic for ANY input
 // sequence (the M29 zero-SCC oracle pattern). The 3-arg overload below
 // delegates with fm = nullptr and stays byte-behaviour identical.
+//
+// M37 Slice B (DEC-0055, R-D): a FOURTH+ source class -- the OPLL(s) of any
+// inserted external Panasonic FM-PAC CARTRIDGE (a SECOND, independent YM2413
+// per external cartridge bay; the real HB-F1XV's built-in MSX-MUSIC OPLL is
+// the `fm` term above, and an inserted FM-PAC adds ANOTHER whole OPLL). These
+// are mixed ADDITIVELY through an `FmSources` array (one slot per external
+// bay, exactly the SccSources shape -- real hardware sums both bays' sound-
+// out lines), reusing the SAME kFmAmplitudeScale and the SAME per-sample
+// advance cadence as the built-in `fm` (no new scaling, no new DSP -- the
+// planner's "wholly-additive follow-on", cartridge_fmpac_rom.h:61-62). The
+// mixing law extends to:
+//
+//   pcm = clamp_int16(psg_raw * kPsgAmplitudeScale
+//                     + scc_sum  * kSccAmplitudeScale
+//                     + fm_sample     * kFmAmplitudeScale
+//                     + fm_pac_sum    * kFmAmplitudeScale)
+//
+// where fm_pac_sum is the sum of every non-null FM-PAC OPLL's mono native
+// sample (mono, like SCC/FM: the same term lands on both channels). Each
+// non-null FM-PAC OPLL is advanced by the same cycles_per_sample as every
+// other generator (generator time always tracks machine time).
+//
+// M37 HARD REGRESSION ORACLE (§ Deliverable): with NO FM-PAC inserted -- an
+// all-null FmSources -- fm_pac_sum is exactly 0, so the output is byte-for-
+// byte identical to the pre-M37 (v1.0.36) built-in-OPLL + PSG + SCC mix for
+// ANY input sequence. The pre-M37 overloads (2/3/4-arg) delegate with an
+// all-null FmSources and stay byte-behaviour identical (the M29/M31/M34
+// oracles survive unchanged). CLAMP MATH: adding up to two more full-scale
+// OPLLs only pushes the already-saturating worst case higher (27 aligned
+// carriers max: 9 built-in + 9 + 9) -- the int16 clamp was already REQUIRED
+// (R-M29-4/R-M31-4) and remains correct; realistic FM+FM-PAC music sits far
+// below it.
 class MachineAudioMixer {
 public:
     // Must match Sdl3AudioPresenter::kAmplitudeScale (static_assert'ed in
@@ -168,6 +200,13 @@ public:
     // loaded" regression null, Hbf1xvMachine::scc_chip()'s own contract).
     using SccSources = std::array<devices::audio::SccWavetable*, 2>;
 
+    // M37 Slice B: 0..2 inserted FM-PAC cartridge OPLLs (one per external
+    // cartridge bay); nullptr entries are skipped (the "no FM-PAC cart in this
+    // bay" regression null, Hbf1xvMachine::fmpac()'s own contract). Distinct
+    // from the built-in MSX-MUSIC OPLL passed as `fm` -- these are the SECOND,
+    // independent YM2413(s) the inserted cartridge(s) own.
+    using FmSources = std::array<devices::audio::Ym2413Opll*, 2>;
+
     // cycles_per_sample: the 3.58 MHz system-cycle delta advanced per sample
     // (the caller computes it; kCyclesPerSample = 81 inherits the disclosed
     // -3.6 cent integer simplification documented in sdl3_audio_presenter.h
@@ -184,9 +223,21 @@ public:
     // M31: the three-source overload. A nullptr fm contributes exactly 0 to
     // every sample (the hard regression oracle); a non-null fm is advanced
     // by cycles_per_sample per pair, exactly like the SCC sources.
+    // Byte-behaviour identical to pre-M37: delegates below with an all-null
+    // FmSources (no inserted FM-PAC -> fm_pac_sum == 0).
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
         std::size_t sample_count) const;
+
+    // M37 Slice B: the FM-PAC overload. Adds 0..2 inserted FM-PAC cartridge
+    // OPLLs as ADDITIVE sources, mixed with the SAME kFmAmplitudeScale and the
+    // SAME per-sample advance cadence as the built-in `fm`. An all-null
+    // fm_pacs contributes exactly 0 to every sample (the M37 hard regression
+    // oracle -- byte-identical to the 4-arg overload); each non-null entry is
+    // advanced by cycles_per_sample per pair, exactly like `fm` and the SCCs.
+    [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
+        devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
+        const FmSources& fm_pacs, std::size_t sample_count) const;
 
     [[nodiscard]] const PsgAudioPump& pump() const { return pump_; }
     [[nodiscard]] std::uint64_t cycles_per_sample() const { return pump_.cycles_per_sample(); }
