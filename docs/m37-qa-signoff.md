@@ -147,3 +147,123 @@ blocker-level; Slice E visual issue is a non-blocking follow-up fix).
 - The adversarial Slice C mutation was performed non-destructively (DEC-0049): `cp` backup ->
   edit -> build -> test -> restore from backup; `git status`/`git diff` confirmed the tree
   byte-identical afterward, and the affected target was rebuilt from the restored source.
+
+---
+
+# Slice F delta / final v1.0.38 sign-off (A-F)
+
+- Delta added: **DEC-0057** live-verify PASS + new **Slice F** (`83a0888`, SDL3-frontend-only).
+- Range now verified: `e845b1e..HEAD` (HEAD = `83a0888`), 7 commits / 6 slices. Slice F touches
+  ONLY `src/frontend/{sdl3_app,sdl3_cli,sdl3_main}.{cpp,h}` (+ two test files + a checksum regen) —
+  zero `src/devices/cpu` / `src/core` / VDP / PSG / memory / slot edits.
+- QA re-run performed from the ONE canonical `build/` after a **fully pristine from-scratch
+  bootstrap** (full wipe incl. the vendored SDL3 install -> `tools/bootstrap-build.ps1`, SDL3=ON
+  superset). Date: 2026-07-10.
+
+## Precondition: A-E converted to full PASS (DEC-0057)
+
+The prior Conditional Pass gated on two human live-verify actions. Per **DEC-0057** the human
+LIVE-VERIFIED the candidate ("YS II loads and plays perfectly, SRAM works perfectly, screen looks
+good"), discharging **both** Gate 1 (Slice C YS II two-disk boot + interior/disk load + save under
+the new WD2793 rotational read-latency — no regression) and Gate 2 (Slice E SDL3 scaling/visual).
+Slices **A-E are therefore full PASS**. No re-litigation below; this section is the Slice F delta +
+whole-release no-regression confirmation only.
+
+## F. Regression Scope (delta)
+
+Behavior-affecting surface added by Slice F: (F1) an off-by-default `--capture <on|off>` gate on the
+F10 stream-capture host hotkey, and (F2) a default-window-size change 640x480 (scale 2) -> 960x720
+(scale 3). Both are SDL3-frontend-only, additive, and off/inert by default. The regression matrix
+extends the A-E matrix with the F10-gate differential and the re-derived default-window oracle; it
+also re-confirms the A-E automated oracles are still green after the Slice F rebuild.
+
+## F. Regression Matrix Status (delta + whole-release re-run)
+
+| Area | Evidence | Result |
+| --- | --- | --- |
+| cpu/core untouched — WHOLE range | `git diff --stat e845b1e..HEAD -- src/devices/cpu src/core` = **EMPTY** | PASS |
+| Full deterministic suite (excl. #128 ZEXALL) | `ctest -E hbf1xv_m24_zexall_system_test` from pristine build/ | **210/210 passed, 0 failed** (67.87 s) |
+| Registry / exclusion accounting | `ctest -N` = **211** total; `-E` set = **210**; excluded = exactly #128 ZEXALL | PASS (1 excluded) |
+| ZEXALL withhold justification | durable RC all-pass log `docs/m31-rc-zexall-log.txt` (`ok_markers=67 error_markers=0` both ZEXALL+ZEXDOC); cpu/core LOGIC byte-identical to v1.0.37 | PASS |
+| F1 — `--capture` parse oracle | `sdl3_cli_unit_test` Case 15: on->true / off->false / absent->false / bad->error+false / missing->error+false / order-independent w/ `--stream-light` — all HARD asserts | PASS |
+| F1 — F10-gate end-to-end (non-vacuous) | scaling integ Cases 5+6: identical injected `SDL_EVENT_KEY_DOWN`/F10 via real `run_one_frame()`->`poll_and_dispatch_events()`; **off -> stream inactive**, **on -> stream active** | PASS (two-sided differential) |
+| F2 — default window 960x720 (HARD) | scaling integ Case 4: config field == 960x720 **AND** live `SDL_GetWindowSize` read-back == 960x720 | PASS |
+| F2 — scale-absent parser assert preserved | `sdl3_cli_unit_test` Case 11: `!pabsent.scale.has_value()` predicate UNCHANGED (only label re-derived); `--scale 3`==3, bounds/non-numeric/missing error asserts intact | PASS (not weakened) |
+| Additive discipline — sdl3_cli | pre-existing Cases 1-14 unchanged; only additive Case 15 + one label rename | PASS |
+| No-regression — Slice B audio | `frontend_machine_audio_mixer_fmpac_unit_test` (#165) | PASS |
+| No-regression — Slice C FDC/boot/disk | wd2793_type2 (#70), m16_fdc (#74), boot suite (#13/#49/#67/#75/#178/#171), disk-save (#154), multi-disk (#207) | PASS |
+| No-regression — Slice D/E scaling/pixel | `sdl3_app_scaling_integration_test` (#210), video-presenter pixel (#198), `sdl3_cli_unit_test` (#138) | PASS |
+| Evidence gate — assets | `tools/validate-assets.ps1` = **True** (7 BIOS incl. `f1xvmus.rom`, 5 ROMs) | PASS |
+| Evidence gate — executables | pristine `build/Debug/sony_msx_headless.exe` (2.08 MB) + `sony_msx_sdl3.exe` (2.04 MB) built | PASS |
+
+> Test-number note: the `-E` run renumbers 1..210 (ZEXALL #128 removed), so tests after #128 read
+> `N-1` vs the A-E section's full-registry numbering (audio 166->165, cli 139->138, scaling 211->210,
+> pixel 199->198, disk-save 155->154, multi-disk 208->207). No test was lost; #70 (pre-#128) is
+> unchanged. Total registry count is unchanged (Slice F added test *cases*, not new test binaries).
+
+### Slice F per-item verdicts
+
+- **F1 (`--capture <on|off>` F10 gate) — PASS.** Source: `sdl3_app.cpp:352` guards the F10 branch on
+  `config_.capture_enabled && ... SDL_SCANCODE_F10 && !repeat`; when OFF the event is NOT consumed and
+  falls through to `input_mapper_.dispatch_event()` where F10 is unmapped -> zero matrix effect, no
+  toggle, no log (byte-identical default gameplay). F11 disk-swap (`:329`), F12 snapshot (`:338`),
+  Alt+Enter fullscreen (`:364`) are untouched. Parse: `sdl3_cli.cpp:171-183` mirrors the `--filter`
+  value policy (on/off else `.errors`). The F10-gate oracle is **non-vacuous by construction**: Cases
+  5 and 6 push the IDENTICAL fresh-F10 key-down event through the REAL event loop and differ ONLY in
+  `config.capture_enabled`, yielding OPPOSITE observable outcomes via `stream_capture_active()`
+  (false vs true). This is mutation-equivalent (Case 5 = gate-closed reality, Case 6 = gate-open
+  reality) — a stronger non-tautology proof than a one-sided mutation, so no separate adversarial
+  mutation was required for Slice F.
+- **F2 (default `--scale 3 --filter linear`) — PASS.** `Sdl3AppConfig` default `window_width/height`
+  moved 640x480 -> 960x720 (`sdl3_app.h:69-70`); `sdl3_main.cpp:121-124` still overrides ONLY when
+  `--scale` is present (320N x 240N, N in [1,8]); logical presentation stays 320x240 letterbox
+  (Slice E, asserted Case 3). The change is a legitimate re-derivation, NOT a weakening: the
+  scale-absent parser contract (`!scale.has_value()`) is preserved verbatim (only the test label was
+  re-derived), and the new default is a HARD double assert (config field AND live `SDL_GetWindowSize`
+  read-back). `--filter` default was already linear (no behavior change).
+
+## F. Failures and Risk Ranking
+
+No test failures. No blocker/critical/high finding. Two residual items, both low-risk:
+
+- **Low (informational, non-blocking) — trivial stale code comment.** `sdl3_main.cpp:120` still reads
+  `// ... absent keeps the default 640x480 (= scale 2).` The CODE is correct (the 960x720 default now
+  lives in `sdl3_app.h` and `main.cpp` only overrides when `--scale` is present); only the inline
+  comment is stale. The user-facing `--help` text was correctly updated to `default 3 = 960x720`.
+  Purely cosmetic; does not affect behavior or any assertion. Optional cleanup, does NOT gate the tag.
+- **Low (live-visual, non-blocking) — two un-headless-assertable items.** (a) the 960x720 window
+  actually opening on a real display, and (b) a real-session F10-inert confirmation. Both are
+  **structurally covered**: (a) by Case 4's live `SDL_GetWindowSize` read-back on a real SDL3 window
+  (dummy driver), (b) by the Cases 5/6 injected-event differential through the real event loop. The
+  earlier A-E live-verify (DEC-0057) already exercised a real interactive SDL3 window, and Slice F
+  only changes a default size + adds an off-by-default gate. **These do NOT gate the tag.**
+
+## F. Required Fixes
+
+None. The stale comment is an optional trivial follow-up, not a defect blocking release.
+
+## F. Sign-off Decision (A-F): **PASS**
+
+All mechanical/automated regression criteria PASS from a fully pristine from-scratch build:
+cpu/core provably untouched across the WHOLE `e845b1e..HEAD` range (ZEXALL withhold justified against
+the durable RC all-pass log + byte-identical CPU logic vs v1.0.37), **210/210** deterministic tests
+green (exactly ZEXALL #128 withheld), Slice F oracles verified hard + non-vacuous (the F10 gate by a
+two-sided injected-event differential; the 960x720 default by a config + live read-back double
+assert), additive discipline confirmed, no A-E regression, and both evidence gates (assets + both
+executables) green. Slices A-E are full PASS via the DEC-0057 human live-verify. **No blocker remains
+and no tag gate remains** — the two live-visual items are structurally covered and explicitly
+non-gating. **v1.0.38 (A-F) is cleared for tagging** (owner-run push per DEC-0047; coordinator owns
+the tag/checkpoint — QA does not commit).
+
+### Assumptions / verification notes (Slice F pass)
+
+- Assumption: my first rebuild attempt's project tree vanished from `build/` after an exit-0 build (a
+  transient filesystem anomaly, cause undetermined). Verification action taken: I discarded it and ran
+  a **fully pristine** from-scratch bootstrap (wiped `build/` entirely incl. the vendored SDL3 install,
+  rebuilt SDL3 + project), confirmed both exes + `build/CTestTestfile.cmake` persisted, and ran the
+  suite from that tree — 210/210. All Slice F results above are from the pristine tree.
+- The `git status` working tree was clean before and after this QA pass; only the gitignored `build/`
+  was wiped/rebuilt — no tracked source was perturbed (DEC-0049 non-destructive discipline).
+- I did not re-run openMSX in this pass; Slice F is SDL3-frontend-only (window default + host-hotkey
+  gate) with no device-timing/parity surface, so no openMSX A/B is applicable to the delta. The
+  Slice C parity evidence is unchanged from the A-E section and was live-verified by the human.

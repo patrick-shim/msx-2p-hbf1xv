@@ -2159,3 +2159,19 @@ Use this format:
   1. **Slice C (Medium; blocker-level if it regresses):** YS II two-disk re-check — boot both disks, confirm an in-game interior/disk load completes with the new rotational read-latency (no automated YS-II regression exists; required by DEC-0055/0056).
   2. **Slice E (Low; non-blocking follow-up):** SDL3 `--scale 4 --filter linear|nearest`, drag-resize, Alt+Enter fullscreen both directions (no RETURN leak); optional `--speed 7` slow-down glance.
 - Disposition: coordinator to route the two live-verify actions to the human; on both passing, Conditional Pass → full PASS → release decision + git tag v1.0.38. QA doc: docs/m37-qa-signoff.md.
+
+---
+
+- Response ID: RESP-M37-QA-FINAL
+- Timestamp: 2026-07-10T00:00:00Z
+- From: MSX QA Agent → Coordinator
+- Re: v1.0.38 final sign-off (M37 slices A–F)
+- Recommendation: **PASS** (full A–F release; supersedes the RESP-M37-QA CONDITIONAL PASS now that the DEC-0057 live-verify discharged both gates and Slice F is verified).
+- Evidence (pristine from-scratch bootstrap, single canonical build/, SDL3=ON):
+  - `ctest -E hbf1xv_m24_zexall_system_test`: **210/210 passed, 0 failed** (67.87s). Registry 211; excluded = exactly #128 ZEXALL.
+  - `git diff --stat e845b1e..HEAD -- src/devices/cpu src/core` = EMPTY across all of M37 → ZEXALL withhold justified (durable RC log docs/m31-rc-zexall-log.txt ok=67/err=0; CPU/core logic byte-identical to signed-off v1.0.37).
+  - Slice F: **F1** --capture F10 gate PASS (gated at sdl3_app.cpp:352; F10 inert when off, falls through to unmapped input; F11/F12/Alt+Enter untouched; Cases 5/6 two-sided injected-event differential = mutation-equivalent, non-vacuous). **F2** default 960×720 PASS (legitimate re-derivation, not a weakening: scale-absent parser assert preserved, bounds/error asserts hard, new default hard double-assert incl. live SDL_GetWindowSize; additive discipline Cases 1–14 intact).
+  - No-regression: Slice B audio, Slice C FDC/boot/disk/multi-disk, Slice D/E scaling all green in the clean run.
+  - Gates: validate-assets True (7 BIOS incl. f1xvmus.rom, 5 ROMs); both exes built.
+- Residual manual items (NONE gate the tag): live 960×720 window open + real-session F10-inert glance — both structurally covered (Case 4 live read-back; Cases 5/6 injected differential) and the DEC-0057 A–E live-verify already exercised a real interactive SDL3 window. One trivial stale comment (sdl3_main.cpp) — coordinator corrected post-QA (comment-only).
+- Disposition: coordinator release decision DEC-0058 → M37 CLOSED, tag v1.0.38 (owner-run push per DEC-0047). QA doc: docs/m37-qa-signoff.md (Slice F delta section appended).

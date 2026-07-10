@@ -117,7 +117,8 @@ int main(int argc, char** argv) {
     config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
                                 ? SDL_SCALEMODE_NEAREST
                                 : SDL_SCALEMODE_LINEAR;
-    // --scale N -> 320N x 240N window; absent keeps the default 640x480 (= scale 2).
+    // --scale N -> 320N x 240N window; absent keeps the default 960x720 (= scale 3,
+    // M37 Slice F / DEC-0057; the default lives in Sdl3AppConfig).
     if (parsed.scale.has_value()) {
         config.window_width = 320 * *parsed.scale;
         config.window_height = 240 * *parsed.scale;

@@ -6,9 +6,16 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M37 (post-M36 hardening, DEC-0055 + DEC-0056) — ALL 5 SLICES IMPLEMENTED +
-  committed; QA CONDITIONAL PASS (docs/m37-qa-signoff.md, clean-rebuild 210/210, cpu/core diff
-  EMPTY across the cycle); tag v1.0.38 GATED on two human live-verify actions.** Slices: A (861eec1)
+- Active Phase: **M37 CLOSED (tag v1.0.38, 2026-07-10, DEC-0058) — post-M36 hardening + two
+  live-play feature requests. QA FINAL PASS (docs/m37-qa-signoff.md, pristine rebuild 210/210,
+  cpu/core diff EMPTY across the whole cycle, no oracle weakened) + LIVE human validation (DEC-0057:
+  "YS II loads and plays perfectly, SRAM works perfectly, screen looks good").** Six slices:
+  A (861eec1) VDP-IRQ probe tool; B (85b48aa) FM-PAC OPLL audio mix; C (85827e5) WD2793 read
+  rotational latency (openMSX-corroborated, no oracle weakened); D (cd459a3) --speed CLI; E (cd459a3)
+  SDL3 window scaling/fullscreen; F (83a0888) --capture on|off F10 gate + default --scale 3/--filter
+  linear. Non-blocking follow-on backlog: WD2793 write/read-address/read-track rotational latency
+  (fixed-delay remains); optional --capture gating of the F12 snapshot. Historical M37 slice detail
+  and prior M36 context retained below. Slices: A (861eec1)
   openMSX VDP-IRQ A/B probe → tools/openmsx-vdp-irq-parity.ps1; B (85b48aa) inserted FM-PAC OPLL
   mixed into machine audio (additive, byte-identical when absent); C (85827e5) WD2793 Read-Sector
   rotational first-DRQ latency (index-pulse-relative; replaces the fixed 228-cycle R-A defect;
