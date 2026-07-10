@@ -6,18 +6,30 @@
   depth, release candidate; the ZEXALL/ZEXDOC slow sweep runs ONLY at M31's QA gate)**. The
   coordinator proceeds through all three without pausing for human sign-off; Conditional Passes
   handled via the fix-re-confirm-then-proceed pattern; only genuine blockers surface mid-run.
-- Active Phase: **M36 PHASE 2 — DEVELOPER (Kickoff 2026-07-10, DEC-0049; Phase 2A REFRAMED by
-  DEC-0050; tag target v1.0.37).** Phase 1 (the reusable msx-playtest observe-act-replay harness)
-  is DONE and committed as CHECKPOINT d522804 — coordinator-verified (boot→MSX Disk BASIC + YS II
-  title genuinely vision-read; two Phase-1 defects found, wrapper stderr bug fixed); its tooling QA
-  is DEFERRED to the single M36-closure QA sign-off (coordinator verification is NOT a QA
-  substitute). The Phase-2 gate PASSED (msx-orchestration). The DEC-0050-aligned Phase-2 planner
-  package is delivered (docs/m36-phase2-planner-package.md, RESP-M36-003); the developer is
-  dispatched for slices S-a..S-f (REQ-M36-004): S-a agent-frontmatter enabler; **S-b Bug B fix
-  [MANDATORY — "building interiors load"]**; S-c disk-save persistence; S-d FM-PAC peripheral
-  cartridge; S-e reconcile the speculative internal sram_; S-f R-M35-1. FM-PAC asset roms/fmpac.rom
-  provided by the human (both save paths achievable this cycle; a signature-valid non-canonical
-  FM-PAC variant, validate functionally). Original Phase-1 kickoff intent retained below for
+- Active Phase: **M36 — WIP CHECKPOINT COMMITTED (af44cb3, 2026-07-10, DEC-0049/0050/0051/0052; NOT
+  yet tagged). Phase 2 + Phase 3 DONE; the mandatory Bug B (YS II building-interior black screen)
+  ROOT-CAUSED but OPEN.** Phase 1 (msx-playtest harness) committed d522804. Phase 2 (DEC-0050,
+  device-level): S-a agent-frontmatter enabler; S-c disk-save persistence (DiskImage host-file
+  flush, opt-in --disk-writable, tools/format-blank-disk.ps1); S-d FM-PAC peripheral cartridge
+  (CartridgeMapperType::FmPac per MSXFmPac.cc, loadable via --cart roms/fmpac.rom, functional
+  validation, real-ROM integration test); S-e speculative internal sram_ REMOVED (bare machine =
+  "NO S-RAM AVAILABLE", correct); S-f R-M35-1 strengthened; PLUS the DSKCHG read-and-clear fix
+  (sony_fdc 0x3FFD, openMSX-grounded — a real latent media-change bug, NOT the YS II crash). Phase 3
+  (debug tooling, DEC-0051/0052; additive/read-only, zero cpu/core): the comprehensive F12 debug
+  snapshot (debug_snapshot.*) + the F10 live stream-capture (per-frame snapshots + CPU-trace ring +
+  FDC read log, auto-finalize on HALT/SP-underflow) — the F10 tool is what cracked Bug B open.
+  **Bug B: ROOT-CAUSED, OPEN.** A nested VBLANK-interrupt storm — the game runs its minimal ISR
+  (0xA5E3) with the sound routine's EI (0xA373) unpatched and never acks S#0, so the VBLANK re-fires
+  ~440x mid-ISR → stack runaway → JP(HL) into data → HALT. Our V9958 interrupt path is CORRECT
+  (audited vs openMSX); disk reads byte-perfect (12/12 sector CRCs match disk2.dsk); mapper,
+  CHS→LBA, DSKCHG all ruled out. The real divergence is UPSTREAM (the full ISR 0xA5F5 via 0xAAB4 is
+  never restored before the sound is enabled), driven by a not-yet-pinned device value/timing (top
+  suspects: WD2793 completion timing, VDP command-engine S#2). Human chose the openMSX-A/B path +
+  the checkpoint, then went AWAY authorizing AUTONOMOUS end-to-end operation (no interrupts); the
+  ONE human dependency left is the final end-to-end VERIFY (drive YS II to the building — not
+  headlessly reproducible). Running: msx-qa on the committed portion + a read-only Bug-B
+  device-timing A/B audit (WD2793 + VDP cmd-engine vs openMSX). Original Phase-1 kickoff intent
+  retained below for
   history: Per the human's ratified decisions after live YS II play: (1) BUILD A
   PLAYTEST/LIVE-QA AGENT + COMMAND FIRST — hybrid design: headless `--input-script` drive +
   `--dump-frame` PNG capture read by a vision-capable opus agent (deterministic, regression-able)

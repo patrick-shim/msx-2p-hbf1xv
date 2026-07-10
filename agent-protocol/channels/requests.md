@@ -1769,3 +1769,32 @@ Full 34-row deferred-backlog review; `docs/m24-implementation-report.md` with th
 - Constraints: additive/read-only; zero cpu/core; deterministic; feedback_system_wide_review_first + feedback_single_build_repo_hygiene.
 - Dependencies: docs/m36-phase3-planner-package.md; DEC-0051; the existing state-dump foundation; the Phase-2 uncommitted tree.
 - Requested At: 2026-07-10T19:50:00+09:00
+
+---
+
+- Request ID: REQ-M36-007..010 (consolidated back-fill -- intermediate M36 debug dispatches, coordinator-driven live during the human-in-the-loop session)
+- From: MSX Master Agent (coordinator) -> MSX Developer Agent(s) / forensic investigators (opus)
+- Milestone ID: M36 (Phase 3 + Bug B)
+- Type: Implementation + forensic investigation (dispatched live; back-filled to channel)
+- Scope: (007) Phase 3 comprehensive debug snapshot (debug_snapshot.*, F12 + --snapshot, 13 additive getters, determinism system test). (008) DSKCHG read-and-clear device fix (sony_fdc 0x3FFD) + R-M35-1 strengthen. (009) F10 live stream-capture (per-frame snapshot + 1M CPU-trace ring + FDC read log), then its enhancement (SP-underflow crash trigger, per-sector CRC log). (010) deep forensic trace analysis -> root-caused Bug B to the nested VBLANK-interrupt storm + the upstream A5F5-restore divergence; V9958 interrupt path audited CORRECT vs openMSX. All device-level/additive; zero cpu/core; deterministic. Delivered per RESP-M36-006.
+- Requested At: 2026-07-10 (multiple dispatches through the afternoon/evening)
+
+---
+
+- Request ID: REQ-M36-011
+- From: MSX Master Agent (coordinator)
+- To: MSX QA Agent (opus)
+- Milestone ID: M36 (committed checkpoint af44cb3)
+- Type: QA sign-off on the COMMITTED M36 portion (Phase 2 device features + Phase 3 tools). Bug B is a documented OPEN item, out of scope, NOT a QA failure.
+- Scope: Independent re-verification from the single canonical build/ (fast subset, ZEXALL withheld -- zero cpu/core edits, git-diff-proven); focus FM-PAC cart (real ROM), disk-save round-trip, DSKCHG one-shot, R-M35-1, the debug_snapshot + stream-capture tests, sram_-removal; non-destructive adversarial spot-checks; verdict Pass/Conditional/Fail on the committed portion -> docs/m36-qa-signoff.md.
+- Requested At: 2026-07-10T21:30:00+09:00
+
+---
+
+- Request ID: REQ-M36-012
+- From: MSX Master Agent (coordinator)
+- To: MSX Developer Agent (opus) -- ANALYSIS ONLY (no edits/build)
+- Milestone ID: M36 (Bug B)
+- Type: Read-only Bug-B device-timing A/B audit (autonomous, human away)
+- Scope: Pin the upstream divergence -- audit WD2793 completion timing + VDP command-engine S#2 vs references/openmsx-21.0 for the operations YS II does during the interior load (the CALL 8003 load span frames 2427-2445), and find the deciding branch in the existing F10 trace (debug/snapshot/traces/stream_f002253_...); propose a grounded device-level fix + how to verify (existing FDC/VDP tests + the human's end-to-end re-run). No src/ edits, no build.
+- Requested At: 2026-07-10T21:35:00+09:00
