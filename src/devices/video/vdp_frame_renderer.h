@@ -16,6 +16,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <utility>
 
 #include "devices/video/frame_buffer.h"
 #include "devices/video/v9958_vdp.h"
@@ -133,15 +134,26 @@ private:
     // DOES implement (R#25 bit0 + R#2 bit5).
     [[nodiscard]] int scrolled_name_col(int col) const;
     // Horizontal scroll for bitmap modes (R#26 coarse + R#27 fine) -- a
-    // DIFFERENT mechanism from the character-mode one above (A-M21-8).
-    // Grounded at SDLRasterizer.cc:465-471 (coarse: `8 * (lineWidth/256) *
-    // (R26&0x1F)`, doubled to 16-dot units for 512-wide modes) and
-    // PixelRenderer.cc:60-69 (fine: R#27, likewise doubled). Returns a pixel
-    // shift in [0, width); the full split-page-blit windowing mechanics
-    // (SDLRasterizer.cc:477-538) are NOT reproduced -- only the register-
-    // driven shift formula is (a disclosed depth limit).
-    [[nodiscard]] int bitmap_horizontal_shift(int width) const;
-    void apply_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* unshifted, int width) const;
+    // DIFFERENT mechanism from the character-mode one above (A-M21-8), and
+    // internally TWO independent mechanisms with OPPOSITE effect (M38 Phase B,
+    // re-derived from openMSX SDLRasterizer.cc:464-538 + PixelRenderer.cc:
+    // 586-604 + VDP.hh:335-370/629-631 -- never copied):
+    //   * COARSE (R#26 & 0x1F): rotates the display LEFT in 8-dot steps
+    //     (`8 * (lineWidth/256) * (R#26&0x1F)`, 16-dot for 512-wide G5/G6).
+    //   * FINE (R#27 & 0x07): shifts the WHOLE displayed image to the RIGHT by
+    //     0..7 dots (0..7*2 for 512-wide) and exposes the vacated left edge as
+    //     BORDER/backdrop (PixelRenderer.cc:586-594: "the 0..7 extra horizontal
+    //     scroll low pixels should be drawn in border color"; displayL =
+    //     getLeftBackground() = getLeftSprites() + R#27*4). NOT a circular wrap,
+    //     NOT the same sign as coarse. This was the M38 Phase-A root cause.
+    // compose_bitmap_scroll() applies both to the already-decoded page
+    // buffer(s): `page_first` is the primary page's decoded line, `page_wrap`
+    // the page supplying the coarse wrap tail (== `page_first` unless multi-page
+    // scroll is active; see bitmap_scroll_pages()).
+    [[nodiscard]] int bitmap_coarse_shift(int width) const;
+    [[nodiscard]] int bitmap_fine_shift(int width) const;
+    void compose_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* page_first,
+                               const std::uint16_t* page_wrap, int width) const;
 
     // Bitmap-mode page selection (R#2 bits 5-6; VDP.hh getDisplayPage()),
     // multi-page scroll (R#25 bit0 + R#2 bit5; VDP.hh:362-370
@@ -161,22 +173,34 @@ private:
     [[nodiscard]] bool multi_page_scrolling() const;
     [[nodiscard]] bool use_alternate_page(Field field) const;
     [[nodiscard]] std::uint32_t resolve_bitmap_page(std::uint32_t page_mask, Field field) const;
-    [[nodiscard]] std::uint32_t bitmap_row_base_nonplanar(int line, Field field) const;
-    [[nodiscard]] std::uint32_t bitmap_row_base_planar(int line, Field field) const;
+    // The {first, wrap} page pair fed to compose_bitmap_scroll(): both equal
+    // the resolved display page when multi-page scroll is inactive, else the
+    // even/odd page pair ordered by R#26 bit5 (SDLRasterizer.cc:479-538).
+    [[nodiscard]] std::pair<std::uint32_t, std::uint32_t> bitmap_scroll_pages(std::uint32_t page_mask,
+                                                                             Field field) const;
 
     // Per-mode content renderers (CharacterConverter.{hh,cc} /
     // BitmapConverter.{hh,cc} two-family precedent, independently
-    // re-expressed -- never copied).
+    // re-expressed -- never copied). Each bitmap renderer decodes one page's
+    // scanline into a temp buffer via the matching decode_*_row() helper (so a
+    // second, wrap page can be decoded when multi-page scroll is active) and
+    // then applies compose_bitmap_scroll().
     void render_text1(int line, std::span<std::uint16_t> out) const;
     void render_text2(int line, std::span<std::uint16_t> out) const;
     void render_graphic1(int line, std::span<std::uint16_t> out) const;
     void render_graphic2_or_3(int line, std::span<std::uint16_t> out) const;
     void render_multicolor(int line, std::span<std::uint16_t> out) const;
+    void decode_graphic4_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_graphic4(int line, std::span<std::uint16_t> out) const;
+    void decode_graphic5_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_graphic5(int line, std::span<std::uint16_t> out) const;
+    void decode_graphic6_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_graphic6(int line, Field field, std::span<std::uint16_t> out) const;
+    void decode_graphic7_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_graphic7(int line, Field field, std::span<std::uint16_t> out) const;
+    void decode_yjk_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_yjk(int line, Field field, std::span<std::uint16_t> out) const;
+    void decode_yjk_yae_row(std::uint32_t row_base, std::span<std::uint16_t> temp) const;
     void render_yjk_yae(int line, Field field, std::span<std::uint16_t> out) const;
     // TEXT1Q, MULTIQ, and any undefined mode byte render flat blank (palette
     // entry 15), NEVER TMS9918-compatible content -- the HB-F1XV's V9958 is

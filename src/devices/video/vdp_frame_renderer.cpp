@@ -147,18 +147,59 @@ int VdpFrameRenderer::scrolled_name_col(const int col) const {
     return (col + vdp_->control_register(26)) & 0x1F;  // CharacterConverter.cc:255-270
 }
 
-int VdpFrameRenderer::bitmap_horizontal_shift(const int width) const {
-    const int mult = (width >= 512) ? 2 : 1;  // fact-sheet §4: G5/G6 double the scroll units
-    const int coarse = (vdp_->control_register(26) & 0x1F) * 8 * mult;  // SDLRasterizer.cc:465-471
-    const int fine = (vdp_->control_register(27) & 0x07) * mult;       // PixelRenderer.cc:60-69
-    return (coarse + fine) % width;
+int VdpFrameRenderer::bitmap_coarse_shift(const int width) const {
+    // R#26 coarse horizontal scroll (SDLRasterizer.cc:468-471): rotates the
+    // displayed bitmap line LEFT in 8-dot steps -- `8 * (lineWidth/256) *
+    // (R#26 & 0x1F)`, i.e. 8-dot units for 256-wide modes and 16-dot units for
+    // the 512-wide G5/G6. Range [0, 248] (256-wide) / [0, 496] (512-wide),
+    // always < width, so no wrap of the shift value itself is needed. This is
+    // the ORIGINAL, correct coarse behavior (M38 Phase-A scenarios s02/s07
+    // already MATCHED); the fine component is a SEPARATE mechanism.
+    const int mult = (width >= 512) ? 2 : 1;
+    return (vdp_->control_register(26) & 0x1F) * 8 * mult;
 }
 
-void VdpFrameRenderer::apply_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* unshifted,
-                                           const int width) const {
-    const int shift = bitmap_horizontal_shift(width);
+int VdpFrameRenderer::bitmap_fine_shift(const int width) const {
+    // R#27 fine horizontal scroll (VDP.hh:335-342 getHorizontalScrollLow;
+    // VDP.hh:629-631 getLeftBackground() = getLeftSprites() + R#27*4;
+    // SDLRasterizer.cc:464-465). Shifts the WHOLE displayed image to the RIGHT
+    // by 0..7 dots (doubled for 512-wide modes) and exposes the vacated left
+    // edge as BORDER/backdrop -- NOT a circular wrap, NOT the same sign as the
+    // coarse rotate (M38 Phase-A root cause, s03/s04).
+    const int mult = (width >= 512) ? 2 : 1;
+    return (vdp_->control_register(27) & 0x07) * mult;
+}
+
+void VdpFrameRenderer::compose_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* page_first,
+                                             const std::uint16_t* page_wrap, const int width) const {
+    // Compose one bitmap scanline from the decoded page content, applying the
+    // V9958 horizontal-scroll model re-derived (never copied) from openMSX
+    // SDLRasterizer.cc:464-538 + PixelRenderer.cc:586-604:
+    //   1. COARSE (R#26): a LEFT rotation by `coarse` dots. Output column x in
+    //      [0, width-coarse) reads page_first[x+coarse]; the wrap tail x in
+    //      [width-coarse, width) reads page_wrap[x+coarse-width]. For a single
+    //      page (non multi-page) page_wrap == page_first, so this degenerates to
+    //      the pre-M38 circular left rotation. For multi-page scroll (R#25 bit0
+    //      + R#2 bit5) page_wrap is the ADJACENT page, so the tail shows the
+    //      neighbouring page instead of a self-wrap (SDLRasterizer.cc:530-537).
+    //   2. FINE (R#27): the coarse-rotated line is then shifted RIGHT by `fine`
+    //      dots; the vacated left `fine` columns show the BORDER/backdrop
+    //      ("the 0..7 extra horizontal scroll low pixels should be drawn in
+    //      border color", PixelRenderer.cc:587-594) and the rightmost `fine`
+    //      content dots fall off the right edge (clipped -- they would land in
+    //      the right border on the full bordered canvas).
+    const int coarse = bitmap_coarse_shift(width);
+    const int fine = bitmap_fine_shift(width);
+    const std::uint16_t bc = border_color();
     for (int x = 0; x < width; ++x) {
-        out[static_cast<std::size_t>(x)] = unshifted[(x + shift) % width];
+        if (x < fine) {
+            out[static_cast<std::size_t>(x)] = bc;  // exposed left border strip
+            continue;
+        }
+        const int cx = x - fine;      // column within the coarse-rotated line
+        const int src = cx + coarse;  // source column before the left rotation
+        out[static_cast<std::size_t>(x)] =
+            (src < width) ? page_first[src] : page_wrap[src - width];
     }
 }
 
@@ -209,20 +250,31 @@ std::uint32_t VdpFrameRenderer::resolve_bitmap_page(const std::uint32_t page_mas
     return page;
 }
 
-std::uint32_t VdpFrameRenderer::bitmap_row_base_nonplanar(const int line, const Field field) const {
-    // G4/G5: 128 logical bytes/row x 256 rows = 0x8000/page, 2-bit page
-    // selector (4 pages x 0x8000 = 128 KB, matches this machine's fixed
-    // VRAM capacity).
-    return resolve_bitmap_page(0x03, field) * 0x8000u + static_cast<std::uint32_t>(line) * 128u;
-}
-
-std::uint32_t VdpFrameRenderer::bitmap_row_base_planar(const int line, const Field field) const {
-    // G6/G7/YJK: 256 logical bytes/row (both banks combined, pre-transform)
-    // x 256 rows = 0x10000/page, 1-bit page selector (2 pages x 0x10000 =
-    // 128 KB) -- the well-known MSX2 fact that SCREEN7/8 support only 2
-    // pages where SCREEN5/6 support 4, independently re-derived here from
-    // VRAM-capacity arithmetic.
-    return resolve_bitmap_page(0x01, field) * 0x10000u + static_cast<std::uint32_t>(line) * 256u;
+std::pair<std::uint32_t, std::uint32_t> VdpFrameRenderer::bitmap_scroll_pages(const std::uint32_t page_mask,
+                                                                             const Field field) const {
+    // The {first, wrap} page pair fed to compose_bitmap_scroll(). page_mask is
+    // 0x03 for G4/G5 (2-bit page, 4 x 0x8000 = 128 KB) or 0x01 for G6/G7/YJK
+    // (1-bit page, 2 x 0x10000 = 128 KB) -- re-derived from VRAM capacity,
+    // matching SCREEN5/6's 4 pages vs SCREEN7/8's 2.
+    const std::uint32_t page = resolve_bitmap_page(page_mask, field);
+    if (!multi_page_scrolling()) {
+        return {page, page};
+    }
+    // Multi-page scroll pair (VDP.hh:362-370 isMultiPageScrolling(), "wraps into
+    // the lower even page"; SDLRasterizer.cc:479-538). resolve_bitmap_page()
+    // already forced the low page bit clear when multi-page is active, so `page`
+    // is the EVEN member of the pair and `page | 1` its ODD neighbour. R#26 bit5
+    // (openMSX `p1 = getHorizontalScrollHigh() >> 5`) selects which member is
+    // drawn first; the other supplies the coarse wrap tail. So even with R#2
+    // selecting the odd page, the primary content is the even page and the tail
+    // wraps in from the odd page (or vice-versa when p1 is set).
+    const std::uint32_t even = page;
+    const std::uint32_t odd = (page | 0x01u) & page_mask;
+    const int p1 = (vdp_->control_register(26) >> 5) & 0x01;
+    if (p1 != 0) {
+        return {odd, even};
+    }
+    return {even, odd};
 }
 
 std::uint16_t VdpFrameRenderer::border_color() const {
@@ -581,28 +633,44 @@ void VdpFrameRenderer::render_blank(std::span<std::uint16_t> out) const {
 }
 
 // --- non-planar bitmap modes ---------------------------------------------
+//
+// Each bitmap renderer decodes the primary page's scanline into `first`, and --
+// only when multi-page scroll makes the wrap page distinct -- the adjacent
+// page's scanline into `wrap`, then defers the R#26/R#27 scroll composition to
+// compose_bitmap_scroll(). The single-page fast path passes `first` for both
+// buffers so behavior is byte-identical to the pre-M38 apply_bitmap_scroll()
+// for the (overwhelmingly common) non multi-page case.
 
-void VdpFrameRenderer::render_graphic4(const int line, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::decode_graphic4_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:104-133 (renderGraphic4): 4bpp packed, high nibble
     // = even pixel.
-    const std::uint32_t row_base = bitmap_row_base_nonplanar(line, Field::Progressive);
-    std::array<std::uint16_t, 256> temp{};
     for (int i = 0; i < 128; ++i) {
         const std::uint8_t b = vram_read(row_base + static_cast<std::uint32_t>(i));
         temp[static_cast<std::size_t>(2 * i + 0)] = content_pal16(b >> 4);
         temp[static_cast<std::size_t>(2 * i + 1)] = content_pal16(b & 0x0F);
     }
-    apply_bitmap_scroll(out, temp.data(), 256);
 }
 
-void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::render_graphic4(const int line, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x03, Field::Progressive);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 128u;
+    std::array<std::uint16_t, 256> first{};
+    decode_graphic4_row(page_first * 0x8000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 256> wrap{};
+        decode_graphic4_row(page_wrap * 0x8000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+    }
+}
+
+void VdpFrameRenderer::decode_graphic5_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:135-147 (renderGraphic5): 2bpp packed. Real
     // hardware doubles palette16 (even/odd halves), but absent superimpose
     // (no digitizer, fact-sheet §9) the two halves are always identical
     // (SDLRasterizer.cc:104-109: `palFg[i] = palFg[i+16] = palBg[i] = ...`),
     // so both parities read the SAME 4 palette registers (0-3) directly.
-    const std::uint32_t row_base = bitmap_row_base_nonplanar(line, Field::Progressive);
-    std::array<std::uint16_t, 512> temp{};
     for (int i = 0; i < 128; ++i) {
         const std::uint8_t b = vram_read(row_base + static_cast<std::uint32_t>(i));
         temp[static_cast<std::size_t>(4 * i + 0)] = content_pal16_g5((b >> 6) & 0x03, false);
@@ -610,17 +678,28 @@ void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> 
         temp[static_cast<std::size_t>(4 * i + 2)] = content_pal16_g5((b >> 2) & 0x03, false);
         temp[static_cast<std::size_t>(4 * i + 3)] = content_pal16_g5(b & 0x03, true);
     }
-    apply_bitmap_scroll(out, temp.data(), 512);
+}
+
+void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x03, Field::Progressive);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 128u;
+    std::array<std::uint16_t, 512> first{};
+    decode_graphic5_row(page_first * 0x8000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 512> wrap{};
+        decode_graphic5_row(page_wrap * 0x8000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 512);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 512);
+    }
 }
 
 // --- planar bitmap modes (D7 display-path piece) -------------------------
 
-void VdpFrameRenderer::render_graphic6(const int line, const Field field, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::decode_graphic6_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:149-183 (renderGraphic6, per-byte form): 4bpp
     // planar.
-    const std::uint32_t row_base = bitmap_row_base_planar(line, field);
     const PlanarRowSpans spans = planar_row_spans(row_base, 256);
-    std::array<std::uint16_t, 512> temp{};
     for (std::size_t i = 0; i < spans.half_length; ++i) {
         const std::uint8_t d0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(i));
         const std::uint8_t d1 = vram_read(spans.bank1_base + static_cast<std::uint32_t>(i));
@@ -629,22 +708,46 @@ void VdpFrameRenderer::render_graphic6(const int line, const Field field, std::s
         temp[4 * i + 2] = content_pal16(d1 >> 4);
         temp[4 * i + 3] = content_pal16(d1 & 0x0F);
     }
-    apply_bitmap_scroll(out, temp.data(), 512);
 }
 
-void VdpFrameRenderer::render_graphic7(const int line, const Field field, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::render_graphic6(const int line, const Field field, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x01, field);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
+    std::array<std::uint16_t, 512> first{};
+    decode_graphic6_row(page_first * 0x10000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 512> wrap{};
+        decode_graphic6_row(page_wrap * 0x10000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 512);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 512);
+    }
+}
+
+void VdpFrameRenderer::decode_graphic7_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:185-195 (renderGraphic7): one fixed-256-color byte
     // per pixel (A-M21-4), banks alternate even/odd output pixels.
-    const std::uint32_t row_base = bitmap_row_base_planar(line, field);
     const PlanarRowSpans spans = planar_row_spans(row_base, 256);
-    std::array<std::uint16_t, 256> temp{};
     for (std::size_t i = 0; i < spans.half_length; ++i) {
         const std::uint8_t d0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(i));
         const std::uint8_t d1 = vram_read(spans.bank1_base + static_cast<std::uint32_t>(i));
         temp[2 * i + 0] = graphic7_fixed_color_to_rgb555(d0);
         temp[2 * i + 1] = graphic7_fixed_color_to_rgb555(d1);
     }
-    apply_bitmap_scroll(out, temp.data(), 256);
+}
+
+void VdpFrameRenderer::render_graphic7(const int line, const Field field, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x01, field);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
+    std::array<std::uint16_t, 256> first{};
+    decode_graphic7_row(page_first * 0x10000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 256> wrap{};
+        decode_graphic7_row(page_wrap * 0x10000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+    }
 }
 
 namespace {
@@ -667,11 +770,9 @@ struct YjkGroup {
 
 }  // namespace
 
-void VdpFrameRenderer::render_yjk(const int line, const Field field, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::decode_yjk_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:230-249 (renderYJK).
-    const std::uint32_t row_base = bitmap_row_base_planar(line, field);
     const PlanarRowSpans spans = planar_row_spans(row_base, 256);
-    std::array<std::uint16_t, 256> temp{};
     for (std::size_t i = 0; i < 64; ++i) {
         const std::uint8_t p0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(2 * i + 0));
         const std::uint8_t p1 = vram_read(spans.bank1_base + static_cast<std::uint32_t>(2 * i + 0));
@@ -686,16 +787,27 @@ void VdpFrameRenderer::render_yjk(const int line, const Field field, std::span<s
                             static_cast<std::uint8_t>(rgb.b));
         }
     }
-    apply_bitmap_scroll(out, temp.data(), 256);
 }
 
-void VdpFrameRenderer::render_yjk_yae(const int line, const Field field, std::span<std::uint16_t> out) const {
+void VdpFrameRenderer::render_yjk(const int line, const Field field, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x01, field);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
+    std::array<std::uint16_t, 256> first{};
+    decode_yjk_row(page_first * 0x10000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 256> wrap{};
+        decode_yjk_row(page_wrap * 0x10000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+    }
+}
+
+void VdpFrameRenderer::decode_yjk_yae_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:251-276 (renderYAE): identical J/K unpack, but each
     // pixel's bit3 (0x08) selects the 16-color palette branch instead of the
     // computed YJK color.
-    const std::uint32_t row_base = bitmap_row_base_planar(line, field);
     const PlanarRowSpans spans = planar_row_spans(row_base, 256);
-    std::array<std::uint16_t, 256> temp{};
     for (std::size_t i = 0; i < 64; ++i) {
         const std::uint8_t p0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(2 * i + 0));
         const std::uint8_t p1 = vram_read(spans.bank1_base + static_cast<std::uint32_t>(2 * i + 0));
@@ -718,7 +830,20 @@ void VdpFrameRenderer::render_yjk_yae(const int line, const Field field, std::sp
             temp[4 * i + static_cast<std::size_t>(n)] = pixel;
         }
     }
-    apply_bitmap_scroll(out, temp.data(), 256);
+}
+
+void VdpFrameRenderer::render_yjk_yae(const int line, const Field field, std::span<std::uint16_t> out) const {
+    const auto [page_first, page_wrap] = bitmap_scroll_pages(0x01, field);
+    const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
+    std::array<std::uint16_t, 256> first{};
+    decode_yjk_yae_row(page_first * 0x10000u + stride, first);
+    if (page_first != page_wrap) {
+        std::array<std::uint16_t, 256> wrap{};
+        decode_yjk_yae_row(page_wrap * 0x10000u + stride, wrap);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+    } else {
+        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+    }
 }
 
 }  // namespace sony_msx::devices::video
