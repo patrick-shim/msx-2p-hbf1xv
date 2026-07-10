@@ -46,15 +46,13 @@ Hbf1xvMachine::Hbf1xvMachine() : cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
 }
 
 void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
-    // M32-S2 (docs/m32-planner-package.md §2.3): a write while the beam is on
-    // display line L takes effect from line L+1 -- commit [watermark, L+1)
-    // from the PRE-write state before the write mutates anything (openMSX's
-    // sync-before-change protocol at line granularity,
-    // references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
-    // Negative L (raster in border/vblank) clamps to a no-op inside
-    // sync_to_line() -- vblank writes affect the whole next frame. Suspended
-    // while the non-perturbing debug_io_write() seam drives the bus (§2.3
-    // documented exclusion).
+    // M32-S2 (docs/m32-planner-package.md §2.3): commit the display lines the
+    // beam has already passed from the PRE-write state before the write mutates
+    // anything -- openMSX's sync-before-change protocol at line granularity
+    // (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
+    // Suspended while the non-perturbing debug_io_write() seam drives the bus
+    // (§2.3 documented exclusion). Negative raster (border/vblank) clamps to a
+    // no-op inside sync_to_line() -- vblank writes affect the whole next frame.
     if (suspended_) {
         return;
     }
@@ -62,9 +60,40 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // frame -- state has moved past the sealed frame.
     machine_.scanline_accumulator_.mark_completed_frame_stale();
     const int line = machine_.vdp_.raster_display_line();
-    if (line >= 0) {
-        machine_.scanline_accumulator_.sync_to_line(line + 1);
+    if (line < 0) {
+        return;
     }
+    // M39 (DEC-0060) render-sync commit boundary -- the ACTIVE-DISPLAY LEFT
+    // MARGIN rounding. The commit boundary here is the openMSX LINE-accuracy
+    // renderer's `renderUntil()` rounding, NOT a raw scanline boundary:
+    // openMSX rounds the sync point with the left margin --
+    //   limitY = (limitTicks + TICKS_PER_LINE - 400) / TICKS_PER_LINE
+    // (references/openmsx-21.0/src/video/PixelRenderer.cc:566-567) -- so a
+    // register write is committed against the line whose ACTIVE pixels have
+    // already been drawn, which lands one display line LATER than our raw
+    // `raster_display_line()` (floor(tstates / kCpuTstatesPerLine), quantized at
+    // the scanline START with no left-margin term, v9958_vdp.cpp
+    // raster_display_line()). So the write takes effect from line L+2, not L+1:
+    // lines [watermark, L+2) keep the pre-write state, the change applies from
+    // L+2.
+    //
+    // CALIBRATION (openMSX 19.1 Sony_HB-F1XV, Aleste 2 gameplay, raw captures
+    // debug/m39-hud/omsx_hud_*.png -- 4 stable frames): Aleste holds a fixed
+    // top HUD over a vertically-scrolling playfield via cycle-timed R#1 (BL) +
+    // R#23 (vertical scroll) writes with NO line interrupt. The BL-off write is
+    // issued at raster_display_line()==13; openMSX blanks from display line 15
+    // (blank band = display lines 15-16, HUD's 2nd text row fully rendered incl.
+    // its bottom row at display line 14). The prior L+1 rule blanked from line
+    // 14, clipping the bottom pixel row of the HUD glyphs (the human-reported
+    // "letters chopped at the bottom"). L+2 lands the split exactly on openMSX's
+    // scanline for ALL three per-frame writes (measured in-line tstates 44/98/
+    // 169 -> uniform +1-line delta). This is a register/raster-level rule, not
+    // an Aleste special-case: it shifts EVERY cycle-timed mid-frame VDP write
+    // (R#23 splits, R#1 BL bands, R#7/palette raster bars) by the same margin,
+    // for every game. raster_display_line() itself is UNCHANGED (line-interrupt
+    // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
+    // render-sync rounding is independent of the VDP line-interrupt counter).
+    machine_.scanline_accumulator_.sync_to_line(line + 2);
 }
 
 void Hbf1xvMachine::wire_bus() {
