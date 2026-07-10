@@ -27,14 +27,20 @@ namespace sony_msx::frontend {
 // `devices/video/frame_buffer.h` and `references/sdl3/include/SDL3/SDL_pixels.h`: bits
 // 14-10=R, 9-5=G, 4-0=B, bit15/X unused, both plain host-native uint16_t values).
 //
-// Border composition is OPT-IN (`border_enabled`, default false -- a human-decided
-// presentation preference, docs/konami-splash-regression-investigation.md): by default
-// `blit_frame()` uploads the bare active-area FrameBuffer edge-to-edge (pre-border
-// behavior, byte-for-byte); with `border_enabled` it first composes the frame into its
-// border-colored presentation canvas (frontend/border_composer.h, raster-true geometry,
-// live per-frame R#7 border color) and uploads that instead. Either way the uploaded
-// buffer is raw uint16_t pixels via `SDL_UpdateTexture` with zero per-pixel conversion in
-// this project's own code (composition copies pixel values, never converts them).
+// Border composition is controlled by `border_enabled`. When true, `blit_frame()` first
+// composes the frame into its border-colored presentation canvas (frontend/border_composer.h,
+// raster-true geometry, live per-frame R#7 border color) and uploads that; when false it
+// uploads the bare active-area FrameBuffer edge-to-edge (the pre-border behavior,
+// byte-for-byte). Either way the uploaded buffer is raw uint16_t pixels via
+// `SDL_UpdateTexture` with zero per-pixel conversion in this project's own code
+// (composition copies pixel values, never converts them).
+//
+// The CONSTRUCTOR default is false (bare) -- direct/test construction stays byte-for-byte
+// the pre-border presentation. The SDL3 APP, however, defaults border ON (M39-B,
+// Sdl3AppConfig::border_enabled = true): the composed canvas is the ONLY present that
+// matches openMSX's vertical framing + per-pixel aspect for BOTH 192- and 212-line modes
+// (the bare present vertically squishes 212-line content and drops the border headroom).
+// `--no-border` selects the bare present at the app level.
 //
 // `blit_frame()`/`present()` are split (rather than one combined call) so a test can read
 // back the texture's presented pixel data via `SDL_RenderReadPixels` between the two steps

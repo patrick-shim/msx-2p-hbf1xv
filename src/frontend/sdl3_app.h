@@ -67,12 +67,19 @@ struct Sdl3AppConfig {
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
     // interactive session.
     bool hidden_window = false;
-    // Opt-in border-box composition (--border): when true the video
-    // presenter composes the active area inside the live R#7-colored border
-    // canvas (frontend/border_composer.h); default false presents the bare
-    // active area edge-to-edge (human-decided presentation preference,
-    // docs/konami-splash-regression-investigation.md).
-    bool border_enabled = false;
+    // Border-canvas composition (default ON, M39-B): the video presenter
+    // places the active area at its raster-true openMSX-matching position
+    // inside the live R#7-colored 320x240 / 640x240 canvas
+    // (frontend/border_composer.h). This is the ONLY present that matches
+    // openMSX's vertical framing + per-pixel aspect for BOTH 192- and 212-line
+    // modes -- the bare edge-to-edge present (border_enabled == false, the
+    // pre-M39-B default, still reachable via --no-border) vertically squishes
+    // 212-line content (stretching 256x212 to fill 320x240 = 1.25x H but only
+    // 1.132x V) and jams the active area to the window's top edge with no
+    // border headroom (docs/m39-fix-plans.md Issue 1). R#18-neutral software is
+    // byte-identical either way; the composed canvas is a strict superset of
+    // the correct 4:3 geometry.
+    bool border_enabled = true;
     // A bounded, non-interactive run length for headless/manual-verification
     // use (§2.3). std::nullopt (the default) means run_interactive() only
     // stops on SDL_EVENT_QUIT.

@@ -60,10 +60,12 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
 }
 
 bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
-    // Default: bare active area, edge to edge (human-preferred; byte-for-byte the
-    // pre-border behavior). Opt-in (border_enabled_, --border flag): compose into the
-    // border-colored 320x240 / 640x240 canvas first (border_composer.h documents the
-    // raster-true geometry; border color is live per frame).
+    // border_enabled_ (app default ON, M39-B): compose into the border-colored
+    // 320x240 / 640x240 canvas so the active area sits at its raster-true,
+    // openMSX-matching position (border_composer.h documents the geometry; border
+    // color is live per frame) -- the only present correct for BOTH 192- and
+    // 212-line modes. false (--no-border): bare active area edge-to-edge
+    // (byte-for-byte the pre-border behavior; squishes 212-line vertically).
     devices::video::FrameBuffer composed;
     const devices::video::FrameBuffer* source = &frame;
     if (border_enabled_) {

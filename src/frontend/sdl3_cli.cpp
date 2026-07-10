@@ -89,7 +89,12 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
         } else if (arg == "--hidden-window") {
             parsed.hidden_window = true;
         } else if (arg == "--border") {
-            parsed.border_enabled = true;
+            parsed.border_enabled = true;  // M39-B: now a no-op alias for the default (border ON)
+        } else if (arg == "--no-border") {
+            // M39-B: opt back into the bare active-area-edge-to-edge present
+            // (the pre-M39-B default). Last-wins vs an earlier --border, since
+            // this is a plain linear scan (mirrors the other boolean flags).
+            parsed.border_enabled = false;
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
         } else if (arg == "--stream-light") {
