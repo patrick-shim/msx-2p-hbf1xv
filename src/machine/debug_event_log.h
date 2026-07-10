@@ -40,10 +40,11 @@ struct DebugEvent {
 
 // Deterministic collector + serializer for execution events (M10-S3).
 //
-// The event stream is byte-stable across identical runs: sequence indices are a
-// monotonic counter, `tstate` comes from the deterministic scheduler clock, and
-// serialization is hand-rolled ASCII (fixed field order, fixed-width uppercase
-// hex, '\n' line endings, no locale/stream state, no wall-clock).
+// The event stream is byte-stable across identical runs: sequence indices
+// are a monotonic counter, `tstate` comes from the deterministic scheduler
+// clock, and serialization is hand-rolled ASCII (fixed field order,
+// fixed-width uppercase hex, '\n' line endings, no locale/stream state, no
+// wall-clock).
 class DebugEventLog {
 public:
     void clear();

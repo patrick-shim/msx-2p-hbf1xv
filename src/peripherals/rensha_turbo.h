@@ -17,16 +17,16 @@
 
 namespace sony_msx::peripherals {
 
-// Deterministic emulated-cycle clock source for Ren-Sha Turbo (M25, X-pattern
-// of RtcClockSource/FdcClockSource/CassetteClockSource -- mirrors
+// Deterministic emulated-cycle clock source for Ren-Sha Turbo (M25,
+// X-pattern of RtcClockSource/FdcClockSource/CassetteClockSource -- mirrors
 // src/devices/rtc/rp5c01.h:14-18, src/devices/fdc/fdc_clock_source.h, and
-// src/peripherals/cassette_interface.h:20-24 exactly). The autofire signal
-// advances READ-ONLY off the machine cycle clock (Hbf1xvMachine::
-// elapsed_cycles() == scheduler total cycles), never the host wall clock;
-// CPU T-state accounting is never touched (protecting the M9/M12/M23
-// zero-tolerance CPU-timing oracles -- this class is consulted PULL-STYLE
-// ONLY, from KeyboardMatrix::keyboard_row()/JoystickPorts::read_port_a(),
-// never wired into step_cpu_instruction()/run_cycles()/run_frame()).
+// src/peripherals/cassette_interface.h:20-24). The autofire signal advances
+// read-only off the machine cycle clock (Hbf1xvMachine::elapsed_cycles() ==
+// scheduler total cycles), never the host wall clock; CPU T-state accounting
+// is never touched (protects the M9/M12/M23 zero-tolerance CPU-timing
+// oracles). Consulted pull-style only, from
+// KeyboardMatrix::keyboard_row()/JoystickPorts::read_port_a(), never wired
+// into step_cpu_instruction()/run_cycles()/run_frame().
 class RenshaTurboClockSource {
 public:
     virtual ~RenshaTurboClockSource() = default;
@@ -36,8 +36,8 @@ public:
 // Ren-Sha Turbo autofire (M25, backlog C8 sub-item) -- rapid button-press
 // synthesis on the space bar and joystick trigger-A of both ports.
 //
-// Grounded concretely in real openMSX behavior (behavior reference, never
-// copied -- GPL isolation) rather than guessed:
+// Grounded in real openMSX behavior (behavior reference, never copied -- GPL
+// isolation) rather than guessed:
 //   - references/openmsx-21.0/src/RenShaTurbo.{hh,cc}: a thin wrapper owning
 //     one Autofire circuit.
 //   - references/openmsx-21.0/src/Autofire.{hh,cc}: the actual signal
@@ -46,9 +46,9 @@ public:
 //     square wave); speed 0 = disabled (special-cased, not "very slow").
 //   - references/openmsx-21.0/src/MSXPPI.cc:90-93 (keyboard row 8 bit 0) and
 //     references/openmsx-21.0/src/sound/MSXPSG.cc:90-93 (PSG R14 bit 4):
-//     BOTH combine the autofire signal via bitwise-OR, applied AFTER the
+//     both combine the autofire signal via bitwise-OR, applied after the
 //     normal (possibly-pressed) row/port read -- the autofire signal can
-//     only ever force a bit from 0->1 (a periodic RELEASE), never force a 0
+//     only ever force a bit from 0->1 (a periodic release), never force a 0
 //     (a press). This is a critical correctness invariant this class's
 //     consumers (KeyboardMatrix/JoystickPorts) must preserve exactly.
 //   - references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:16-19: a real,
@@ -59,10 +59,10 @@ public:
 //     standing license-sensitivity directive (categorically different from
 //     a large data table).
 //
-// The toggle-frequency FORMULA below is independently derived from the
-// config data's own documented MEANING (references/openmsx-21.0/src/
+// The toggle-frequency formula below is independently derived from the
+// config data's own documented meaning (references/openmsx-21.0/src/
 // Autofire.hh:66-76: "Number of interrupts ... for 50 periods, measured in
-// ntsc mode (which gives 60 interrupts per second)"), NOT transcribed from
+// ntsc mode (which gives 60 interrupts per second)"), not transcribed from
 // openMSX's own setClock() code shape
 // (references/openmsx-21.0/src/Autofire.cc:79-87,
 // `(2 * 50 * 60) / (max_ints - (speed * (max_ints - min_ints)) / 100)`):
@@ -75,7 +75,7 @@ public:
 // kDefaultMinInts (speed=100, fastest); speed=0 is specially disabled, not
 // "infinitely slow".
 //
-// Deliberately a CONCRETE class held by direct pointer (not an abstract
+// Deliberately a concrete class held by direct pointer (not an abstract
 // interface like CassetteInputSource) -- unlike CassetteInterface, this
 // class has no dependency of its own that would create coupling pressure on
 // its consumers, so the extra interface layer buys nothing here.
@@ -105,8 +105,8 @@ public:
     // Consumer-facing OR masks (openMSX MSXPPI.cc:90-93 / MSXPSG.cc:90-93):
     // 0x01 (keyboard row8 bit0 = SPACE) / 0x10 (PSG R14 bit4 = trigger A)
     // when signal() is true, else 0x00. Callers OR these into an
-    // already-computed read value -- NEVER forces a 0 bit, only ever forces
-    // a bit from 0->1 (a periodic RELEASE pulse, matching real hardware).
+    // already-computed read value -- never forces a 0 bit, only ever forces
+    // a bit from 0->1 (a periodic release pulse, matching real hardware).
     [[nodiscard]] std::uint8_t keyboard_row8_or_mask() const;
     [[nodiscard]] std::uint8_t joystick_trigger_a_or_mask() const;
 

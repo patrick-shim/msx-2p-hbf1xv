@@ -20,16 +20,15 @@ namespace sony_msx::devices::video {
 
 namespace {
 
-// D7's rotate-right-by-1 planar interleave (A-M21-10), independently
-// re-applied here to an arbitrary LOGICAL VRAM address (not just a display
-// row): even logical addresses land in bank0 (physical = addr>>1), odd land
-// in bank1 (physical = 0x10000 + (addr>>1)). This is the SAME physical-bank
-// placement rule V9958Vdp::effective_address()/VdpFrameRenderer's
-// planar_row_spans() already establish -- re-expressed here as a tiny, self-
-// contained helper (never calling into v9958_vdp.cpp) because the sprite
-// attribute/pattern tables in mode 2 planar screens (G6/G7) are spread over
-// the SAME two VRAM ICs as bitmap data (SpriteChecker.cc:283-327's
-// getReadAreaPlanar/readPlanar calls).
+// D7's rotate-right-by-1 planar interleave (A-M21-10), re-applied here to an
+// arbitrary logical VRAM address (not just a display row): even logical
+// addresses land in bank0 (physical = addr>>1), odd in bank1 (physical =
+// 0x10000 + (addr>>1)). Same physical-bank placement rule as
+// V9958Vdp::effective_address()/VdpFrameRenderer's planar_row_spans(),
+// re-expressed here as a tiny self-contained helper (never calling into
+// v9958_vdp.cpp) because the sprite attribute/pattern tables in mode 2
+// planar screens (G6/G7) are spread over the same two VRAM ICs as bitmap
+// data (SpriteChecker.cc:283-327's getReadAreaPlanar/readPlanar calls).
 std::uint32_t planar_address(const std::uint32_t logical) {
     const std::uint32_t masked = logical & 0x1FFFFu;
     return (masked >> 1) | ((masked & 1u) << 16);
@@ -91,15 +90,15 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
 
     // spritesEnabledFast() gate (VDP.hh:313-319): `displayEnabled` (R#1
     // bit6, the display-enable/BLANK bit -- false at reset, VDP.cc:284/437)
-    // AND `spriteEnabled` (R#8 bit1 clear, SPD). updateSprites1/2 do NOTHING
-    // at all (not even the per-line visible-sprite population) when this is
-    // false -- only frameStart()'s unconditional spriteCount clear (already
+    // AND `spriteEnabled` (R#8 bit1 clear, SPD). updateSprites1/2 do nothing
+    // at all (not even per-line visible-sprite population) when this is
+    // false; only frameStart()'s unconditional spriteCount clear (already
     // applied above via lines_.assign()) still happens. Without this gate, a
     // freshly reset/unconfigured VDP (VRAM all-zero, so all 32 "phantom"
-    // sprites read Y=0) would spuriously populate S#0 on every on_vsync(),
-    // which is both wrong (real hardware/openMSX gate this identically) and
-    // was independently confirmed by a regression against the M14 VBlank
-    // status tests, which call on_vsync() without configuring any sprites.
+    // sprites read Y=0) would spuriously populate S#0 on every on_vsync() --
+    // wrong (real hardware/openMSX gate this identically), and caught by a
+    // regression against the M14 VBlank status tests, which call on_vsync()
+    // without configuring any sprites.
     const bool display_enabled = (control_regs[1] & 0x40) != 0;
     const bool sprite_enabled = (control_regs[8] & 0x02) == 0;
     if (!display_enabled || !sprite_enabled) {
@@ -122,14 +121,14 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
     // with baseMask = (R#11<<15) | (R#5<<7) | 0x7F and indexMask = ~0x3FF
     // (VDP.cc:1357-1371 updateSpriteAttributeBase; VDPVRAM.hh:263-279
     // readNP/getReadArea apply `effectiveBaseMask & index` with unused index
-    // bits set to one). R#5's low 3 bits are therefore AND-MASK bits in mode
-    // 2, NOT base-address bits: with the universal software convention of
+    // bits set to one). R#5's low 3 bits are therefore AND-mask bits in mode
+    // 2, not base-address bits: with the universal software convention of
     // setting them to 1 (BIOS SCREEN5 R#5=0xEF, Metal Gear R#5=0xE7), the
-    // table is a 1KB-aligned region -- per-line colors at offsets 0-511,
-    // the Y/X/pattern sub-table at offsets 512-1023. Treating R#5's full
-    // value as a plain base (the pre-fix code) landed every mode-2 Y/X/
-    // pattern read 0x200 bytes too high (inside the sprite PATTERN table),
-    // so every sprite read garbage/zero attributes and vanished.
+    // table is a 1KB-aligned region -- per-line colors at offsets 0-511, the
+    // Y/X/pattern sub-table at offsets 512-1023. Treating R#5's full value as
+    // a plain base (the pre-fix code) landed every mode-2 Y/X/pattern read
+    // 0x200 bytes too high (inside the sprite PATTERN table), so every
+    // sprite read garbage/zero attributes and vanished.
     const std::uint32_t attrib_base_mask = attrib_base | 0x7Fu;
     const auto mode2_attr_addr = [attrib_base_mask](const std::uint32_t index) {
         return attrib_base_mask & (~0x3FFu | index);
@@ -142,7 +141,7 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
 
     int fifth_num = -1;      // no 5th/9th sprite detected yet
     int fifth_line = height;  // larger than any valid line index
-    int sprite_end = 32;      // sprite index where the loop stopped (32 = ran through all 32)
+    int sprite_end = 32;      // sentinel-Y loop-stop index (32 = loop never broke)
 
     for (int sprite = 0; sprite < 32; ++sprite) {
         int y;
@@ -225,9 +224,9 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
 
     // S#0 composition (SpriteChecker.cc:157-171/387-402). Unlike the
     // reference's combined byte (which also gates on bit7/F), this project
-    // keeps F entirely inside V9958Vdp, so the gate here is simply "5S/9S
-    // bit (bit6) not already latched" -- behaviorally equivalent for this
-    // project's frame-wide, non-progressive recompute model.
+    // keeps F inside V9958Vdp, so the gate here is simply "5S/9S bit (bit6)
+    // not already latched" -- behaviorally equivalent for this project's
+    // frame-wide, non-progressive recompute model.
     const int last_sprite_num = std::min(sprite_end, 31);
     if (fifth_num != -1 && (status_ & 0x40) == 0) {
         status_ = static_cast<std::uint8_t>(0x40 | (status_ & 0x20) | fifth_num);

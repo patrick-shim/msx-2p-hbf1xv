@@ -36,7 +36,7 @@ public:
     // 3,579,545 Hz system clock; ~4 s delayed motor-off = 4 * clock cycles.
     static constexpr std::uint64_t kSystemClockHz = 3579545;
     static constexpr std::uint64_t kMotorOffCycles = 4 * kSystemClockHz;  // 14,318,180
-    // 300 rpm -> 200 ms index period; a ~5% index-pulse width window.
+    // 300 rpm -> 200 ms index period; pulse width is 1/64 of a rotation (~1.6%).
     static constexpr std::uint64_t kIndexPeriodCycles = kSystemClockHz / 5;  // 715,909
     static constexpr std::uint64_t kIndexPulseWidthCycles = kIndexPeriodCycles / 64;
 
@@ -78,10 +78,10 @@ public:
     [[nodiscard]] std::uint64_t cycles_until_index_pulse(std::uint64_t now) const;
 
     // Cycles until the requested sector's ID address mark next rotates under the
-    // head, from `now` (range 0 .. ~1 rotation). Grounds the WD2793 Type-II Read
-    // Sector first-DRQ ROTATIONAL latency: real hardware / openMSX must wait for
+    // head, from `now` (range 0..~1 rotation). Grounds the WD2793 Type-II Read
+    // Sector first-DRQ ROTATIONAL latency: real hardware/openMSX must wait for
     // the requested sector to come around, so the first-DRQ delay is VARIABLE, a
-    // function of the disk's rotational angle at command start
+    // function of rotational angle at command start
     // (references/openmsx-21.0/src/fdc/RealDrive.cc:453 getNextSector -- finds the
     // next matching sector's addrIdx and returns the EmuTime it rotates under the
     // head; WD2793.cc:557 type2Search schedules from it).
@@ -89,11 +89,11 @@ public:
     // APPROXIMATION (documented, DEC-0055 slice C): our CHS image has no
     // per-sector byte-angular positions or real interleave, so the 9 sectors are
     // modelled as evenly spaced and sequential -- sector `sector_index` (0-based)
-    // sits at angle sector_index/9 of the 715909-cycle rotation. This is the most
-    // faithful rotational model our sector geometry can support; it is NOT
+    // sits at angle sector_index/9 of the 715909-cycle rotation. Not
     // byte-identical to openMSX's raw-track model (which locks onto real addrIdx
-    // positions with real interleave). Fully DETERMINISTIC: a pure function of
-    // `now` and the fixed sector geometry -- no wall clock, no randomness.
+    // positions with real interleave), but the most faithful model our flat
+    // sector geometry supports. Fully DETERMINISTIC: a pure function of `now`
+    // and the fixed sector geometry -- no wall clock, no randomness.
     [[nodiscard]] std::uint64_t cycles_until_sector_id(std::uint32_t sector_index,
                                                        std::uint64_t now) const;
 
@@ -106,14 +106,14 @@ public:
     [[nodiscard]] bool disk_changed() const { return disk_changed_; }
     void set_disk_changed(bool changed) { disk_changed_ = changed; }
 
-    // Read-and-CLEAR DSKCHG one-shot: returns the current latch and clears it.
-    // Models real hardware + openMSX, where READING the disk-changed line resets
-    // it (references/openmsx-21.0/src/fdc/DiskChanger.cc:95-100 -- diskChanged()
+    // Read-and-CLEAR DSKCHG one-shot: returns the latch, then clears it. Models
+    // real hardware + openMSX, where READING the disk-changed line resets it
+    // (references/openmsx-21.0/src/fdc/DiskChanger.cc:95-100 -- diskChanged()
     // returns the flag then sets diskChangedFlag=false). This is the MUTATING
-    // accessor the FDC register read at 0x7FFD uses (mirroring the mutating
-    // readMem path PhilipsFDC.cc:37, as opposed to the const peekMem :90). Without
-    // it a swapped medium keeps DSKCHG asserted forever, so a game that re-checks
-    // the disk after a swap (e.g. YS II's building-interior loader) sees a
+    // accessor the FDC register read at 0x7FFD uses (mirrors the mutating
+    // readMem path PhilipsFDC.cc:37, vs. the const peekMem :90). Without it a
+    // swapped medium keeps DSKCHG asserted forever, so a game that re-checks the
+    // disk after a swap (e.g. YS II's building-interior loader) sees a
     // perpetually-"changed" medium, retries/aborts (Force Interrupt) and drops
     // into DI;HALT -- the universal media-change freeze (M36 Bug B).
     [[nodiscard]] bool take_disk_changed() {

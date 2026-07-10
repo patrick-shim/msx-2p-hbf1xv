@@ -25,10 +25,10 @@ namespace sony_msx::machine {
 // (M10-S1). Implements the CPU-side observer interface, retains records in a
 // stable in-memory vector, and produces a deterministic, diffable text form.
 //
-// This record store and serialization are the reusable substrate for the later
-// M10 slices (S3 full-state debug dump, S4 openMSX parity harness). The output
-// is ASCII-only, fixed field order, fixed hex width, and '\n'-terminated so it
-// is byte-stable across runs and environments.
+// This record store and serialization are the reusable substrate for later
+// M10 slices (S3 full-state debug dump, S4 openMSX parity harness). Output is
+// ASCII-only, fixed field order, fixed hex width, '\n'-terminated -- byte-
+// stable across runs and environments.
 class CpuTraceSink final : public devices::cpu::Z80aTraceObserver {
 public:
     void on_instruction_retired(const devices::cpu::Z80aTraceRecord& record) override;

@@ -17,17 +17,17 @@ namespace sony_msx::machine {
 
 CpmBdosHarness::LoadResult CpmBdosHarness::load_com(Hbf1xvMachine& machine, std::vector<std::uint8_t> image,
                                                      std::uint16_t top_of_memory) {
-    // Flat, linear 64 KB RAM view -- the CP/M loading convention this harness
-    // models assumes a single flat address space, not the HB-F1XV's own
-    // slotted memory map. Applied unconditionally: it is a harmless, idempotent
-    // remap (no image bytes are written by it), so doing it before the size
-    // guard below costs nothing even when the load is about to be refused.
+    // Flat, linear 64 KB RAM view -- CP/M's loading convention assumes a
+    // single flat address space, not the HB-F1XV's slotted memory map.
+    // Applied unconditionally: a harmless, idempotent remap (writes no image
+    // bytes), so doing it before the size guard below costs nothing even
+    // when the load is about to be refused.
     machine.map_flat_ram();
 
     const std::uint32_t end_address = static_cast<std::uint32_t>(kLoadBase) + image.size();
     if (end_address >= top_of_memory) {
-        // Defensive, GENERIC safety guard (NOT a magic number specific to any
-        // one CP/M program): refuse to load rather than risk silently
+        // Defensive, generic safety guard (not a magic number specific to
+        // any one CP/M program): refuse to load rather than risk silently
         // corrupting memory above the image. Neither the image nor the
         // top-of-memory word is written, and PC is left untouched.
         return LoadResult::ImageTooLargeForMemory;
@@ -36,9 +36,9 @@ CpmBdosHarness::LoadResult CpmBdosHarness::load_com(Hbf1xvMachine& machine, std:
     machine.load_memory(kLoadBase, image.data(), static_cast<std::uint32_t>(image.size()));
 
     // CP/M "top of TPA" word at 0x0006-0x0007, little-endian. This harness
-    // traps CALL 5 rather than hosting real BDOS machine code, so the exact
-    // value only needs to be a safe stack-pointer seed clear of the loaded
-    // image -- not a real BDOS base address.
+    // traps CALL 5 rather than hosting real BDOS machine code, so the value
+    // only needs to be a safe stack-pointer seed clear of the loaded image --
+    // not a real BDOS base address.
     const std::uint8_t low = static_cast<std::uint8_t>(top_of_memory & 0xFF);
     const std::uint8_t high = static_cast<std::uint8_t>((top_of_memory >> 8) & 0xFF);
     machine.load_memory(kTopOfMemoryWordAddress, &low, 1);
@@ -79,8 +79,8 @@ CpmBdosHarness::RunResult CpmBdosHarness::run(Hbf1xvMachine& machine, std::uint6
 
             // Synthesize the RET the real BDOS entry point would eventually
             // execute: pop the return address the caller's CALL 5 pushed and
-            // resume there. No step_cpu_instruction() call for this trap --
-            // the CPU never decodes whatever raw byte sits at 0x0005.
+            // resume there. No step_cpu_instruction() call here -- the CPU
+            // never decodes whatever raw byte sits at 0x0005.
             const std::uint16_t sp = regs.sp;
             const std::uint16_t ret_low = machine.read_memory(sp);
             const std::uint16_t ret_high = machine.read_memory(static_cast<std::uint16_t>(sp + 1));

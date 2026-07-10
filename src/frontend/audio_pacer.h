@@ -19,31 +19,31 @@ namespace sony_msx::frontend {
 
 // One frame's audio-production plan (see AudioPacer::plan()).
 struct AudioPacingDecision {
-    // How many real PSG samples to PUMP this call (generator advance). This is
-    // ALWAYS the full exact-accounting delta -- the PSG generator's notion of
-    // time never diverges from the machine's elapsed cycles, no matter what the
-    // host audio queue looks like.
+    // How many real PSG samples to PUMP this call (generator advance). Always
+    // the full exact-accounting delta -- the PSG generator's notion of time
+    // never diverges from the machine's elapsed cycles, regardless of what
+    // the host audio queue looks like.
     std::uint64_t samples_to_pump = 0;
-    // How many of the pumped samples (the FIRST samples_to_push of them, in
-    // order) to actually push to the host stream. samples_to_push <=
-    // samples_to_pump; the difference is dropped (trimmed) to keep the host
-    // queue depth bounded by max_queued_samples.
+    // How many of the pumped samples (the first samples_to_push, in order) to
+    // push to the host stream. samples_to_push <= samples_to_pump; the
+    // difference is dropped to keep the host queue depth bounded by
+    // max_queued_samples.
     std::uint64_t samples_to_push = 0;
-    // How many SILENCE samples to push BEFORE the real samples. Non-zero only
-    // at an underrun boundary (queued_samples == 0 at plan time: session start,
-    // or the host drained the queue completely during a stall) -- it restores
-    // the low-water base latency so subsequent audio plays contiguously instead
-    // of chronically riding the empty-queue edge.
+    // How many SILENCE samples to push before the real samples. Non-zero only
+    // at an underrun boundary (queued_samples == 0 at plan time: session
+    // start, or the host drained the queue during a stall) -- restores the
+    // low-water base latency so audio plays contiguously instead of
+    // chronically riding the empty-queue edge.
     std::uint64_t silence_samples_to_push = 0;
 };
 
-// Exact-accounting, backpressure-capped audio pacing policy (SDL-free, so the
-// whole decision procedure is headlessly ctest-provable -- mirrors the
+// Exact-accounting, backpressure-capped audio pacing policy (SDL-free, so
+// the whole decision procedure is headlessly ctest-provable -- mirrors the
 // PsgAudioPump SDL3-independence precedent, M26-S5).
 //
-// Root cause this class exists to fix (docs/audio-latency-investigation.md):
-// the M26 frontend pushed floor(59736/81) = 737 samples per frame on a
-// wall-clock frame cadence whose 16.688 ms period was TRUNCATED to 16 ms, and
+// Root cause this class fixes (docs/audio-latency-investigation.md): the M26
+// frontend pushed floor(59736/81) = 737 samples per frame on a wall-clock
+// frame cadence whose 16.688 ms period was TRUNCATED to 16 ms, and
 // SDL_PutAudioStreamData queues unboundedly -- measured +1,307 samples/s of
 // unbounded host-queue growth (+29.7 ms of audio latency per second of play).
 //
@@ -63,9 +63,9 @@ struct AudioPacingDecision {
 //      instead of accumulating permanently.
 //   3. LOW-WATER RE-PRIME -- only when the queue is found EMPTY (an underrun
 //      boundary; the device already played silence), silence is pushed to
-//      restore low_water_samples of base latency. Never triggered by ordinary
-//      jitter dips, so it cannot inject artificial gaps into an otherwise
-//      healthy stream.
+//      restore low_water_samples of base latency. Never triggered by
+//      ordinary jitter dips, so it cannot inject artificial gaps into an
+//      otherwise healthy stream.
 //
 // Determinism: samples_to_pump (the only output that touches emulated device
 // state) is a pure function of total_elapsed_cycles -- host-queue state only

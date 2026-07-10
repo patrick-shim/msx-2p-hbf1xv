@@ -89,11 +89,11 @@ std::uint64_t DiskDrive::cycles_until_index_pulse(const std::uint64_t now) const
 
 std::uint64_t DiskDrive::cycles_until_sector_id(const std::uint32_t sector_index,
                                                 const std::uint64_t now) const {
-    // Evenly-spaced sequential sector model (see header): sector k's ID address
-    // mark sits at angle (k / 9) of the rotation. Computed as a fraction of the
-    // FULL period (k * P / 9, not k * (P/9)) so the integer rounding is spread
-    // across the 9 slots rather than accumulating per slot. sector_index is 0..8
-    // (SR 1..9 validated by the WD2793 caller), so sector_angle < kIndexPeriodCycles.
+    // Evenly-spaced sequential model (see header): sector k's ID mark sits at
+    // angle k/9 of the rotation, computed as k*P/9 (not k*(P/9)) so integer
+    // rounding is spread across the 9 slots instead of accumulating. sector_index
+    // is 0..8 (SR 1..9 validated by the WD2793 caller), so sector_angle <
+    // kIndexPeriodCycles.
     const std::uint64_t sector_angle =
         (static_cast<std::uint64_t>(sector_index) * kIndexPeriodCycles) /
         DiskImage::kSectorsPerTrack;

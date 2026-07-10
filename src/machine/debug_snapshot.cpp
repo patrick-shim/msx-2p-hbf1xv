@@ -34,8 +34,9 @@ using debug_format::to_hex;
 // Boolean -> "1"/"0" (matches the CPU dump's IFF1=1 discipline).
 [[nodiscard]] std::string b01(const bool value) { return value ? "1" : "0"; }
 
-// Signed decimal (raster line can be negative in the border region; INT_MIN is
-// the "no clock attached" sentinel -- a real machine always has one).
+// Signed decimal. Raster line / VDP cycle position can be negative (border
+// region) or INT_MIN, the "no VDP clock attached" sentinel (v9958_vdp.h) --
+// a real machine always has one.
 [[nodiscard]] std::string sdec(const long long value) {
     if (value < 0) {
         return "-" + to_dec(static_cast<std::uint64_t>(-value));
@@ -113,8 +114,8 @@ std::string cpu_section(const devices::cpu::Z80aState& state) {
     out += "AF'=" + to_hex(r.af_shadow, 4) + " BC'=" + to_hex(r.bc_shadow, 4) +
            " DE'=" + to_hex(r.de_shadow, 4) + " HL'=" + to_hex(r.hl_shadow, 4) + "\n";
     out += "IX=" + to_hex(r.ix, 4) + " IY=" + to_hex(r.iy, 4) + "\n";
-    // The comprehensive CPU serializer's delta over the golden serialize_cpu:
-    // the internal WZ/MEMPTR + Q latch (restore-ready; planner §2.4 item 1).
+    // Delta over the golden serialize_cpu: internal WZ/MEMPTR + Q latch
+    // (restore-ready; planner §2.4 item 1).
     out += "WZ=" + to_hex(r.wz, 4) + " Q=" + to_hex(r.q, 2) + "\n";
     out += "A=" + to_hex(r.a(), 2) + " F=" + to_hex(r.f(), 2) + "[" + flag_string(r.f()) + "]" +
            " B=" + to_hex(r.b(), 2) + " C=" + to_hex(r.c(), 2) + " D=" + to_hex(r.d(), 2) +
@@ -454,9 +455,9 @@ std::string cartridge_section(const std::string& label,
     }
     out += "\n";
 
-    // Generic bank-state dump via the additive rom_window() seam (planner §2.4
-    // item 13): window-based mappers expose their 8-slot window; others (FM-PAC)
-    // return nullptr and are dumped through their own sections below.
+    // Generic bank-state dump via the additive rom_window() seam (planner
+    // §2.4 item 13): window-based mappers expose their 8-slot window; FM-PAC
+    // returns nullptr and is dumped via its own section below.
     if (const devices::cartridge::CartridgeMapperDevice* mapper = slot.mapper()) {
         if (const devices::cartridge::CartridgeRomWindow* window = mapper->rom_window()) {
             out += "[" + label + ".BANKS]\n";

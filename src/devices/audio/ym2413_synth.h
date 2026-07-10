@@ -23,47 +23,47 @@ class Ym2413Opll;
 // YM2413 (OPLL) FM waveform-synthesis engine (M31, backlog E1 -- the
 // formulaically-derivable subset per docs/m31-planner-package.md §1.2, ratified
 // by DEC-0035 from the M28 §2.3(a) finding). Pure, deterministic,
-// self-contained: no clock attachment, advanced ONLY by explicit
+// self-contained: no clock attachment, advanced only by explicit
 // advance_cycles() calls (the SccWavetable precedent,
-// src/devices/audio/scc_wavetable.h) with the owning Ym2413Opll register file
+// src/devices/audio/scc_wavetable.h), with the owning Ym2413Opll register file
 // passed in as the live register view (§2.6 register-file-as-truth; the M17
-// decode accessors are genuinely REUSED -- no duplicated register decode).
+// decode accessors are reused directly -- no duplicated register decode).
 //
 // GROUNDING (every element -> its independent source, planner §2.1):
-//   - log-sin/exp operator tables: COMPUTED AT STATIC CONSTRUCTION from
+//   - log-sin/exp operator tables: computed at static construction from
 //     closed-form math (fact-sheet §4 structure: 256-entry 12-bit log-sin,
 //     256-entry 10-bit exp, `expTable[logsin + 128*vol + 16*env]`
 //     composition). Formulas re-derived from the fact-sheet's structural
-//     description; NO table values transcribed from any reference source.
+//     description; no table values transcribed from any reference source.
 //   - phase generation: fact-sheet §8 (`dP = F-Num * 2^BLOCK * MUL(/2)` into
 //     a 19-bit accumulator, top 10 bits index the sine, top 2 mirror);
 //     19-bit width is A-M31-4 (a documented choice within §8's "~18-19-bit"
 //     hedge, corroborated by fMSX's /2^19 frequency constant); the §3 MUL
 //     table is carried in x2-integer form to represent the 0 -> 1/2 entry.
-//   - EG decay/release: EXACT per fact-sheet §5 (128 levels over 48 dB,
+//   - EG decay/release: exact per fact-sheet §5 (128 levels over 48 dB,
 //     0.375 dB/step; effective 6-bit rate = 4*R + Rks; rates 0-3 no change;
 //     60-63 two levels/sample; eg_shift = 13 - rate/4, eg_select = rate & 3
-//     with §5's four printed 8-entry select tables; ONE global counter shared
+//     with §5's four printed 8-entry select tables; one global counter shared
 //     by all 18 operators -- deliberately preserving §5's audible
 //     "first decay segment after key-on is typically shorter" consequence).
 //     Overall timing anchored by §5's closed form
 //     `cycles = (rate<60) ? (1<<(14-(rate/4)))*s[rate&3] : 63`,
 //     s = {127,102,85,73} -- the unit-test oracle.
-//   - feedback: average of the modulator's LAST TWO output samples
+//   - feedback: average of the modulator's last two output samples
 //     (fact-sheet §5, die-confirmed 2-deep delay) with FB[2:0] as an
 //     exponential shift spanning modulation index 0, pi/16 .. 4pi (§3);
-//     property: each FB step exactly DOUBLES the modulation index.
+//     each FB step exactly doubles the modulation index.
 //   - KSR/Rks: Rks = (BLOCK*2 + F-Num[8]) when KSR=1, >>2 when KSR=0 --
 //     A-M31-3, the only natural 0-15 construction satisfying §3's stated
 //     ranges; semantics cross-checked against openMSX YM2413Okazaki.cc
 //     updateRKS (freq >> (KSR ? 8 : 10) over a block<<9|fnum packing --
 //     bit-identical to this construction; semantics only, no tables) and
-//     against fMSX YM2413.c (which has NO operator-level KSR handling at all,
+//     against fMSX YM2413.c (which has no operator-level KSR handling at all,
 //     planner §2.8 -- no disagreement possible).
 //   - rhythm mode: fact-sheet §6 slot commitment (BD = ch6 normal 2-op FM;
 //     TOM = ch8-modulator 1-op; HH/SD on ch7 sharing its frequency; TOM/T-CY
 //     sharing ch8's), $0E bit-keying, $36-$38 nibble volumes via the M17
-//     accessors, and the DOUBLE-OUTPUT quirk as an exact x2 rhythm gain law
+//     accessors, and the double-output quirk as an exact x2 rhythm gain law
 //     (§6 quirk 1 / §7 "output twice ... effectively +6 dB after LPF").
 //   - native rate: one native sample tick per 72 master cycles = exactly
 //     3.579545 MHz / 72 = 49716 Hz (fact-sheet §7).

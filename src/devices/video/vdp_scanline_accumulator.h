@@ -27,35 +27,35 @@ namespace sony_msx::devices::video {
 //
 // Real V9958 output is produced as the beam advances: a register/VRAM write
 // between lines takes effect on the FOLLOWING line. openMSX models this with
-// its sync-before-change protocol -- every VDP state-change notification
-// renders up to the current beam position BEFORE the change applies
+// a sync-before-change protocol -- every VDP state-change notification
+// renders up to the current beam position before the change applies
 // (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394 register/
 // palette updates, :510-517 VRAM writes, :527-547 sync(), :219-228
-// frameEnd()); under its first-class Accuracy::LINE mode the beam limit is a
-// whole line index (PixelRenderer.cc:549-571). fMSX independently
-// corroborates the per-scanline architecture -- its whole display pipeline
-// runs one RefreshLine per scanline as the scan advances
+// frameEnd()); its first-class Accuracy::LINE mode uses a whole line index
+// as the beam limit (PixelRenderer.cc:549-571). fMSX independently
+// corroborates the per-scanline architecture: its display pipeline runs one
+// RefreshLine per scanline as the scan advances
 // (references/fmsx-60/source/fMSX/MSX.c:209-224, 2149-2155). This class is
 // the line-granular accumulation store both references imply: the machine
 // commits display lines [0, watermark_) as the raster passes them (via the
-// V9958Vdp render-sync seam), and the remainder of the frame renders from
-// live registers at finalize.
+// V9958Vdp render-sync seam); the rest of the frame renders from live
+// registers at finalize.
 //
-// The EXISTING per-line workhorse is reused as-is: every committed row is
-// produced by VdpFrameRenderer::render_line() against the LIVE V9958Vdp it
+// The existing per-line workhorse is reused as-is: every committed row comes
+// from VdpFrameRenderer::render_line() against the LIVE V9958Vdp it
 // references (M21). The legacy VdpFrameRenderer::render_frame() snapshot
-// path is deliberately NOT touched -- it remains the in-test static-frame
+// path is deliberately untouched -- it remains the in-test static-frame
 // equivalence oracle (§2.2: "NOT modified and NOT removed").
 //
 // Determinism: every output is a pure function of the machine's cycle
-// history and the sequence of sync points (themselves cycle-derived). No
-// wall clock, no host state, no allocation churn (row buffers are reused
-// across frames -- R-M32-3 mitigation).
+// history and sync-point sequence (themselves cycle-derived). No wall
+// clock, no host state, no allocation churn (row buffers are reused across
+// frames -- R-M32-3 mitigation).
 //
 // Field note (documented design choice, §2.4 consumers audit): accumulation
 // always renders Field::Progressive -- the only field any production caller
 // uses (Sdl3App::run_one_frame(), write_frame_dump() defaults, main.cpp
-// evidence mode). Interlace Even/Odd remain frame-snapshot semantics at the
+// evidence mode). Interlace Even/Odd stay frame-snapshot semantics at the
 // machine level (Hbf1xvMachine::render_frame() routes non-Progressive
 // requests to the legacy snapshot renderer).
 class VdpScanlineAccumulator {
@@ -68,56 +68,56 @@ public:
 
     // Commit display lines [watermark_, min(exclusive_end_line, height))
     // via VdpFrameRenderer::render_line() against LIVE registers, then
-    // advance watermark_. Idempotent: a no-op for end <= watermark_ EXCEPT
-    // the wrap-safety rule below. Negative/border raster positions clamp
-    // to 0 (a caller passing raster_line+1 for raster_line < 0 commits
-    // nothing -- writes during vblank/border affect the whole next frame).
+    // advance watermark_. Idempotent: a no-op for end <= watermark_ except
+    // the wrap-safety rule below. Negative/border raster positions clamp to
+    // 0 (a caller passing raster_line+1 for raster_line < 0 commits nothing
+    // -- writes during vblank/border affect the whole next frame).
     //
     // Wrap safety (§2.2): if 0 < end < watermark_, the observed raster
-    // position is BEHIND the accumulation point within the same frame -- a step-only
-    // caller that never calls on_vsync_boundary() let the 262-line
-    // arithmetic wrap (the DEC-0034 loop-shape class), or a mid-frame LN/
-    // mode change moved the active-window origin (the §2.4/D10 geometry-
-    // adaptation class). The accumulator then finalizes-to-bottom and
-    // resets deterministically before committing [0, end). No crash, no
+    // position is behind the accumulation point within the same frame -- a
+    // step-only caller that never calls on_vsync_boundary() let the
+    // 262-line arithmetic wrap (the DEC-0034 loop-shape class), or a
+    // mid-frame LN/mode change moved the active-window origin (the §2.4/D10
+    // geometry-adaptation class). The accumulator then finalizes-to-bottom
+    // and resets deterministically before committing [0, end). No crash, no
     // host-state dependence.
     void sync_to_line(int exclusive_end_line);
 
-    // Seal the current frame: sync_to_line(height), materialize the frame
-    // under the END-of-frame geometry policy (§2.4: width/height/border
-    // from the live end-of-frame register state, exactly what the legacy
-    // snapshot renderer reports; rows accumulated under a different width
-    // adapt deterministically -- 256->512 pixel-double, 512->256
-    // even-sample, other mismatches copy-and-pad with the border color;
-    // rows above the final height are dropped; rows never accumulated
-    // because the height grew render at finalize from live state), store
-    // it as the completed frame, and reset the line store for the next
-    // frame. `field` selects the field for any lines rendered live at
-    // finalize (production passes Field::Progressive).
+    // Seal the current frame: sync_to_line(height), materialize under the
+    // end-of-frame geometry policy (§2.4: width/height/border from the live
+    // end-of-frame register state, matching what the legacy snapshot
+    // renderer reports; rows accumulated under a different width adapt
+    // deterministically -- 256->512 pixel-double, 512->256 even-sample,
+    // other mismatches copy-and-pad with the border color; rows above the
+    // final height are dropped; rows never accumulated because height grew
+    // render at finalize from live state), store it as the completed
+    // frame, and reset the line store for the next frame. `field` selects
+    // the field for lines rendered live at finalize (production passes
+    // Field::Progressive).
     void finalize(Field field);
 
-    // "Accumulated past + projected future" snapshot WITHOUT sealing:
-    // rows [0, watermark_) from the store (geometry-adapted), rows
-    // [watermark_, height) rendered from live registers directly into the
-    // returned frame (NOT committed -- a later hooked write may still
-    // re-render them). For a frame with no accumulated rows this is
-    // byte-identical to the legacy snapshot renderer by construction
-    // (every line renders from the same live register state).
+    // "Accumulated past + projected future" snapshot without sealing: rows
+    // [0, watermark_) from the store (geometry-adapted), rows [watermark_,
+    // height) rendered from live registers directly into the returned frame
+    // (not committed -- a later hooked write may still re-render them). For
+    // a frame with no accumulated rows this is byte-identical to the legacy
+    // snapshot renderer by construction (every line renders from the same
+    // live register state).
     [[nodiscard]] FrameBuffer compose(Field field) const;
 
     [[nodiscard]] int watermark() const { return watermark_; }
     [[nodiscard]] bool has_completed_frame() const { return has_completed_frame_; }
     [[nodiscard]] const FrameBuffer& completed_frame() const { return completed_frame_; }
 
-    // Staleness guard for the frame-boundary fast path: ANY VDP state
+    // Staleness guard for the frame-boundary fast path: any VDP state
     // mutation after finalize (hooked io_write -- including border-region
     // writes that commit nothing -- or a machine debug_io_write to the VDP
     // ports) marks the completed frame stale. The machine returns the
-    // completed frame at a boundary ONLY while it is fresh; once state
-    // moved on, a boundary-position render falls back to live projection
-    // (the exact legacy snapshot semantics for scenes rebuilt after a
-    // frame ran -- e.g. debug-built test scenes on a machine that
-    // previously called run_frame()).
+    // completed frame at a boundary only while fresh; once state moved on,
+    // a boundary-position render falls back to live projection (the exact
+    // legacy snapshot semantics for scenes rebuilt after a frame ran --
+    // e.g. debug-built test scenes on a machine that previously called
+    // run_frame()).
     void mark_completed_frame_stale() { completed_frame_stale_ = true; }
     [[nodiscard]] bool completed_frame_fresh() const {
         return has_completed_frame_ && !completed_frame_stale_;

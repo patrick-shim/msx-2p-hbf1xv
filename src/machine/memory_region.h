@@ -23,13 +23,12 @@ namespace sony_msx::machine {
 //
 // A MemoryRegion is a fixed-size, deterministically zero-initialized byte
 // buffer that is addressable, readable, writable, loadable, and dumpable. It
-// carries NO device behavior whatsoever: no slot/subslot/mapper decoding, no
-// V9958 VDP command/rendering semantics, no FM-PAC/SRAM mapper or battery
-// persistence, and no I/O bus. Those subsystems are owned by SEPARATE
-// milestones (planner package DP-1 slot/mapper, DP-2 V9958 VDP, DP-3
-// FM-PAC/SRAM). This type only provides the minimum backing storage the
-// machine layer needs so that DRAM/VRAM/SRAM can be wired, reset, dumped, and
-// reloaded deterministically.
+// carries no device behavior: no slot/subslot/mapper decoding, no V9958 VDP
+// command/rendering semantics, no FM-PAC/SRAM mapper or battery persistence,
+// and no I/O bus. Those subsystems are owned by separate milestones (planner
+// package DP-1 slot/mapper, DP-2 V9958 VDP, DP-3 FM-PAC/SRAM). This type only
+// provides the minimum backing storage the machine layer needs so that
+// DRAM/VRAM/SRAM can be wired, reset, dumped, and reloaded deterministically.
 //
 // All accessors are bounds-safe and deterministic: out-of-range reads yield
 // 0x00 and out-of-range writes are ignored, so no access can perturb state

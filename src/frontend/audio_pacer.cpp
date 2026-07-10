@@ -28,8 +28,8 @@ AudioPacer::AudioPacer(const std::uint64_t sample_rate_hz, const std::uint64_t s
 AudioPacingDecision AudioPacer::plan(const std::uint64_t total_elapsed_cycles, const std::uint64_t queued_samples) {
     AudioPacingDecision decision;
 
-    // 1. Exact accounting: cumulative due count from cumulative cycles, no
-    //    per-frame rounding drift. Monotonic guard: a repeated/stale cycle
+    // 1. Exact accounting: total_due comes from cumulative cycles (no
+    //    per-frame rounding drift). Monotonic guard: a stale/repeated cycle
     //    count pumps nothing (never rewinds samples_produced_).
     const std::uint64_t total_due = cycles_to_samples(total_elapsed_cycles);
     if (total_due > samples_produced_) {

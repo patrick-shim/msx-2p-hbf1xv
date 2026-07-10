@@ -25,9 +25,10 @@ namespace sony_msx::frontend {
 // Deterministic, decoded-PSG-audio dump serializer (M27-S5, "Production
 // Hardening + Debug/Test Tooling" item 2, docs/m27-planner-package.md §2.3).
 //
-// Genuinely reuses M26's real PSG sample-generation wiring
+// Reuses M26's real PSG sample-generation wiring
 // (frontend::PsgAudioPump / devices::audio::PsgYm2149::advance_cycles()/
-// sample()) -- NOT a parallel/duplicate synthesis implementation -- and
+// take_integrated_sample(), M34's box-average path -- see the M34 note
+// below) -- NOT a parallel/duplicate synthesis implementation -- and
 // mirrors machine/frame_dump.h's exact reuse-of-debug_dump::serialize_region()
 // discipline (src/frontend/ MAY depend on src/machine/, A-M27-8). Headless-
 // buildable, no SDL3 dependency (A-M27-7): added to the SAME unguarded

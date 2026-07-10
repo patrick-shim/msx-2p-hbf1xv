@@ -19,7 +19,7 @@ namespace sony_msx::peripherals {
 
 void RenshaTurbo::reset() {
     speed_ = 0;
-    // clock_source_ is NOT reset (mirrors CassetteInterface's own reset()
+    // clock_source_ is not reset (mirrors CassetteInterface's own reset()
     // precedent -- an attached clock/dependency source is wired once at
     // machine composition and persists across a cold boot).
 }

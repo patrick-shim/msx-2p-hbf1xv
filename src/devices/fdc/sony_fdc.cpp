@@ -40,14 +40,13 @@ core::BusData SonyFdc::mem_read(const core::BusAddress address) {
             return side_reg_;  // PhilipsFDC.cc:77-80
         case 0x3FFD: {
             // bit2 = 0 iff disk changed (DSKCHG); else pulled to 1 (PhilipsFDC.cc:35-41).
-            // READING the register CLEARS the DSKCHG one-shot: openMSX's readMem
-            // calls the MUTATING multiplexer.diskChanged() (PhilipsFDC.cc:37),
-            // which resets the latch (DiskChanger.cc:95-100). take_disk_changed()
-            // mirrors that. This is REQUIRED so a swapped medium reports "changed"
-            // exactly once; otherwise DSKCHG stays asserted forever after any swap
-            // and a game that re-checks the disk retries/aborts into DI;HALT
-            // (M36 Bug B). The debug/snapshot peek path stays on the const,
-            // non-clearing drive_.disk_changed() (mirrors const peekMem :90).
+            // READING clears the DSKCHG one-shot (openMSX's readMem calls the
+            // MUTATING diskChanged(), PhilipsFDC.cc:37 -> DiskChanger.cc:95-100);
+            // take_disk_changed() mirrors that -- required so a swapped medium
+            // doesn't stay "changed" forever and drive a game into DI;HALT (M36
+            // Bug B; full derivation: DiskDrive::take_disk_changed). The
+            // debug/snapshot peek path stays on the const, non-clearing
+            // drive_.disk_changed() (mirrors const peekMem :90).
             std::uint8_t res = static_cast<std::uint8_t>(drive_reg_ & ~0x04);
             if (!drive_.take_disk_changed()) {
                 res |= 0x04;

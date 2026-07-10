@@ -49,15 +49,11 @@ core::BusData CartridgeKonamiRom::mem_read(const core::BusAddress address) {
 }
 
 void CartridgeKonamiRom::mem_write(const core::BusAddress address, const core::BusData value) {
-    // RomKonami.cc:61-67: [0x4000..0x6000) is fixed at segment 0 -- writes
-    // only trigger at addr >= 0x6000 (page>>13 in {3,4,5} only), so page 2 is
-    // NEVER passed to bank_switch() again after reset(); window-slot 2 (and,
-    // via the mirror, window-slot 0) is therefore permanently fixed at bank 0
-    // for the whole session (R-M19-3, corrected). Window-slot 1 is NOT
-    // fixed: it mirrors window-slot 3's LIVE value on every write to page 3
-    // (0x6000-0x7FFF), since bank_switch(3, block) always re-applies the
-    // page==3 mirror branch too -- see the class-level doc comment in
-    // cartridge_konami_rom.h for the full derivation.
+    // RomKonami.cc:61-67: [0x4000..0x6000) is fixed at bank 0 -- writes only
+    // trigger at addr >= 0x6000, so slot 2 (and its mirror, slot 0) never
+    // changes after reset(), while slot 1 tracks slot 3's live value via the
+    // page-3 mirror branch (R-M19-3). Full derivation: class doc in
+    // cartridge_konami_rom.h.
     if (address >= 0x6000 && address < 0xC000) {
         bank_switch((address >> 13) & 0x07, value);
     }

@@ -19,10 +19,10 @@ namespace sony_msx::devices::video {
 
 // VDP command-engine coordinate-to-VRAM-address resolution (M22-S3, the
 // D7-closing piece, backlog D3/D7). Five NEW, dedicated, pure functions --
-// genuinely SEPARATE from V9958Vdp::effective_address() (that function has
-// no X/Y parameters at all: it operates on a linear 17-bit CPU-port pointer,
-// a completely different domain). The command engine addresses VRAM
-// directly in X/Y pixel-coordinate space, so it needs its own formulas.
+// separate from V9958Vdp::effective_address(), which has no X/Y parameters
+// at all (it operates on a linear 17-bit CPU-port pointer, a different
+// domain). The command engine addresses VRAM directly in X/Y pixel-
+// coordinate space, so it needs its own formulas.
 //
 // Grounding (behavior reference only, GPL isolation -- never copied):
 // references/openmsx-21.0/src/video/VDPCmdEngine.cc:175-410 (the
@@ -30,14 +30,14 @@ namespace sony_msx::devices::video {
 // `addressOf(x, y, extVRAM)` static functions), `!extVRAM` branch only --
 // HB-F1XV has no expansion socket (128 KB VRAM, fixed, matching the
 // established M14/M21 scope boundary; A-M22-8). MXS/MXD/R#45-bit6 are
-// therefore not modeled here at all: these five functions take only (x, y).
+// therefore not modeled: these five functions take only (x, y).
 //
 // CRITICAL (independently hand-verified, docs/m22-planner-package.md §1.5):
-// none of these formulas reference R#2 at all. Commands address BOTH pages
-// of a bitmap mode DIRECTLY through the Y-coordinate's own range (`y & 511`
-// spans both G6/G7 pages since each page is 256 lines; `y & 1023` spans all
-// 4 G4/G5 pages) -- this completely bypasses R#2's display-page-select bits,
-// which only matter for the DISPLAY/rendering path (VdpFrameRenderer's
+// none of these formulas reference R#2. Commands address BOTH pages of a
+// bitmap mode directly through the Y-coordinate's own range (`y & 511` spans
+// both G6/G7 pages since each page is 256 lines; `y & 1023` spans all 4
+// G4/G5 pages), bypassing R#2's display-page-select bits entirely -- those
+// only matter for the DISPLAY/rendering path (VdpFrameRenderer's
 // resolve_bitmap_page()). Do NOT gate these formulas on R#2.
 
 // GRAPHIC4 (SCREEN5): 4bpp packed, non-planar, 4 pages x 256 lines (10-bit Y).

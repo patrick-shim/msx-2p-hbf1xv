@@ -45,10 +45,10 @@ namespace sony_msx::devices::cartridge {
 //
 // SCC enable latch (SCC fact-sheet §2, A-M29-2/§9.6 arbitration): a write
 // anywhere in 0x9000-0x97FF with (value & 0x3F) == 0x3F enables the SCC
-// (0xBF enables too -- the bank latch is 6 bits wide, the 512 kB/64-bank
-// hardware ceiling's own rationale); any other value disables. THE SAME
-// WRITE STILL BANK-SWITCHES PAGE 4 (both-effects rule, RomKonamiSCC.cc:
-// 108-123 -- the enable check falls through to the page-selection check).
+// (0xBF enables too, since the bank latch is only 6 bits wide -- the same
+// 512 kB/64-bank hardware ceiling); any other value disables. THE SAME WRITE
+// STILL BANK-SWITCHES PAGE 4 (both-effects rule, RomKonamiSCC.cc:108-123 --
+// the enable check falls through to the page-selection check).
 //
 // SCC register window: when enabled, reads AND writes in 0x9800-0x9FFF go
 // to the sound generator, addressed as (addr & 0xFF) -- the 256-byte map

@@ -28,11 +28,10 @@ namespace sony_msx::devices::video {
 // Deterministic emulated-cycle clock source for the S#2 VR/HR raster-position
 // status bits (bug fix, post-M28). X-pattern of rtc::RtcClockSource/
 // fdc::FdcClockSource/peripherals::CassetteClockSource/RenshaTurboClockSource/
-// audio::Ym2413ClockSource: returns CPU T-states elapsed since the most
-// recent on_vsync() call, READ-ONLY, consulted PULL-STYLE only from
-// peek_status_register(2) -- never wired into step_cpu_instruction()/
-// run_cycles()/run_frame(), so it cannot perturb the M9/M12/M23
-// zero-tolerance CPU-timing oracles.
+// audio::Ym2413ClockSource: read-only, returns CPU T-states elapsed since the
+// last on_vsync(), consulted PULL-STYLE only from peek_status_register(2) --
+// never wired into step_cpu_instruction()/run_cycles()/run_frame(), so it
+// cannot perturb the M9/M12/M23 zero-tolerance CPU-timing oracles.
 class VdpClockSource {
 public:
     virtual ~VdpClockSource() = default;
@@ -40,20 +39,19 @@ public:
 };
 
 // Render-sync seam (M32-S1, Defect A of DEC-0039; docs/m32-planner-package.md
-// §2.3). Nullable listener notified at the TOP of V9958Vdp::io_write() for
+// §2.3). Nullable listener notified at the TOP of V9958Vdp::io_write(), for
 // all four ports (#98 VRAM data, #99 register/address, #9A palette, #9B
-// indirect) BEFORE the write mutates any state -- the direct analogue of
+// indirect), BEFORE the write mutates any state -- the direct analogue of
 // openMSX's sync-before-change protocol, where every VDP state-change
 // notification renders up to the current beam position before the change
 // applies (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394
-// register/palette updates; :510-517 VRAM writes). One call site, uniform:
-// covers control registers, palette, VRAM, and every command-engine mutation
-// (all 13 commands execute inside register/data-port writes per the M22
-// hybrid model, so their VRAM effects are bracketed by hooked writes).
-// X-pattern of VdpClockSource/IrqLine: default nullptr = byte-identical
-// no-op (proven by unit test). Rendering through this seam has ZERO
-// interrupt/status side effects -- the listener reads registers/VRAM and
-// writes only into its own pixel store (§2.3).
+// register/palette updates; :510-517 VRAM writes). One call site covers
+// control registers, palette, VRAM, and every command-engine mutation (all
+// 13 commands execute inside register/data-port writes per the M22 hybrid
+// model, so their VRAM effects are bracketed by hooked writes). X-pattern of
+// VdpClockSource/IrqLine: default nullptr = byte-identical no-op (proven by
+// unit test). Zero interrupt/status side effects -- the listener reads
+// registers/VRAM and writes only into its own pixel store (§2.3).
 class VdpRenderSyncListener {
 public:
     virtual ~VdpRenderSyncListener() = default;
@@ -61,14 +59,14 @@ public:
 };
 
 // DEC-0052 (M36 stream-light): non-perturbing control-register-write observer.
-// Notified from change_register() for every R#0..R#31 control-register write
-// (the single funnel for BOTH the #99 two-write and the #9B indirect protocols)
-// with (reg, value), so a diagnostic can watch a specific register (e.g. R#1,
-// the display/IE0 register; IE0 = bit5). Command-engine registers R#32..R#46 do
-// NOT notify (they return before the funnel). Default-null => byte-identical
-// no-op (X-pattern of VdpClockSource/VdpRenderSyncListener; reset() does NOT
-// clear it -- externally-owned lifecycle pointer). An implementation MUST NOT
-// mutate VDP state or advance any clock.
+// Notified from change_register() for every R#0..R#31 write (the single
+// funnel for both the #99 two-write and the #9B indirect protocols) with
+// (reg, value), so a diagnostic can watch a specific register (e.g. R#1,
+// IE0 = bit5). Command-engine registers R#32..R#46 do NOT notify (they
+// return before the funnel). Default-null => byte-identical no-op (X-pattern
+// of VdpClockSource/VdpRenderSyncListener); reset() does NOT clear it --
+// externally-owned lifecycle pointer. An implementation MUST NOT mutate VDP
+// state or advance any clock.
 class VdpRegisterWriteObserver {
 public:
     virtual ~VdpRegisterWriteObserver() = default;
@@ -80,12 +78,15 @@ public:
 // This device delivers the externally observable behavior a program drives
 // through the four I/O ports #98-#9B (+ the S1985 #9C-#9F mirror) and observes
 // through status registers, VRAM bytes, and the /INT line. It owns the 128 KB
-// VRAM store. It computes NO output pixels or colors: pixel raster rendering,
-// sprites+collision, the command engine, cycle-accurate slot/command timing, the
-// exact sub-frame IRQ position, YJK/YAE decode, and the visual scroll/interlace/
-// blink/superimpose effects are DEFERRED (backlog D1-D7). Every register bit
-// those features need is stored here so software can drive the chip and the
-// contract is A/B-parity-verifiable against openMSX.
+// VRAM store plus the sprite engine and VDP command engine (M22) that mutate
+// it. It computes NO output pixels or colors -- pixel raster rendering,
+// sprite/command visual compositing, and YJK/YAE decode live in
+// VdpFrameRenderer (backlog D1/D2/D3/D5/D6/D7, all DONE). Still open here is
+// D4: cycle-accurate slot/command timing and the exact sub-frame IRQ raster
+// position (frame/line-count granularity stands in; see on_vsync()/
+// on_line_match() below). Every register bit those features need is stored
+// here so software can drive the chip and the contract is A/B-parity-
+// verifiable against openMSX.
 //
 // Grounding: references/fact-sheets/Yamaha V9958 VDP.md (registers, ports,
 // status, interrupts); behavior reference references/openmsx-21.0/src/video/
@@ -94,8 +95,9 @@ public:
 // (GPL isolation).
 class V9958Vdp final : public core::IoDevice {
 public:
-    // Number of control registers modeled (R#0..R#31). Command registers
-    // R#32..R#46 are DEFERRED (backlog D3) and ignored on write.
+    // Number of control registers modeled here (R#0..R#31). R#32..R#46 are
+    // the command engine's own register file (see cmd_engine(), M22) and are
+    // dispatched to it separately in change_register().
     static constexpr int kNumControlRegs = 32;
     static constexpr int kNumStatusRegs = 10;   // S#0..S#9 (V9958 set)
     static constexpr int kNumPaletteEntries = 16;
@@ -117,9 +119,8 @@ public:
     void set_irq_line(IrqLine* sink);
 
     // Wire the S#2 VR/HR raster-position clock source (bug fix, post-M28).
-    // Nullptr (the default) means VR/HR read as their prior hardcoded-0
-    // fallback (no clock attached, e.g. unit tests constructing a bare
-    // V9958Vdp with no machine).
+    // Nullptr (the default): VR/HR read as their prior hardcoded-0 fallback
+    // (e.g. a unit test constructing a bare V9958Vdp with no machine).
     void attach_clock_source(VdpClockSource* source);
 
     // Wire the render-sync listener (M32-S1, see VdpRenderSyncListener
@@ -185,12 +186,11 @@ public:
     // on_vsync() -- the start of the lower border, fact-sheet §7 -- and the
     // top of the next active area). Derived pull-style from the same
     // VdpClockSource the S#2 VR/HR bits use; INT_MIN when no clock is
-    // attached (turning the sprite engine's raster-collision hooks into
-    // no-ops, preserving clockless-test behavior). Used by the S#0 read path
-    // for line-granular collision re-latching (boot-logo fix) and -- public
-    // since M32-S2 -- by the machine's render-sync adapter (write at line L
-    // takes effect from line L+1) and line-interrupt delivery
-    // (docs/m32-planner-package.md §2.3/§2.5).
+    // attached (raster-collision hooks become no-ops, preserving clockless-
+    // test behavior). Used by the S#0 read path for line-granular collision
+    // re-latching (boot-logo fix) and -- public since M32-S2 -- by the
+    // machine's render-sync adapter (write at line L takes effect from line
+    // L+1) and line-interrupt delivery (docs/m32-planner-package.md §2.3/§2.5).
     [[nodiscard]] int raster_display_line() const;
 
     // --- M36 Phase 3 debug snapshot: additive read-only introspection of the

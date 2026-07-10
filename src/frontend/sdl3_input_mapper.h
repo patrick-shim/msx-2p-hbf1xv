@@ -37,21 +37,17 @@ struct ScancodeBinding {
 // SDL3 real-input -> KeyboardMatrix/JoystickPorts/PAUSE/Speed-Controller/
 // Ren-Sha-Turbo mapper (M26-S6, docs/m26-planner-package.md §2.7).
 //
-// **Keyboard.** Keys off `SDL_KeyboardEvent::scancode` (a PHYSICAL,
-// layout-independent key identity, matching KeyboardMatrix's own physical
-// row/column-matrix semantics -- SDL_events.h:380's own doc: "SDL physical
-// key code"). `kScancodeMap` below is the well-known, standard MSX
-// international 11x8 keyboard matrix layout (rows 0-8; the two numeric-
-// keypad rows 9-10 are not mapped this cycle, a disclosed, bounded-scope
-// simplification) -- independently cross-checked against this project's OWN
-// already-established ground truth: `peripherals::RenshaTurbo`'s doc comment
-// (src/peripherals/rensha_turbo.h, M25) cites "keyboard row 8 bit 0 (SPACE)"
-// as the real autofire attach point, which matches `kScancodeMap`'s own
-// row=8,column=0 = SDL_SCANCODE_SPACE entry exactly. This table is genuinely
-// NEW to M26 (an SDL-scancode-keyed lookup on top of the already-correct,
-// already-tested M15 row/column semantics) -- not a re-derivation of the
-// matrix contract itself. `references/openmsx-21.0/src/input/
-// UnicodeKeymap.hh` (confirmed present) is openMSX's own generic host-key ->
+// **Keyboard.** Keyed off `SDL_KeyboardEvent::scancode` (a PHYSICAL,
+// layout-independent key identity -- matches KeyboardMatrix's own physical
+// row/column semantics, per SDL_events.h:380's "SDL physical key code" doc).
+// `kScancodeMap` below is the standard MSX international 11x8 keyboard
+// matrix layout (rows 0-8; the two numeric-keypad rows 9-10 are not mapped
+// this cycle, a disclosed scope limit) -- cross-checked against this
+// project's own M25 ground truth: `peripherals::RenshaTurbo`'s doc comment
+// (src/peripherals/rensha_turbo.h) cites "keyboard row 8 bit 0 (SPACE)" as
+// the real autofire attach point, matching `kScancodeMap`'s own
+// row=8,column=0 = SDL_SCANCODE_SPACE entry exactly. `references/openmsx-
+// 21.0/src/input/UnicodeKeymap.hh` is openMSX's own generic host-key ->
 // MSX-matrix translation MECHANISM and may be consulted as an
 // implementation-TECHNIQUE reference only -- never copied verbatim (GPL
 // isolation).

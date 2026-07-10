@@ -25,18 +25,18 @@ namespace sony_msx::devices::video {
 // V9958 sprite check / collision / 5th-sprite-detection engine (M22-S1/S2,
 // backlog D2). Owned INSIDE V9958Vdp as a private member (mirrors the
 // existing blink_countdown_/blink_state_ ownership style -- NOT a new
-// machine-level sibling like VdpFrameRenderer). Driven ONLY by the EXISTING
-// on_vsync() frame-boundary hook: recompute_frame() is called once per
-// frame, over ALL output lines in one deterministic pass -- no new clock
-// consumer (mirrors the M21 blink-countdown precedent exactly).
+// machine-level sibling like VdpFrameRenderer). Driven only by the existing
+// on_vsync() frame-boundary hook: recompute_frame() runs once per frame,
+// over all output lines in one deterministic pass -- no new clock consumer
+// (mirrors the M21 blink-countdown precedent exactly).
 //
-// CPU-visible status side effects (S#0 5S/C, S#3-S#6 collision X/Y) are
-// independent of whether any frame is ever rendered: real software polls
-// these via IN (#99) without needing a pixel output. VdpFrameRenderer's
-// sprite-pixel compositing pass (composite_sprites()) then QUERIES this SAME
+// CPU-visible status side effects (S#0 5S/C, S#3-S#6 collision X/Y) don't
+// depend on whether any frame is ever rendered: real software polls these
+// via IN (#99) without needing pixel output. VdpFrameRenderer's sprite-pixel
+// compositing pass (composite_sprites()) then queries this same
 // already-computed per-line visible-sprite buffer via visible_sprites()
-// (a read-only accessor), avoiding a second, drift-prone implementation of
-// the sprite-selection algorithm (planner package §1.4 Resolution 1).
+// (read-only), avoiding a second, drift-prone implementation of the
+// sprite-selection algorithm (planner package §1.4 Resolution 1).
 //
 // Grounding (behavior reference only, GPL isolation -- never copied):
 // references/openmsx-21.0/src/video/SpriteChecker.{hh,cc} (check/collision/
@@ -88,18 +88,18 @@ public:
     void reset_collision();
 
     // Per-line collision re-latch against the live raster position (boot-logo
-    // fix). Real hardware checks sprites PROGRESSIVELY as the raster scans
+    // fix). Real hardware checks sprites progressively as the raster scans
     // (openMSX models this in SpriteChecker::sync()/checkSprites1/2, which
-    // run "up to the current emulation time" -- SpriteChecker.hh:70-100): the
-    // S#0 C flag therefore re-latches on the NEXT colliding line scanned
-    // after an S#0 read cleared it, i.e. with LINE granularity, not frame
-    // granularity. The HB-F1XV BIOS's boot-logo wobble effect depends on
-    // this: it paces one R#26/R#27 write per S#0-C poll exit (BIOS
-    // f1xvbios.rom loop at 0x7A5D-0x7A74), which on a frame-granular model
-    // runs two orders of magnitude too slowly and never visibly completes.
+    // run "up to the current emulation time" -- SpriteChecker.hh:70-100), so
+    // the S#0 C flag re-latches on the NEXT colliding line scanned after an
+    // S#0 read cleared it -- LINE granularity, not frame granularity. The
+    // HB-F1XV BIOS's boot-logo wobble effect depends on this: it paces one
+    // R#26/R#27 write per S#0-C poll exit (BIOS f1xvbios.rom loop at
+    // 0x7A5D-0x7A74), which on a frame-granular model runs two orders of
+    // magnitude too slowly and never visibly completes.
     //
     // recompute_frame() therefore collects the frame's per-line collision
-    // EVENTS (raster order); the V9958Vdp S#0 read path calls these two
+    // events (raster order); the V9958Vdp S#0 read path calls these two
     // hooks with the current raster display line (derived from its existing
     // pull-style VdpClockSource -- this engine still owns no clock):
     //  * sync_collision_to_raster(): if C is clear, latch the next

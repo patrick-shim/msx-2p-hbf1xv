@@ -25,21 +25,20 @@ namespace sony_msx::devices::cartridge {
 // references/openmsx-21.0/src/memory/RomKonami.cc (behaviour reference only,
 // never copied -- GPL isolation). The single most common real-world MSX
 // MegaROM scheme (Nemesis, Penguin Adventure, Metal Gear, The Maze of
-// Galious, ...). KonamiSCC (the SCC-chip-bearing sibling) is explicitly OUT
-// of scope (backlog G1, a new audio device, not an incremental mapper).
+// Galious, ...). The SCC-chip-bearing sibling is CartridgeKonamiScc
+// (cartridge_konami_scc_rom.h, added M29, backlog G1).
 //
 // Construction: set_block_mask(31) -- "Konami mapper is 256kB in size, even
-// if ROM is smaller" (RomKonami.cc:24). If the loaded image exceeds 256 KB
-// this is loaded anyway (never rejected, matching openMSX's own non-fatal
-// warning, RomKonami.cc:27-31) -- and because the mask is only a FALLBACK for
+// if ROM is smaller" (RomKonami.cc:24). An image exceeding 256 KB is loaded
+// anyway (never rejected, matching openMSX's own non-fatal warning,
+// RomKonami.cc:27-31) -- and since the mask is only a FALLBACK for
 // out-of-range requests (A-M19-6), every byte-value bank request 0..255
 // against a >256KB image is used UNMASKED (the mask never engages).
 // Deliberately does NOT call reset() in the constructor, matching
 // RomKonami.cc:33-35 exactly ("Do not call reset() here... there will be a
 // reset() at power up anyway"); CartridgeSlot::load() (M19-S3) calls the
 // newly constructed mapper's reset() explicitly before installing it as
-// active, so this is a documented, deliberate no-op-until-loaded state, never
-// an unresolved gap.
+// active -- a documented no-op-until-loaded state, not a bug.
 //
 // reset(): bank_switch(2,0); bank_switch(3,1); bank_switch(4,2);
 // bank_switch(5,3) (RomKonami.cc:54-59).
@@ -48,16 +47,14 @@ namespace sony_msx::devices::cartridge {
 // page==4 or 5, ALSO window.set_bank(page+2, block) (mirrors into
 // window-slots 6/7) -- RomKonami.cc:38-52.
 // mem_write: only when 0x6000 <= addr < 0xC000; bank_switch(addr>>13, val)
-// (RomKonami.cc:61-67). CRITICAL QUIRK (deliberately preserved, corrected
-// during M19 QA): window-slot 2 (0x4000-0x5FFF) is never a write target
-// (writes only trigger at addr >= 0x6000, "[0x4000..0x6000) is fixed at
-// segment 0", RomKonami.cc:63), so bank_switch(2,...) is ONLY ever invoked
-// by reset() -- meaning window-slots 0 AND 2 (mirrored together via
-// bank_switch(2,...)'s page-2=0 branch) are BOTH permanently fixed at bank 0
-// for the entire session. Window-slot 1, however, is mirrored by
-// bank_switch(3,...) (page-2=1), which IS re-invoked on every write to page
-// 3 (addr 0x6000-0x7FFF) -- so slot 1 is NOT fixed; it tracks slot 3's LIVE
-// value, exactly as slot 6 tracks slot 4 and slot 7 tracks slot 5 (R-M19-3).
+// (RomKonami.cc:61-67). QUIRK (deliberately preserved, R-M19-3): slot 2
+// (0x4000-0x5FFF) is never a write target -- writes only trigger at addr >=
+// 0x6000 ("[0x4000..0x6000) is fixed at segment 0", RomKonami.cc:63) -- so
+// bank_switch(2,...) only ever runs from reset(), leaving slots 0 and 2
+// (mirrored together via the page-2=0 branch) permanently fixed at bank 0
+// for the session. Slot 1, however, is mirrored by bank_switch(3,...)
+// (page-2=1), which IS re-invoked on every page-3 write (0x6000-0x7FFF) --
+// so slot 1 tracks slot 3's LIVE value, same as slot 6/4 and slot 7/5.
 class CartridgeKonamiRom final : public CartridgeMapperDevice {
 public:
     [[nodiscard]] static bool is_valid_image_size(std::size_t size);

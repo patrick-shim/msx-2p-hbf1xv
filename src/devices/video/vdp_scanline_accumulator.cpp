@@ -41,7 +41,7 @@ void VdpScanlineAccumulator::sync_to_line(const int exclusive_end_line) {
     const int end = std::clamp(exclusive_end_line, 0, std::min(height, kMaxLines));
 
     if (end > 0 && end < watermark_) {
-        // Wrap safety (§2.2): a POSITIVE raster position behind the
+        // Wrap safety (§2.2): a positive raster position behind the
         // accumulation point -- the previous frame was never finalized
         // (step-only caller, DEC-0034 loop-shape class) or a mid-frame
         // geometry change moved the active window (D10 class). Seal
@@ -49,8 +49,7 @@ void VdpScanlineAccumulator::sync_to_line(const int exclusive_end_line) {
         // position -- is always a plain no-op: border writes never reset a
         // partial frame.)
         finalize(Field::Progressive);
-        // finalize() reset watermark_ to 0; fall through to accumulate
-        // [0, end) of the new frame below.
+        // watermark_ is now 0; fall through to accumulate [0, end).
     }
     if (end <= watermark_) {
         return;  // idempotent no-op (includes border/vblank writes, end == 0)
@@ -64,7 +63,7 @@ void VdpScanlineAccumulator::sync_to_line(const int exclusive_end_line) {
         if (static_cast<int>(row.pixels.size()) != width) {
             row.pixels.assign(static_cast<std::size_t>(width), 0);
         }
-        // The M21 per-line workhorse against LIVE registers -- the openMSX
+        // M21 per-line workhorse against LIVE registers -- the openMSX
         // sync-before-change analogue at line granularity
         // (PixelRenderer.cc:549-571 Accuracy::LINE rounding).
         renderer_->render_line(line, Field::Progressive,
@@ -79,10 +78,9 @@ void VdpScanlineAccumulator::emit_adapted_row(const Row& row, std::uint16_t* con
         std::copy_n(row.pixels.data(), static_cast<std::size_t>(out_width), out);
         return;
     }
-    // Deterministic width-adaptation policy (§2.4 geometry policy; named
-    // remainder D10 covers per-line-perfect fidelity for geometry-mixed
-    // frames -- no title in the current evidence set switches width
-    // mid-frame).
+    // Deterministic width-adaptation policy (§2.4; the D10 remainder covers
+    // per-line-perfect fidelity for geometry-mixed frames -- no title in
+    // the current evidence set switches width mid-frame).
     if (row.width * 2 == out_width) {
         for (int x = 0; x < row.width; ++x) {
             out[x * 2 + 0] = row.pixels[static_cast<std::size_t>(x)];
@@ -98,7 +96,7 @@ void VdpScanlineAccumulator::emit_adapted_row(const Row& row, std::uint16_t* con
     }
     // Non-2x mismatch (e.g. the 240/480-wide TEXT families vs a bitmap
     // width): copy the overlapping prefix, pad the remainder with the
-    // border color. Deterministic and documented; D10-class depth.
+    // border color. Deterministic; D10-class depth.
     const int n = std::min(row.width, out_width);
     std::copy_n(row.pixels.data(), static_cast<std::size_t>(n), out);
     for (int x = n; x < out_width; ++x) {
@@ -122,7 +120,7 @@ FrameBuffer VdpScanlineAccumulator::compose(const Field field) const {
             emit_adapted_row(row, out, fb.width, fb.border_color);
         } else {
             // Defensive: a committed index without a valid row cannot occur
-            // through the public API; render live for determinism anyway.
+            // through the public API; render live anyway for determinism.
             renderer_->render_line(line, field,
                                    std::span<std::uint16_t>(out, static_cast<std::size_t>(fb.width)));
         }
@@ -143,8 +141,8 @@ void VdpScanlineAccumulator::finalize(const Field field) {
     // end-of-frame geometry.
     const int height = std::min(renderer_->height(), kMaxLines);
     if (watermark_ < height) {
-        // Direct commit loop rather than sync_to_line() -- finalize() must
-        // never recurse through the wrap-safety path.
+        // Direct commit loop, not sync_to_line() -- finalize() must never
+        // recurse through the wrap-safety path.
         const int width = renderer_->width();
         for (int line = watermark_; line < height; ++line) {
             Row& row = rows_[static_cast<std::size_t>(line)];

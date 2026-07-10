@@ -19,19 +19,20 @@ namespace sony_msx::devices::video {
 
 // V9958 display-mode identity (M14-S3, bit-level decode ONLY — no pixels).
 //
-// The V9958 display mode is selected by M1..M5 (R#1 b4,b3 and R#0 b3,b2,b1) plus
-// the V9958 YJK/YAE bits (R#25 b3/b4). LN (R#9 b7) and IL (R#9 b3) only change
-// vertical resolution/interlace, not the mode identity, so they are NOT part of
-// this enum. This decode reproduces the canonical MSX mode-bit encoding grounded
-// in references/openmsx-21.0/src/video/DisplayMode.hh (behavior reference only —
-// never copied; the numeric layout below is the public MSX2 register encoding
-// from the fact-sheet §3 lines 45-64, independently expressed here).
+// The V9958 display mode is selected by M1..M5 (R#1 b4,b3 and R#0 b3,b2,b1)
+// plus the V9958 YJK/YAE bits (R#25 b3/b4). LN (R#9 b7) and IL (R#9 b3) only
+// change vertical resolution/interlace, not mode identity, so they are not
+// part of this enum. This decode reproduces the canonical MSX mode-bit
+// encoding grounded in references/openmsx-21.0/src/video/DisplayMode.hh
+// (behavior reference only — never copied; the numeric layout below is the
+// public MSX2 register encoding from the fact-sheet §3 lines 45-64,
+// independently expressed here).
 //
 // Base byte layout (M5..M1), bit0=M1 .. bit4=M5:
 //   base = ((reg0 & 0x0E) << 1) | ((reg1 & 0x08) >> 2) | ((reg1 & 0x10) >> 4)
 //
-// M14 stores this identity + the raw V9958 feature bits; it computes NO output
-// pixels or colors (rendering is deferred, backlog D1/D5/D6).
+// M14 stores this identity + the raw V9958 feature bits; it computes no
+// output pixels or colors (rendering deferred, backlog D1/D5/D6).
 
 enum class VdpMode : std::uint8_t {
     Graphic1,     // SCREEN 1        (base 0x00)

@@ -60,7 +60,7 @@ public:
 // YM2149 specifics vs AY-3-8910 (fact-sheet §2, "YM2149 vs AY-3-8910"):
 //   - 5-bit / 32-step envelope counter.
 //   - Register readback returns values AS WRITTEN (the AY masks unused bits to 0;
-//     the YM does not). Modelled here: read_register returns the raw store.
+//     the YM does not) -- read_register returns the raw store.
 class PsgYm2149 final : public core::IoDevice {
 public:
     static constexpr std::uint8_t kRegisterCount = 16;
@@ -88,9 +88,9 @@ public:
     core::BusData io_read(core::BusAddress port) override;
     void io_write(core::BusAddress port, core::BusData value) override;
 
-    // Deterministic generator advance, driven READ-ONLY off the machine clock
-    // (X4: never perturbs CPU T-state accounting). delta_cpu_cycles is the number
-    // of 3.58 MHz system cycles elapsed since the last advance.
+    // Deterministic generator advance, read-only off the machine clock (X4:
+    // never perturbs CPU T-state accounting). delta_cpu_cycles = 3.58 MHz
+    // system cycles elapsed since the last advance.
     void advance_cycles(std::uint64_t delta_cpu_cycles);
 
     struct StereoSample {
@@ -205,8 +205,8 @@ public:
     };
     [[nodiscard]] GeneratorSnapshot generator_snapshot() const;
 
-    // Test-only: single-step the envelope state machine (bypasses the clock
-    // divider) to exercise the shape logic deterministically.
+    // Test-only: invoke do_step() directly `steps` times, bypassing the
+    // period/count clock divider, to exercise the shape logic deterministically.
     void debug_step_envelope(int steps);
 
 private:

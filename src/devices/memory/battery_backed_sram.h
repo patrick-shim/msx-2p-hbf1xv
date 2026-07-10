@@ -27,10 +27,11 @@ namespace sony_msx::devices::memory {
 // docs/m17-planner-package.md; DEC-0012). Generalizes
 // `S1985Engine::load_backup_ram`/`save_backup_ram`
 // (src/devices/chipset/s1985_engine.h:63-64, s1985_engine.cpp:79-103) into a
-// device-agnostic store: absent/short/unreadable file -> the store is left
+// device-agnostic store: an absent/short/unreadable file leaves the store
 // UNTOUCHED (deterministic default: all-zero after construction/clear()),
-// never fabricated; `load()`/`save()` round-trip byte-identical; no wall-clock
-// or host-filesystem nondeterminism beyond the one fixed load-at-setup read.
+// never fabricated; `load()`/`save()` round-trip byte-identical; no
+// wall-clock or host-filesystem nondeterminism beyond the one fixed
+// load-at-setup read.
 //
 // Sizing precedent (why 16 KB / 0x4000 is the unit-tested size, §3.3): the
 // REAL 16 KB MSX-JE SRAM belongs to the Halnote-mapped MSX-JE firmware ROM at
@@ -40,12 +41,11 @@ namespace sony_msx::devices::memory {
 // The exact size is grounded in
 // references/openmsx-21.0/src/memory/RomHalnote.cc:37-46:
 // `sram = std::make_unique<SRAM>(getName() + " SRAM", 0x4000, config);` ==
-// 16384 bytes. This class is deliberately NOT instantiated in `Hbf1xvMachine`
-// and NOT wired to any slot in M17 -- no real consumer exists yet (Halnote/B6
-// is still out of scope); wiring it into slot 3-3 would fabricate a
-// chip-select overlay this specific machine does not have (A-M17-1/A-M17-2).
-// It is built here, standalone and unit-tested at 16 KB, so a future Halnote
-// milestone (backlog B6) can attach it directly with no redesign.
+// 16384 bytes. This class is deliberately NOT instantiated in
+// `Hbf1xvMachine` and NOT wired to any slot in M17 -- Halnote/B6 is still
+// out of scope, and wiring it into slot 3-3 would fabricate a chip-select
+// overlay this machine does not have (A-M17-1/A-M17-2). It is unit-tested
+// standalone at 16 KB so a future Halnote milestone can attach it directly.
 class BatteryBackedSram {
 public:
     // Construct a store of `byte_count` bytes, zero-initialized (the

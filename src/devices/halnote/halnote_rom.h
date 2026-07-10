@@ -43,26 +43,25 @@ namespace sony_msx::devices::halnote {
 //   - `devices::cartridge::CartridgeRomWindow window_` -- the M19 8-slot x
 //     8 KB primitive, for the main bank-switch window. Halnote relies on the
 //     window's DEFAULT block mask (num_blocks()-1 == 127 for a 1 MB/128-bank
-//     image) -- unlike Konami's `set_block_mask(31)` override, NO override
-//     call is made here (RomHalnote.cc has no setBlockMask call at all).
+//     image); unlike Konami's `set_block_mask(31)` override, NO override is
+//     made here (RomHalnote.cc has no setBlockMask call at all).
 //   - `devices::memory::BatteryBackedSram sram_{0x4000}` -- the M17 16 KB
 //     primitive (RomHalnote.cc:44, `make_unique<SRAM>(..., 0x4000, ...)`),
 //     wired as the real store behind the SRAM-enable gate.
 //
-// SRAM access (0x0000-0x3FFF) is implemented as a direct address-range
-// branch rather than openMSX's pointer-indirection into window-slots 0/1
-// (RomHalnote.cc:107-112) -- planner A-M20-6 proves this is behaviourally
-// IDENTICAL (CartridgeRomWindow has no mechanism to point a slot at an
-// external buffer); window-slots 0/1 are consequently left permanently
+// SRAM access (0x0000-0x3FFF) is a direct address-range branch rather than
+// openMSX's pointer-indirection into window-slots 0/1 (RomHalnote.cc:107-112)
+// -- planner A-M20-6 proves this is behaviourally IDENTICAL
+// (CartridgeRomWindow has no mechanism to point a slot at an external
+// buffer); window-slots 0/1 are consequently left permanently
 // unmapped/unused for this device's whole lifetime.
 //
-// Register numbering note (A-M20-3): RomHalnote.cc's own header comment
-// labels the four main bank-switch registers "bank 0".."bank 3"
-// (0-based, comment-only); the ACTUAL CODE (`writeMem:100`,
-// `auto bank = address >> 13;`) computes bank in {2,3,4,5} for these same
-// four regions, matching `CartridgeRomWindow`'s own slot-index convention.
-// This implementation follows the CODE's numbering (2-5), not the header
-// comment's simplified prose.
+// Register numbering note (A-M20-3): RomHalnote.cc's header comment labels
+// the four main bank-switch registers "bank 0".."bank 3" (0-based,
+// comment-only), but the actual code (`writeMem:100`, `auto bank = address
+// >> 13;`) computes bank in {2,3,4,5} for these same four regions, matching
+// `CartridgeRomWindow`'s own slot-index convention. This implementation
+// follows the code's numbering (2-5), not the header comment's prose.
 //
 // Determinism (planner §2.5): a pure, combinational device -- mem_read/
 // mem_write are functions of stored bytes only, never elapsed_cycles(). No
@@ -85,10 +84,10 @@ public:
     // RomHalnote.cc:48-61, byte-exact: clears sub_banks_/sram_enabled_/
     // sub_mapper_enabled_, re-establishes the window bank/unmapped layout,
     // AND clears sram_ content (a disclosed simplification beyond literal
-    // openMSX, mirroring the EXISTING S1985Engine::reset() precedent exactly,
+    // openMSX, mirroring the S1985Engine::reset() precedent exactly,
     // s1985_engine.cpp:8-17 -- real battery-backed SRAM survives a reset in
-    // reality; this emulator's cold_boot() models a fresh, deterministic
-    // power-on, with persistence modeled entirely through the file load/save
+    // reality, but this emulator's cold_boot() models a fresh, deterministic
+    // power-on; persistence is modeled entirely through the file load/save
     // the owning machine performs around this call).
     void reset();
 

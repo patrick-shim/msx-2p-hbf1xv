@@ -28,8 +28,8 @@ namespace sony_msx::machine {
 // scripted-input automation against either executable, driven through the
 // same CPU sub-loop each already runs.
 //
-// Format (mirrors debug_dump.h/frame_dump.h's exact ASCII discipline: fixed
-// field order, base-10 T-state values, '\n' line endings, zero wall-clock/
+// Format (mirrors debug_dump.h/frame_dump.h's ASCII discipline: fixed field
+// order, base-10 T-state values, '\n' line endings, zero wall-clock/
 // environment content):
 //   HBF1XV-INPUT-SCRIPT v1
 //   T=<tstate-dec> KEY=<name> DOWN
@@ -37,13 +37,12 @@ namespace sony_msx::machine {
 //   [END]
 //
 // `T` is the cumulative machine T-state (Hbf1xvMachine::elapsed_cycles()'s
-// own deterministic clock basis -- the SAME field convention
-// DebugEvent::tstate already uses, debug_event_log.h:23). Events MUST be
-// strictly non-decreasing in `T` in the file; `KEY` names are resolved via
-// peripherals::key_name_to_row_col(). Only keyboard events are a required
-// deliverable this cycle (joystick-event scripting is an OUT-OF-SCOPE-unless-
-// trivial extension, docs/m27-planner-package.md §1.2) -- so this format has
-// no `JOY=` line kind.
+// deterministic clock basis -- the same field convention DebugEvent::tstate
+// uses, debug_event_log.h:23). Events must be strictly non-decreasing in `T`
+// in the file; `KEY` names are resolved via peripherals::key_name_to_row_col().
+// Only keyboard events are a required deliverable this cycle (joystick-event
+// scripting is an out-of-scope-unless-trivial extension,
+// docs/m27-planner-package.md §1.2) -- so this format has no `JOY=` line kind.
 inline constexpr const char* kInputScriptFormatTag = "HBF1XV-INPUT-SCRIPT v1";
 
 struct InputScriptEvent {
@@ -52,12 +51,12 @@ struct InputScriptEvent {
     bool pressed = false;
 };
 
-// Parses the format above. Throws std::runtime_error on ANY malformed input
+// Parses the format above. Throws std::runtime_error on any malformed input
 // -- a missing/mismatched format tag, a line that is neither DOWN nor UP, an
 // unrecognized KEY name (peripherals::key_name_to_row_col() returns
-// std::nullopt), or a non-monotonic T value -- mirrors frame_dump.h's
+// std::nullopt), or a non-monotonic T value -- mirroring frame_dump.h's
 // "throws on malformed input, never silently returns garbage" discipline
-// (frame_dump.h:44-45). Never silently returns a partial/garbage result.
+// (frame_dump.h:44-45).
 [[nodiscard]] std::vector<InputScriptEvent> parse_input_script(const std::string& text);
 
 // Deterministic serialization; a parse(serialize(x)) == x round-trip holds
@@ -69,12 +68,12 @@ struct InputScriptEvent {
 // A monotonic-cursor player (M27-S6/S7, mirrors this project's established
 // event-driven, monotonic-cursor architectural precedent -- the M16 FDC
 // DRQ/INTRQ state machine, the M22 VDP command engine's LMCM/LMMC/HMMC
-// event-driven commands -- an architectural PATTERN citation, not identical
+// event-driven commands -- an architectural pattern citation, not identical
 // code). Applies every event with at_tstate <= current_tstate not yet
 // applied, in file order, via peripherals::key_name_to_row_col() +
 // KeyboardMatrix::set_key(). Never re-scans from the start; a stale or
 // repeated current_tstate re-application is a safe no-op (every due event is
-// applied EXACTLY once, never skipped, never re-applied).
+// applied exactly once, never skipped, never re-applied).
 class InputScriptPlayer {
 public:
     explicit InputScriptPlayer(std::vector<InputScriptEvent> events = {});

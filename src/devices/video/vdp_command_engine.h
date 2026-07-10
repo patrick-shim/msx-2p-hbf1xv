@@ -34,28 +34,27 @@ namespace sony_msx::devices::video {
 //
 // Execution model is HYBRID (planner package §1.4 Resolution 2): 10
 // commands (ABRT/STOP, POINT, SRCH, LINE, LMMV, LMMM, HMMV, HMMM, YMMM,
-// PSET) execute ATOMICALLY -- the entire NX*NY operation completes
-// synchronously within the call that writes CMD (R#46); CE is observably 0
-// immediately after that call returns. The other 3 (LMCM, LMMC, HMMC)
-// require a genuine, EVENT-DRIVEN (never wall-clock/cycle-scheduled),
-// multi-step state machine, directly mirroring this project's own FDC
-// DRQ/INTRQ precedent (src/devices/fdc/wd2793.*): CE stays 1 across the
-// whole transfer; the command completes only after NX*NY individual,
-// separate CPU-port interactions (writes to R#44/COL, or reads of S#7) have
-// each been serviced.
+// PSET) execute ATOMICALLY -- the whole NX*NY operation completes
+// synchronously within the call that writes CMD (R#46); CE reads 0
+// immediately after that call returns. The other 3 (LMCM, LMMC, HMMC) need
+// an EVENT-DRIVEN (never wall-clock/cycle-scheduled) multi-step state
+// machine, mirroring this project's own FDC DRQ/INTRQ precedent
+// (src/devices/fdc/wd2793.*): CE stays 1 across the whole transfer, which
+// completes only after NX*NY separate CPU-port interactions (writes to
+// R#44/COL, or reads of S#7) have each been serviced.
 //
 // Disclosed simplification (low risk, not exercised by any required test):
 // unlike the reference, this engine does NOT mutate the SX/SY/DX/DY register
 // members during command execution (the reference mutates DY/SY/ADX/ASX in
-// place as a block command progresses, a real but obscure hardware quirk
-// visible only via non-standard mid-command register peeking). All
-// coordinate advancement uses local working copies for the 10 atomic
-// commands, and dedicated transfer_* members for the 3 event-driven
-// commands; only ASX (exposed via S#8/S#9, used by SRCH and LMCM) is a
-// genuine persistent member, matching the one case where real software can
-// observe it (VDPCmdEngine.hh:104-114 getBorderX() -- "real VDP simply
-// returns the current value of the ASX...counter, regardless of the command
-// being executed").
+// place as a block command progresses -- a real but obscure hardware quirk
+// visible only via non-standard mid-command register peeking). Coordinate
+// advancement uses local working copies for the 10 atomic commands, and
+// dedicated transfer_* members for the 3 event-driven commands; only ASX
+// (exposed via S#8/S#9, used by SRCH and LMCM) is a genuine persistent
+// member, matching the one case where real software can observe it
+// (VDPCmdEngine.hh:104-114 getBorderX() -- "real VDP simply returns the
+// current value of the ASX...counter, regardless of the command being
+// executed").
 //
 // Grounding (behavior reference only, GPL isolation -- never copied):
 // references/openmsx-21.0/src/video/VDPCmdEngine.{hh,cc}.
@@ -96,12 +95,10 @@ public:
     // Deterministic power-on reset.
     void reset();
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
-    //     command working-register file + event-driven transfer FSM. const
-    //     returns of existing members, ZERO behavior change
-    //     (docs/m36-phase3-planner-package.md §2.4 item 4). Enum-valued fields
-    //     return their numeric code so the snapshot stays self-describing
-    //     without exposing the private LogicalOp/TransferKind enums. ---
+    // --- M36 Phase 3 debug snapshot: additive, read-only introspection of
+    //     the register file + transfer FSM (docs/m36-phase3-planner-package.md
+    //     §2.4 item 4); zero behavior change. Enum fields return numeric
+    //     codes to avoid exposing the private LogicalOp/TransferKind enums. ---
     [[nodiscard]] std::uint8_t status_byte() const { return status_; }
     [[nodiscard]] int scr_mode() const { return scr_mode_; }
     [[nodiscard]] unsigned sx() const { return sx_; }
@@ -183,11 +180,11 @@ private:
 
     // Event-driven transfer state (LMCM/LMMC/HMMC only).
     // transfer_pending_ mirrors the reference's `transfer` flag
-    // (VDPCmdEngine.cc:1856-1863 setCmdReg case 0x0C: ANY R#44/COL write
+    // (VDPCmdEngine.cc:1856-1863 setCmdReg case 0x0C): ANY R#44/COL write
     // arms exactly one pending CPU->VRAM transfer unit -- even BEFORE the
     // command is issued -- while startLmmc/startHmmc deliberately do NOT arm
-    // it themselves, VDPCmdEngine.cc:1303-1305/1732-1733 "do not set
-    // 'transfer = true'", their bug#1014). A pre-armed unit is consumed as
+    // it themselves (VDPCmdEngine.cc:1303-1305/1732-1733 "do not set
+    // 'transfer = true'", bug#1014). A pre-armed unit is consumed as
     // the FIRST transferred unit when LMMC/HMMC starts: the MSX2+ boot logo
     // (HB-F1XV SUB-ROM) pre-loads the first pixel color into R#44, issues
     // LMMC, then sends only NX*NY-1 further writes -- without this flag the

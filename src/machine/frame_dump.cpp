@@ -37,9 +37,9 @@ std::string serialize_frame_dump(const devices::video::FrameBuffer& frame) {
            " height=" + to_dec(static_cast<std::uint64_t>(frame.height)) +
            " border=" + to_hex(frame.border_color, 4) + "\n";
     // Reinterpret the pixel buffer as raw bytes (host-native little-endian --
-    // see the header doc comment) and reuse the EXISTING, already-proven
-    // debug_dump::serialize_region() folded-hex routine (genuine reuse, not a
-    // parallel reimplementation, planner §2.5 point 1).
+    // see the header doc comment) and reuse the existing
+    // debug_dump::serialize_region() folded-hex routine (planner §2.5
+    // point 1).
     const auto* bytes = reinterpret_cast<const std::uint8_t*>(frame.pixels.data());
     const std::size_t byte_count = frame.pixels.size() * sizeof(std::uint16_t);
     out += debug_dump::serialize_region("PIXELS", frame.pixels.empty() ? nullptr : bytes, byte_count);
@@ -49,11 +49,11 @@ std::string serialize_frame_dump(const devices::video::FrameBuffer& frame) {
 
 namespace {
 
-// Reverses debug_dump::serialize_region()'s exact folded-hex format for one
-// named region: a '*' line means the previous printed 16-byte line repeats
-// until the next printed offset (mirrors tools/mem-to-png.py's own Python
+// Reverses debug_dump::serialize_region()'s folded-hex format for one named
+// region: a '*' line means the previous printed 16-byte line repeats until
+// the next printed offset (mirrors tools/mem-to-png.py's Python
 // parse_region_from_dump(), independently re-expressed in C++ for this
-// project's own round-trip test -- never copied, no external reference).
+// project's round-trip test -- never copied, no external reference).
 std::vector<std::uint8_t> parse_region(const std::vector<std::string>& lines, std::size_t start,
                                         std::size_t size) {
     std::vector<std::uint8_t> buf(size, 0);

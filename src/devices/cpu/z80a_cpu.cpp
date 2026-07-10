@@ -69,21 +69,17 @@ std::uint32_t Z80aCpu::step() {
     } else if (!blocked_this_step && state_.maskable_interrupt_pending() && state_.iff1()) {
         tstates = service_maskable_interrupt();
     } else if (state_.halted()) {
-        // Halted "idle" step (M23-S1, closes backlog C2/DEC-0004). Real Z80
-        // silicon internally refetches the current opcode -- a phantom M1 cycle
-        // -- for every machine cycle spent in the HALT loop, and that SAME M1
-        // both ticks the refresh register and (via the S1985's machine-level
-        // +1-per-M1 formula, hbf1xv_machine.cpp) advances the clock; the two
-        // effects are not separable mechanisms on real hardware
-        // (references/openmsx-21.0/src/cpu/Z80.hh:19-21, HALT_STATES = 4 +
-        // WAIT_CYCLES; CPUCore.cc:2508-2511, incR(advanceHalt(HALT_STATES,...))
-        // -- the identical `halts` computation drives both). This CPU core
-        // keeps publishing the bare, unchanged datasheet T-state count (4,
-        // A-M23-1's invariant: the core's own returned value never becomes 5 --
-        // only the machine-level `datasheet + m1_wait` sum does, with zero
-        // change to that existing formula); calling increment_refresh_register()
-        // here is the ONLY change this cycle -- it registers one M1 cycle so
-        // the existing, unmodified S1985 M1-wait arithmetic naturally applies.
+        // Halted "idle" step (M23-S1, DEC-0004). Real Z80 silicon refetches the
+        // current opcode every HALT-loop machine cycle -- a phantom M1 that both
+        // ticks the refresh register and (via the S1985's machine-level
+        // +1-per-M1 formula) advances the clock; the two effects share one
+        // mechanism on real hardware (references/openmsx-21.0/src/cpu/Z80.hh:
+        // 19-21 HALT_STATES; CPUCore.cc:2508-2511 incR(advanceHalt(...))).
+        // This core keeps publishing the bare datasheet T-state count (4;
+        // A-M23-1 invariant: the core's own return value never becomes 5, only
+        // the machine-level `datasheet + m1_wait` sum does). Calling
+        // increment_refresh_register() here is the only change -- it registers
+        // one M1 cycle so the existing S1985 wait arithmetic applies unmodified.
         increment_refresh_register();
         tstates = 4;
     } else {
@@ -1190,16 +1186,15 @@ void Z80aCpu::ld_a_ir(const std::uint8_t value) {
     if (state_.iff2()) {
         flags |= kPV;  // P/V reflects IFF2 for LD A,I / LD A,R.
     }
-    // NMOS LD A,I / LD A,R interrupt bug (M12-S5, gap #31): on the genuine Zilog
-    // NMOS part, if a maskable interrupt is accepted during this instruction, the
-    // P/V flag reads 0 even though IFF2 was set (fact-sheet §5; openMSX models it
-    // as a fix-up at IRQ accept, CPUCore.cc:2476-2496). In this instruction-atomic
-    // core we approximate the silicon race at the boundary: an IRQ is accepted at
-    // the step immediately following LD A,I/R iff it is pending and IFF1 is set
-    // (LD A,I/R itself never arms an EI-delay, so the following boundary is never
-    // EI-blocked; this matches the openMSX note that the quirk is independent of a
-    // preceding EI, CPUCore.cc:2490-2493). This is an approximation (planner R-4);
-    // ZEXALL does not exercise the IRQ race, so it is unit-proven only.
+    // NMOS LD A,I / LD A,R interrupt bug (M12-S5, gap #31): on genuine Zilog NMOS,
+    // P/V reads 0 (despite IFF2 set) if a maskable interrupt is accepted during
+    // this instruction (fact-sheet §5; openMSX fixes it up at IRQ accept,
+    // CPUCore.cc:2476-2496). This instruction-atomic core approximates the race
+    // at the boundary: an IRQ pending with IFF1 set is treated as accepted at the
+    // step immediately following LD A,I/R (which never arms an EI-delay, so that
+    // boundary is never EI-blocked -- matching openMSX's note that the quirk is
+    // independent of a preceding EI, CPUCore.cc:2490-2493). Approximation only
+    // (planner R-4); not exercised by ZEXALL, so unit-proven only.
     if (state_.maskable_interrupt_pending() && state_.iff1()) {
         flags &= static_cast<std::uint8_t>(~kPV);
     }

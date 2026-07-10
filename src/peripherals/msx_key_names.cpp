@@ -30,11 +30,11 @@ struct KeyNameBinding {
 std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view name) {
     // Re-expression of src/frontend/sdl3_input_mapper.cpp's `kMap` array
     // literal (71 entries, rows 0-8), re-keyed by the SDL_Scancode
-    // enumerator's own suffix string instead of the SDL_Scancode value
-    // itself. Every (row, column) pair below was copied verbatim, in the
-    // SAME order/grouping, from that file this cycle (never independently
-    // re-derived) -- see the header doc comment / R-M27-4. A dedicated
-    // SDL3-gated cross-consistency test proves the two tables agree.
+    // enumerator's suffix string instead of the SDL_Scancode value. Every
+    // (row, column) pair below was copied verbatim, in the same
+    // order/grouping, from that file (never independently re-derived) --
+    // see the header doc comment / R-M27-4. A dedicated SDL3-gated
+    // cross-consistency test proves the two tables agree.
     static const std::array<KeyNameBinding, 71> kMap{{
         // Row 0: digits 0-7
         {"0", 0, 0},

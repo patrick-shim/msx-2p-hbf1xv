@@ -29,8 +29,8 @@ namespace sony_msx::devices::video {
 //
 // Pixel format: native RGB555 (bits 14-10 = R, 9-5 = G, 4-0 = B), matching
 // the V9958's physical 15-bit (5:5:5) DAC (fact-sheet §9) — chosen so YJK's
-// already-clamped 0..31 R/G/B values pack directly with no 32768-entry host
-// lookup table (A-M21-2). Bit 15 is reserved (unused this milestone).
+// already-clamped 0..31 R/G/B values pack directly, no 32768-entry host
+// lookup table needed (A-M21-2). Bit 15 is reserved, unused this milestone.
 
 // 3-bit -> 5-bit component expansion (A-M21-3), independently re-derived and
 // cross-checked against SDLRasterizer.cc:286-296 (`r5 = (r3 << 2) | (r3 >> 1)`):
@@ -91,10 +91,10 @@ namespace sony_msx::devices::video {
 // 0..31 (YJK) or an even value 0..30 (YJK+YAE, LSB stolen for the attribute
 // bit); `j`/`k` are signed, range -32..31. The B-channel division is PLAIN
 // C++ `int` division (truncating toward zero) — NEVER `std::floor()`
-// (A-M21-5/R-M21-2): both this emulator and openMSX are C++ with identical
-// `int` truncation semantics for `/`, so plain `/` is automatically
-// byte-exact; a "helpful" refactor to `std::floor()` would silently diverge
-// for negative, non-multiple-of-4 numerators.
+// (A-M21-5/R-M21-2): openMSX is also C++ with identical `int` truncation
+// semantics for `/`, so plain `/` is automatically byte-exact; a "helpful"
+// refactor to `std::floor()` would silently diverge for negative,
+// non-multiple-of-4 numerators.
 struct YjkRgb {
     int r;
     int g;

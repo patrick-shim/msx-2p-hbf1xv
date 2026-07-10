@@ -46,15 +46,15 @@ Hbf1xvMachine::Hbf1xvMachine() : cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
 }
 
 void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
-    // M32-S2 (docs/m32-planner-package.md §2.3): a write while the beam is
-    // on display line L takes effect from line L+1 -- commit [watermark,
-    // L+1) from the PRE-write state before the write mutates anything. The
-    // openMSX sync-before-change protocol at line granularity
-    // (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
+    // M32-S2 (docs/m32-planner-package.md §2.3): a write while the beam is on
+    // display line L takes effect from line L+1 -- commit [watermark, L+1)
+    // from the PRE-write state before the write mutates anything (openMSX's
+    // sync-before-change protocol at line granularity,
+    // references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
     // Negative L (raster in border/vblank) clamps to a no-op inside
-    // sync_to_line() -- vblank writes affect the whole next frame.
-    // Suspended while the machine's non-perturbing debug_io_write() seam is
-    // driving the bus (§2.3 documented exclusion).
+    // sync_to_line() -- vblank writes affect the whole next frame. Suspended
+    // while the non-perturbing debug_io_write() seam drives the bus (§2.3
+    // documented exclusion).
     if (suspended_) {
         return;
     }
@@ -69,11 +69,11 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
 
 void Hbf1xvMachine::wire_bus() {
     // --- Memory fabric (SlotBus) ---
-    // HB-F1XV slot/sub-slot/page population, derived from the authoritative
-    // machine XML references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml (§2 of
-    // docs/m13-planner-package.md). BOTH primary slots 0 and 3 are expanded (each
-    // has four <secondary> children: XML lines 85-116 and 123-199; A-6 corrects
-    // the M11 wiring that expanded only slot 3).
+    // HB-F1XV slot/sub-slot/page population, from the machine XML
+    // references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml (§2 of
+    // docs/m13-planner-package.md). Both primary slots 0 and 3 are expanded
+    // (each has four <secondary> children: XML lines 85-116 and 123-199; A-6
+    // corrects the M11 wiring that expanded only slot 3).
     slot_bus_.set_expanded(0, true);
     slot_bus_.set_expanded(3, true);
 
@@ -102,10 +102,10 @@ void Hbf1xvMachine::wire_bus() {
     slot_bus_.attach(3, 1, 1, &kanji_rom_);
     slot_bus_.attach(3, 1, 2, &kanji_rom_);
     // Slot 3-2: WD2793 FDC (Sony connection style), page 1 (<mem 0x4000/0x4000>,
-    // rom_visibility page 1, XML:161-176). M16 attaches the SonyFdc decode (which
-    // WRAPS disk_rom_) here in place of the bare ROM, so page-1 reads route DISK
-    // ROM + the 0x7FF8-0x7FFF WD2793/glue register window (planner §3.1). The FDC
-    // core advances off the deterministic emulated-cycle FdcClock.
+    // rom_visibility page 1, XML:161-176). M16 attaches the SonyFdc decode
+    // (which wraps disk_rom_) here in place of the bare ROM, so page-1 reads
+    // route DISK ROM + the 0x7FF8-0x7FFF WD2793/glue register window (planner
+    // §3.1). The FDC core advances off the deterministic FdcClock.
     fdc_.attach_clock_source(&fdc_clock_);
     fdc_.attach_drive(&disk_drive_);
     disk_drive_.attach_image(&disk_image_);
@@ -438,8 +438,8 @@ const std::vector<std::string>& Hbf1xvMachine::rom_diagnostics() const {
 }
 
 void Hbf1xvMachine::on_vsync_boundary() {
-    // M26-S1 (docs/m26-planner-package.md §2.3): a pure, mechanical extraction
-    // of run_frame()'s pre-M26 body, EXCLUDING the scheduler_.tick(kFrameCycles)
+    // M26-S1 (docs/m26-planner-package.md §2.3): a mechanical extraction of
+    // run_frame()'s pre-M26 body, EXCLUDING the scheduler_.tick(kFrameCycles)
     // call -- a real-time driver's own step_cpu_instruction() sub-loop has
     // already advanced the scheduler by an equivalent amount before calling
     // this. Same four operations, same order as before: frame counter, VDP
@@ -450,71 +450,64 @@ void Hbf1xvMachine::on_vsync_boundary() {
     // Deterministic per-frame VBlank delivery (M14-S5). run_frame advances the
     // clock a whole frame atomically, so the VDP VBlank is modeled at the frame
     // boundary: on_vsync sets S#0 F and, when R#1 IE0 is enabled, asserts the
-    // vertical /INT line. The CPU then accepts it on the next step_cpu_instruction
+    // vertical /INT line. The CPU accepts it on the next step_cpu_instruction
     // (which level-samples the held line). Exact sub-frame raster position is
     // DEFERRED (backlog D4).
     vdp_.on_vsync();
-    // M32 (Defect A, §2.4): seal the frame that just ended -- the ONE
-    // additive call this milestone adds here. Every line the raster passed
-    // is already committed (render-sync seam); finalize renders the
-    // remaining lines from live end-of-frame registers and stores the
+    // M32 (Defect A, §2.4): seal the frame that just ended. Every line the
+    // raster passed is already committed (render-sync seam); finalize renders
+    // the remaining lines from live end-of-frame registers and stores the
     // completed frame render_frame() returns at the boundary.
     //
-    // ORDERING -- documented, deliberate deviation from the planner
-    // package's "finalize BEFORE vdp_.on_vsync()" clause, in service of the
-    // package's own HARD oracles AC-4/AC-5 (committed-evidence
-    // byte-identity): vdp_.on_vsync() mutates NO register/VRAM/palette
-    // state consumed by the background renderer -- but it DOES (a)
-    // recompute the sprite visibility tables from the frame's own
-    // END-of-frame VRAM (v9958_vdp.cpp on_vsync ->
+    // ORDERING -- deliberate deviation from the planner package's "finalize
+    // BEFORE vdp_.on_vsync()" clause, in service of the package's own hard
+    // oracles AC-4/AC-5 (committed-evidence byte-identity): on_vsync()
+    // mutates no register/VRAM/palette state the background renderer
+    // consumes, but it DOES (a) recompute the sprite visibility tables from
+    // the frame's own end-of-frame VRAM (v9958_vdp.cpp on_vsync ->
     // sprite_engine_.recompute_frame) and (b) advance the R#13 blink
     // countdown. The legacy snapshot renderer that produced every committed
-    // evidence frame ran AFTER on_vsync() (Sdl3App::run_one_frame() /
-    // boot-logo-test shape: step ... on_vsync_boundary() ...
+    // evidence frame ran AFTER on_vsync() (step ... on_vsync_boundary() ...
     // render_frame()), i.e. against the post-recompute sprite table and
     // post-decrement blink state. Finalizing BEFORE on_vsync() would render
-    // the projected lines against the PREVIOUS boundary's sprite table --
-    // one frame of sprite lag versus both the legacy pipeline and real
-    // hardware (which fetches attributes live during the frame; the
-    // vblank-handler attribute writes for frame F land after boundary F-1's
-    // recompute and are therefore first visible in the recompute at
-    // boundary F -- exactly the table this finalize must use). Sprite
-    // per-line LIVE fetching remains the named D9 remainder.
+    // against the PREVIOUS boundary's sprite table -- one frame of sprite
+    // lag vs both the legacy pipeline and real hardware (whose vblank-
+    // handler attribute writes for frame F land after boundary F-1's
+    // recompute and first appear at boundary F -- exactly the table this
+    // finalize must use). Sprite per-line live fetching remains the named
+    // D9 remainder.
     scanline_accumulator_.finalize(devices::video::Field::Progressive);
     // M25 Speed-Controller duty-cycle hook (backlog C8, planner §2.3 point
-    // 4): a single additive line, immediately alongside the existing
-    // vdp_.on_vsync() call above. Advances the PAUSE controller's internal
-    // VBlank-synced duty-cycle window; the Speed Controller's own numeric
-    // level defaults to 0 (never paused) post-reset(), so this is a no-op by
-    // default (regression guard).
+    // 4): advances the PAUSE controller's VBlank-synced duty-cycle window;
+    // its level defaults to 0 (never paused) post-reset(), so this is a
+    // no-op by default (regression guard).
     pause_controller_.on_vsync();
-    // M23-S2 bookkeeping (additive-only; the sole change to this function this
-    // cycle): remember the cycle count at the most recent VSync so
-    // cycles_since_last_vsync()/vdp_cycle_position() can report a raster
+    // M23-S2 bookkeeping: remember the cycle count at the most recent VSync
+    // so cycles_since_last_vsync()/vdp_cycle_position() can report a raster
     // position relative to it. Does not affect scheduling/CPU timing.
     last_vsync_cycle_ = elapsed_cycles();
 
     // DEC-0052 live stream-capture: at this clean frame boundary (frame_count_
-    // incremented, id stable) write one full per-component snapshot bundle into
-    // <debug_root>/snapshot/stream_<id>/<frame-id>/ -- the frame-by-frame state
-    // evolution. GUARDED -- disarmed => byte-for-byte unchanged for every caller.
-    // On a HALT that finalized mid-frame, stream_active_ is already false, so the
-    // crash frame is captured once (by finalize) and NOT duplicated here.
+    // incremented, id stable) write one full per-component snapshot bundle
+    // into <debug_root>/snapshot/stream_<id>/<frame-id>/ -- the frame-by-frame
+    // state evolution. Guarded -- disarmed => byte-for-byte unchanged. On a
+    // HALT that finalized mid-frame, stream_active_ is already false, so the
+    // crash frame is captured once (by finalize) and not duplicated here.
     //
-    // DEC-0052 stream-light: in the lightweight mode the heavy per-frame bundle
-    // is SUPPRESSED (its per-frame ~200 KB I/O is what bogs a long armed session
-    // down); instead a COARSE anchor snapshot is written every
-    // kStreamLightSnapshotInterval frames (~2 s) as a periodic recovery point.
-    // The crash/HALT/manual finalize snapshot is written separately (unaffected).
-    // HEAVY mode (stream_light_ == false) keeps the every-frame bundle exactly as
-    // before -- byte-for-byte unchanged for every pre-light caller.
+    // DEC-0052 stream-light: in the lightweight mode the heavy per-frame
+    // bundle is suppressed (its per-frame ~200 KB I/O is what bogs a long
+    // armed session down); instead a coarse anchor snapshot is written every
+    // kStreamLightSnapshotInterval frames (~2 s) as a periodic recovery
+    // point. The crash/HALT/manual finalize snapshot is written separately.
+    // Heavy mode (stream_light_ == false) keeps the every-frame bundle
+    // exactly as before.
     if (stream_active_) {
         const bool write_bundle =
             !stream_light_ || (frame_count_ % kStreamLightSnapshotInterval == 0);
         if (write_bundle) {
-            // Heavy-mode notes are kept byte-for-byte identical to the pre-light
-            // path (the default path's regression oracle); light coarse anchors
-            // add a self-identifying note so a diagnostic can tell a periodic
+            // Heavy-mode notes stay byte-for-byte identical to the pre-light
+            // path (the regression oracle); light coarse anchors add a
+            // self-identifying note so a diagnostic can tell a periodic
             // anchor apart from a heavy per-frame bundle.
             std::vector<std::string> notes = {
                 "stream_id=" + stream_id_,
@@ -558,21 +551,19 @@ bool Hbf1xvMachine::run_until_cycle(const std::uint64_t target_cycle) {
 
 std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     // M25 hardware PAUSE / Speed-Controller gate (backlog C8, planner
-    // §2.3/§2.4). Consulted FIRST, before any opcode decode. When engaged
-    // (button pressed, or the Speed Controller's own duty-cycle window),
-    // this skips cpu_.step() ENTIRELY -- no M1/opcode-fetch cycle occurs at
-    // all, so PC/R/every register stay completely frozen (A-M25-2's literal
-    // reading of the S1985 fact-sheet §9: "physically halts the CPU and
-    // cannot be bypassed in software"). Genuinely different from the Z80's
-    // own HALT instruction (CPU-internal, R keeps incrementing, released by
-    // any interrupt) -- see the planner package §2.3 comparison table. This
-    // is a small, additive, early-return-only insertion; everything below is
+    // §2.3/§2.4). Consulted first, before any opcode decode. When engaged
+    // (button pressed, or the Speed Controller's own duty-cycle window), this
+    // skips cpu_.step() entirely -- no M1/opcode-fetch cycle occurs, so
+    // PC/R/every register stay frozen (A-M25-2's literal reading of the
+    // S1985 fact-sheet §9: "physically halts the CPU and cannot be bypassed
+    // in software"). Different from the Z80's own HALT instruction
+    // (CPU-internal, R keeps incrementing, released by any interrupt) -- see
+    // the planner package §2.3 comparison table. Everything below is
     // otherwise byte-for-byte unchanged from pre-M25. VDP/RTC/FDC clock
-    // sources are UNAFFECTED (their crystal is not gated by the Z80 WAIT pin
+    // sources are unaffected (their crystal is not gated by the Z80 WAIT pin
     // on real hardware) -- only CPU decode/execute is suppressed. The 1
-    // T-state idle charge is a documented MODELING CHOICE (R-M25-7), not a
-    // hardware-quantized fact (real hardware's WAIT-line hold is not
-    // naturally discretized) -- the finest-grained unit this whole-
+    // T-state idle charge is a documented modeling choice (R-M25-7), not a
+    // hardware-quantized fact -- the finest-grained unit this whole-
     // instruction-atomic engine can charge for an indefinitely-held external
     // WAIT condition, with no overshoot risk.
     if (pause_controller_.cpu_should_pause()) {
@@ -582,12 +573,13 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     }
 
     // Level-sample the VDP's held /INT (M14-S4, R-1). The Z80A accept path
-    // clears its internal pending flag on service, but real hardware holds /INT
-    // until the S#0 status read releases it. Re-asserting the request from the
-    // VDP's held level each step models that hold WITHOUT clobbering an
-    // externally-injected interrupt (we only ASSERT here; the VDP releases via
-    // the adapter's set_irq(false) on the status read). When the VDP line is
-    // idle this is a no-op, so manual interrupt-injection tests are unaffected.
+    // clears its internal pending flag on service, but real hardware holds
+    // /INT until the S#0 status read releases it. Re-asserting the request
+    // from the VDP's held level each step models that hold without
+    // clobbering an externally-injected interrupt (we only assert here; the
+    // VDP releases via the adapter's set_irq(false) on the status read). When
+    // the VDP line is idle this is a no-op, so manual interrupt-injection
+    // tests are unaffected.
     if (vdp_.irq_active()) {
         cpu_.request_maskable_interrupt();
     }
@@ -596,12 +588,13 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     const std::uint16_t pre_pc = cpu_.state().regs().pc;
     const std::uint8_t opcode0 = bus_.read(pre_pc);
 
-    // DEC-0052 live stream-capture: snapshot the PRE-execution CPU record and the
-    // current #A8 primary-slot select BEFORE cpu_.step() mutates the registers.
-    // GUARDED -- when the stream is disarmed this whole block is skipped, so the
-    // default path is byte-for-byte unchanged. Non-perturbing: opcode0 is the
-    // byte already fetched above, and debug_io_read(#A8) is the same non-
-    // perturbing PPI-port-A read the Phase-3 snapshot uses.
+    // DEC-0052 live stream-capture: snapshot the PRE-execution CPU record and
+    // the current #A8 primary-slot select before cpu_.step() mutates the
+    // registers. Guarded -- when the stream is disarmed this whole block is
+    // skipped, so the default path is byte-for-byte unchanged. Non-
+    // perturbing: opcode0 is the byte already fetched above, and
+    // debug_io_read(#A8) is the same non-perturbing PPI-port-A read the
+    // Phase-3 snapshot uses.
     devices::cpu::Z80aTraceRecord stream_pre_record;
     std::uint8_t stream_a8 = 0;
     if (stream_active_) {
@@ -645,20 +638,20 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     }
 
     // DEC-0052 live stream-capture: commit this instruction's record into the
-    // bounded ring, then AUTO-STOP + finalize on a crash signature. Guarded --
-    // disarmed => untouched default path. TWO triggers (mutually exclusive via
-    // else-if; either finalize disarms so on_vsync_boundary never double-writes):
+    // bounded ring, then auto-stop + finalize on a crash signature. Guarded --
+    // disarmed => untouched default path. Two triggers (mutually exclusive
+    // via else-if; either finalize disarms so on_vsync_boundary never
+    // double-writes):
     //   (a) the HALT transition (a clean Z80 HALT crash), and
-    //   (b) a STACK RUNAWAY -- SP underflowing kStreamStackFloor. The M36 Bug B
-    //       YS-II building-entry crash is NOT a HALT: PC derails into data,
-    //       garbage CALLs push the stack down ~2 KB/frame until it collapses into
-    //       an RST-38 loop (PC=0x0038, HALT=0). SP<0x4000 is unreachable in normal
-    //       execution (the YS-II stack lives ~0xDAxx), so it is an unambiguous
-    //       runaway. Firing here still keeps the derail inside the 1M-record ring
-    //       (~2.8 s ~= ~170 frames); the RST-38 loop reaches SP<0x4000 within a
-    //       handful of frames of the derail (~2 KB/frame), so the derail
-    //       (frame ~2683) is comfortably retained. Read SP through the existing
-    //       const accessor (cpu_.state().regs().sp) -- ZERO src/devices/cpu/ edit.
+    //   (b) a STACK RUNAWAY -- SP underflowing kStreamStackFloor. The M36 Bug
+    //       B YS-II building-entry crash is NOT a HALT: PC derails into data,
+    //       garbage CALLs push the stack down ~2 KB/frame until it collapses
+    //       into an RST-38 loop (PC=0x0038, HALT=0). SP<0x4000 is unreachable
+    //       in normal execution (the YS-II stack lives ~0xDAxx), so it is an
+    //       unambiguous runaway; firing here still keeps the derail inside
+    //       the 1M-record ring (~2.8 s ~= ~170 frames -- see
+    //       kStreamStackFloor). Read SP through the existing const accessor
+    //       (cpu_.state().regs().sp) -- zero src/devices/cpu/ edit.
     if (stream_active_) {
         stream_pre_record.instr_tstates = tstates;
         stream_pre_record.cumulative_tstates = elapsed_cycles();  // machine time (incl. M1 wait)
@@ -676,9 +669,9 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
 }
 
 void Hbf1xvMachine::poll_line_interrupt() {
-    // §2.5 trigger rule -- the relation BOTH behavior references agree on:
+    // §2.5 trigger rule -- the relation both behavior references agree on:
     // the horizontal scan (line) interrupt fires when the raster enters
-    // SCREEN-space display line M = (R#19 - R#23) & 0xFF.
+    // screen-space display line M = (R#19 - R#23) & 0xFF.
     //   * openMSX references/openmsx-21.0/src/video/VDP.cc:518-576
     //     (scheduleHScan): the match moment is
     //     `((controlRegs[19] - controlRegs[23]) & 0xFF)` display lines
@@ -688,11 +681,11 @@ void Hbf1xvMachine::poll_line_interrupt() {
     //   * fMSX references/fmsx-60/source/fMSX/MSX.c:2091-2104: fires when
     //     `(((ScanLine+VScroll)&0xFF)-VDP[19])&0xFF` reaches its
     //     coincidence value, IRQ gated on `VDP[0]&0x10` -- algebraically
-    //     the identical screen-space relation.
+    //     identical.
     // Precision disclosure (§2.5): openMSX raises FH at the matched line's
     // right border (VDP.cc:913-923); this poll fires at the first
-    // instruction boundary at-or-after the raster ENTERS the matched line
-    // -- up to one instruction early relative to openMSX, a ±1-line-class
+    // instruction boundary at-or-after the raster enters the matched line --
+    // up to one instruction early relative to openMSX, a ±1-line-class
     // deviation the split-test margins and the A/B gate encode.
     const std::uint8_t r19 = vdp_.control_register(19);
     const std::uint8_t r23 = vdp_.control_register(23);
@@ -1484,12 +1477,13 @@ void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::st
         std::error_code ec;
         std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_fdc.log"), ec);
         fdc_.set_sector_read_observer(&fdc_stream_observer_);
-        // DEC-0052 stream-light: the mapper-RAM + VDP register-write WATCHLOG
-        // observers are a LIGHT-mode-only capability, so the HEAVY F10 path stays
-        // byte-for-byte the prior M36 stream behavior (no watch.log). Clear any
-        // stale watch.log too (same determinism rationale as the fdc.log). All
-        // observers are removed in finalize_stream_capture, so a disarmed machine
-        // is byte-for-byte the pre-DEC-0052 default regardless.
+        // DEC-0052 stream-light: the mapper-RAM + VDP register-write watchlog
+        // observers are a light-mode-only capability, so the heavy F10 path
+        // stays byte-for-byte the prior M36 stream behavior (no watch.log).
+        // Clear any stale watch.log too (same determinism rationale as the
+        // fdc.log). All observers are removed in finalize_stream_capture, so
+        // a disarmed machine is byte-for-byte the pre-DEC-0052 default
+        // regardless.
         if (stream_light_) {
             std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_watch.log"),
                                     ec);

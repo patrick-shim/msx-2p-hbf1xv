@@ -25,10 +25,9 @@ namespace sony_msx::devices::chipset {
 //
 // One write-only 8-bit segment register per 16 KB page (#FC page0 ... #FF page3;
 // S1985 fact-sheet §4). Reading a mapper port is discouraged by the standard;
-// on the S1985 it is not a true register — it returns base | (segment & mask)
-// with base 0x80 and mask 0x1F, i.e. the measured `100xxxxx` pattern
-// (fact-sheet §4; openMSX MSXMapperIO / MSXS1985.cc:31-34
-// MapperReadBackBaseValue = 0x80, mask 0b0001'1111).
+// on the S1985 it is not a true register — it returns base | (segment & mask),
+// the measured `100xxxxx` readback pattern (base 0x80, mask 0x1F; fact-sheet §4;
+// openMSX MSXMapperIO / MSXS1985.cc:31-34).
 //
 // M11 models storage + the readback pattern only; the segment does not yet
 // select a physical RAM bank (that is M12).

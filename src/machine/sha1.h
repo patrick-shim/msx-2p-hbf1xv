@@ -22,12 +22,12 @@ namespace sony_msx::machine {
 
 // Clean-room SHA-1 (M30-S1, backlog G2, docs/m30-planner-package.md §2.1).
 //
-// Implemented SOLELY from the published standard: FIPS 180-4 (equivalently
+// Implemented solely from the published standard: FIPS 180-4 (equivalently
 // RFC 3174) -- 512-bit blocks, 80-round compression, standard 0x80/length
 // padding, 160-bit digest. Correctness is gated on the standard's own
 // published test vectors (tests/unit/machine/sha1_unit_test.cpp).
 //
-// CLEAN-ROOM DISCIPLINE (planner R-M30-2): this file was written WITHOUT
+// Clean-room discipline (planner R-M30-2): this file was written without
 // opening `references/fmsx-60/source/EMULib/SHA1.c` (or any other emulator's
 // SHA-1); the algorithm is a public NIST standard and this is an independent
 // from-spec implementation, exactly like the from-spec SHA-256 precedent in

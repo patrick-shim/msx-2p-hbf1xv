@@ -329,16 +329,16 @@ PsgYm2149::GeneratorSnapshot PsgYm2149::generator_snapshot() const {
 }
 
 void PsgYm2149::advance_cycles(const std::uint64_t delta_cpu_cycles) {
-    // M34 dwell walk (docs/m34-planner-package.md §2.3.1): the level of each
-    // channel is piecewise-constant between generator steps, so the exact
-    // box integral is a walk over the true step boundaries -- head partial
-    // step from cycle_residual_, whole 16-cycle steps, tail partial step.
+    // M34 dwell walk (docs/m34-planner-package.md §2.3.1): each channel's
+    // level is piecewise-constant between generator steps, so the exact box
+    // integral is a walk over the true step boundaries -- head partial step
+    // from cycle_residual_, whole 16-cycle steps, tail partial step.
     // Generator-state evolution is IDENTICAL to the pre-M34 bulk advance
     // (same residual arithmetic, same per-step Tone/Noise/Envelope
     // semantics); only the Σ level×dwell bookkeeping is new. Boundary
-    // convention (§2.3.3): the step completing at cycle t changes the level
-    // effective AFTER cycle t -- the completing cycle's dwell is accumulated
-    // at the PRE-step level.
+    // convention (§2.3.3): a step completing at cycle t changes the level
+    // effective AFTER cycle t, so the completing cycle's dwell is
+    // accumulated at the PRE-step level.
     std::uint64_t remaining = delta_cpu_cycles;
     while (remaining > 0) {
         const std::uint64_t to_boundary = kCyclesPerGeneratorStep - cycle_residual_;

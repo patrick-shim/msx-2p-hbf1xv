@@ -24,13 +24,14 @@
 namespace sony_msx::devices::memory {
 
 // DEC-0052 (M36 stream-light): non-perturbing CPU-memory-write observer. When
-// installed (non-null) it is notified on every mem_write() with the CPU-VISIBLE
-// address (the 16-bit address the CPU wrote -- NOT the folded physical segment
-// offset), so a diagnostic can watch specific addresses (e.g. the 0x0038 IM1/
-// RST-38 JP-target bytes). Default-null => zero behaviour change; like the
-// WD2793 FdcSectorReadObserver it is an externally-owned lifecycle pointer,
-// isolated from emulation (an implementation MUST NOT mutate memory/mapper/CPU/
-// clock state -- it only inspects the supplied address+value, e.g. to log them).
+// installed (non-null) it is notified on every mem_write() with the
+// CPU-VISIBLE address (the 16-bit address the CPU wrote, NOT the folded
+// physical segment offset), so a diagnostic can watch specific addresses
+// (e.g. the 0x0038 IM1/RST-38 JP-target bytes). Default-null => zero
+// behaviour change; like the WD2793 FdcSectorReadObserver it is an
+// externally-owned lifecycle pointer, isolated from emulation (an
+// implementation MUST NOT mutate memory/mapper/CPU/clock state -- it only
+// inspects the supplied address+value, e.g. to log them).
 class MemWriteObserver {
 public:
     virtual ~MemWriteObserver() = default;
@@ -50,16 +51,12 @@ public:
 // duplicated here, so a mapper write is observed on the very next CPU access.
 //
 // Physical address (behaviour reference — read only, never copied; GPL):
-// references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:72-83
-//   segmentOffset(page): segment = (segment < numSegments)
-//                                    ? segment : segment & (numSegments - 1);
-//                        return segment * 0x4000;
-//   calcAddress(addr):   segmentOffset(addr / 0x4000) | (addr & 0x3FFF)
-// For a 64 KB mapper numSegments == 4 (a power of two), so the unpopulated-
-// segment wrap `segment & (numSegments - 1)` == `segment & 3` for every segment
-// value (when segment < 4 the mask is a no-op). The readback (5-bit, chipset)
-// and the physical fold (2-bit, here) authentically use different masks
-// (Sony_HB-F1XV.xml:25 "includes 5 bits mapper-read-back").
+// references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:72-83 folds
+// segment*0x4000 + (addr & 0x3FFF), wrapping the segment with
+// `segment & (numSegments - 1)`. For a 64 KB mapper numSegments == 4 (a power
+// of two), so that wrap == `segment & 3` for every segment value. The readback
+// (5-bit, chipset) and the physical fold (2-bit, here) authentically use
+// different masks (Sony_HB-F1XV.xml:25 "includes 5 bits mapper-read-back").
 class MemoryMapperRam final : public core::MemoryDevice {
 public:
     // 64 KB / 16 KB = 4 populated segments.

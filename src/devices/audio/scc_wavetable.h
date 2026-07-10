@@ -83,9 +83,9 @@ namespace sony_msx::devices::audio {
 // fact-sheet's measured 3.58MHz/(period+1) per shift (fact-sheet §6, Pazos
 // verbatim); openMSX's own /32 tick granularity here is its resampler
 // artifact, not chip semantics ("do not copy it", fact-sheet §10.1) -- a
-// deliberate, disclosed divergence from the reference implementation in
-// favour of the measured formula. In all-rotate mode (bits7:6 == 01) channel
-// 4 rotates at CHANNEL 5's period (fact-sheet §6 bit6 row, SCC.cc:257-262).
+// deliberate divergence from the reference implementation, favouring the
+// measured formula. In all-rotate mode (bits7:6 == 01) channel 4 rotates at
+// CHANNEL 5's period (fact-sheet §6 bit6 row, SCC.cc:257-262).
 //
 // reset() = the enen-measured POWER-ON state (SCC fact-sheet §7): wave RAM
 // all 0xFF, volumes 15, channel-enable 0, deform 0, periods 0 (i.e. stopped,

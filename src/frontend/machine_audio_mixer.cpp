@@ -45,15 +45,13 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
         const devices::audio::PsgYm2149::StereoSample s = pump_.pump_one_sample(psg);
 
         // SCCs: advance by the SAME per-sample delta, then take the mono AC
-        // box average over that window (M34, DEC-0043 Defect A --
-        // SccWavetable::take_integrated_sample(); the §2.3.4 fixed-point
-        // property keeps every constant-output SCC byte-identical to the
-        // pre-M34 point sample). A null entry contributes exactly 0 -- the
-        // zero-SCC path remains arithmetically identical to the pre-M29
-        // presenter loop for ANY input (the hard regression oracle, M29
-        // §2.4, re-grounded by M34: both sides of that oracle now compute
-        // through the same integrated pump, and a silent/absent source
-        // still contributes exactly 0).
+        // box average over the window (M34, DEC-0043 Defect A --
+        // SccWavetable::take_integrated_sample(); §2.3.4's fixed-point
+        // property keeps constant-output SCCs byte-identical to the pre-M34
+        // point sample). A null entry contributes exactly 0, so the zero-SCC
+        // path stays arithmetically identical to the pre-M29 loop for ANY
+        // input (hard regression oracle, M29 §2.4; both sides now compute
+        // through the same integrated pump since M34).
         std::int32_t scc_sum = 0;
         for (devices::audio::SccWavetable* scc : sccs) {
             if (scc != nullptr) {
@@ -75,13 +73,13 @@ std::vector<std::int16_t> MachineAudioMixer::mix_interleaved_stereo(
         }
 
         // FM-PAC (M37 Slice B): each inserted external FM-PAC cartridge owns
-        // its OWN, second YM2413 OPLL. Advance every non-null one by the SAME
+        // its own, second YM2413 OPLL. Advance every non-null one by the SAME
         // per-sample delta as the built-in `fm` (identical 9:8 decimation
-        // cadence) and sum their mono native samples, then apply the SAME
+        // cadence), sum their mono native samples, then apply the SAME
         // kFmAmplitudeScale (reused, not a new scaling). An all-null fm_pacs
-        // (no FM-PAC inserted) sums to exactly 0 -> byte-identical to the
-        // pre-M37 mix for ANY input (the M37 hard regression oracle). FM-PAC
-        // output is mono, so like SCC/FM the same term lands on both channels.
+        // sums to exactly 0 -> byte-identical to the pre-M37 mix for ANY
+        // input (the M37 hard regression oracle). Output is mono, so like
+        // SCC/FM the same term lands on both channels.
         std::int32_t fm_pac_sum = 0;
         for (devices::audio::Ym2413Opll* fm_pac : fm_pacs) {
             if (fm_pac != nullptr) {

@@ -24,15 +24,14 @@ namespace sony_msx::devices::chipset {
 // 256-port MSX I/O dispatch fabric with S1985 straight-alias mirrors (M11-S3).
 //
 // A device registers on one or more of the 256 ports (keyed on port & 0xFF).
-// io_read/io_write dispatch to the registered device or return open-bus 0xFF /
+// io_read/io_write dispatch to the registered device, or return open-bus 0xFF /
 // ignore when unmapped (S1985 fact-sheet §10; A-1).
 //
-// Straight-alias mirrors (register_mirror): the S1985 mirrors the VDP ports
-// #98-#9B onto #9C-#9F (fact-sheet §7) and the PPI ports #A8-#AB onto #AC-#AF
-// (fact-sheet §3, §10) due to incomplete address decoding. A mirror port routes
-// to whatever device is registered on its base port, so e.g. the M13 VDP on
-// #98-#9B is automatically reachable on #9C-#9F, and the MSX-ENGINE detection
-// routine's read(#AC)==read(#A8) holds. Modelled as a straight alias per §10.
+// register_mirror models the S1985's incomplete address decoding, which mirrors
+// VDP ports #98-#9B onto #9C-#9F (fact-sheet §7) and PPI ports #A8-#AB onto
+// #AC-#AF (fact-sheet §3, §10): a mirror port routes to whatever device is
+// registered on its base port, so the MSX-ENGINE detection routine's
+// read(#AC)==read(#A8) holds.
 class IoBus final : public core::Bus {
 public:
     // Register a device on a base port (port & 0xFF). Nullptr detaches.

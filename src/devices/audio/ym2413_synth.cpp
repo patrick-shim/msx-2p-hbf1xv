@@ -24,9 +24,9 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// --- S1: operator tables, COMPUTED from closed-form math (fact-sheet §4
+// --- S1: operator tables, computed from closed-form math (fact-sheet §4
 // structure; planner §2.1 row 1). Never transcribed from any reference
-// source -- identical numeric OUTPUT from an independently-grounded closed
+// source -- identical numeric output from an independently-grounded closed
 // form is expected and acceptable (M28 §2.3(a) finding, ratified DEC-0035).
 // Unit tests recompute both tables independently (double-precision math +
 // rounding) and check endpoint/monotonicity/symmetry properties.

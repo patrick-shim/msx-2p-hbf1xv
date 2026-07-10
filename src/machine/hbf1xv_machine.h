@@ -85,33 +85,29 @@ public:
     // every required ROM was present + correctly sized). Never fabricated.
     [[nodiscard]] const std::vector<std::string>& rom_diagnostics() const;
 
-    // Test/debug helper (M13-S4, discharges the M11 R-1/R-2 obligation): page the
+    // Test/debug helper (M13-S4, discharges the M11 R-1/R-2 obligation): pages the
     // 64 KB mapper RAM (slot 3-0) into all four CPU pages as a FLAT, linear 64 KB
-    // view — the exact configuration the BIOS installs and that the M11 bring-up
-    // default provided implicitly before the authentic #A8=0 reset flip. It sets
+    // view -- the configuration CPU-over-RAM tests page in explicitly after
+    // cold_boot, now that cold_boot resets #A8 to the authentic 0 (BIOS). Sets
     // #A8 so every page selects primary slot 3, the slot-3 sub-slot register to 0
-    // (sub-slot 0 = RAM mapper), and mapper segments {0,1,2,3} for pages {0,1,2,3}
-    // (page p -> physical p*0x4000). CPU-over-RAM behaviour tests call this after
-    // cold_boot to page RAM in explicitly, rather than relying on a hidden default.
+    // (RAM mapper), and mapper segments {0,1,2,3} for pages {0,1,2,3} (page p ->
+    // physical p*0x4000).
     void map_flat_ram();
 
     void run_frame();
     // Frame-boundary bookkeeping for a REAL-TIME driver (the M26 SDL3
-    // frontend) that steps the CPU itself via step_cpu_instruction() in a
-    // sub-loop until elapsed_cycles() reaches a frame_cycles_per_frame()
-    // boundary, rather than using the coarse run_frame() tick (which does
-    // NOT drive the CPU at all -- see run_frame()'s own body/definition).
-    // Performs EXACTLY run_frame()'s non-scheduler-tick side effects (frame
-    // counter, VDP on_vsync(), pause-controller on_vsync(), last-vsync
-    // bookkeeping) but explicitly does NOT call scheduler_.tick(kFrameCycles)
-    // -- the caller's own step_cpu_instruction() loop has ALREADY advanced
-    // the scheduler by that amount. Calling this AND run_frame() for the
-    // same frame boundary in the same session would double-count elapsed
-    // cycles (the same class of hazard already documented at the test level,
-    // R-M25-5) -- a session must pick ONE driving model and never mix them.
-    // A pure, behavior-preserving extraction of run_frame()'s existing body
-    // (docs/m26-planner-package.md §2.3, M26-S1): run_frame() itself is
-    // unchanged in observable behavior for every pre-M26 caller.
+    // frontend) that steps the CPU itself via step_cpu_instruction() until
+    // elapsed_cycles() reaches a frame boundary, instead of run_frame()'s
+    // coarse tick (which does not drive the CPU at all). Performs exactly
+    // run_frame()'s non-tick side effects (frame counter, VDP on_vsync(),
+    // pause-controller on_vsync(), last-vsync bookkeeping) but does NOT call
+    // scheduler_.tick(kFrameCycles) -- the caller's own step loop has already
+    // advanced the scheduler by that amount. Calling this AND run_frame() for
+    // the same frame boundary would double-count elapsed cycles (R-M25-5) --
+    // a session must pick ONE driving model and never mix them. A
+    // behavior-preserving extraction of run_frame()'s body
+    // (docs/m26-planner-package.md §2.3, M26-S1); run_frame() itself is
+    // unchanged for every pre-M26 caller.
     void on_vsync_boundary();
     void run_frames(std::uint32_t frames);
     void run_cycles(std::uint64_t cycles);
@@ -131,10 +127,9 @@ public:
     void debug_io_write(std::uint16_t port, std::uint8_t value);
     [[nodiscard]] bool slot_expanded(int primary) const;
     // Direct (non-#FFFF-indirected) sub-slot register readback for a primary
-    // slot, for diagnostics/tests that need to know the TRUE current page-1
-    // routing regardless of which primary slot currently occupies page 3 (the
-    // 0xFFFF access itself is indirected through whatever primary answers page
-    // 3 -- this bypasses that indirection). Non-perturbing.
+    // slot -- reports the TRUE current page-1 routing regardless of which
+    // primary currently occupies page 3 (a #FFFF access is itself indirected
+    // through whatever primary answers page 3; this bypasses that). Non-perturbing.
     [[nodiscard]] std::uint8_t debug_sub_slot_register(int primary) const;
     [[nodiscard]] const devices::cpu::Z80aCpu& cpu() const;
     devices::cpu::Z80aCpu& cpu();
@@ -146,11 +141,10 @@ public:
     // additive-only, NON-GATING -- nothing in step_cpu_instruction()/
     // run_cycles()/run_until_cycle() consults these). cycles_since_last_vsync()
     // is elapsed_cycles() relative to the most recent run_frame()'s on_vsync()
-    // call (or program start, cycle 0, if run_frame() has never been called --
-    // an honest, tested boundary condition, R-M23-5; every M21/M22 system test
-    // drives the CPU purely via step_cpu_instruction() and never calls
-    // run_frame()). vdp_cycle_position() is a thin wrapper over
-    // vdp_access_timing::vdp_cycle_within_line() for that same relative
+    // call, or cycle 0 if run_frame() was never called (tested boundary
+    // condition, R-M23-5; every M21/M22 system test drives the CPU purely via
+    // step_cpu_instruction()). vdp_cycle_position() wraps
+    // vdp_access_timing::vdp_cycle_within_line() over that same relative
     // position. See devices/video/vdp_access_timing.h for the full contract
     // and the non-gating warning.
     [[nodiscard]] std::uint64_t cycles_since_last_vsync() const;
@@ -165,30 +159,30 @@ public:
     [[nodiscard]] const CpuTraceSink& cpu_trace() const;
     CpuTraceSink& cpu_trace();
 
-    // Minimum INERT memory region (M10-S2). A pure storage byte buffer sized
-    // to the strict Target Machine Specification, deterministically
-    // zero-initialized at cold_boot, exposing read/write/load/dump via its
-    // MemoryRegion accessors. It carries NO device behavior (no slot/mapper
-    // decoding, no V9958 VDP semantics, no I/O bus).
+    // Minimum INERT memory region (M10-S2): a pure storage byte buffer sized to
+    // the strict Target Machine Specification, deterministically zero-
+    // initialized at cold_boot, exposing read/write/load/dump via MemoryRegion.
+    // No device behavior (no slot/mapper decoding, no V9958 VDP semantics, no
+    // I/O bus).
     //
-    // - DRAM = 64 KB main RAM. This is the same store the CPU sees over the
-    //   bus; load_memory/read_memory below are the CPU-visible aliases.
+    // - DRAM = 64 KB main RAM, the same store the CPU sees over the bus;
+    //   load_memory/read_memory below are the CPU-visible aliases.
     //
     // NO internal SRAM (M36, DEC-0050): the earlier speculative 8 KB `sram_`
     // region was removed. The HB-F1XV's built-in FM is MSX-MUSIC (OPLL +
     // APRLOPLL BIOS, NO SRAM) -- grounded in
     // references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml (`<MSX-MUSIC>`
-    // with no `<sramname>`). Battery SRAM is a PERIPHERAL: it belongs to the
-    // external, insertable Panasonic FM-PAC CARTRIDGE (fmpac() /
-    // CartridgeFmPacRom), not the bare machine. So a bare HB-F1XV correctly
-    // reports "NO S-RAM AVAILABLE"; the state dump's SRAM section reflects an
-    // inserted FM-PAC's SRAM when present and is empty otherwise.
+    // with no `<sramname>`). Battery SRAM belongs to the external, insertable
+    // Panasonic FM-PAC CARTRIDGE (fmpac() / CartridgeFmPacRom), not the bare
+    // machine -- so a bare HB-F1XV correctly reports "NO S-RAM AVAILABLE"; the
+    // state dump's SRAM section reflects an inserted FM-PAC's SRAM when
+    // present, empty otherwise.
     //
-    // The 128 KB VRAM MIGRATED to the V9958 VDP device (M14-S1). It is no longer
-    // an inert machine MemoryRegion: the CPU reaches it ONLY through the VDP I/O
-    // ports #98/#99 (+ the S1985 #9C/#9D mirror). Its store + authoritative size
-    // now live in devices::video::VdpVram (VdpVram::kVramBytes); access it via
-    // vdp().vram().
+    // The 128 KB VRAM MIGRATED to the V9958 VDP device (M14-S1): no longer an
+    // inert machine MemoryRegion, the CPU reaches it ONLY through the VDP I/O
+    // ports #98/#99 (+ the S1985 #9C/#9D mirror). Its store + authoritative
+    // size now live in devices::video::VdpVram (VdpVram::kVramBytes); access
+    // via vdp().vram().
     static constexpr std::size_t kDramBytes = 64 * 1024;
 
     [[nodiscard]] std::size_t dram_size() const;
@@ -202,26 +196,25 @@ public:
     [[nodiscard]] const devices::video::V9958Vdp& vdp() const;
     devices::video::V9958Vdp& vdp();
 
-    // Decoded frame accessor. SIGNATURE UNCHANGED since M21; semantics
+    // Decoded frame accessor. Signature unchanged since M21; semantics
     // upgraded by M32 (Defect A of DEC-0039, docs/m32-planner-package.md
     // §2.4): Field::Progressive (every production call site) now routes to
     // the raster-true scanline accumulator -- "accumulated past + projected
     // future". Called at a frame boundary (immediately after
-    // on_vsync_boundary(), the Sdl3App::run_one_frame() shape) it returns
-    // the finalized per-line frame of the frame that just ended; called
-    // mid-frame it returns the raster-true partial accumulation plus a
-    // live-register projection of the lines below the beam. For any frame
-    // with NO mid-frame VDP write it is byte-identical to the legacy
-    // snapshot renderer for ANY call position (AC-4 hard oracle). Even/Odd
-    // (test/debug-only interlace fields; no production caller) keep the
-    // legacy frozen-snapshot semantics via VdpFrameRenderer::render_frame().
+    // on_vsync_boundary(), the Sdl3App::run_one_frame() shape) it returns the
+    // finalized per-line frame of the frame that just ended; called mid-frame
+    // it returns the partial accumulation plus a live-register projection of
+    // the lines below the beam. With no mid-frame VDP write it is
+    // byte-identical to the legacy snapshot renderer for any call position
+    // (AC-4 hard oracle). Even/Odd (test/debug-only interlace fields; no
+    // production caller) keep the legacy frozen-snapshot semantics via
+    // VdpFrameRenderer::render_frame().
     //
     // Logical constness (documented decision, §2.4): the accumulator member
     // is `mutable` -- committing lines the beam has already passed is
-    // memoization (a subsequent hooked write would commit the identical
-    // bytes, since no VDP state can change between this call and that write
-    // except through hooked writes themselves). No observable state of the
-    // machine changes.
+    // memoization (a later hooked write would commit the identical bytes,
+    // since only hooked writes can change VDP state between this call and
+    // that write). No observable machine state changes.
     [[nodiscard]] devices::video::FrameBuffer render_frame(
         devices::video::Field field = devices::video::Field::Progressive) const;
 
@@ -301,15 +294,14 @@ public:
     devices::cartridge::CartridgeSlot& cartridge_slot2();
 
     // Konami SCC wavetable chip accessor (M29-S4, backlog G1; docs/m29-
-    // planner-package.md §2.3). Returns the given cartridge bay's owned
-    // SccWavetable when that bay currently holds a `KonamiSCC` cartridge,
-    // else nullptr -- including invalid slot numbers and every other mapper
-    // type. Mirrors psg()'s accessor shape with the M25 default-nullptr
-    // attach-point precedent: with no SCC cart loaded the frontend/mixer
-    // sees nullptr and behaves byte-identically to v1.0.29 (regression
-    // null). Both bays are queryable independently (real hardware mixes
-    // both slots' sound-in lines). NO new clock consumer and NO wire_bus()
-    // change: the chip is reached over the existing M19 slot attachment;
+    // planner-package.md §2.3). Returns the given bay's owned SccWavetable
+    // when it currently holds a `KonamiSCC` cartridge, else nullptr
+    // (including invalid slot numbers and every other mapper type). Mirrors
+    // psg()'s accessor shape with the M25 default-nullptr precedent: with no
+    // SCC cart loaded the frontend/mixer sees nullptr, byte-identical to
+    // v1.0.29 (regression null). Both bays are queryable independently (real
+    // hardware mixes both slots' sound-in lines). No new clock consumer and
+    // no wire_bus() change: reached over the existing M19 slot attachment;
     // its generator advances only via the frontend audio pump
     // (SccWavetable::advance_cycles, A-M29-6).
     [[nodiscard]] devices::audio::SccWavetable* scc_chip(int slot_number);
@@ -355,12 +347,12 @@ public:
 
     // Full-state debug dump + execution-event logging (M10-S3).
     //
-    // Determinism is guaranteed by construction: every serializer is hand-rolled
-    // ASCII (fixed field order, fixed-width uppercase hex, '\n' endings), event
-    // T-state stamps come from the deterministic scheduler clock, and NO
-    // wall-clock or environment-dependent value is ever embedded. Two identical
-    // runs produce byte-for-byte identical dump/log content. Dumping is
-    // non-perturbing: it reads state only and never advances the CPU or clock.
+    // Deterministic by construction: every serializer is hand-rolled ASCII
+    // (fixed field order, fixed-width uppercase hex, '\n' endings), T-state
+    // stamps come from the deterministic scheduler clock, and no wall-clock or
+    // environment value is ever embedded -- two identical runs produce
+    // byte-for-byte identical output. Dumping is non-perturbing: it reads
+    // state only and never advances the CPU or clock.
     //
     // Output-file layout (created on demand under the configurable debug root,
     // default "debug/"):
@@ -401,8 +393,8 @@ public:
     // §2.5). Mirrors write_state_dump()/write_cpu_trace()/write_event_log()
     // exactly (same directory-creation/error-handling pattern, same
     // debug_root_-relative convention); writes to <root>/frames/<filename>.
-    // Pure/const, non-perturbing to CPU/memory/clock state -- render_frame()
-    // is itself already a pure, on-demand VRAM/register snapshot (M21).
+    // Pure/const, non-perturbing -- render_frame() is itself already a pure,
+    // on-demand VRAM/register snapshot (M21).
     [[nodiscard]] std::string serialize_frame_dump(
         devices::video::Field field = devices::video::Field::Progressive) const;
     bool write_frame_dump(const std::string& filename,
@@ -410,14 +402,14 @@ public:
 
     // --- M36 Phase 3 comprehensive debug SNAPSHOT (DEC-0051,
     //     docs/m36-phase3-planner-package.md). A SEPARATE artifact from the
-    //     golden-locked serialize_state_dump() (M10/M13/M14): it captures the
-    //     EXACT current state of EVERY machine component (§2.3 inventory) into a
-    //     per-component typed dump, versioned "HBF1XV-SNAPSHOT v1" and designed
-    //     RESTORE-READY (restore itself is a future milestone). CAPTURE-ONLY +
-    //     ADDITIVE + read-only w.r.t. emulation: it advances neither the CPU nor
-    //     the scheduler and issues no debug_io_write; it consumes NO RNG and NO
-    //     wall-clock for content, so an identical run to the same frame produces
-    //     byte-identical snapshot CONTENT (auditable determinism). ---
+    //     golden-locked serialize_state_dump() (M10/M13/M14): captures the
+    //     exact current state of EVERY machine component (§2.3 inventory) into
+    //     a per-component typed dump, versioned "HBF1XV-SNAPSHOT v1" and
+    //     designed restore-ready (restore itself is a future milestone).
+    //     Capture-only + additive + read-only w.r.t. emulation: advances
+    //     neither the CPU nor the scheduler, issues no debug_io_write, and
+    //     consumes no RNG/wall-clock, so an identical run to the same frame
+    //     produces byte-identical snapshot content (auditable determinism). ---
 
     // The #FC-#FF memory-mapper segment registers (planner §2.4 item 2). const
     // read-only accessor mirroring s1985()/ppi().
@@ -442,12 +434,12 @@ public:
     // every file wrote. Non-perturbing to CPU/memory/clock state.
     bool write_snapshot(const std::string& id, const std::vector<std::string>& caller_notes = {});
 
-    // --- DEC-0052 live STREAM-CAPTURE (crash-trajectory diagnostic; ADDITIVE,
-    //     DEFAULT-OFF). Extends the M36 Phase-3 snapshot + the M10/M27
-    //     CPU-trace facility to record the temporal trajectory INTO a
-    //     control-flow crash (the M36 Bug B YS-II building-entry HALT). Armed
-    //     at a chosen moment (F10 in the SDL frontend, or set_stream_capture_
-    //     enabled() at the machine level); while armed it
+    // --- DEC-0052 live STREAM-CAPTURE (crash-trajectory diagnostic; additive,
+    //     default-off). Extends the M36 Phase-3 snapshot + the M10/M27
+    //     CPU-trace facility to record the trajectory INTO a control-flow crash
+    //     (the M36 Bug B YS-II building-entry HALT). Armed at a chosen moment
+    //     (F10 in the SDL frontend, or set_stream_capture_enabled() at the
+    //     machine level); while armed it
     //       (1) writes a full per-component snapshot bundle at EVERY frame
     //           boundary (end of on_vsync_boundary()) into
     //           <debug_root>/snapshot/stream_<id>/<frame-id>/ -- the
@@ -460,51 +452,52 @@ public:
     //     disarms. A manual OFF finalizes the same way.
     //
     //     Zero-cost + byte-identical when OFF: every hook is behind an
-    //     `if (stream_active_)` guard, consumes NO RNG/wall-clock, and does not
+    //     `if (stream_active_)` guard, consumes no RNG/wall-clock, and does not
     //     advance/perturb the CPU or scheduler (the ring records are built from
-    //     the SAME non-perturbing const getters the Phase-3 snapshot uses; the
+    //     the same non-perturbing const getters the Phase-3 snapshot uses; the
     //     #A8 slot select comes from the non-perturbing debug_io_read seam).
     //     The hook lives entirely at the MACHINE level (step_cpu_instruction /
-    //     on_vsync_boundary) -- src/devices/cpu/ + src/core/ are UNTOUCHED
+    //     on_vsync_boundary) -- src/devices/cpu/ + src/core/ are untouched
     //     (ZEXALL withheld). ---
     //
     //     DEC-0052 enhancement (M36 Bug B): the finalize trigger ALSO fires on a
-    //     STACK RUNAWAY, not only on HALT. The YS-II building-entry crash is not a
-    //     clean Z80 HALT -- PC derails into a data region, garbage CALLs push the
-    //     stack down ~2 KB/frame until it collapses into an RST-38 loop
-    //     (PC=0x0038, HALT=0), which the HALT-only trigger never caught. When the
-    //     stack pointer underflows kStreamStackFloor (an address normal execution
-    //     never reaches -- the YS-II stack lives ~0xDAxx), the capture finalizes
-    //     itself into a distinct CRASH_ bundle (see finalize_stream_capture). ---
+    //     STACK RUNAWAY, not only on HALT. The YS-II building-entry crash is not
+    //     a clean Z80 HALT -- PC derails into a data region, garbage CALLs push
+    //     the stack down ~2 KB/frame until it collapses into an RST-38 loop
+    //     (PC=0x0038, HALT=0), which the HALT-only trigger never caught. When
+    //     the stack pointer underflows kStreamStackFloor (an address normal
+    //     execution never reaches -- the YS-II stack lives ~0xDAxx), the
+    //     capture finalizes itself into a distinct CRASH_ bundle (see
+    //     finalize_stream_capture). ---
     static constexpr std::size_t kStreamTraceRingCapacity = 1u << 20;  // 1,048,576 records
 
-    // DEC-0052 stack-runaway finalize floor. SP < this is an UNAMBIGUOUS runaway:
-    // the YS-II stack lives ~0xDAxx and normal MSX execution never runs the stack
-    // below 0x4000, whereas the RST-38 crash loop drives SP down hard right after
-    // the derail. Firing here -- a few frames after the derail -- still keeps the
-    // derail inside the 1M-record ring: at the observed ~2 KB/frame stack drop the
-    // RST-38 loop reaches SP<0x4000 within a handful of frames of the derail, and
-    // the ring holds ~1M instructions (~2.8 s ~= ~170 frames), so the derail
-    // (frame ~2683) is comfortably retained when the trigger fires.
+    // DEC-0052 stack-runaway finalize floor. SP < this is an unambiguous
+    // runaway: the YS-II stack lives ~0xDAxx and normal MSX execution never
+    // runs the stack below 0x4000, whereas the RST-38 crash loop drives SP
+    // down hard right after the derail. Firing here still keeps the derail
+    // inside the 1M-record ring (~2.8 s ~= ~170 frames): at the observed
+    // ~2 KB/frame drop the RST-38 loop reaches SP<0x4000 within a handful of
+    // frames of the derail (frame ~2683), so it stays comfortably retained.
     static constexpr std::uint16_t kStreamStackFloor = 0x4000;
 
     // --- DEC-0052 "stream-light" mode (M36 Bug B long-session upstream hunt). A
-    //     LIGHTWEIGHT streaming variant for a LONG armed session (YS-II game
-    //     start -> walking to a building -> entering it) that the heavy per-frame
-    //     snapshot bundle would bog down. When light mode is armed:
-    //       (a) the per-vsync full-snapshot bundle is SUPPRESSED, replaced by a
-    //           COARSE anchor snapshot every kStreamLightSnapshotInterval frames
-    //           (~2 s) plus the existing crash/HALT/manual finalize snapshot, and
+    //     lightweight streaming variant for a long armed session (YS-II game
+    //     start -> walking to a building -> entering it) that the heavy
+    //     per-frame snapshot bundle would bog down. When light mode is armed:
+    //       (a) the per-vsync full-snapshot bundle is suppressed, replaced by a
+    //           coarse anchor snapshot every kStreamLightSnapshotInterval
+    //           frames (~2 s) plus the existing crash/HALT/manual finalize
+    //           snapshot, and
     //       (b) a per-event WATCHLOG (<debug_root>/traces/stream_<id>_watch.log)
-    //           records the decisive-but-RARE upstream events over the whole
+    //           records the decisive-but-rare upstream events over the whole
     //           session: CPU memory writes to the IM1/RST-38 ISR-vector bytes
     //           0x0039/0x003A and the sound-arm flag 0xA5E1 (via the mapper-RAM
     //           write observer), and writes to VDP register R#1 (via the VDP
-    //           register-write observer). Because those events are rare, the
-    //           watchlog overhead is negligible over a long session.
-    //     The heavy per-frame mode remains the DEFAULT when light is off (§3.3);
+    //           register-write observer). These events are rare, so watchlog
+    //           overhead is negligible over a long session.
+    //     The heavy per-frame mode remains the default when light is off (§3.3);
     //     the ring + its HALT/SP-underflow auto-finalize are unchanged (the ring
-    //     stays at kStreamTraceRingCapacity = 1<<20 ~= 2.8 s -- the WATCHLOG, not
+    //     stays at kStreamTraceRingCapacity = 1<<20 ~= 2.8 s -- the watchlog, not
     //     the ring, is the whole-session upstream record, so the ring width need
     //     not grow). ---
     static constexpr std::uint32_t kStreamLightSnapshotInterval = 120;  // frames (~2 s)
@@ -591,18 +584,17 @@ private:
 
     // Render-sync adapter (M32-S2, docs/m32-planner-package.md §2.3): the
     // machine-side listener behind V9958Vdp's render-sync seam. On every
-    // hooked VDP io_write it reads the live raster position L =
+    // hooked VDP io_write it reads the live raster line L =
     // vdp_.raster_display_line() and commits display lines [watermark, L+1)
-    // -- i.e. A WRITE WHILE THE BEAM IS ON DISPLAY LINE L TAKES EFFECT FROM
-    // LINE L+1; lines <= L keep the pre-write state. This is the
-    // line-granular simplification of openMSX's LINE-accuracy rounding
-    // (references/openmsx-21.0/src/video/PixelRenderer.cc:549-571) and errs
-    // by at most one line against the PIXEL-accurate model (§2.3 precision
+    // -- a write while the beam is on line L takes effect from line L+1;
+    // lines <= L keep the pre-write state. Line-granular simplification of
+    // openMSX's line-accuracy rounding
+    // (references/openmsx-21.0/src/video/PixelRenderer.cc:549-571), erring by
+    // at most one line vs the pixel-accurate model (§2.3 precision
     // disclosure). `suspended` gates the machine's non-perturbing
     // debug_io_write() seam OUT of the hook (§2.3: scenes built through
-    // debug_io_write are covered by the lazy projection/finalize path --
-    // its documented contract stays "non-perturbing", proven by
-    // integration test).
+    // debug_io_write use the lazy projection/finalize path instead, which
+    // stays "non-perturbing" per integration test).
     class VdpRenderSyncAdapter final : public devices::video::VdpRenderSyncListener {
     public:
         explicit VdpRenderSyncAdapter(Hbf1xvMachine& machine) : machine_(machine) {}
@@ -636,12 +628,13 @@ private:
         devices::cpu::Z80aCpu& cpu_;
     };
 
-    // DEC-0052 stream-capture FDC observer adapter. Installed on fdc_ ONLY while
-    // stream_active_ (set_stream_capture_enabled arms it, finalize_stream_capture
-    // removes it); default-null on fdc_ => zero behaviour change. Forwards each
-    // completed sector read to log_stream_fdc_read(), which appends one line to
-    // the per-stream FDC log so the human can diff our returned disk bytes against
-    // the raw .dsk. Non-perturbing (see FdcSectorReadObserver's contract).
+    // DEC-0052 stream-capture FDC observer adapter. Installed on fdc_ only
+    // while stream_active_ (set_stream_capture_enabled arms it,
+    // finalize_stream_capture removes it); default-null on fdc_ => zero
+    // behaviour change. Forwards each completed sector read to
+    // log_stream_fdc_read(), which appends one line to the per-stream FDC log
+    // so the human can diff our returned disk bytes against the raw .dsk.
+    // Non-perturbing (see FdcSectorReadObserver's contract).
     class FdcStreamObserver final : public devices::fdc::FdcSectorReadObserver {
     public:
         explicit FdcStreamObserver(Hbf1xvMachine& machine) : machine_(machine) {}
@@ -654,10 +647,10 @@ private:
     };
 
     // DEC-0052 stream-light mapper-RAM write observer. Installed on ram_mapper_
-    // ONLY while streaming (set_stream_capture_enabled arms it, finalize removes
-    // it); default-null on the device => zero behaviour change. Forwards each
-    // CPU RAM write to log_stream_mem_write(), which appends a watchlog line for
-    // the WATCHED addresses (0x0039/0x003A/0xA5E1) only. Non-perturbing.
+    // only while streaming (set_stream_capture_enabled arms it, finalize
+    // removes it); default-null => zero behaviour change. Forwards each CPU
+    // RAM write to log_stream_mem_write(), which appends a watchlog line for
+    // the watched addresses (0x0039/0x003A/0xA5E1) only. Non-perturbing.
     class MemWatchObserver final : public devices::memory::MemWriteObserver {
     public:
         explicit MemWatchObserver(Hbf1xvMachine& machine) : machine_(machine) {}
@@ -668,9 +661,9 @@ private:
     };
 
     // DEC-0052 stream-light VDP control-register-write observer. Installed on
-    // vdp_ ONLY while streaming; default-null => zero behaviour change. Forwards
-    // each R#0..R#31 write to log_stream_vdp_register(), which appends a watchlog
-    // line for R#1 only. Non-perturbing.
+    // vdp_ only while streaming; default-null => zero behaviour change.
+    // Forwards each R#0..R#31 write to log_stream_vdp_register(), which appends
+    // a watchlog line for R#1 only. Non-perturbing.
     class VdpRegWatchObserver final : public devices::video::VdpRegisterWriteObserver {
     public:
         explicit VdpRegWatchObserver(Hbf1xvMachine& machine) : machine_(machine) {}
@@ -693,9 +686,9 @@ private:
     };
 
     // Deterministic emulated-cycle clock source for the FDC (M16, X-pattern of
-    // RtcClock). Returns scheduler total cycles READ-ONLY; all FDC Busy/DRQ/step/
-    // index/motor timing advances off this, never the host wall clock or CPU
-    // T-state accounting (protecting the M9/M12 oracles).
+    // RtcClock). Returns scheduler total cycles read-only; all FDC Busy/DRQ/
+    // step/index/motor timing advances off this, never the host wall clock or
+    // CPU T-state accounting (protecting the M9/M12 oracles).
     class FdcClock final : public devices::fdc::FdcClockSource {
     public:
         explicit FdcClock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
@@ -739,15 +732,15 @@ private:
     // Deterministic emulated-cycle clock source for the YM2413 E2
     // write-timing gate (M28-S1, X-pattern of RtcClock/FdcClock/
     // CassetteClock/RenshaTurboClock, backlog E2). Returns scheduler total
-    // cycles READ-ONLY; the gate's spacing check advances off this, never
+    // cycles read-only; the gate's spacing check advances off this, never
     // the host wall clock or CPU T-state accounting (protecting the
     // M9/M12/M23 zero-tolerance CPU-timing oracles). Consulted pull-style
-    // only from Ym2413Opll::write_address()/write_data() -- never wired
-    // into step_cpu_instruction()/run_cycles()/run_frame(). Wiring this
-    // clock source does NOT by itself change behaviour: the gate defaults
-    // to OFF (Ym2413Opll::write_timing_enforced() == false) until a caller
-    // explicitly opts in via set_write_timing_enforced(true) (docs/
-    // m28-implementation-report.md's regression pre-check).
+    // only from Ym2413Opll::write_address()/write_data() -- never wired into
+    // step_cpu_instruction()/run_cycles()/run_frame(). Wiring this clock
+    // source does not by itself change behaviour: the gate defaults to OFF
+    // (Ym2413Opll::write_timing_enforced() == false) until a caller opts in
+    // via set_write_timing_enforced(true) (docs/m28-implementation-report.md's
+    // regression pre-check).
     class Ym2413Clock final : public devices::audio::Ym2413ClockSource {
     public:
         explicit Ym2413Clock(const core::Scheduler& scheduler) : scheduler_(scheduler) {}
@@ -758,15 +751,15 @@ private:
     };
 
     // Deterministic clock source for the VDP's S#2 VR/HR raster-position
-    // status bits (bug fix, post-M28 -- see docs/ for the finding: the real
-    // BIOS hangs forever polling VR/HR during early boot when they are a
-    // hardcoded constant, because real hardware's VR/HR genuinely toggle
-    // every frame/line). Unlike the other X-pattern clocks above, this one
-    // needs BOTH the scheduler AND last_vsync_cycle_ (declared further below)
-    // -- it is declared as a DATA MEMBER after last_vsync_cycle_ so
-    // reference-member initialization order is correct; this nested TYPE
-    // definition may appear anywhere relative to that, since attaching it to
-    // vdp_ happens in wire_bus() (constructor body), after all members exist.
+    // status bits (bug fix, post-M28: the real BIOS hangs forever polling
+    // VR/HR during early boot when they are a hardcoded constant, because
+    // real hardware's VR/HR genuinely toggle every frame/line). Unlike the
+    // other X-pattern clocks above, this one needs BOTH the scheduler AND
+    // last_vsync_cycle_ (declared further below) -- it is declared as a data
+    // MEMBER after last_vsync_cycle_ so reference-member initialization order
+    // is correct; this nested TYPE definition may appear anywhere relative to
+    // that, since attaching it to vdp_ happens in wire_bus() (constructor
+    // body), after all members exist.
     class VdpRasterClock final : public devices::video::VdpClockSource {
     public:
         VdpRasterClock(const core::Scheduler& scheduler, const std::uint64_t& last_vsync_cycle)
@@ -927,14 +920,14 @@ private:
 
     // Line-interrupt delivery cache (M32-S2, §2.5). line_int_next_cycle_ is
     // the absolute scheduler cycle at which the raster next ENTERS screen
-    // line M = (R#19 - R#23) & 0xFF -- the relation BOTH behavior references
+    // line M = (R#19 - R#23) & 0xFF -- the relation both behavior references
     // agree on (openMSX references/openmsx-21.0/src/video/VDP.cc:527-529:
     // `((controlRegs[19] - controlRegs[23]) & 0xFF)` display lines after
     // display start; fMSX references/fmsx-60/source/fMSX/MSX.c:2094-2100:
     // fires when `(((ScanLine+VScroll)&0xFF)-VDP[19])&0xFF` hits its
-    // coincidence value -- algebraically the identical screen-space
-    // relation). kLineIntNever = the openMSX "never occurs" clamp analogue
-    // (VDP.cc:554-559) for M >= the active line count.
+    // coincidence value -- algebraically identical). kLineIntNever = the
+    // openMSX "never occurs" clamp analogue (VDP.cc:554-559) for M >= the
+    // active line count.
     static constexpr std::uint64_t kLineIntNever = ~static_cast<std::uint64_t>(0);
     std::uint64_t line_int_next_cycle_ = kLineIntNever;
     std::uint8_t line_int_r19_ = 0;

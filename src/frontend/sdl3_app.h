@@ -36,36 +36,32 @@ struct Sdl3AppConfig {
     devices::cartridge::CartridgeMapperType cart1_type = devices::cartridge::CartridgeMapperType::Mirrored;
     std::optional<std::string> cart2_path;
     devices::cartridge::CartridgeMapperType cart2_type = devices::cartridge::CartridgeMapperType::Mirrored;
-    // M30 (backlog G2): whether cartN_type was EXPLICITLY chosen. Defaults
-    // to true so every pre-existing PROGRAMMATIC Sdl3AppConfig construction
-    // keeps byte-for-byte current behavior (the config's type field stays
-    // authoritative, mirroring the machine-API rule of planner §2.4.1 step
-    // 5); sdl3_main.cpp sets it from the parsed `type_was_explicit`, so a
-    // CLI run with no --cartN-type (or `auto`) triggers auto-identification
-    // through the ONE shared resolver (machine/cartridge_identifier.h).
+    // M30 (backlog G2): whether cartN_type was explicitly chosen. Defaults to
+    // true so existing programmatic Sdl3AppConfig construction stays byte-
+    // for-byte unchanged; sdl3_main.cpp sets it from the parsed CLI flag, so
+    // --cartN-type omitted (or `auto`) triggers auto-identification through
+    // the ONE shared resolver (machine/cartridge_identifier.h).
     bool cart1_type_explicit = true;
     bool cart2_type_explicit = true;
     // M30: --softwaredb override; std::nullopt selects the CWD-relative
     // default (machine::kDefaultSoftwareDbPath).
     std::optional<std::string> softwaredb_path;
-    // M35-S2: Real disk-image loading (A-M26-6 + M35-S2): a repeatable
-    // --disk list (see sdl3_cli.h). Empty means no disk. First disk loads
-    // at boot (AC-S2-1). All disks are pre-loaded into memory for
-    // deterministic swapping (AC-S2-2).
+    // M35-S2: repeatable --disk list (A-M26-6 + M35-S2, see sdl3_cli.h).
+    // Empty = no disk. First disk loads at boot (AC-S2-1); all disks are
+    // pre-loaded into memory for deterministic swapping (AC-S2-2).
     std::vector<std::string> disk_paths;
     // M36-S-c: opt-in host-file disk-save persistence. Default false =
-    // in-memory-only, byte-for-byte the pre-M36 behavior (never clobbers a
-    // real .dsk). When true, each mounted disk gets its host `.dsk` path bound
-    // for write-back; a dirty writable image is flushed on shutdown and before
-    // a swap discards it. Game disks stay effectively read-only unless the
-    // user opts in; the SAVE target is a writable data disk.
+    // in-memory-only (never touches a real .dsk). When true, each mounted
+    // disk's host `.dsk` path is bound for write-back; a dirty image flushes
+    // on shutdown and before a swap discards it -- so game disks stay
+    // read-only unless the user opts in, with a writable data disk as the
+    // save target.
     bool disk_writable = false;
-    // M37 Slice F: the out-of-box initial window default is now scale 3 =
-    // 320*3 x 240*3 = 960x720 (was 640x480 / scale 2 through Slice E), so the
-    // human gets a comfortably sized window without passing --scale. An explicit
-    // --scale N still overrides this via sdl3_main.cpp (320N x 240N, N in [1,8]).
-    // The logical presentation stays 320x240 letterbox -- only the initial
-    // window size default changed.
+    // M37 Slice F: default window is now scale 3 = 320x3 x 240x3 = 960x720
+    // (was 640x480/scale 2 through Slice E) so the out-of-box window is
+    // comfortably sized without passing --scale. --scale N still overrides
+    // via sdl3_main.cpp (320N x 240N, N in [1,8]); the logical presentation
+    // stays 320x240 letterbox -- only the initial window size default changed.
     int window_width = 960;
     int window_height = 720;
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
@@ -82,21 +78,18 @@ struct Sdl3AppConfig {
     // stops on SDL_EVENT_QUIT.
     std::optional<std::uint32_t> max_frames;
 
-    // M27-S4/S7 additive debug/scripted-input session fields (docs/m27-
-    // planner-package.md §2.2/§2.4, items 1/3/4). All std::nullopt by
-    // default -- a hard regression guard (§4 Acceptance Criterion 10): every
-    // pre-existing M26 Sdl3App/Sdl3AppConfig test remains green unmodified
-    // when these are left unset.
+    // M27-S4/S7 additive debug/scripted-input fields (docs/m27-planner-
+    // package.md §2.2/§2.4, items 1/3/4). All std::nullopt by default -- a
+    // regression guard (§4 Acceptance Criterion 10): every pre-existing M26
+    // Sdl3App/Sdl3AppConfig test stays green when these are left unset.
     //
     // dump_state_filename/trace_cpu_filename/event_log_filename mirror the
     // headless `--debug-session` mode's own flags of the same name
-    // (write_state_dump()/write_cpu_trace()/write_event_log() -- already
-    // existing, already-tested Hbf1xvMachine APIs, M10-S3). Written once, at
-    // the end of run_interactive()'s bounded loop (max_frames reached) or on
-    // SDL_EVENT_QUIT -- whichever comes first -- via
-    // flush_debug_session_outputs() (also directly, publicly callable after
-    // a bounded run_one_frame() loop, for ctest use, since run_interactive()
-    // itself is NEVER exercised by ctest, A-M26-8).
+    // (write_state_dump()/write_cpu_trace()/write_event_log(), M10-S3).
+    // Written once via flush_debug_session_outputs() at run_interactive()'s
+    // loop exit (max_frames reached or SDL_EVENT_QUIT, whichever first); also
+    // directly callable after a bounded run_one_frame() loop for ctest, since
+    // run_interactive() itself is never exercised by ctest (A-M26-8).
     std::optional<std::string> dump_state_filename;
     std::optional<std::string> trace_cpu_filename;
     std::optional<std::string> event_log_filename;
@@ -116,58 +109,53 @@ struct Sdl3AppConfig {
     std::optional<std::string> snapshot_dir;
 
     // DEC-0052 stream-light (M36 Bug B long-session upstream hunt): when true,
-    // the F10 live stream-capture toggle arms the LIGHTWEIGHT mode (per-frame
-    // snapshot bundles suppressed -> coarse anchors + the per-event watchlog),
-    // suitable for a LONG armed session that the heavy per-frame I/O would bog
-    // down. Default false = the heavy every-frame mode (byte-for-byte the prior
-    // F10 behavior). Set from the `--stream-light` CLI flag.
+    // F10 arms the LIGHTWEIGHT stream-capture mode (per-frame snapshots
+    // suppressed -> coarse anchors + the per-event watchlog), for long armed
+    // sessions the heavy per-frame I/O would bog down. Default false = the
+    // heavy every-frame mode (prior F10 behavior). Set from `--stream-light`.
     bool stream_light = false;
 
-    // M36 FM-PAC SRAM persistence (SDL3 side): a real FM-PAC always
-    // battery-persists, so this is AUTOMATIC by default (no opt-in flag). When a
-    // loaded cartridge resolves to an FM-PAC, load_configured_assets() binds a
-    // .sram host file so the SRAM loads on insertion and flushes on shutdown --
-    // mirroring the headless --fmpac-sram path (src/main.cpp) and the
-    // --disk-writable flush discipline above.
-    //   * fmpac_sram_path == std::nullopt (default): auto-derive the path from
-    //     the FM-PAC cart's ROM path (<cart>.rom -> <cart>.rom.sram), so a save
-    //     lands beside the cart, exactly like a real FM-PAC battery.
-    //   * fmpac_sram_path set (--fmpac-sram <path>): OVERRIDE the derived path.
-    //   * fmpac_sram_disabled (--no-fmpac-sram): opt OUT entirely -- no path is
-    //     bound, so the SRAM stays in-memory-only and never touches the host
-    //     filesystem.
-    // All three are complete no-ops when no inserted cartridge is an FM-PAC
+    // M36 FM-PAC SRAM persistence (SDL3 side): a real FM-PAC always battery-
+    // persists, so this is AUTOMATIC (no opt-in flag). When a loaded cartridge
+    // resolves to an FM-PAC, load_configured_assets() binds a .sram host file
+    // so the SRAM loads on insertion and flushes on shutdown -- mirroring the
+    // headless --fmpac-sram path (src/main.cpp) and the --disk-writable flush
+    // discipline above.
+    //   * fmpac_sram_path == std::nullopt (default): auto-derive from the
+    //     cart's ROM path (<cart>.rom -> <cart>.rom.sram), landing the save
+    //     beside the cart, like a real FM-PAC battery.
+    //   * fmpac_sram_path set (--fmpac-sram <path>): overrides the derived path.
+    //   * fmpac_sram_disabled (--no-fmpac-sram): opts out entirely -- no path
+    //     is bound, so the SRAM stays in-memory-only.
+    // All three are no-ops when no inserted cartridge is an FM-PAC
     // (flush_fmpac_sram() returns false harmlessly): a non-FM-PAC run is
-    // byte-for-byte identical to before.
+    // byte-for-byte unchanged.
     std::optional<std::string> fmpac_sram_path;
     bool fmpac_sram_disabled = false;
 
     // M37 Slice D (DEC-0056): launch-time initial Sony Speed Controller level
-    // (Mb670836PauseController). std::nullopt (default) leaves the controller
-    // untouched -> level 0 (full speed), byte-identical to before. Applied in
-    // init() AFTER cold_boot() (which resets the controller). The F6/F7
-    // runtime stepping is unchanged; this only sets the INITIAL value.
+    // (Mb670836PauseController). std::nullopt (default) leaves it at level 0
+    // (full speed). Applied in init() AFTER cold_boot() (which resets the
+    // controller); F6/F7 runtime stepping is unchanged -- this only sets the
+    // initial value.
     std::optional<int> speed_level;
 
     // M37 Slice E (DEC-0056): start the window fullscreen. Default false =
     // windowed (byte-identical to before). Alt+Enter toggles at runtime.
     bool fullscreen = false;
 
-    // M37 Slice F: gate the F10 live stream-capture hotkey (--capture <on|off>).
-    // Default false (OFF) = F10 is INERT: a mis-struck F10 during play does
-    // nothing (no toggle, no log), so a default run is byte-identical gameplay.
-    // Only when true does poll_and_dispatch_events() route F10 to
-    // on_stream_toggle_hotkey(). --stream-light still selects light-vs-heavy
-    // mode, but only takes effect once F10 is enabled+triggered. F11/F12 and all
-    // other hotkeys are unaffected.
+    // M37 Slice F: gates the F10 live stream-capture hotkey (--capture <on|off>).
+    // Default false = F10 is INERT (no toggle, no log), so a mis-struck F10
+    // during play is harmless and default gameplay is byte-identical. Only
+    // when true does poll_and_dispatch_events() route F10 to
+    // on_stream_toggle_hotkey(); --stream-light still selects light-vs-heavy
+    // mode once triggered. F11/F12 and other hotkeys are unaffected.
     bool capture_enabled = false;
 
     // M37 Slice E (DEC-0056): texture scale mode fed to the video presenter
     // (--filter). Default SDL_SCALEMODE_LINEAR = the renderer's own default
-    // (references/sdl3/include/SDL3/SDL_render.h:1260), the "smooth" look and
+    // (references/sdl3/include/SDL3/SDL_render.h:1260), the "smooth" look,
     // byte-identical to before; SDL_SCALEMODE_NEAREST = crisp pixels.
-    // window_width/window_height above are set from --scale N (320N x 240N) by
-    // sdl3_main.cpp; the default is now 960x720 (= scale 3, M37 Slice F).
     SDL_ScaleMode texture_filter = SDL_SCALEMODE_LINEAR;
 };
 
@@ -175,15 +163,15 @@ struct Sdl3AppConfig {
 // Hbf1xvMachine session end to end: window/renderer/audio-device creation,
 // cold_boot() + asset loading, and the real-time frame loop.
 //
-// Architecture (docs/m26-planner-package.md §2.3, A-M26-5/A-M26-8): the
-// CORE STEP (run_one_frame()) is a pure function of "poll input, step the
-// CPU to the next frame boundary via step_cpu_instruction(), call
-// on_vsync_boundary() (NEVER run_frame() -- the double-count hazard,
-// R-M25-5), blit one video frame, pump one batch of audio samples" -- ZERO
-// wall-clock delay/pacing logic, so ctest can call it directly, a bounded
-// number of times, with fully deterministic, assertable results. The
-// REAL-TIME wrapper (run_interactive()) adds SDL_Delay-based pacing +
-// SDL_EVENT_QUIT handling on top and is NEVER exercised by ctest.
+// Architecture (docs/m26-planner-package.md §2.3, A-M26-5/A-M26-8): the CORE
+// STEP (run_one_frame()) is a pure function -- poll input, step the CPU to
+// the next frame boundary via step_cpu_instruction(), call
+// on_vsync_boundary() (NEVER run_frame(), the double-count hazard, R-M25-5),
+// blit one video frame, pump one batch of audio samples -- with ZERO wall-
+// clock delay/pacing, so ctest can call it directly, a bounded number of
+// times, with fully deterministic, assertable results. The REAL-TIME wrapper
+// (run_interactive()) adds SDL_DelayNS-based nanosecond pacing + SDL_EVENT_QUIT
+// handling on top and is NEVER exercised by ctest.
 class Sdl3App {
 public:
     // The real MSX NTSC system clock (X-pattern precedent: wd2793.h/
@@ -198,10 +186,10 @@ public:
     Sdl3App& operator=(const Sdl3App&) = delete;
 
     // SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) + window/renderer/video-
-    // presenter/audio-presenter creation, then cold_boot()s the owned
-    // machine and loads the configured BIOS/cartridge(s)/disk. Returns false
-    // (and records last_error()) on ANY failure -- never partially
-    // initializes (a failed init() leaves shutdown() already applied).
+    // presenter/audio-presenter creation, then cold_boot()s the machine and
+    // loads the configured BIOS/cartridge(s)/disk. Returns false (records
+    // last_error()) on any failure -- never partially initializes (a failed
+    // init() leaves shutdown() already applied).
     bool init();
     void shutdown();
     [[nodiscard]] bool initialized() const { return initialized_; }
@@ -223,31 +211,32 @@ public:
 
     // M27-S4 (docs/m27-planner-package.md §2.2, items 1/4): writes whichever
     // of dump_state_filename/trace_cpu_filename/event_log_filename are
-    // configured, via the SAME already-existing Hbf1xvMachine APIs the
-    // headless `--debug-session` mode's own end-of-run write-out uses. A
-    // genuine no-op when all three are unset (the default) -- callable
-    // directly after a bounded run_one_frame() loop (ctest use, since
-    // run_interactive() itself is never exercised by ctest); ALSO called
-    // automatically once at run_interactive()'s own loop-exit point.
+    // configured, via the same existing Hbf1xvMachine APIs the headless
+    // `--debug-session` mode uses for its end-of-run write-out. A no-op when
+    // all three are unset (default) -- callable directly after a bounded
+    // run_one_frame() loop (ctest, since run_interactive() itself is never
+    // exercised by ctest); also called automatically at run_interactive()'s
+    // loop-exit point.
     void flush_debug_session_outputs();
 
     // M36-S-f (R-M35-1): the deterministic disk-swap seam behind the F11
     // hotkey, exposed publicly so an integration test can assert the mounted
-    // disk index advances (0 -> 1 -> ... -> wrap) WITHOUT SDL event injection.
-    // Rotates to the next cached disk (no-op for a <=1-disk list); when
-    // disk-writable is enabled it flushes the outgoing dirty image first.
+    // disk index advances (0 -> 1 -> ... -> wrap) without SDL event injection.
+    // Rotates to the next cached disk (no-op for a <=1-disk list); flushes the
+    // outgoing dirty image first when disk-writable is enabled.
     void swap_to_next_disk() { on_disk_swap_hotkey(); }
     [[nodiscard]] std::size_t current_disk_index() const { return current_disk_index_; }
 
     // M36 Phase 3: the F12 snapshot-request seam, exposed publicly so an
-    // integration test can drive a capture WITHOUT SDL event injection (mirrors
-    // swap_to_next_disk()'s R-M35-1 precedent exactly). Sets the deferred-capture
-    // flag; the actual write happens at the end of the next run_one_frame().
+    // integration test can drive a capture without SDL event injection
+    // (mirrors swap_to_next_disk()'s R-M35-1 precedent). Sets the deferred-
+    // capture flag; the actual write happens at the end of the next
+    // run_one_frame().
     void request_snapshot() { on_snapshot_hotkey(); }
     [[nodiscard]] bool snapshot_requested() const { return snapshot_requested_; }
 
     // DEC-0052: the F10 live stream-capture toggle seam, exposed publicly so an
-    // integration test can arm/finalize a stream WITHOUT SDL event injection
+    // integration test can arm/finalize a stream without SDL event injection
     // (mirrors request_snapshot()/swap_to_next_disk()). Flips the machine-level
     // stream capture: ON stamps a deterministic stream id (the current
     // snapshot_id()); OFF finalizes (dumps the trace ring + a final snapshot).
@@ -278,13 +267,12 @@ private:
     void on_disk_swap_hotkey();
     // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot
     // serviced at the END of run_one_frame() (a clean frame boundary + a stable
-    // deterministic id). Consumed as a HOST hotkey, NEVER routed to the MSX
-    // keyboard matrix (mirrors on_disk_swap_hotkey's F11 discipline exactly).
+    // deterministic id). Consumed as a HOST hotkey, never routed to the MSX
+    // keyboard matrix (mirrors on_disk_swap_hotkey's F11 discipline).
     void on_snapshot_hotkey();
     // DEC-0052: F10 hotkey handler -- toggles live stream-capture ON/OFF at the
-    // machine level. Consumed as a HOST hotkey, NEVER routed to the MSX keyboard
-    // matrix (mirrors on_disk_swap_hotkey/on_snapshot_hotkey discipline; F10 is
-    // otherwise unbound -- only F6-F9/F11/F12 are wired).
+    // machine level. Consumed as a HOST hotkey, never routed to the MSX keyboard
+    // matrix (mirrors on_disk_swap_hotkey/on_snapshot_hotkey discipline).
     void on_stream_toggle_hotkey();
     void update_window_title_for_current_disk();
     void log_disk_swap();
@@ -309,8 +297,8 @@ private:
     Sdl3InputMapper input_mapper_;
 
     // M27-S7 (item 3, §2.4): default-constructed = empty = a genuine no-op
-    // (the cursor never advances because events_ is empty) -- zero
-    // observable effect on any pre-existing M26 run_one_frame() caller when
+    // (the cursor never advances because events_ is empty) -- zero effect on
+    // any pre-existing M26 run_one_frame() caller when
     // config_.input_script_path is unset.
     machine::InputScriptPlayer input_script_player_;
 

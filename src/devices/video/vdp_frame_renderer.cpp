@@ -47,8 +47,7 @@ PlanarRowSpans planar_row_spans(const std::uint32_t row_base, const std::size_t 
     // (A-M21-10, `physical = (logical >> 1) | ((logical & 1) << 16)`) applied
     // to every byte in [row_base, row_base+length) degenerates to two
     // contiguous half-length spans: bank0[i] = vram[(row_base>>1)+i] (even
-    // logical bytes), bank1[i] = vram[0x10000+(row_base>>1)+i] (odd logical
-    // bytes).
+    // bytes), bank1[i] = vram[0x10000+(row_base>>1)+i] (odd bytes).
     const std::uint32_t masked = row_base & 0x1FFFF;
     const std::uint32_t bank0 = masked >> 1;
     return PlanarRowSpans{bank0, bank0 + 0x10000u, length / 2};
@@ -171,35 +170,27 @@ bool VdpFrameRenderer::multi_page_scrolling() const {
 }
 
 bool VdpFrameRenderer::use_alternate_page(const Field field) const {
-    // A-M21-7 (hedged, independently-chosen model -- see the note below on
-    // why this deliberately does NOT reproduce VDP.hh:443-459's
-    // getEvenOddMask() bit-for-bit).
+    // A-M21-7: deliberately-narrower model, NOT a bit-for-bit reproduction
+    // of VDP.hh:443-459's getEvenOddMask().
     //
-    // getEvenOddMask() algebraically reduces to a single boolean: false when
-    // blinkState is true, else true when EITHER the EO bit (R#9 bit2) is
-    // CLEAR or the chip's live eo_field_ toggle is set. A first attempt at
-    // this renderer directly substituted "field == Field::Odd" for that live
-    // toggle -- but re-reading the ONLY call site (SDLRasterizer.cc:490-497)
-    // shows getEvenOddMask()'s result feeds `pageMaskOdd`/`pageMaskEven`,
-    // which distinguish SCANLINE PARITY within a frame for the multi-page-
-    // scroll smooth-blit effect, NOT interlace FIELD selection -- a
-    // different feature this renderer does not attempt (§1.2/no per-scanline
-    // split-page blit). Naively substituting Field for that toggle would
-    // make "EO bit clear" (the common power-on default) ALWAYS force
-    // alternation regardless of which Field was requested -- silently
-    // flipping every bitmap-mode page read by default, which is NOT the
-    // intended, testable behavior for a caller that never asked for
-    // interlace at all.
+    // getEvenOddMask() reduces to: false when blinkState, else true when
+    // EITHER EO (R#9 bit2) is CLEAR or the chip's live eo_field_ toggle is
+    // set. Naively substituting "field == Field::Odd" for that toggle looks
+    // tempting, but its only call site (SDLRasterizer.cc:490-497) feeds
+    // `pageMaskOdd`/`pageMaskEven`, which distinguish SCANLINE PARITY within
+    // a frame for the multi-page-scroll smooth-blit effect -- NOT interlace
+    // FIELD selection (a different feature this renderer doesn't attempt).
+    // That substitution would make "EO clear" (the power-on default) ALWAYS
+    // force alternation regardless of the requested Field -- silently
+    // flipping every bitmap-mode page read for callers that never asked for
+    // interlace.
     //
-    // This renderer therefore uses a narrower, explicitly-chosen predicate
-    // instead: alternation only engages when the program has explicitly
-    // enabled EO (R#9 bit2 SET) and is not suppressed by blink; Field::Odd
-    // then selects the alternate page, Field::Even/Progressive the
-    // configured one. Acceptance bar per the planner package: parity with
-    // openMSX's own MODELED CONCEPT (blink-suppressed even/odd page
-    // alternation, itself flagged "TODO: verify" by the reference authors),
-    // not bit-for-bit reproduction of getEvenOddMask() and NOT independently
-    // proven hardware ground truth.
+    // Instead: alternation only engages when EO is explicitly SET (R#9
+    // bit2) and not suppressed by blink; Field::Odd then selects the
+    // alternate page, Field::Even/Progressive the configured one. Acceptance
+    // bar: parity with openMSX's MODELED CONCEPT (itself flagged "TODO:
+    // verify" by the reference authors), not bit-for-bit getEvenOddMask()
+    // reproduction or independently-proven hardware ground truth.
     if (vdp_->blink_state()) {
         return false;
     }
@@ -240,17 +231,16 @@ std::uint16_t VdpFrameRenderer::border_color() const {
     if (m.mode == VdpMode::Graphic7) {
         // VDP.hh:216-226 getBackgroundColor() / SDLRasterizer.cc:384-393
         // getBorderColors(): full byte through the fixed 256-color decode.
-        // Pure GRAPHIC7 only -- YJK/YJK+YAE modes (which share base 0x1C)
-        // use the plain 16-color palette instead (their mode BYTE, unlike
-        // base, differs from plain GRAPHIC7's), matching the fact-sheet's
+        // Pure GRAPHIC7 only -- YJK/YJK+YAE (sharing base 0x1C) use the
+        // plain 16-color palette instead, matching the fact-sheet's
         // "sprites use the 16-colour palette" note for YJK modes.
         return graphic7_fixed_color_to_rgb555(reg7);
     }
     if (m.base == 0x10) {
         // GRAPHIC5 (SCREEN6): real hardware alternates two border colors
-        // (SDLRasterizer.cc:378-383, bits3-2 even / bits1-0 odd); this
-        // renderer's FrameBuffer.border_color is a single value (§2.2), so
-        // the even-pixel half is used, a documented simplification.
+        // (SDLRasterizer.cc:378-383, bits3-2 even / bits1-0 odd); since
+        // FrameBuffer.border_color is a single value (§2.2), the even-pixel
+        // half is used as a documented simplification.
         return pal16((reg7 & 0x0C) >> 2);
     }
     return pal16(reg7 & 0x0F);  // VDP.hh:216-226, the common case
@@ -320,16 +310,14 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
     const bool tp_enabled = (vdp_->control_register(8) & 0x20) == 0;
     const int w = width();
     // Sprite X coordinates live in a 256-wide space even on the 512-wide
-    // GRAPHIC5/GRAPHIC6 canvases -- each sprite pixel there spans TWO canvas
-    // pixels (out[x*2+0/1] below), so the per-pixel loop must clip at the
-    // sprite-space limit (256), NOT the canvas width. The reference encodes
-    // the same contract: SpriteConverter.hh:134-143 documents the mode-2
-    // buffer as "256 pixels wide" in sprite coordinates with maxX clipping
-    // via clipPattern(), then writes pixelPtr[x*2+0/1] for GRAPHIC5/6
-    // (SpriteConverter.hh:186-198). Using the canvas width here let a
-    // right-edge sprite (the MSX2+ boot-logo animation places its sliding
-    // letter sprites there in SCREEN 6) write out[x*2+1] past the row span
-    // -- an out-of-bounds write (debug-CRT abort during the boot logo).
+    // GRAPHIC5/GRAPHIC6 canvases -- each sprite pixel spans TWO canvas pixels
+    // (out[x*2+0/1] below), so the per-pixel loop must clip at the
+    // sprite-space limit (256), NOT the canvas width. Reference contract:
+    // SpriteConverter.hh:134-143 documents the mode-2 buffer as "256 pixels
+    // wide" with maxX clipping via clipPattern(), writing pixelPtr[x*2+0/1]
+    // for GRAPHIC5/6 (:186-198). Using canvas width here let a right-edge
+    // sprite (SCREEN 6 boot-logo sliding letters) write out[x*2+1] past the
+    // row span -- an out-of-bounds write (debug-CRT abort during boot logo).
     const bool doubled = (m.mode == VdpMode::Graphic5 || m.mode == VdpMode::Graphic6);
     const int x_limit = doubled ? w / 2 : w;
 
@@ -409,30 +397,29 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
 
 void VdpFrameRenderer::render_line(const int line, const Field field, std::span<std::uint16_t> out) const {
     // M34 Defect B (DEC-0043; docs/m34-planner-package.md §3.2): R#1 bit6
-    // (BL, display enable) gates the ENTIRE active line. BL=0 => the line is
-    // pure backdrop -- content dispatch, sprite compositing AND the R#25 MSK
-    // step are all skipped (sprites are off when the display is off, the
-    // same bit sprite_engine.cpp:90-94 already honors -- this closes the
-    // pre-M34 internal asymmetry where sprites obeyed BL but the background
-    // did not). Grounding (both references AGREE, §3.1):
+    // (BL, display enable) gates the ENTIRE active line. BL=0 => pure
+    // backdrop -- content dispatch, sprite compositing, and the R#25 MSK
+    // step are all skipped (sprites already honored this bit,
+    // sprite_engine.cpp:90-94; this closes the pre-M34 asymmetry where
+    // sprites obeyed BL but the background didn't). Grounding (both
+    // references agree, §3.1):
     //   * openMSX references/openmsx-21.0/src/video/PixelRenderer.cc:608-611
-    //     (!displayEnabled => the whole line draws DRAW_BORDER) and :580-584
+    //     (!displayEnabled => whole line draws DRAW_BORDER) and :580-584
     //     (sprite checking only under displayEnabled); VDP.cc:435-442
     //     (displayEnabled derives from controlRegs[1] & 0x40).
     //   * fMSX references/fmsx-60/source/MSX.h:216 (#define ScreenON
     //     (VDP[1]&0x40)) with every per-line refresh in Common.h (:463,
     //     :497, :533, ...) starting `if(!ScreenON) ClearLine(background)`.
-    // Fill color = the mode-aware border_color() (VDP.hh:211-226
-    // getBackgroundColor -- the same color the real border shows), NOT
-    // render_blank()'s undefined-mode palette-15 fallback (a different
-    // semantic, CharacterConverter.cc:368-373). Because render_line() reads
-    // R#1 LIVE and is the single per-line workhorse shared by the legacy
-    // snapshot render_frame() and the M32 scanline accumulator, the L+1
-    // write-latch (hbf1xv_machine.cpp write hook) applies to BL exactly as
-    // to every other register -- matching VDP.cc:1080-1082/:1260-1269
-    // (an R#1 bit6 change takes effect at the NEXT line; syncAtNextLine).
-    // Mid-LINE BL precision is the pre-existing D8 remainder; BL=1-mid-frame
-    // sprite-table liveness is the D9 remainder (cross-notes in the ledger).
+    // Fill color = mode-aware border_color() (VDP.hh:211-226
+    // getBackgroundColor, the real border's color), NOT render_blank()'s
+    // undefined-mode palette-15 fallback (different semantic,
+    // CharacterConverter.cc:368-373). render_line() reads R#1 LIVE and is
+    // shared by render_frame() and the M32 scanline accumulator, so the L+1
+    // write-latch (hbf1xv_machine.cpp write hook) applies to BL like any
+    // other register -- matching VDP.cc:1080-1082/:1260-1269 (an R#1 bit6
+    // change takes effect at the NEXT line; syncAtNextLine). Mid-LINE BL
+    // precision is the pre-existing D8 remainder; BL=1-mid-frame
+    // sprite-table liveness is D9 (cross-notes in the ledger).
     if ((vdp_->control_register(1) & 0x40) == 0) {
         const std::uint16_t bc = border_color();
         const int w = width();
@@ -446,10 +433,9 @@ void VdpFrameRenderer::render_line(const int line, const Field field, std::span<
     composite_sprites(line, field, out);
 
     // Border mask (R#25 bit1 MSK, VDP.hh:353-360): "extends the left border
-    // by 8 pixels." Since this renderer models border as a single color (not
-    // extra canvas columns, §2.2), the effect is reproduced by overwriting
-    // the leftmost 8 (or fewer, if narrower) active-display pixels with the
-    // border color.
+    // by 8 pixels." Since border is modeled as a single color, not extra
+    // canvas columns (§2.2), this overwrites the leftmost 8 (or fewer, if
+    // narrower) active-display pixels with the border color.
     if (vdp_->control_register(25) & 0x02) {
         const int n = std::min(8, width());
         const std::uint16_t bc = border_color();
@@ -611,11 +597,10 @@ void VdpFrameRenderer::render_graphic4(const int line, std::span<std::uint16_t> 
 
 void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> out) const {
     // BitmapConverter.cc:135-147 (renderGraphic5): 2bpp packed. Real
-    // hardware doubles palette16 (even/odd pixel halves), but absent
-    // superimpose (this machine has no digitizer, fact-sheet §9) the two
-    // halves are always populated identically (SDLRasterizer.cc:104-109:
-    // `palFg[i] = palFg[i+16] = palBg[i] = ...`), so both parities read the
-    // SAME 4 palette registers (0-3) directly.
+    // hardware doubles palette16 (even/odd halves), but absent superimpose
+    // (no digitizer, fact-sheet §9) the two halves are always identical
+    // (SDLRasterizer.cc:104-109: `palFg[i] = palFg[i+16] = palBg[i] = ...`),
+    // so both parities read the SAME 4 palette registers (0-3) directly.
     const std::uint32_t row_base = bitmap_row_base_nonplanar(line, Field::Progressive);
     std::array<std::uint16_t, 512> temp{};
     for (int i = 0; i < 128; ++i) {

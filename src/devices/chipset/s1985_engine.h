@@ -34,10 +34,9 @@ namespace sony_msx::devices::chipset {
 //       SwitchedDevice (attach it to the SwitchedIoController).
 //   (b) the mapper readback base 0x80 / mask 0x1F (`100xxxxx`) — apply via
 //       configure_mapper (fact-sheet §4; MSXS1985.cc:31-34).
-//   (c) the +1 M1 opcode-fetch wait state helper (fact-sheet §8; A-4). The Z80
-//       core publishes datasheet T-states + an M1-cycle count; this maps the
-//       count to +1 T-state per M1 cycle. The machine applies it to the
-//       scheduler.
+//   (c) the +1 M1 opcode-fetch wait state helper (fact-sheet §8; A-4): maps
+//       the Z80 core's published M1-cycle count to +1 T-state per M1 cycle,
+//       applied by the machine to the scheduler.
 //
 // SRAM persistence (openMSX saves 16 bytes to a .sram file) is out of M11 scope
 // (A-5 / R-6): storage here is volatile and cleared on reset().
@@ -76,11 +75,11 @@ public:
     // Battery-backed backup-RAM .sram persistence (M15-S5, backlog C4).
     //
     // openMSX saves the 16-byte backup RAM as an SRAM persistency file
-    // (fact-sheet §6; MSXS1985 SRAM "S1985 Backup RAM" size 0x10). load_backup_ram
-    // reads exactly kBackupRamBytes from `path` INTO the store; save_backup_ram
-    // writes the store OUT. Deterministic: an absent/short/unreadable file leaves
-    // the store untouched (zero after reset()), so the M11 golden (absent file ->
-    // zero state) is preserved. No wall-clock, no fabricated provenance.
+    // (fact-sheet §6; MSXS1985 SRAM "S1985 Backup RAM" size 0x10).
+    // load_backup_ram reads exactly kBackupRamBytes from `path` into the
+    // store; save_backup_ram writes the store out. An absent/short/unreadable
+    // file leaves the store untouched (zero after reset()), preserving the
+    // M11 golden (absent file -> zero state). No wall-clock dependency.
     bool load_backup_ram(const std::filesystem::path& path);
     [[nodiscard]] bool save_backup_ram(const std::filesystem::path& path) const;
 

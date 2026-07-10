@@ -28,9 +28,9 @@ namespace {
 
 // X-pattern precedent (wd2793.h/disk_drive.h/rp5c01.h/rensha_turbo.h/
 // sdl3_app.h/sdl3_audio_presenter.h all independently declare this same
-// constant): declared locally here too so this file stays headless-buildable
-// with zero SDL3 dependency (A-M27-7/A-M27-8) -- never pulled from an
-// SDL3-gated header.
+// constant): declared locally so this file stays headless-buildable with
+// zero SDL3 dependency (A-M27-7/A-M27-8) -- never pulled from an SDL3-gated
+// header.
 constexpr std::uint64_t kSystemClockHz = 3579545;
 
 }  // namespace

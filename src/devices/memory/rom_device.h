@@ -40,9 +40,9 @@ namespace sony_msx::devices::memory {
 // page-1 cell to this device.
 //
 // Behaviour reference (read only, never copied — GPL isolation, guardrails):
-// references/openmsx-21.0/src/memory/Rom.cc / RomBlocks.cc show ROM reads as a
-// direct image index with unmapped regions reading the bus; the read-only
-// semantics (writes ignored) are inherent to a mask-ROM device.
+// references/openmsx-21.0/src/memory/Rom.cc / RomBlocks.cc — direct image
+// index reads, unmapped regions reading the bus, writes ignored (inherent to
+// a mask-ROM device).
 class RomDevice final : public core::MemoryDevice {
 public:
     static constexpr core::BusData kOpenBus = 0xFF;

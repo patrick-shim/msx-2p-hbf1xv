@@ -50,11 +50,11 @@ namespace sony_msx::frontend {
 // M34 (DEC-0043 Defect A, docs/m34-planner-package.md §2.3.6): psg_raw and
 // each SCC contribution are the chips' EXACT box averages over the advanced
 // window (PsgYm2149/SccWavetable::take_integrated_sample()), replacing the
-// aliasing point samples; the §2.3.4 fixed-point property keeps every
-// constant/silent source's contribution byte-identical to before (the M29/
-// M31 zero-source oracles survive in meaning AND, for constant signals, in
-// bytes). Sample COUNT accounting (AudioPacer, DEC-0033) is untouched --
-// this changes only how each sample's VALUE is produced.
+// aliasing point samples; §2.3.4's fixed-point property keeps every
+// constant/silent source byte-identical to before (the M29/M31 zero-source
+// oracles survive in meaning and, for constant signals, in bytes). Sample
+// COUNT accounting (AudioPacer, DEC-0033) is untouched -- this changes only
+// how each sample's VALUE is produced.
 //
 // Amplitude constants (documented presentation policy, the same disclosed-
 // simplification class as M26's kAmplitudeScale itself):
@@ -71,8 +71,8 @@ namespace sony_msx::frontend {
 // presenter arithmetic (psg pump sample * 400 per channel, clamped) for ANY
 // input sequence -- proven by a dedicated unit test, and structurally
 // evident below (a null-only source array contributes an scc_sum of exactly
-// 0 to every sample). Since M34 both sides of that oracle compute through
-// the integrated-sample pump; the meaning -- absent/silent sources
+// 0 to every sample). Since M34, both sides of that oracle compute through
+// the integrated-sample pump, so the meaning -- absent/silent sources
 // contribute exactly 0 -- is unchanged.
 //
 // M31 (backlog E1, docs/m31-planner-package.md §2.2): a THIRD source -- the

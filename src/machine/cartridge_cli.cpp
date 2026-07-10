@@ -22,7 +22,7 @@ namespace {
 using devices::cartridge::parse_cartridge_mapper_type;
 
 // Case-insensitive match for the M30 `auto` type value (mirrors the enum
-// parser's own case-insensitivity for the canonical names).
+// parser's case-insensitivity for canonical names).
 bool is_auto_value(const std::string& value) {
     if (value.size() != 4) {
         return false;
@@ -37,10 +37,10 @@ bool is_auto_value(const std::string& value) {
 }
 
 // Consumes `args[i]` (a recognized flag) plus its following value argument
-// (`args[i+1]`) if present; returns the value, or records `error_no_value`
-// and returns std::nullopt when the flag is the last argument (no value
-// follows). Either way the caller should advance past the flag itself; the
-// value (if consumed) is skipped by the caller's loop increment.
+// (`args[i+1]`) if present; returns the value, or records an error and
+// returns std::nullopt when the flag is the last argument (no value
+// follows). Either way the caller advances past the flag itself; the value
+// (if consumed) is skipped by the caller's loop increment.
 std::optional<std::string> take_value(const std::vector<std::string>& args, const std::size_t i,
                                        const char* flag_name, std::vector<std::string>& errors) {
     if (i + 1 >= args.size()) {
@@ -97,15 +97,14 @@ ParsedCartridgeCli parse_cartridge_cli(const std::vector<std::string>& args) {
                 }
             }
         } else if (arg == "--softwaredb") {
-            // M30 (backlog G2): identification-database override.
+            // M30 (backlog G2): identification-database path override.
             if (auto value = take_value(args, i, "--softwaredb", parsed.errors)) {
                 parsed.softwaredb_path = *value;
                 ++i;
             }
         }
         // Any other argument is not this parser's concern (mode flags,
-        // positional parity-trace args, etc.) -- left untouched, order-
-        // independent scanning (A-M19-4).
+        // positional parity-trace args, etc.) -- left untouched.
     }
 
     return parsed;

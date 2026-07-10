@@ -18,8 +18,8 @@
 
 namespace sony_msx::frontend {
 
-// The two constants are one presentation policy declared in two
-// SDL3-independence-separated places (M29-S5); they must never drift apart.
+// Same amplitude-scale policy declared twice to keep the mixer SDL3-independent
+// (M29-S5); this assert guards against the two drifting apart.
 static_assert(Sdl3AudioPresenter::kAmplitudeScale == MachineAudioMixer::kPsgAmplitudeScale,
               "presenter/mixer PSG amplitude scales must match (byte-identity oracle)");
 
@@ -31,16 +31,15 @@ Sdl3AudioPresenter::~Sdl3AudioPresenter() {
 
 bool Sdl3AudioPresenter::init() {
     const SDL_AudioSpec spec{SDL_AUDIO_S16, 2, kSampleRateHz};
-    // A nullptr callback: this presenter manually pushes samples via
-    // pump_and_push()/SDL_PutAudioStreamData (SDL_audio.h:2028-2031's own
-    // documented "push" usage pattern) -- never a pull callback.
+    // nullptr callback: samples are pushed manually via pump_and_push()/
+    // SDL_PutAudioStreamData -- SDL_audio.h:2028-2031's documented "push" pattern,
+    // not a pull callback.
     stream_ = SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &spec, nullptr, nullptr);
     if (stream_ == nullptr) {
         last_error_ = SDL_GetError();
         return false;
     }
-    // The device begins paused (SDL_audio.h:2011-2014) -- must be explicitly
-    // resumed for audio to actually flow.
+    // Device starts paused (SDL_audio.h:2011-2014); must resume explicitly for audio to flow.
     if (!SDL_ResumeAudioStreamDevice(stream_)) {
         last_error_ = SDL_GetError();
         return false;
@@ -104,9 +103,8 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
         return;
     }
 
-    // Live host-queue depth (bytes of queued-but-unconsumed input data,
-    // SDL_audio.h's SDL_GetAudioStreamQueued) in sample frames. Backpressure
-    // is a function of THIS queue state only -- it never touches emulated
+    // Live host-queue depth (SDL_GetAudioStreamQueued, bytes -> sample frames).
+    // Backpressure is a function of this queue state only; it never touches emulated
     // device state (determinism note in audio_pacer.h).
     const int queued_bytes = SDL_GetAudioStreamQueued(stream_);
     const std::uint64_t queued_samples =
@@ -129,11 +127,9 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
         return;
     }
 
-    // ALWAYS pump the full batch: EVERY generator's (PSG + attached SCCs' +
-    // built-in FM's + inserted FM-PAC OPLLs') notion of time stays in lockstep
-    // with the machine's elapsed cycles even when the pushed output is trimmed
-    // by backpressure (M29-S5/M31-S5/M37-SliceB; the DEC-0033 invariant
-    // extended uniformly).
+    // Always pump the full batch: every generator (PSG, SCCs, built-in FM, FM-PAC OPLLs)
+    // stays in lockstep with the machine's elapsed cycles even when backpressure trims the
+    // pushed output (M29-S5/M31-S5/M37-SliceB; DEC-0033 invariant).
     const std::vector<std::int16_t> pcm = mixer_.mix_interleaved_stereo(
         psg, sccs, fm, fm_pacs, static_cast<std::size_t>(decision.samples_to_pump));
 

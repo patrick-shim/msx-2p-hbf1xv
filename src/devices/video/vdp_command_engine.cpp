@@ -22,12 +22,12 @@ namespace sony_msx::devices::video {
 namespace {
 
 // Per-scrMode addressing/packing traits (VDPCmdEngine.cc:155-410's
-// Graphic4Mode/Graphic5Mode/Graphic6Mode/Graphic7Mode/NonBitmapMode structs,
-// independently re-expressed as a runtime table keyed by scrMode instead of
-// the reference's compile-time template parameter -- behaviorally
-// equivalent, much simpler to dispatch on a value computed from R#0/R#1/R#25
-// at runtime). `address_of` is one of the five vdp_command_address.h
-// functions (the D7-closing piece, §1.5) -- never V9958Vdp::effective_address().
+// Graphic4Mode/Graphic5Mode/Graphic6Mode/Graphic7Mode/NonBitmapMode structs),
+// re-expressed as a runtime table keyed by scrMode instead of the
+// reference's compile-time template parameter -- behaviorally equivalent,
+// simpler to dispatch on a value computed from R#0/R#1/R#25 at runtime.
+// `address_of` is one of the five vdp_command_address.h functions (the
+// D7-closing piece, §1.5), never V9958Vdp::effective_address().
 struct ModeTraits {
     std::uint8_t color_mask;
     std::uint8_t pixels_per_byte;
@@ -457,7 +457,7 @@ void VdpCommandEngine::run_line() {
     const bool major_y = (arg_ & kMaj) != 0;
     ny_ &= 1023u;
     const unsigned ny_limit = ny_;
-    unsigned asx = (nx_ - 1u) >> 1;  // ASX = (NX-1)>>1 (unsigned; NX==0 is a pathological, unused input)
+    unsigned asx = (nx_ - 1u) >> 1;  // unsigned; NX==0 is a pathological, unused input
     unsigned adx = dx_;
     unsigned dy = dy_;
     unsigned anx = 0;

@@ -33,8 +33,8 @@ namespace {
 // (references/openmsx-21.0/src/sound/YM2413NukeYKT.hh, "close to how the real
 // hardware is implemented"). Reconciling this table against NukeYKT's exact
 // decoded per-field patches is deferred to whichever milestone implements DSP
-// depth (backlog E1), since only real audio synthesis makes the byte-exact
-// difference observable (M17 is register/channel/rhythm CONTRACT only).
+// depth (backlog E1) -- only real audio synthesis makes the byte-exact
+// difference observable (M17 is register/channel/rhythm contract only).
 constexpr std::array<std::array<std::uint8_t, 8>, 15> kMelodyPatches{{
     {0x71, 0x61, 0x1E, 0x17, 0xD0, 0x78, 0x00, 0x17},  //  1 Violin
     {0x13, 0x41, 0x1A, 0x0D, 0xD8, 0xF7, 0x23, 0x13},  //  2 Guitar
@@ -64,17 +64,16 @@ void Ym2413Opll::reset() {
     // zeroes every register ($00-$3F) and the address latch on reset().
     regs_.fill(0);
     latch_ = 0;
-    // E2 (M28-S1): reset the write-timing tracker's DEVICE STATE (the last-
-    // write bookkeeping), but NOT the clock_source_ pointer or the
+    // E2 (M28-S1): reset the write-timing tracker's device state (the
+    // last-write bookkeeping), but not the clock_source_ pointer or the
     // write_timing_enforced_ toggle -- those are wiring/config, mirroring
     // Rp5c01::reset() leaving clock_source_/clock_gate_ untouched
     // (src/devices/rtc/rp5c01.h/.cpp).
     has_last_write_ = false;
     last_write_was_address_ = false;
     last_write_cycle_ = 0;
-    // M31 (backlog E1): reset() additionally restores the synth's documented
-    // power-on state (planner §2.2/§2.3). Wholly additive -- the M17 register
-    // contract above is byte-for-byte unchanged.
+    // M31 (backlog E1): also restores the synth's documented power-on state
+    // (planner §2.2/§2.3); the M17 register contract above is unchanged.
     synth_.reset();
 }
 
@@ -96,17 +95,17 @@ bool Ym2413Opll::gate_allows_write(const bool is_address_write) {
     }
     const std::uint64_t now = clock_source_->cpu_cycles();
     if (has_last_write_) {
-        // Fact-sheet §8: the required minimum spacing is keyed on what the
-        // PREVIOUS write was (address write -> next write needs >=12
-        // cycles; data write -> next write needs >=84 cycles), regardless
-        // of which port the CURRENT write targets.
+        // Fact-sheet §8: required minimum spacing is keyed on the PREVIOUS
+        // write (address write -> next needs >=12 cycles; data write ->
+        // next needs >=84), regardless of which port the CURRENT write
+        // targets.
         const std::uint32_t required =
             last_write_was_address_ ? kAddressWriteMinCycles : kDataWriteMinCycles;
         const std::uint64_t elapsed = now - last_write_cycle_;
         if (elapsed < required) {
-            // Too-fast write: dropped per real-hardware behaviour. The
-            // timing reference is left UNCHANGED (real hardware's busy
-            // window is not restarted by an ignored write).
+            // Too-fast write: dropped per real-hardware behaviour. Timing
+            // reference is left unchanged (an ignored write does not
+            // restart real hardware's busy window).
             return false;
         }
     }
@@ -117,11 +116,11 @@ bool Ym2413Opll::gate_allows_write(const bool is_address_write) {
 }
 
 void Ym2413Opll::write_address(const std::uint8_t value) {
-    // A-M17-3: the latch stores the value UNMASKED (YM2413Okazaki.cc:1370-1371).
+    // A-M17-3: the latch stores the value unmasked (YM2413Okazaki.cc:1370-1371).
     // D-M31-2 (DEC-0030 cross-reference, planner M31 §2.8): fMSX masks at
-    // LATCH time instead (YM2413.c:134-137, `Latch = V&0x3F`) --
-    // observationally equivalent for all write sequences; settled in M17
-    // (mask at USE time, below); recorded, no change.
+    // latch time instead (YM2413.c:134-137, `Latch = V&0x3F`) --
+    // observationally equivalent for all write sequences; M17 settled on
+    // mask-at-USE-time (below); recorded, no change.
     if (!gate_allows_write(/*is_address_write=*/true)) {
         return;  // E2: dropped, insufficient spacing since the prior write.
     }

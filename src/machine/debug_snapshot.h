@@ -43,21 +43,21 @@
 namespace sony_msx::machine::debug_snapshot {
 
 // Comprehensive, RESTORE-READY, deterministic per-component debug-snapshot
-// serializers (M36 Phase 3, DEC-0051; docs/m36-phase3-planner-package.md). This
-// is a SEPARATE artifact from the golden-locked debug_dump / serialize_state_dump
-// (M10/M13/M14): it never edits those, it SUPERSETS them across EVERY machine
+// serializers (M36 Phase 3, DEC-0051; docs/m36-phase3-planner-package.md).
+// Separate from the golden-locked debug_dump / serialize_state_dump
+// (M10/M13/M14) -- never edits those, supersets them across every machine
 // component (§2.3 inventory).
 //
-// Determinism is guaranteed by construction, exactly like debug_dump: every
-// serializer is hand-rolled ASCII (fixed field order, fixed-width uppercase hex,
-// '\n' endings, symbolic + numeric enum tokens), it reads NO wall-clock and NO
-// RNG for content, and it reuses the proven debug_dump::serialize_region() fold
-// for byte regions. Two identical runs to the same frame/cycle produce a
-// byte-identical snapshot (S5 system test is the hard gate).
+// Deterministic by construction like debug_dump: hand-rolled ASCII output
+// (fixed field order, fixed-width uppercase hex, '\n' endings, symbolic +
+// numeric enum tokens), no wall-clock/RNG, reuses
+// debug_dump::serialize_region() for byte regions. Identical runs at the
+// same frame/cycle produce a byte-identical snapshot (S5 system test gates
+// this).
 //
-// Every accessor consumed here is a const getter or a non-perturbing seam: the
-// snapshot ADVANCES neither the CPU nor the scheduler and issues no
-// debug_io_write -- it is read-only w.r.t. emulation.
+// Every accessor here is a const getter or non-perturbing seam: a snapshot
+// never advances the CPU or scheduler and issues no debug_io_write -- fully
+// read-only w.r.t. emulation.
 
 // Snapshot format version tag (mirrors debug_dump::kDumpFormatTag +
 // frame_dump::kFrameDumpFormatTag). A future load_snapshot() reader dispatches

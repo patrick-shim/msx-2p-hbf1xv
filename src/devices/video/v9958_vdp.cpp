@@ -116,12 +116,12 @@ core::BusData V9958Vdp::io_read(const core::BusAddress port) {
 
 void V9958Vdp::io_write(const core::BusAddress port, const core::BusData value) {
     // M32-S1 render-sync seam: notify BEFORE any state mutates, for all four
-    // ports uniformly -- the openMSX sync-before-change protocol at line
-    // granularity (PixelRenderer.cc:253-394 register/palette updates,
+    // ports uniformly -- openMSX's sync-before-change protocol at line
+    // granularity (PixelRenderer.cc:253-394 register/palette updates;
     // :510-517 VRAM writes: every update handler calls sync(time)/
-    // renderUntil(time) FIRST, then applies the change). The listener only
-    // reads state and writes into its own pixel store -- zero interrupt/
-    // status/VRAM side effects (docs/m32-planner-package.md §2.3).
+    // renderUntil(time) FIRST, then applies the change). Zero interrupt/
+    // status/VRAM side effects here -- the listener only reads state and
+    // writes into its own pixel store (docs/m32-planner-package.md §2.3).
     if (render_sync_ != nullptr) {
         render_sync_->on_before_state_change();
     }
@@ -151,17 +151,14 @@ std::uint32_t V9958Vdp::effective_address() const {
         ((static_cast<std::uint32_t>(control_regs_[14]) << 14) | vram_pointer_) & 0x1FFFF;
 
     // D7 CPU-port piece (M21-S4, backlog D7): in G6/G7 (and the YJK overlay
-    // modes, which share GRAPHIC7's base) planar VRAM is spread over two
-    // banks; the STORAGE address is a 17-bit rotate-right-by-1 (A-M21-10,
-    // independently re-derived from VDP.cc:849-857: `addr = ((addr << 16) |
-    // (addr >> 1)) & 0x1FFFF`, which for a 17-bit addr reduces exactly to
-    // `(addr >> 1) | ((addr & 1) << 16)` -- even logical addresses land in
-    // bank 0 (0x00000-0x0FFFF), odd in bank 1 (0x10000-0x1FFFF), same
-    // `addr >> 1` value in both banks). This is the ONLY line this edit
-    // touches (A-M21-13): `advance_vram_pointer()` below still operates on
-    // the ORIGINAL `vram_pointer_`/`control_regs_[14]`, never on this
-    // transformed value (A-M21-12) -- the existing M14 R#14-carry unit
-    // tests are unaffected.
+    // modes sharing GRAPHIC7's base) planar VRAM is spread over two banks;
+    // the STORAGE address is a 17-bit rotate-right-by-1 (A-M21-10, derived
+    // from VDP.cc:849-857: `addr = ((addr << 16) | (addr >> 1)) & 0x1FFFF`,
+    // which for a 17-bit addr reduces to `(addr >> 1) | ((addr & 1) << 16)`
+    // -- even logical addresses land in bank 0 (0x00000-0x0FFFF), odd in
+    // bank 1 (0x10000-0x1FFFF), same `addr >> 1` value in both banks).
+    // `advance_vram_pointer()` below still operates on the untransformed
+    // `vram_pointer_`/`control_regs_[14]` (A-M21-12).
     if (vdp_base_is_planar(mode_.base)) {
         addr = (addr >> 1) | ((addr & 1) << 16);
     }
@@ -315,21 +312,20 @@ void V9958Vdp::indirect_write(const std::uint8_t value) {
 void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value) {
     if (reg >= kNumControlRegs) {
         // R#32..R#46 = the command engine's own register file (A-M22-1,
-        // grounded 1:1 against VDP.cc:1020-1033's own changeRegister()).
-        // Works identically whether reached via the #99 two-write latch
-        // protocol or the #9B indirect-register path -- both already route
-        // through this function.
+        // grounded 1:1 against VDP.cc:1020-1033's changeRegister()). Reached
+        // identically via the #99 two-write latch or the #9B indirect path
+        // -- both already route through this function.
         if (reg < 47) {
             cmd_engine_.write_register(static_cast<int>(reg) - 32, value);
         }
         return;
     }
 
-    // M36 Bug B: capture the OLD value BEFORE committing so the IE0/IE1
-    // register-write /INT re-evaluation below (cases 0/1) can compute
-    // `change = old ^ new` -- openMSX's `changeRegister` does exactly this
-    // (references/openmsx-21.0/src/video/VDP.cc:1170-1198: it commits the new
-    // value, then re-evaluates the IE0/IE1 interrupt lines against `change`).
+    // M36 Bug B: capture the OLD value before committing so the IE0/IE1
+    // /INT re-evaluation below (cases 0/1) can compute `change = old ^ new`
+    // -- openMSX's `changeRegister` does exactly this: commits the new
+    // value, then re-evaluates the IE0/IE1 interrupt lines against `change`
+    // (references/openmsx-21.0/src/video/VDP.cc:1170-1198).
     const std::uint8_t old_value = control_regs_[reg];
     control_regs_[reg] = value;
     const std::uint8_t change = static_cast<std::uint8_t>(old_value ^ value);
@@ -345,13 +341,14 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
     case 0:  // M3..M5 + IE1 (R#0 bit4, line-int enable, gates S#1 FH)
         // M36 Bug B: an R#0 write that TOGGLES IE1 re-evaluates the horizontal
         // /INT on the write itself (VDP.cc:1177-1185). Only the CLEAR edge acts
-        // here: IE1 off must immediately de-assert a held line /INT, exactly as
-        // openMSX does `irqHorizontal.reset()` (VDP.cc:1182). The SET edge is
-        // left to the existing per-step line-match poll
-        // (Hbf1xvMachine::poll_line_interrupt -> V9958Vdp::on_line_match), our
-        // analogue of openMSX's `scheduleHScan(time)` (VDP.cc:1180): it asserts
-        // irq_horizontal_ at the next (R#19-R#23) match-line crossing while IE1
-        // is on, so enabling IE1 mid-frame arms rather than instantly fires.
+        // here -- IE1 off must immediately de-assert a held line /INT, as
+        // openMSX's `irqHorizontal.reset()` does (VDP.cc:1182). The SET edge
+        // is left to the existing per-step line-match poll
+        // (Hbf1xvMachine::poll_line_interrupt -> on_line_match()), our
+        // analogue of openMSX's `scheduleHScan(time)` (VDP.cc:1180): it
+        // asserts irq_horizontal_ at the next R#19-R#23 match-line crossing
+        // while IE1 is on, so enabling IE1 mid-frame arms rather than
+        // instantly fires.
         if (change & 0x10) {
             if (!(value & 0x10)) {
                 irq_horizontal_ = false;
@@ -363,13 +360,12 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
     case 1:  // M1..M2 + IE0 (R#1 bit5, VBlank-int enable)
         // M36 Bug B (the YS II building-interior crash): an R#1 write that
         // TOGGLES IE0 re-evaluates the vertical /INT on the write itself -- the
-        // path the pre-fix code MISSED (it only called recompute_mode(), so a
+        // path the pre-fix code missed (it only called recompute_mode(), so a
         // held /INT survived an IE0-clear until the next S#0 read, letting the
         // ISR's later EI re-fire forever -> nested-VBLANK stack overflow).
-        // openMSX VDP.cc:1186-1198:
-        //   IE0 set  -> re-assert ONLY if F is already pending (their documented
-        //               Andonis/Zanac case, VDP.cc:1189-1194);
-        //   IE0 clear-> de-assert immediately (VDP.cc:1196, irqVertical.reset()).
+        // openMSX VDP.cc:1186-1198: IE0 set -> re-assert ONLY if F is already
+        // pending (the documented Andonis/Zanac case, VDP.cc:1189-1194); IE0
+        // clear -> de-assert immediately (VDP.cc:1196, irqVertical.reset()).
         if (change & 0x20) {
             if (value & 0x20) {
                 if (status_reg0_ & 0x80) {  // F pending
@@ -391,11 +387,11 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         break;
     case 13: {
         // Blink on/off timing (M21-S2, backlog D6). Writing R#13 resets blink
-        // state EVEN IF the value is unchanged (VDP.cc:1040-1057): force
-        // blink_state_ to the "ON" phase unless the ON period (bits 7-4) is
-        // zero, then re-arm the countdown from the newly-current phase's
-        // period (*10 frames) when BOTH nibbles are non-zero (alternating);
-        // otherwise freeze (blink_countdown_ = 0, a single stable color).
+        // state even if the value is unchanged (VDP.cc:1040-1057): force
+        // blink_state_ to "ON" unless the ON period (bits 7-4) is zero, then
+        // re-arm the countdown from the current phase's period (*10 frames)
+        // when both nibbles are non-zero (alternating); otherwise freeze
+        // (blink_countdown_ = 0, a single stable color).
         blink_state_ = (value & 0xF0) != 0;
         blink_countdown_ = ((value & 0xF0) != 0 && (value & 0x0F) != 0)
                                 ? static_cast<int>(value >> 4) * 10
@@ -442,11 +438,11 @@ void V9958Vdp::on_vsync() {
     }
 
     // Sprite check/collision/5th-sprite recompute (M22-S1/S2, backlog D2).
-    // Once per frame boundary, mirrors the blink-countdown precedent exactly
-    // -- no new clock consumer. `height` duplicates
-    // VdpFrameRenderer::height()'s own formula deliberately: V9958Vdp (core)
-    // has no dependency on VdpFrameRenderer (presentation), keeping the
-    // existing one-directional layering intact.
+    // Once per frame boundary, mirroring the blink-countdown precedent -- no
+    // new clock consumer. `height` deliberately duplicates
+    // VdpFrameRenderer::height()'s own formula: V9958Vdp (core) has no
+    // dependency on VdpFrameRenderer (presentation), keeping the existing
+    // one-directional layering intact.
     int height = 192;
     switch (mode_.mode) {
     case VdpMode::Text1:
@@ -540,10 +536,10 @@ std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
         // bit4 BD, bit0 CE live from the command engine (M22-S3..S6, backlog
         // D3). Bits5/6 (HR/VR) are LIVE, raster-position-derived (bug fix,
         // post-M28 -- discovered via a real, CPU-driven BIOS boot: the BIOS
-        // polls S#2 bit6 (VR) waiting for it to toggle before ever writing a
-        // single VDP register, and hangs forever if VR is a hardcoded
-        // constant of either polarity; empirically confirmed by forcing
-        // VR=1 and observing the SAME hang on the opposite edge).
+        // polls S#2 bit6 (VR) waiting for it to toggle before writing any VDP
+        // register, and hangs forever if VR is a hardcoded constant of
+        // either polarity; confirmed by forcing VR=1 and observing the same
+        // hang on the opposite edge).
         std::uint8_t s2 = static_cast<std::uint8_t>(kStatusReg2Base | (eo_field_ ? 0x02 : 0x00));
         if (clock_source_ != nullptr) {
             const std::uint64_t tstates = clock_source_->cpu_tstates_since_vsync();

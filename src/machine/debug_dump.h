@@ -23,17 +23,17 @@ namespace sony_msx::machine::debug_dump {
 
 // Deterministic full-state debug-dump serializers (M10-S3).
 //
-// These build a byte-stable, diff-friendly ASCII text representation of the
-// machine's architectural state for offline inspection and regression locking.
-// Determinism is guaranteed by construction: fixed field order, fixed-width
-// uppercase hex, '\n' line endings, no locale/stream state, and NO wall-clock
-// or other environment-dependent input. Two identical runs produce byte-for-
-// byte identical output.
+// Build a byte-stable, diff-friendly ASCII text representation of the
+// machine's architectural state for offline inspection and regression
+// locking. Determinism is guaranteed by construction: fixed field order,
+// fixed-width uppercase hex, '\n' line endings, no locale/stream state, and
+// no wall-clock or other environment-dependent input. Two identical runs
+// produce byte-for-byte identical output.
 //
 // The region serializer emits a canonical folded hex dump: 16 bytes per line
-// prefixed with an 8-hex-digit offset. Runs of identical interior 16-byte lines
-// are folded to a single '*' marker (the first and the last line of every
-// region are always emitted verbatim), so large zero-initialized regions stay
+// prefixed with an 8-hex-digit offset. Runs of identical interior 16-byte
+// lines fold to a single '*' marker (the first and last line of every region
+// are always emitted verbatim), so large zero-initialized regions stay
 // compact while remaining unambiguous and reversible.
 
 // Dump-format version tag emitted as the first line of a full-state dump.

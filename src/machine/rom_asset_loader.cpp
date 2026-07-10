@@ -68,8 +68,9 @@ std::vector<std::uint8_t> RomAssetLoader::load(const Spec& spec) {
     }
 
     if (image.size() != spec.expected_size) {
-        // Deterministic: keep as much real content as possible but normalize to
-        // the expected window size; record the divergence (no silent accept).
+        // Deterministic: keep as much real content as possible but normalize
+        // to the expected window size; record the divergence (no silent
+        // accept).
         diagnostics_.push_back("ROM asset '" + path_str + "' SIZE_MISMATCH actual " +
                                to_dec(image.size()) + "; normalized to " + spec.label +
                                " expected " + to_dec(spec.expected_size) + " bytes (0xFF-pad/truncate)");

@@ -90,8 +90,8 @@ std::string serialize_region(const std::string& name, const std::uint8_t* data, 
         const bool is_last = (line_index + 1 == line_count);
 
         // Interior line identical to its predecessor: fold into a single '*'.
-        // Only full 16-byte lines are candidates for folding (the last line may
-        // be short); first and last lines are always emitted verbatim.
+        // Only full 16-byte lines fold (the last line may be short); first
+        // and last lines are always emitted verbatim.
         if (!is_first && !is_last && line_equals_previous(line_index)) {
             if (!star_active) {
                 out += "*\n";

@@ -183,9 +183,9 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 }
             }
         }
-        // Any other argument is not this parser's concern -- left untouched
-        // for the cartridge-flag delegation below (order-independent
-        // scanning, mirrors cartridge_cli's A-M19-4).
+        // Anything else isn't this parser's concern -- left untouched for
+        // the cartridge-flag delegation below (order-independent scan,
+        // mirrors cartridge_cli's A-M19-4).
     }
 
     parsed.cartridges = machine::parse_cartridge_cli(args);

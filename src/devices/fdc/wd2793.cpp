@@ -436,17 +436,17 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
     // Index-pulse-relative first DRQ (DEC-0055 slice C / DEC-0053 residual R-A).
-    // Real hardware (and openMSX) must wait for the requested sector to rotate
-    // under the head before the data stream begins, so the first-DRQ latency is
-    // VARIABLE (0 .. ~1 rotation), a function of the disk's rotational angle at
-    // command start -- NOT the old fixed 2-byte kReadStartCycles (which modelled
-    // ZERO rotational latency). Faithful to openMSX WD2793.cc:544/557/624
-    // (type2Loaded -> type2Search[getNextSector] -> startReadSector): the drive
-    // returns the rotational wait until the sector's ID mark arrives, then the
-    // fixed intra-sector ID-header -> first-data span is added. sector_reg_ is
-    // validated 1..9 by the caller (start_type2 / finish_read_sector multi), so
-    // sector_reg_ - 1 is a valid 0-based sector index. Inter-byte cadence
-    // (kCyclesPerByte) is unchanged -- only the FIRST DRQ moves.
+    // Real hardware/openMSX must wait for the requested sector to rotate under
+    // the head before the data stream begins, so the first-DRQ latency is
+    // VARIABLE (0..~1 rotation) -- NOT the old fixed 2-byte kReadStartCycles
+    // (which modelled ZERO rotational latency). Faithful to openMSX
+    // WD2793.cc:544/557/624 (type2Loaded -> type2Search[getNextSector] ->
+    // startReadSector): the drive returns the rotational wait until the
+    // sector's ID mark arrives, then the fixed ID-header -> first-data span is
+    // added. sector_reg_ is validated 1..9 by the caller (start_type2 /
+    // finish_read_sector multi), so sector_reg_ - 1 is a valid 0-based index.
+    // Inter-byte cadence (kCyclesPerByte) is unchanged -- only the FIRST DRQ
+    // moves.
     const std::uint64_t rotational_wait = drive_->cycles_until_sector_id(sector_reg_ - 1u, t);
     drq_deadline_ = t + rotational_wait + kReadSectorHeaderCycles;
     phase_ = Phase::ReadSector;

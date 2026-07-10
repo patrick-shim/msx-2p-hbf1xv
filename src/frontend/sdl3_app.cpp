@@ -83,16 +83,11 @@ bool Sdl3App::load_configured_assets() {
         // M36 FM-PAC SRAM persistence: a real FM-PAC always battery-persists, so
         // bind its .sram host file BEFORE the cartridge is inserted -- the
         // machine loads the SRAM on insertion (hbf1xv_machine.cpp load_cartridge,
-        // guarded on FmPac + a non-empty path), so setting it here makes the
-        // load-on-insert restore work exactly like the headless --fmpac-sram
-        // path (src/main.cpp:923-926 sets it before load_cartridges_from_args).
-        // resolution.type is authoritative here (auto-identification already
-        // resolved), so THIS is the point we know a bay is an FM-PAC and which
-        // ROM path derives its default save. Default (no override, not disabled)
-        // derives <cart>.rom -> <cart>.rom.sram so the save lands beside the
-        // cart, matching a real FM-PAC. --fmpac-sram overrides; --no-fmpac-sram
-        // opts out (in-memory-only). Non-FM-PAC carts never touch this path, so
-        // a non-FM-PAC run is byte-for-byte unchanged.
+        // guarded on FmPac + a non-empty path), mirroring the headless
+        // --fmpac-sram path (src/main.cpp). resolution.type is authoritative
+        // here (auto-identification already resolved), so this is the point we
+        // know a bay is an FM-PAC. Path derivation/override/opt-out semantics
+        // are documented on Sdl3AppConfig::fmpac_sram_path (sdl3_app.h).
         if (resolution.type == devices::cartridge::CartridgeMapperType::FmPac &&
             !config_.fmpac_sram_disabled) {
             const std::filesystem::path sram_path =
@@ -165,8 +160,8 @@ bool Sdl3App::init() {
     sdl_initialized_ = true;
 
     // M37 Slice E (DEC-0056): the window is RESIZABLE so drag-resize scales
-    // live out of the box (references/sdl3/include/SDL3/SDL_video.h:237); still
-    // honor hidden_window (test/CI) and start fullscreen when requested
+    // live (references/sdl3/include/SDL3/SDL_video.h:237); still honor
+    // hidden_window (test/CI) and start fullscreen when requested
     // (SDL_video.h:232). fullscreen_ tracks the runtime Alt+Enter toggle state.
     SDL_WindowFlags flags = SDL_WINDOW_RESIZABLE;
     if (config_.hidden_window) {
@@ -184,10 +179,10 @@ bool Sdl3App::init() {
     }
 
     // M37 Slice E (DEC-0056): aspect-correct, never-distorted letterboxed
-    // scaling. 320x240 is the MSX 4:3 framing, so the picture matches today
-    // (the presenter's SDL_RenderTexture(..., nullptr, nullptr) fills this
-    // logical area; SDL letterboxes it to the actual window/fullscreen size at
-    // any --scale). Grounded in references/sdl3/include/SDL3/SDL_render.h:1574
+    // scaling. 320x240 is the MSX 4:3 framing (the presenter's
+    // SDL_RenderTexture(..., nullptr, nullptr) fills this logical area; SDL
+    // letterboxes it to the actual window/fullscreen size at any --scale).
+    // Grounded in references/sdl3/include/SDL3/SDL_render.h:1574
     // (SDL_SetRenderLogicalPresentation) + :136 (SDL_LOGICAL_PRESENTATION_LETTERBOX).
     if (!SDL_SetRenderLogicalPresentation(renderer_, 320, 240, SDL_LOGICAL_PRESENTATION_LETTERBOX)) {
         last_error_ = SDL_GetError();
@@ -204,11 +199,10 @@ bool Sdl3App::init() {
         return false;
     }
 
-    // M27-S4, R-M27-2 (a real, easy-to-get-wrong sequencing constraint):
-    // event logging MUST be enabled BEFORE cold_boot() to capture the Reset
-    // event (hbf1xv_machine.h:306-309's own documented ordering
-    // requirement) -- mirrors the headless --debug-session mode's identical
-    // ordering exactly.
+    // M27-S4, R-M27-2 (easy-to-get-wrong sequencing constraint): event
+    // logging MUST be enabled BEFORE cold_boot() to capture the Reset event
+    // (hbf1xv_machine.h:306-309's documented ordering requirement) -- mirrors
+    // the headless --debug-session mode's identical ordering.
     if (config_.event_log_filename.has_value()) {
         machine_.set_event_logging_enabled(true);
     }
@@ -226,9 +220,9 @@ bool Sdl3App::init() {
     // M37 Slice D (DEC-0056): apply the launch-time initial Sony Speed
     // Controller level AFTER cold_boot() -- cold_boot() resets the controller
     // to level 0 (hbf1xv_machine.cpp:316), so setting it earlier would be
-    // clobbered. std::nullopt (default) leaves it untouched -> level 0 (full
-    // speed), byte-identical to before. The F6/F7 runtime stepping
-    // (sdl3_input_mapper.cpp) is unchanged; this only sets the INITIAL value.
+    // clobbered. std::nullopt (default) leaves it at level 0 (full speed).
+    // The F6/F7 runtime stepping (sdl3_input_mapper.cpp) is unchanged; this
+    // only sets the initial value.
     if (config_.speed_level.has_value()) {
         machine_.pause_controller().set_speed_level(*config_.speed_level);
     }
@@ -244,7 +238,7 @@ bool Sdl3App::init() {
 
     // M27-S7 (item 3, §2.4): load the scripted-input mechanism, if
     // configured. A malformed script is a real init() failure (mirrors
-    // load_configured_assets()'s own "never partially initialize" contract),
+    // load_configured_assets()'s "never partially initialize" contract),
     // never a silent no-op.
     if (config_.input_script_path.has_value()) {
         std::ifstream in(*config_.input_script_path, std::ios::binary);
@@ -269,9 +263,9 @@ bool Sdl3App::init() {
 
 void Sdl3App::flush_debug_session_outputs() {
     // M27-S4 (docs/m27-planner-package.md §2.2, items 1/4): mirrors the
-    // headless --debug-session mode's own end-of-run write-out exactly, via
-    // the SAME already-existing Hbf1xvMachine APIs (M10-S3) -- zero new
-    // machine-level method needed.
+    // headless --debug-session mode's own end-of-run write-out, via the same
+    // existing Hbf1xvMachine APIs (M10-S3) -- zero new machine-level method
+    // needed.
     if (config_.dump_state_filename.has_value()) {
         machine_.write_state_dump(*config_.dump_state_filename);
     }
@@ -291,10 +285,10 @@ void Sdl3App::shutdown() {
     }
     // M36 FM-PAC SRAM persistence: save the inserted FM-PAC's 8 KB battery SRAM
     // to its bound .sram host file (mirrors the --disk-writable flush above and
-    // the headless --fmpac-sram flush-on-exit, src/main.cpp:1083-1086). A genuine
-    // no-op when no FM-PAC is inserted or no path was bound -- flush_fmpac_sram()
-    // returns false -- so a non-FM-PAC run is byte-for-byte unchanged. Guarded on
-    // initialized_ so a failed-init teardown never writes (matches the disk flush).
+    // the headless --fmpac-sram flush-on-exit, src/main.cpp:1083-1086). A no-op
+    // when no FM-PAC is inserted or no path was bound -- flush_fmpac_sram()
+    // returns false. Guarded on initialized_ so a failed-init teardown never
+    // writes (matches the disk flush).
     if (initialized_ && machine_.flush_fmpac_sram()) {
         std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_.fmpac_sram_path().string()
                   << "\"\n";
@@ -323,31 +317,28 @@ void Sdl3App::poll_and_dispatch_events() {
             quit_requested_ = true;
             continue;
         }
-        // M35-S3/S4: F11 hotkey for disk-swap (fresh key-down only, not repeat,
-        // not routed to MSX keyboard matrix). Consumed here; never dispatched
-        // to input_mapper (which would feed it to the machine's peripherals).
+        // M35-S3/S4: F11 hotkey for disk-swap (fresh key-down only, not a
+        // repeat). Consumed here; never dispatched to input_mapper_, which
+        // would otherwise feed it into the MSX keyboard matrix.
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F11 && !event.key.repeat) {
             on_disk_swap_hotkey();
             continue;
         }
         // M36 Phase 3: F12 hotkey for a comprehensive debug snapshot (fresh
-        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; NEVER
-        // dispatched to input_mapper_ (which would leak it into the MSX keyboard
-        // matrix) -- mirrors the F11 disk-swap discipline. No collision: F11 is
-        // the only other host hotkey wired.
+        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; never
+        // dispatched to input_mapper_ (would leak into the MSX keyboard
+        // matrix) -- mirrors the F11 disk-swap discipline.
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F12 && !event.key.repeat) {
             on_snapshot_hotkey();
             continue;
         }
-        // DEC-0052 + M37 Slice F: F10 hotkey toggles live stream-capture (fresh
-        // key-down only, not a repeat), but ONLY when --capture on was given
+        // DEC-0052 + M37 Slice F: F10 toggles live stream-capture (fresh key-
+        // down only, not a repeat), but ONLY when --capture on was given
         // (config_.capture_enabled). Default OFF makes F10 completely INERT --
-        // a mis-struck F10 during gameplay is ignored entirely (no toggle, no
-        // log, no continue-consume): it simply falls through to the normal MSX
-        // input path like any other unbound host key, so default gameplay is
-        // byte-identical. When enabled, it is consumed HERE as a HOST hotkey and
-        // NEVER dispatched to input_mapper_ (which would leak it into the MSX
-        // keyboard matrix) -- mirrors the F11/F12 discipline. Only F10 is gated;
+        // a mis-struck F10 falls through to the normal MSX input path like any
+        // other unbound key, so default gameplay is byte-identical. When
+        // enabled, it's consumed HERE as a HOST hotkey, never dispatched to
+        // input_mapper_ -- mirrors the F11/F12 discipline. Only F10 is gated;
         // F6-F9 speed/rensha + F11 disk-swap + F12 snapshot stay wired as before.
         if (config_.capture_enabled && event.type == SDL_EVENT_KEY_DOWN &&
             event.key.scancode == SDL_SCANCODE_F10 && !event.key.repeat) {
@@ -355,7 +346,7 @@ void Sdl3App::poll_and_dispatch_events() {
             continue;
         }
         // M37 Slice E (DEC-0056): Alt+Enter toggles fullscreen at runtime (fresh
-        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; NEVER
+        // key-down only, not a repeat). Consumed HERE as a HOST hotkey; never
         // dispatched to input_mapper_ -- RETURN is an MSX matrix key, so it must
         // not leak into the emulated keyboard (mirrors the F10/F11/F12
         // discipline above). Mod mask SDL_KMOD_ALT (either Alt) per
@@ -377,7 +368,7 @@ void Sdl3App::run_one_frame() {
 
     // The deterministic core step (§2.3): step the CPU purely via
     // step_cpu_instruction() until the next frame boundary, then call
-    // on_vsync_boundary() directly -- NEVER run_frame() (A-M26-5's
+    // on_vsync_boundary() directly -- never run_frame() (A-M26-5's
     // double-count hazard).
     const std::uint64_t frame_start_cycle = machine_.elapsed_cycles();
     const std::uint64_t target = machine_.frame_cycles_per_frame();
@@ -391,7 +382,7 @@ void Sdl3App::run_one_frame() {
     machine_.on_vsync_boundary();
 
     // M36 Phase 3: service a pending F12 snapshot request at this clean frame
-    // boundary -- the deterministic id (frame_count()/elapsed_cycles()) is now
+    // boundary, where the deterministic id (frame_count()/elapsed_cycles()) is
     // stable. Read-only; never perturbs emulation. The manifest carries the
     // frontend multi-disk index (planner A4) as a caller note.
     if (snapshot_requested_) {
@@ -414,35 +405,29 @@ void Sdl3App::run_one_frame() {
 
     if (audio_presenter_) {
         // Exact-accounting audio production (audio-latency fix, docs/audio-
-        // latency-investigation.md): this batch's sample count is derived
-        // from the machine's CUMULATIVE elapsed cycles (floor(cycles * 44100
-        // / 3579545), integer math), never from a per-frame rounded count.
-        // The old `target / kCyclesPerSample` = floor(59736/81) = 737
-        // samples/frame overproduced vs the exact 735.948 samples/frame and
-        // -- with no backpressure on SDL_PutAudioStreamData's unbounded
-        // queue -- accumulated audio latency without limit (measured +29.7
-        // ms of lag per second of play, combined with the run_interactive()
-        // ms-truncation below). samples_to_pump is a pure function of
-        // elapsed cycles, so the deterministic ctest path is unaffected by
-        // host-queue state.
+        // latency-investigation.md): this batch's sample count is derived from
+        // the machine's CUMULATIVE elapsed cycles (floor(cycles * 44100 /
+        // 3579545), integer math), never a per-frame rounded count. The old
+        // `target / kCyclesPerSample` = floor(59736/81) = 737 samples/frame
+        // overproduced vs the exact 735.948/frame, and with no backpressure on
+        // SDL_PutAudioStreamData's unbounded queue this accumulated unlimited
+        // audio latency (+29.7 ms/s measured, compounded by the ms-truncated
+        // pacing in run_interactive() below). samples_to_pump is a pure
+        // function of elapsed cycles, so the deterministic ctest path is
+        // unaffected by host-queue state.
         //
-        // M29-S5: the SCC sources are queried fresh each frame (cheap, and
-        // correct across cartridge load state) -- nullptr when a bay holds
-        // no KonamiSCC cart, in which case the mixed output is byte-
-        // identical to the pre-M29 PSG-only path (the mixer's regression
-        // oracle).
+        // M29-S5: SCC sources are queried fresh each frame -- nullptr when a
+        // bay holds no KonamiSCC cart, so the mix is byte-identical to the
+        // pre-M29 PSG-only path (the regression oracle).
         //
-        // M31-S5: the machine's YM2413 (OPLL) is the third mixed source --
-        // real FM synthesis (backlog E1). A silent (never-keyed) OPLL
-        // contributes exactly 0 to every sample (the M31 hard oracle), so
-        // FM-less software sounds byte-identical to v1.0.31.
+        // M31-S5: the machine's YM2413 (OPLL) is a third mixed source (backlog
+        // E1). A silent (never-keyed) OPLL contributes exactly 0 to every
+        // sample, so FM-less software is byte-identical to v1.0.31.
         //
-        // M37 Slice B (DEC-0055): the OPLL(s) of any inserted external FM-PAC
-        // cartridge are ADDITIONAL mixed sources -- queried fresh each frame
-        // (nullptr when a bay holds no FM-PAC cart), so with no FM-PAC inserted
-        // the mixed output is byte-identical to v1.0.36 (the M37 hard oracle).
-        // This is what makes FM-PAC music (e.g. SRAM-save games) actually
-        // audible, alongside the SRAM the cartridge already provides.
+        // M37 Slice B (DEC-0055): OPLL(s) of any inserted external FM-PAC
+        // cartridge are additional mixed sources (nullptr when no FM-PAC is
+        // present), so with none inserted the mix is byte-identical to v1.0.36.
+        // This is what makes FM-PAC music (e.g. SRAM-save games) audible.
         const auto fmpac_opll = [](devices::cartridge::CartridgeFmPacRom* cart) {
             return cart != nullptr ? &cart->opll() : nullptr;
         };
@@ -461,12 +446,12 @@ void Sdl3App::on_disk_swap_hotkey() {
     // index, load the new image from cache, re-attach it, and set the
     // disk-changed flag (AC-S4-1..4). No-op if list <= 1 (AC-S3-3).
     if (disk_images_.size() <= 1) {
-        return;  // No-op: empty or single-disk list
+        return;
     }
 
     // M36-S-c/R9: before discarding the outgoing image, persist and cache its
-    // writes so they are not lost (and a swap-back sees them). Guarded on
-    // disk_writable so the default path stays byte-for-byte pre-M36.
+    // writes so a swap-back sees them. Guarded on disk_writable so the
+    // default path stays byte-for-byte pre-M36.
     if (config_.disk_writable) {
         machine_.disk_image().flush();  // no-op if no host path / not dirty
         if (current_disk_index_ < disk_images_.size()) {
@@ -480,17 +465,17 @@ void Sdl3App::on_disk_swap_hotkey() {
         machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
     }
     machine_.disk_drive().attach_image(&machine_.disk_image());
-    machine_.disk_drive().set_disk_changed(true);  // Signal media change
+    machine_.disk_drive().set_disk_changed(true);
     update_window_title_for_current_disk();
     log_disk_swap();
 }
 
 void Sdl3App::on_snapshot_hotkey() {
-    // M36 Phase 3: request a comprehensive debug snapshot. The actual capture is
-    // DEFERRED to the end of run_one_frame() (after on_vsync_boundary()) so the
-    // machine is always at a clean frame boundary and the deterministic id
-    // (frame_count()) is stable -- exactly the safe, non-perturbing capture
-    // point (planner §4.1). Setting a flag keeps this handler O(1).
+    // M36 Phase 3: request a comprehensive debug snapshot. The actual capture
+    // is deferred to the end of run_one_frame() (after on_vsync_boundary())
+    // so the machine is always at a clean frame boundary and the
+    // deterministic id (frame_count()) is stable -- the safe, non-perturbing
+    // capture point (planner §4.1). Setting a flag keeps this handler O(1).
     snapshot_requested_ = true;
 }
 
@@ -503,11 +488,11 @@ void Sdl3App::on_stream_toggle_hotkey() {
         machine_.set_stream_capture_enabled(false);  // manual OFF -> finalize
         std::cerr << "Stream capture OFF (finalized).\n";
     } else {
-        // Stamp the stream id from the current deterministic frame/cycle id so an
-        // identical run toggling at the same frame yields identical stream paths.
-        // DEC-0052 stream-light: arm the lightweight mode when --stream-light was
-        // given, so a LONG armed session (YS-II game start -> building entry) is
-        // not bogged down by the heavy per-frame snapshot I/O.
+        // Stamp the stream id from the current deterministic frame/cycle id so
+        // an identical run toggling at the same frame yields identical stream
+        // paths. DEC-0052 stream-light: arm the lightweight mode when
+        // --stream-light was given, so a long armed session (e.g. YS-II game
+        // start -> building entry) isn't bogged down by heavy per-frame I/O.
         const std::string stream_id = machine_.snapshot_id();
         machine_.set_stream_capture_enabled(true, stream_id, config_.stream_light);
         std::cerr << "Stream capture ON: stream_" << stream_id
@@ -525,11 +510,9 @@ bool Sdl3App::flush_current_disk() {
 }
 
 void Sdl3App::update_window_title_for_current_disk() {
-    // M35-S5: Update window title to show the current disk name (AC-S5-1,
-    // AC-S5-2). Format: "sony-msx-hbf1xv — <disk_name>" or "(no disk)".
+    // M35-S5 (AC-S5-1/2): "sony-msx-hbf1xv — <disk_name>" or "(no disk)".
     std::string title = "sony-msx-hbf1xv";
     if (!config_.disk_paths.empty() && current_disk_index_ < config_.disk_paths.size()) {
-        // Extract filename from full path (platform-independent approach)
         const auto& disk_path = config_.disk_paths[current_disk_index_];
         const size_t last_slash = disk_path.find_last_of("/\\");
         const std::string disk_name =
@@ -544,8 +527,7 @@ void Sdl3App::update_window_title_for_current_disk() {
 }
 
 void Sdl3App::log_disk_swap() {
-    // M35-S5: Log disk swap to stderr with human-readable feedback
-    // (AC-S5-3). Format: "Inserted disk: <name> (i/N)" or "Inserted disk: (no disk)".
+    // M35-S5 (AC-S5-3): "Inserted disk: <name> (i/N)" or "Inserted disk: (no disk)".
     if (!config_.disk_paths.empty() && current_disk_index_ < config_.disk_paths.size()) {
         const auto& disk_path = config_.disk_paths[current_disk_index_];
         const size_t last_slash = disk_path.find_last_of("/\\");
@@ -565,7 +547,7 @@ int Sdl3App::run_interactive() {
 
     // Exact-nanosecond absolute-deadline frame pacing (audio-latency fix,
     // docs/audio-latency-investigation.md). The previous per-frame
-    // SDL_GetTicks()/SDL_Delay() arithmetic TRUNCATED the exact 16.688154 ms
+    // SDL_GetTicks()/SDL_Delay() arithmetic truncated the exact 16.688154 ms
     // frame period (kFrameCycles / kSystemClockHz) to a 16 ms integer target,
     // running the whole session ~3-4% fast (measured 61.61 fps vs the real
     // 59.9227 Hz cadence) and overproducing audio by ~1,300 samples/s. Here
@@ -605,7 +587,7 @@ int Sdl3App::run_interactive() {
     // M27-S4 (docs/m27-planner-package.md §2.2): the three write_* calls
     // happen once, at the end of run_interactive()'s bounded loop (max_frames
     // reached) or on SDL_EVENT_QUIT -- whichever comes first -- added to the
-    // EXISTING loop-exit path, not a new one.
+    // existing loop-exit path, not a new one.
     flush_debug_session_outputs();
 
     return 0;

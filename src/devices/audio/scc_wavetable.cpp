@@ -161,15 +161,15 @@ void SccWavetable::set_freq_vol(std::uint8_t address, const std::uint8_t value) 
             per >>= 8;  // 4-bit mode
         }
         period_[ch] = per;
-        // NYYRIKKI restart (fact-sheet §4): the current byte starts again...
+        // NYYRIKKI restart (fact-sheet §4): the current byte restarts.
         count_[ch] = 0;
         if (deform_ & 0x20) {
-            // ...and under deform bit5 the whole waveform restarts, also
+            // Deform bit5: the whole waveform restarts too, also
             // resynchronising the rotation time base (fact-sheet §6 bit5).
             pos_[ch] = 0;
             deform_cycles_ = 0;
         }
-        // ...and the held output refreshes immediately.
+        // The held output refreshes immediately.
         out_[ch] = adjust(static_cast<int>(ch));
     } else if (address < 0x0F) {
         // 4-bit volume; takes effect at the next position step (NYYRIKKI
