@@ -60,8 +60,14 @@ struct Sdl3AppConfig {
     // a swap discards it. Game disks stay effectively read-only unless the
     // user opts in; the SAVE target is a writable data disk.
     bool disk_writable = false;
-    int window_width = 640;
-    int window_height = 480;
+    // M37 Slice F: the out-of-box initial window default is now scale 3 =
+    // 320*3 x 240*3 = 960x720 (was 640x480 / scale 2 through Slice E), so the
+    // human gets a comfortably sized window without passing --scale. An explicit
+    // --scale N still overrides this via sdl3_main.cpp (320N x 240N, N in [1,8]).
+    // The logical presentation stays 320x240 letterbox -- only the initial
+    // window size default changed.
+    int window_width = 960;
+    int window_height = 720;
     // SDL_WINDOW_HIDDEN -- test/CI convenience; never required for a real
     // interactive session.
     bool hidden_window = false;
@@ -147,12 +153,21 @@ struct Sdl3AppConfig {
     // windowed (byte-identical to before). Alt+Enter toggles at runtime.
     bool fullscreen = false;
 
+    // M37 Slice F: gate the F10 live stream-capture hotkey (--capture <on|off>).
+    // Default false (OFF) = F10 is INERT: a mis-struck F10 during play does
+    // nothing (no toggle, no log), so a default run is byte-identical gameplay.
+    // Only when true does poll_and_dispatch_events() route F10 to
+    // on_stream_toggle_hotkey(). --stream-light still selects light-vs-heavy
+    // mode, but only takes effect once F10 is enabled+triggered. F11/F12 and all
+    // other hotkeys are unaffected.
+    bool capture_enabled = false;
+
     // M37 Slice E (DEC-0056): texture scale mode fed to the video presenter
     // (--filter). Default SDL_SCALEMODE_LINEAR = the renderer's own default
     // (references/sdl3/include/SDL3/SDL_render.h:1260), the "smooth" look and
     // byte-identical to before; SDL_SCALEMODE_NEAREST = crisp pixels.
     // window_width/window_height above are set from --scale N (320N x 240N) by
-    // sdl3_main.cpp; the default stays 640x480 (= scale 2).
+    // sdl3_main.cpp; the default is now 960x720 (= scale 3, M37 Slice F).
     SDL_ScaleMode texture_filter = SDL_SCALEMODE_LINEAR;
 };
 

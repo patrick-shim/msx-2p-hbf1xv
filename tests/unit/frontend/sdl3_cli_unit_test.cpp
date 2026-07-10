@@ -215,7 +215,10 @@ int main() {
     // --- Case 11 (M37 Slice E, DEC-0056): --scale <N> initial window scale.
     // Valid N in [1,8] parses; sdl3_main.cpp maps N -> 320N x 240N. Out-of-range
     // / non-numeric / missing each record an error and leave scale absent. Absent
-    // flag -> nullopt (the 640x480 default is preserved, non-regressive). ---
+    // flag -> nullopt; sdl3_main.cpp then falls back to the Sdl3AppConfig window
+    // default, which M37 Slice F changed from 640x480 (scale 2) to 960x720
+    // (scale 3) BY DESIGN -- the parser field policy (absent -> nullopt) is
+    // unchanged; only the downstream default window size moved. ---
     {
         const auto p3 = parse_sdl3_cli({"--scale", "3"});
         expect(p3.errors.empty() && p3.scale.has_value() && *p3.scale == 3, "Scale3_Parses");
@@ -234,8 +237,11 @@ int main() {
         expect(!px.errors.empty() && !px.scale.has_value(), "ScaleNonNumeric_Error");
         const auto pmiss = parse_sdl3_cli({"--scale"});
         expect(!pmiss.errors.empty(), "ScaleMissingArg_Error");
+        // Absent --scale stays nullopt (parser contract unchanged). The window
+        // default it defers to is now scale 3 / 960x720 (M37 Slice F, by design;
+        // the Sdl3AppConfig default is asserted in the scaling integration test).
         const auto pabsent = parse_sdl3_cli({});
-        expect(!pabsent.scale.has_value(), "ScaleAbsent_Nullopt_640x480Preserved");
+        expect(!pabsent.scale.has_value(), "ScaleAbsent_Nullopt_DefaultWindowIsScale3_960x720_M37F");
     }
 
     // --- Case 12 (M37 Slice E, DEC-0056): --filter <nearest|linear>. Both valid
@@ -280,6 +286,29 @@ int main() {
         expect(p.max_frames.has_value() && *p.max_frames == 10 && p.disk_paths.size() == 1 &&
                    p.disk_paths[0] == "d.dsk" && p.border_enabled,
                "M37Combined_PreExistingFlagsIntact_AdditiveRegressionGuard");
+    }
+
+    // --- Case 15 (M37 Slice F): --capture <on|off> gates the F10 stream-capture
+    // hotkey. `on` -> true, `off` -> false, absent -> false (default OFF, F10
+    // inert), a bad value records a loud error (mirrors --filter). Absent stays
+    // false as a hard regression guard (default gameplay unchanged). ---
+    {
+        const auto pon = parse_sdl3_cli({"--capture", "on"});
+        expect(pon.errors.empty() && pon.capture_enabled, "CaptureOn_SetsTrue");
+        const auto poff = parse_sdl3_cli({"--capture", "off"});
+        expect(poff.errors.empty() && !poff.capture_enabled, "CaptureOff_SetsFalse");
+        const auto pabsent = parse_sdl3_cli({});
+        expect(pabsent.errors.empty() && !pabsent.capture_enabled, "CaptureAbsent_DefaultsFalse");
+        const auto pbad = parse_sdl3_cli({"--capture", "yes"});
+        expect(!pbad.errors.empty() && !pbad.capture_enabled, "CaptureBadValue_Error_StaysFalse");
+        const auto pmiss = parse_sdl3_cli({"--capture"});
+        expect(!pmiss.errors.empty() && !pmiss.capture_enabled, "CaptureMissingArg_Error");
+        // Order-independent alongside a pre-existing flag; --capture on coexists
+        // with --stream-light (which selects light mode once F10 is triggered).
+        const auto pcombo = parse_sdl3_cli({"--stream-light", "--capture", "on", "--max-frames", "3"});
+        expect(pcombo.errors.empty() && pcombo.capture_enabled && pcombo.stream_light &&
+                   pcombo.max_frames.has_value() && *pcombo.max_frames == 3,
+               "CaptureOn_WithStreamLight_OrderIndependent");
     }
 
     if (g_failures != 0) {

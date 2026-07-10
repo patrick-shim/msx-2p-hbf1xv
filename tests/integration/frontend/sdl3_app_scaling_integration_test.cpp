@@ -14,13 +14,24 @@
 #include <SDL3/SDL.h>
 
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <string>
+#include <system_error>
 #include <utility>
 
 #include "frontend/sdl3_app.h"
 
-// Suite: Frontend_Sdl3AppScaling_Integration (M37 Slices D + E, DEC-0056).
+// Suite: Frontend_Sdl3AppScaling_Integration (M37 Slices D + E + F, DEC-0056).
+//
+// M37 Slice F adds two end-to-end concerns on top of the Slice D/E coverage:
+//   * the OUT-OF-BOX default window is now scale 3 = 960x720 (was 640x480);
+//   * the F10 live stream-capture hotkey is GATED by config.capture_enabled
+//     (--capture <on|off>, default OFF): with capture off a pushed F10 key
+//     event, driven through the REAL Sdl3App event loop (run_one_frame ->
+//     poll_and_dispatch_events), is INERT; with capture on the identical event
+//     arms the stream. Both are asserted below with SDL_PushEvent injection --
+//     no fabricated "it toggled" claim.
 //
 // End-to-end proof that Sdl3App::init() threads the M37 launch-time config
 // into the LIVE machine/window/renderer/presenter, under the "dummy" video/
@@ -138,6 +149,110 @@ int main() {
 
             app.shutdown();
         }
+    }
+
+    // --- Case 4 (M37 Slice F): the OUT-OF-BOX default window is now scale 3 =
+    // 960x720 (was 640x480 / scale 2 through Slice E) -- changed by design in
+    // Slice F so the human gets a comfortable window without passing --scale.
+    // The Sdl3AppConfig default fields are the oracle (sdl3_main.cpp feeds these
+    // straight to SDL_CreateWindowAndRenderer when --scale is absent), and the
+    // live window created under the dummy driver reports that same size. The
+    // logical presentation stays 320x240 letterbox (asserted in Case 3). ---
+    {
+        sony_msx::frontend::Sdl3AppConfig config;
+        config.bios_dir = "bios";
+        config.hidden_window = true;
+        // No window_width/window_height override -> the struct defaults apply.
+        const int default_w = config.window_width;
+        const int default_h = config.window_height;
+        expect(default_w == 960 && default_h == 720,
+               "DefaultWindow_Scale3_960x720_M37F_ChangedByDesign");
+
+        sony_msx::frontend::Sdl3App app(std::move(config));
+        const bool init_ok = app.init();
+        expect(init_ok, "DefaultWindow_InitSucceeds");
+        if (!init_ok) {
+            std::cerr << "  last_error=" << app.last_error() << "\n";
+        } else {
+            int ww = 0;
+            int wh = 0;
+            const bool got = SDL_GetWindowSize(app.window(), &ww, &wh);
+            expect(got && ww == 960 && wh == 720,
+                   "DefaultWindow_LiveWindowIs960x720");
+            app.shutdown();
+        }
+    }
+
+    // A pushed fresh F10 key-down event, matching the poll_and_dispatch_events()
+    // gate exactly (SDL_EVENT_KEY_DOWN + SDL_SCANCODE_F10 + repeat=false). Field
+    // layout per references/sdl3/include/SDL3/SDL_events.h:373-386; SDL_PushEvent
+    // returns bool per :1449.
+    const auto push_f10_keydown = []() {
+        SDL_Event ev{};
+        ev.type = SDL_EVENT_KEY_DOWN;
+        ev.key.type = SDL_EVENT_KEY_DOWN;
+        ev.key.scancode = SDL_SCANCODE_F10;
+        ev.key.down = true;
+        ev.key.repeat = false;
+        return SDL_PushEvent(&ev);
+    };
+
+    // --- Case 5 (M37 Slice F): --capture off (DEFAULT) makes F10 INERT. The
+    // pushed F10 event, processed through the REAL event loop, does NOT arm
+    // stream capture -- the user's exact requirement (a mis-struck F10 during
+    // play does nothing). Zero filesystem writes (capture never arms). ---
+    {
+        sony_msx::frontend::Sdl3AppConfig config;
+        config.bios_dir = "bios";
+        config.hidden_window = true;
+        config.capture_enabled = false;  // default OFF (gate closed)
+
+        sony_msx::frontend::Sdl3App app(std::move(config));
+        const bool init_ok = app.init();
+        expect(init_ok, "CaptureOff_InitSucceeds");
+        if (!init_ok) {
+            std::cerr << "  last_error=" << app.last_error() << "\n";
+        } else {
+            expect(!app.stream_capture_active(), "CaptureOff_StreamInactiveBefore");
+            expect(push_f10_keydown(), "CaptureOff_F10Pushed");
+            app.run_one_frame();  // polls + dispatches the F10 event
+            expect(!app.stream_capture_active(),
+                   "CaptureOff_F10Inert_StreamStillInactive");
+            app.shutdown();
+        }
+    }
+
+    // --- Case 6 (M37 Slice F): --capture on ARMS the F10 hotkey. The IDENTICAL
+    // pushed F10 event now toggles stream capture ON through the real event
+    // loop, proving the gate discriminates purely on config.capture_enabled.
+    // Capture I/O is redirected to a temp root and removed afterwards, so the one
+    // per-frame bundle written while armed leaves NO repo debris. ---
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path tmp_root = fs::temp_directory_path() / "sony_msx_m37f_f10gate";
+        fs::remove_all(tmp_root, ec);  // pre-clean any prior run
+
+        sony_msx::frontend::Sdl3AppConfig config;
+        config.bios_dir = "bios";
+        config.hidden_window = true;
+        config.capture_enabled = true;            // --capture on (gate open)
+        config.snapshot_dir = tmp_root.string();  // redirect all capture I/O to temp
+
+        sony_msx::frontend::Sdl3App app(std::move(config));
+        const bool init_ok = app.init();
+        expect(init_ok, "CaptureOn_InitSucceeds");
+        if (!init_ok) {
+            std::cerr << "  last_error=" << app.last_error() << "\n";
+        } else {
+            expect(!app.stream_capture_active(), "CaptureOn_StreamInactiveBefore");
+            expect(push_f10_keydown(), "CaptureOn_F10Pushed");
+            app.run_one_frame();  // polls + dispatches the F10 event -> arms capture
+            expect(app.stream_capture_active(),
+                   "CaptureOn_F10Armed_StreamActive");
+            app.shutdown();
+        }
+        fs::remove_all(tmp_root, ec);  // clean up temp capture output (no repo debris)
     }
 
     if (g_failures != 0) {

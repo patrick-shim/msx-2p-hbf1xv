@@ -30,14 +30,21 @@ void print_usage(const char* argv0) {
                  " [--input-script <path>] [--snapshot <dir>]"
                  " [--fmpac-sram <path>] [--no-fmpac-sram]"
                  " [--speed <0..7>] [--scale <1..8>] [--filter <nearest|linear>] [--fullscreen]\n"
+                 " [--capture <on|off>]\n"
                  "\n"
                  "--speed <0..7> sets the initial Sony Speed Controller level (0 = full speed,\n"
                  "default; 7 = maximum slow-motion -- a CPU slow-down duty cycle, NOT a turbo).\n"
                  "F6/F7 still step it at runtime. --scale <N> opens the window at 320N x 240N\n"
-                 "(default 2 = 640x480); the window is resizable and the picture is aspect-correct\n"
+                 "(default 3 = 960x720); the window is resizable and the picture is aspect-correct\n"
                  "letterboxed at any size / fullscreen. --filter picks the scaling filter (default\n"
                  "linear = smooth; nearest = crisp pixels). --fullscreen starts fullscreen and\n"
                  "Alt+Enter toggles fullscreen at runtime.\n"
+                 "\n"
+                 "--capture <on|off> (default off) gates the F10 live stream-capture hotkey: with\n"
+                 "--capture off (the default) F10 is INERT, so a mis-struck F10 during gameplay\n"
+                 "does nothing; pass --capture on to arm the F10 toggle (--stream-light then\n"
+                 "selects the lightweight capture mode). F11 disk-swap and F12 snapshot are\n"
+                 "unaffected.\n"
                  "\n"
                  "--snapshot <dir> sets the debug-snapshot output root (default debug/); press\n"
                  "F12 in-session to write a comprehensive per-component snapshot to\n"
@@ -104,6 +111,9 @@ int main(int argc, char** argv) {
     config.speed_level = parsed.speed_level;
     // M37 Slice E (DEC-0056): --fullscreen / --filter / --scale window scaling.
     config.fullscreen = parsed.fullscreen;
+    // M37 Slice F: --capture <on|off> gates the F10 stream-capture hotkey
+    // (default off = F10 inert). No effect on gameplay when off.
+    config.capture_enabled = parsed.capture_enabled;
     config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
                                 ? SDL_SCALEMODE_NEAREST
                                 : SDL_SCALEMODE_LINEAR;

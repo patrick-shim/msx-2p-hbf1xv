@@ -112,6 +112,15 @@ struct ParsedSdl3Cli {
     // M37 Slice E (DEC-0056): --fullscreen starts the window fullscreen
     // (Alt+Enter toggles at runtime). Bare boolean flag; default false.
     bool fullscreen = false;
+    // M37 Slice F: --capture <on|off> gates the F10 live stream-capture hotkey.
+    // DEFAULT false (OFF) -- F10 is INERT unless explicitly enabled, so a
+    // mis-struck F10 during gameplay does nothing (a disruptive-toggle
+    // complaint from the human). `on`->true, `off`->false, absent->false; any
+    // other value pushes a `.errors` entry (mirrors the --filter error policy).
+    // Only the F10 stream-capture hotkey is gated; F11/F12 and every other
+    // hotkey are untouched. --stream-light/--snapshot still parse and configure
+    // capture behavior, but only take effect when F10 is enabled+triggered.
+    bool capture_enabled = false;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).

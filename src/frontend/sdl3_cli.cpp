@@ -168,6 +168,20 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--fullscreen") {
             parsed.fullscreen = true;  // M37 Slice E: start fullscreen (Alt+Enter toggles at runtime)
+        } else if (arg == "--capture") {
+            // M37 Slice F: gate the F10 live stream-capture hotkey; default OFF.
+            // Value must be 'on' or 'off' (mirrors the --filter value policy).
+            if (auto value = take_value(args, i, "--capture", parsed.errors)) {
+                ++i;
+                if (*value == "on") {
+                    parsed.capture_enabled = true;
+                } else if (*value == "off") {
+                    parsed.capture_enabled = false;
+                } else {
+                    parsed.errors.push_back("sdl3_cli: --capture value must be 'on' or 'off': '" +
+                                            *value + "'");
+                }
+            }
         }
         // Any other argument is not this parser's concern -- left untouched
         // for the cartridge-flag delegation below (order-independent

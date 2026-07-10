@@ -339,12 +339,18 @@ void Sdl3App::poll_and_dispatch_events() {
             on_snapshot_hotkey();
             continue;
         }
-        // DEC-0052: F10 hotkey toggles live stream-capture (fresh key-down only,
-        // not a repeat). Consumed HERE as a HOST hotkey; NEVER dispatched to
-        // input_mapper_ (which would leak it into the MSX keyboard matrix) --
-        // mirrors the F11/F12 discipline. No collision: F10 is unbound (only
-        // F6-F9 speed/rensha + F11 disk-swap + F12 snapshot are wired).
-        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F10 && !event.key.repeat) {
+        // DEC-0052 + M37 Slice F: F10 hotkey toggles live stream-capture (fresh
+        // key-down only, not a repeat), but ONLY when --capture on was given
+        // (config_.capture_enabled). Default OFF makes F10 completely INERT --
+        // a mis-struck F10 during gameplay is ignored entirely (no toggle, no
+        // log, no continue-consume): it simply falls through to the normal MSX
+        // input path like any other unbound host key, so default gameplay is
+        // byte-identical. When enabled, it is consumed HERE as a HOST hotkey and
+        // NEVER dispatched to input_mapper_ (which would leak it into the MSX
+        // keyboard matrix) -- mirrors the F11/F12 discipline. Only F10 is gated;
+        // F6-F9 speed/rensha + F11 disk-swap + F12 snapshot stay wired as before.
+        if (config_.capture_enabled && event.type == SDL_EVENT_KEY_DOWN &&
+            event.key.scancode == SDL_SCANCODE_F10 && !event.key.repeat) {
             on_stream_toggle_hotkey();
             continue;
         }
