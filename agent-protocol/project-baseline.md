@@ -28,7 +28,7 @@ any deviation is a defect. No substitution of components, capacities, or variant
 | **TEXT MODES**     | 40 × 24 / 32 × 24                                                                                                                                                |
 | **GRAPHIC MODES**  | 64 × 48, 256 × 192, 256 × 212, 512 × 212, 256 × 212, 256 × 424. Additional KANJI screen modes (Japanese text screen modes): 40 × 24, 32 × 24, 256 × 192, 64 × 48 |
 | **COLORS**         | 19,268 simultaneous colors — this is the V9958 YJK maximum on-screen count (YJK/YAE modes), NOT the palette size. The V9958 palette is 512 colors (9-bit: 3 bits each R/G/B), of which 16 are selectable at once in palette modes. Implementers must not treat 19,268 as a palette dimension.                                                                                                                                                           |
-| **SOUND**          | FM-PAC (OPLL YM-2413) – 9-channel FM synthesizer                                                                                                                 |
+| **SOUND**          | Built-in **MSX-MUSIC**: Yamaha **YM2413 (OPLL)** 9-channel FM synthesizer + MSX-MUSIC BIOS (APRLOPLL, no SRAM), alongside the S1985 PSG. Per **DEC-0050** the built-in FM is MSX-MUSIC — **NOT** a Panasonic FM-PAC; the FM-PAC (which adds 8 KB battery SRAM) is an optional EXTERNAL cartridge peripheral. |
 | **I/O PORTS**      | 2 cartridge slots, RGB/Scart video output, 2 joystick ports, printer port, NTSC video output, mono audio output, RF video output, cassette interface             |
 
 ## Non-Negotiable Goals

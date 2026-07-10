@@ -34,4 +34,6 @@ slot/sub-slot/page, and asset loading) stays in `src/machine/` per `src/CLAUDE.m
 
 - No filesystem / asset-path knowledge here — that is `machine/rom_asset_loader`.
 - No segment-register ownership here — that is `chipset/mapper_io`.
-- No FM-PAC / FDC / Halnote / Kanji-font device internals (deferred milestones).
+- No FM-PAC / FDC / Halnote / Kanji-font device internals — those are implemented, but own
+  folders elsewhere: `devices/cartridge/` (FM-PAC peripheral cartridge, M17/M36),
+  `devices/fdc/` (M16), `devices/halnote/` (M20), `devices/kanji/` (M18).

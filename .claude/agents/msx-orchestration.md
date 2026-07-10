@@ -48,4 +48,5 @@ Mandatory references before answering:
 5. Recommended Transition
 
 ## Update Project README.md ##
-1. After each milestone with git commit, update **Project Scafford** section of the root @README.md to reflect the latest directory structure. 
+1. After each milestone with git commit, update the **Repository layout** section of the root
+   @README.md to reflect the latest directory structure. 

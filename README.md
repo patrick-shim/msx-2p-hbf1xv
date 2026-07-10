@@ -6,25 +6,35 @@ Konami SCC, YM2413 FM/MSX-MUSIC, RTC, WD2793-family FDC with 720 KB 3.5" floppy,
 slot/mapper fabric) plus an optional SDL3 desktop frontend. The authoritative hardware
 target and all operating rules live in [`CLAUDE.md`](CLAUDE.md).
 
-## Current status (2026-07-09)
+## Current status (2026-07-10)
 
-- **Milestones M0–M32 are closed**; git tags `v1.0.11`…`v1.0.33` mark the closure line
+- **Milestones M0–M37 are closed**; git tags `v1.0.11`…`v1.0.38` mark the closure line
   (`v1.0.NN` = milestone `MNN` through M28; `v1.0.29` tagged the live-playtesting hardening
   arc DEC-0028..DEC-0034, so tags offset milestone numbers by one from M29 on: M29=v1.0.30 …
-  M32=v1.0.33). `v1.0.32` was declared the production candidate; `v1.0.33` advanced that
-  line with the M32 RC-playtest fixes (raster-accurate per-line rendering + line
-  interrupts, FM mix calibration).
+  M37=v1.0.38). `v1.0.32` was declared the production candidate; **`v1.0.38` (M37, "post-M36
+  hardening") is the current release** — a committed openMSX VDP-IRQ A/B probe, an inserted
+  FM-PAC cartridge's OPLL mixed into machine audio, WD2793 read-sector rotational read
+  latency, a `--speed` Sony Speed Controller CLI, SDL3 window scaling/fullscreen, and a
+  `--capture` gate on the F10 hotkey — LIVE human-validated ("YS II loads and plays
+  perfectly, SRAM works perfectly, screen looks good").
 - **Authoritative live status:** [`agent-protocol/state/current-phase.md`](agent-protocol/state/current-phase.md)
   (active phase), [`state/milestones.md`](agent-protocol/state/milestones.md),
   [`state/deferred-backlog.md`](agent-protocol/state/deferred-backlog.md) (open backlog),
   and [`channels/decisions.md`](agent-protocol/channels/decisions.md) (DEC-NNNN history).
   Always trust those over any README snapshot.
 - Working today, per the closed-milestone record under `docs/`: real Sony BIOS cold boot to
-  the MSX2+ logo and BASIC; MSX-DOS / Disk BASIC boot from `.dsk` images; cartridge loading
-  with universal mapper auto-identification (softwaredb SHA1 match, then a bank-write
-  heuristic); sprites + V9958 command engine with per-line raster rendering; live PSG + SCC
-  + YM2413 FM audio; keyboard/joystick, Ren-Sha Turbo, hardware PAUSE and Speed Controller;
-  ZEXALL/ZEXDOC clean (durable log `docs/m31-rc-zexall-log.txt`).
+  the MSX2+ logo and BASIC; MSX-DOS / Disk BASIC boot from `.dsk` images, including
+  multi-disk hot-swap (F11); cartridge loading with universal mapper auto-identification
+  (softwaredb SHA1 match, then a bank-write heuristic), plus an FM-PAC peripheral cartridge
+  (battery-backed SRAM saves, its OPLL mixed into machine audio); sprites + V9958 command
+  engine with per-line raster rendering; live PSG + Konami SCC + built-in MSX-MUSIC YM2413
+  FM audio; WD2793 FDC with index-pulse-relative read-sector rotational latency; keyboard/
+  joystick, Ren-Sha Turbo, hardware PAUSE and the Speed Controller (`--speed <0..7>`); an
+  SDL3 window that resizes/scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter) with a
+  `--capture`-gated F10 live stream-capture hotkey; ZEXALL/ZEXDOC clean (durable log
+  `docs/m31-rc-zexall-log.txt`; zero `src/devices/cpu/`/`src/core/` edits since, so the
+  suite has correctly stayed withheld at every later milestone gate per the standing
+  slow-test-cadence policy).
 
 ## Build and test (the single way)
 
@@ -67,11 +77,23 @@ build\Debug\sony_msx_sdl3.exe --disk disks\msxdos22.dsk        # MSX-DOS boot fl
 ```
 
 Flags (all verified in `src/frontend/sdl3_main.cpp` / `src/frontend/sdl3_cli.cpp`):
-`--bios-dir <path>` (default `bios`), `--disk <path>`, `--cart1 <path>`,
+`--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, first
+disk inserted at boot, F11 cycles drive A through the rest at runtime), `--cart1 <path>`,
 `--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`,
 `--softwaredb <path>` (default `references/openmsx-21.0/share/softwaredb.xml`),
-`--max-frames <N>`, `--hidden-window`, `--border`, `--dump-state <name>`,
-`--trace-cpu <name>`, `--event-log <name>`, `--input-script <path>`, `--help`.
+`--max-frames <N>`, `--hidden-window`, `--border`, `--disk-writable` (persist disk writes
+back to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
+`--input-script <path>`, `--snapshot <dir>` (F12 comprehensive debug-snapshot output root,
+default `debug/`), `--fmpac-sram <path>` / `--no-fmpac-sram` (override/opt-out of the
+FM-PAC battery-SRAM auto-persistence, which otherwise saves to `<cart-rom-path>.sram`),
+`--speed <0..7>` (initial Sony Speed Controller level — a CPU slow-down duty cycle, not a
+turbo; 0 = full speed, the default; F6/F7 still step it at runtime), `--scale <1..8>`
+(initial window size `320N x 240N`, default `3` = 960×720; the window is resizable and the
+picture stays aspect-correct letterboxed at any size), `--filter <nearest|linear>` (texture
+scaling filter, default `linear`), `--fullscreen` (Alt+Enter toggles at runtime),
+`--capture <on|off>` (default `off`; gates the F10 live stream-capture hotkey so a
+mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are unaffected),
+`--stream-light` (F10's lightweight capture mode, relevant once `--capture on`), `--help`.
 `--cartN-type` omitted (or `auto`) triggers auto-identification; an explicit type is
 honored byte-for-byte.
 
@@ -85,10 +107,14 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.d
 `--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--cart1/--cart1-type`,
 `--cart2/--cart2-type`, `--softwaredb`, `--debug-root`, `--dump-state`, `--trace-cpu`,
 `--event-log`, `--input-script`, `--frames <N>` (drive N real frames; `<max_steps>` then
-ignored), `--dump-frame <name>`. Other single-purpose headless modes (each prints usage):
-`--cpm-run`, `--parity-trace`, `--bios-boot-trace`, `--frame-dump-demo`,
-`--audio-dump-demo`, and the per-milestone parity probes (`--vdp-parity`,
-`--vdp-render-parity`, `--sprite-cmd-parity`, `--ym2413-parity`, `--halnote-parity`).
+ignored), `--dump-frame <name>`, `--disk-writable`, `--swap-disk-frame <N>`,
+`--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>` (F12-style comprehensive
+debug snapshot), `--stream-light`. The plain (no-subcommand) headless boot mode additionally
+accepts `--speed <0..7>` (same Sony Speed Controller CLI as the SDL3 frontend). Other
+single-purpose headless modes (each prints usage): `--cpm-run`, `--parity-trace`,
+`--bios-boot-trace`, `--frame-dump-demo`, `--audio-dump-demo`, and the per-milestone parity
+probes (`--vdp-parity`, `--vdp-render-parity`, `--sprite-cmd-parity`, `--ym2413-parity`,
+`--halnote-parity`).
 Debug output lands under `debug/` (see [`debug/README.md`](debug/README.md)).
 
 ## Repository layout

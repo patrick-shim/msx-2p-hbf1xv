@@ -9,7 +9,7 @@ precedent). The LIVE project status does not live here — it lives in
 `definition-of-done.yaml`) with the decision history in
 `agent-protocol/channels/decisions.md`.
 
-## Per-milestone records (M0–M32, all closed; tags v1.0.11–v1.0.33)
+## Per-milestone records (M0–M37, all closed; tags v1.0.11–v1.0.38)
 
 Each milestone `mNN` leaves a triad, in workflow order:
 
@@ -18,6 +18,12 @@ Each milestone `mNN` leaves a triad, in workflow order:
    evidence-gate output (M0 uses `m0-implementation-prep.md` instead).
 3. `mNN-qa-signoff.md` — QA's independent regression assessment and verdict
    (Pass / Conditional Pass), which gated the closure decision and git tag.
+
+Two milestones depart from the full triad: **M33** (repository housekeeping, DEC-0041/0042)
+is a coordinator-executed, non-device-behavior cycle with no `docs/m33-*` triad at all; **M37**
+(post-M36 hardening, DEC-0055..0058) has only `m37-qa-signoff.md` — its five slices were each
+spec'd directly in `agent-protocol/channels/decisions.md` rather than a separate
+`m37-planner-package.md`/`m37-implementation-report.md`.
 
 Where the milestone was behavior-affecting, a fourth artifact records openMSX A/B evidence:
 `mNN-parity-trace-diff.md` — present for **m10–m25, m28, m29, m31, m32**. Milestone-specific
@@ -29,6 +35,16 @@ adjuncts:
 - `m31-rc-zexall-log.txt` — the durable release-candidate ZEXALL/ZEXDOC full-sweep log
   (the standing slow-test-cadence policy: this sweep runs only at RC checkpoints or after
   direct cpu/core edits, and its log is kept).
+- `m34-audio-ab.md` — M34 PSG/SCC band-limited integration + R#1 BL render-gate A/B evidence.
+- `m36-bugB-vdp-ie0-fix-report.md`, `m36-fmpac-sram-persistence-report.md`,
+  `m36-stream-capture-report.md`, `m36-phase2-planner-package.md` /
+  `m36-phase2-implementation-report.md`, `m36-phase3-planner-package.md` /
+  `m36-phase3-implementation-report.md` — M36's Phase 2 (FM-PAC cartridge + Bug B fix) and
+  Phase 3 (F10/F12 debug tooling) addenda; `m36-qa-signoff-final.md` supersedes the
+  Phase-1-only `m36-qa-signoff.md` as M36's actual closure sign-off.
+- `openmsx-vdp-irq-parity.md` — M37 Slice A: the committed, reusable openMSX VDP-IRQ A/B
+  probe artifact.
+- `openmsx-fdc-read-timing-ab.md` — M37 Slice C: WD2793 read-sector rotational-latency A/B.
 
 ## Investigation / fix reports (frozen; live-playtesting arc and M28-era findings)
 
