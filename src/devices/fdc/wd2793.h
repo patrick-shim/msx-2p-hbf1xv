@@ -84,6 +84,18 @@ public:
     static constexpr std::uint64_t kStepCycles[4] = {21477, 42955, 71591, 107386};
     static constexpr std::uint64_t kSettleCycles = 107386;   // 30 ms (V/E flag)
     static constexpr std::uint64_t kReadStartCycles = 2 * kCyclesPerByte;
+    // Type-II Read Sector first-DRQ: intra-sector header span from the ID address
+    // mark (the 0xFE byte the sector search locks onto) to the first data byte.
+    // openMSX startReadSector schedules the first data DRQ gapLength + 2 byte
+    // periods after that mark rotates under the head (WD2793.cc:624-644;
+    // gapLength = dataIdx - addrIdx). Our standard IBM System-34 track
+    // (build_read_track_buffer: C/H/R/N + CRC + Gap2 + sync + A1A1A1 + DAM) has
+    // gapLength = 45, so 45 + 2 = 47 byte periods. The rotational wait until the
+    // mark ARRIVES under the head is added separately (DiskDrive::
+    // cycles_until_sector_id); see begin_read_sector. DISTINCT from
+    // kReadStartCycles, which the write / read-address / read-track / write-track
+    // paths keep unchanged (DEC-0055 slice C scope: READ SECTOR only).
+    static constexpr std::uint64_t kReadSectorHeaderCycles = 47 * kCyclesPerByte;
     // HLD (head-load) idle-timeout duration (WD2793.cc:42 `IDLE = 3s`): the
     // Type-I HEAD_LOADED status bit stays set for this long after HLD was last
     // (re)activated -- see start_type1/end_command.

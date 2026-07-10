@@ -77,6 +77,26 @@ public:
     // WD2793.cc:1049-1050 `irqTime = drive.getTimeTillIndexPulse(time)`).
     [[nodiscard]] std::uint64_t cycles_until_index_pulse(std::uint64_t now) const;
 
+    // Cycles until the requested sector's ID address mark next rotates under the
+    // head, from `now` (range 0 .. ~1 rotation). Grounds the WD2793 Type-II Read
+    // Sector first-DRQ ROTATIONAL latency: real hardware / openMSX must wait for
+    // the requested sector to come around, so the first-DRQ delay is VARIABLE, a
+    // function of the disk's rotational angle at command start
+    // (references/openmsx-21.0/src/fdc/RealDrive.cc:453 getNextSector -- finds the
+    // next matching sector's addrIdx and returns the EmuTime it rotates under the
+    // head; WD2793.cc:557 type2Search schedules from it).
+    //
+    // APPROXIMATION (documented, DEC-0055 slice C): our CHS image has no
+    // per-sector byte-angular positions or real interleave, so the 9 sectors are
+    // modelled as evenly spaced and sequential -- sector `sector_index` (0-based)
+    // sits at angle sector_index/9 of the 715909-cycle rotation. This is the most
+    // faithful rotational model our sector geometry can support; it is NOT
+    // byte-identical to openMSX's raw-track model (which locks onto real addrIdx
+    // positions with real interleave). Fully DETERMINISTIC: a pure function of
+    // `now` and the fixed sector geometry -- no wall clock, no randomness.
+    [[nodiscard]] std::uint64_t cycles_until_sector_id(std::uint32_t sector_index,
+                                                       std::uint64_t now) const;
+
     // Disk-changed latch (Sony DSKCHG at 0x7FFD bit2, 0 = changed). Set true when
     // the mounted medium is (deterministically) swapped; cleared once acknowledged.
     //

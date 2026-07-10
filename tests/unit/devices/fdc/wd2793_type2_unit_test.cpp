@@ -52,8 +52,14 @@ public:
     std::uint64_t cycles = 0;
 };
 
-constexpr std::uint64_t kReadStartCycles = 2 * 114;
+constexpr std::uint64_t kReadStartCycles = 2 * 114;  // write / read-addr / read-track tail
 constexpr std::uint64_t kCyclesPerByte = 114;
+// DEC-0055 slice C: Read Sector first-DRQ = rotational wait (until the sector's
+// ID mark rotates under the head) + this fixed intra-sector ID-header->data span.
+// 47 * 114 = 5358 (Wd2793::kReadSectorHeaderCycles; openMSX startReadSector
+// gapLength+2, WD2793.cc:624-644). See the rotational-latency case below.
+constexpr std::uint64_t kReadSectorHeaderCycles = 47 * kCyclesPerByte;
+constexpr std::uint64_t kIndexPeriodCycles = 715909;  // DiskDrive::kIndexPeriodCycles
 
 struct Fixture {
     FakeClock clock;
@@ -127,12 +133,78 @@ int main() {
         f.fdc.write_track(0);
         f.fdc.write_sector(1);
         f.fdc.write_command(0x80);
-        // Let 5 whole byte-periods elapse past the first DRQ window before the
-        // first read_data() call (deliberate overshoot - the point of this case).
-        f.clock.cycles += kReadStartCycles + 5 * kCyclesPerByte;
+        // Let 5 whole byte-periods elapse past the ACTUAL first-DRQ window before
+        // the first read_data() call (deliberate overshoot - the point of this
+        // case). DEC-0055 slice C re-derivation: the first DRQ is now index-pulse-
+        // relative (rotational wait + intra-sector header), not the old fixed
+        // 2-byte kReadStartCycles, so the overshoot is measured from the device's
+        // actual computed first-DRQ deadline. For sector 1 at rotational phase 0
+        // (clock=0 at command issue) the rotational wait is 0, so that deadline is
+        // exactly kReadSectorHeaderCycles (5358) -- asserted directly here. The
+        // Lost-Data semantics under test are UNCHANGED (5 byte-periods late ->
+        // Lost Data set); only the reference point moved.
+        const std::uint64_t first_drq = f.fdc.drq_deadline();
+        expect(first_drq == kReadSectorHeaderCycles, "ReadSector_FirstDrq_Sector1Phase0_HeaderOnly");
+        f.clock.cycles = first_drq + 5 * kCyclesPerByte;
         f.fdc.read_data();
         const std::uint8_t status = f.fdc.peek_status();
         expect((status & 0x04) != 0, "ReadSector_MissedDrq_LostDataSet");
+    }
+
+    // --- DEC-0055 slice C: Type-II Read Sector first-DRQ ROTATIONAL latency.
+    //     The first DRQ is scheduled index-pulse-relative: t + (cycles until the
+    //     requested sector's ID mark rotates under the head) + kReadSectorHeader-
+    //     Cycles. The rotational wait is VARIABLE in the sector index AND in the
+    //     disk angle (phase = clock % kIndexPeriodCycles) at command start, unlike
+    //     the OLD fixed 228-cycle model. Evenly-spaced sequential sector model:
+    //     sector k (0-based) sits at angle (k * P) / 9 of the P=715909-cycle
+    //     rotation (DiskDrive::cycles_until_sector_id); grounded in openMSX
+    //     WD2793.cc:544/557/624 + RealDrive.cc:453 (documented sector-model
+    //     approximation of the raw-track model). Every expected value is
+    //     hand-derived below and asserted EXACTLY (hard oracle). ---
+    {
+        // Helper: first-DRQ deadline for (sector, issue_cycle). A fresh fixture so
+        // the read is issued at a known absolute cycle (== rotational phase, since
+        // issue_cycle < P here) with the head on track 0.
+        auto first_drq_deadline = [](std::uint64_t issue_cycle,
+                                     std::uint8_t sector) -> std::uint64_t {
+            Fixture f;
+            f.clock.cycles = issue_cycle;
+            f.fdc.write_track(0);
+            f.fdc.write_sector(sector);
+            f.fdc.write_command(0x80);  // Read Sector, single
+            return f.fdc.drq_deadline();
+        };
+
+        // Phase 0 (issue at cycle 0): rotational wait = ((k*P)/9 - 0) mod P = (k*P)/9.
+        //   k=0 (SR1): 0        -> deadline 0      + 5358 =   5358
+        //   k=1 (SR2): 715909/9=79545  -> 79545  + 5358 =  84903
+        //   k=4 (SR5): 4*715909/9=318181 -> 318181 + 5358 = 323539
+        //   k=8 (SR9): 8*715909/9=636363 -> 636363 + 5358 = 641721
+        expect(first_drq_deadline(0, 1) == 5358, "RotLatency_Sector1_Phase0_Deadline");
+        expect(first_drq_deadline(0, 2) == 84903, "RotLatency_Sector2_Phase0_Deadline");
+        expect(first_drq_deadline(0, 5) == 323539, "RotLatency_Sector5_Phase0_Deadline");
+        expect(first_drq_deadline(0, 9) == 641721, "RotLatency_Sector9_Phase0_Deadline");
+
+        // Latency is VARIABLE across sectors at the same phase (the defect fix vs
+        // the OLD fixed 228-cycle first DRQ).
+        expect(first_drq_deadline(0, 1) != first_drq_deadline(0, 5) &&
+                   first_drq_deadline(0, 5) != first_drq_deadline(0, 9),
+               "RotLatency_VariesBySector");
+
+        // Latency is VARIABLE across rotational phase for the SAME sector. Sector 1
+        // (angle 0) issued at cycle 400000: wait = (0 + P - 400000) mod P = 315909;
+        // deadline = 400000 + 315909 + 5358 = 721267.
+        expect(first_drq_deadline(400000, 1) == 721267, "RotLatency_Sector1_Phase400k_Deadline");
+        expect(first_drq_deadline(0, 1) != first_drq_deadline(400000, 1),
+               "RotLatency_VariesByPhase");
+
+        // DETERMINISM: identical issue cycle -> identical first-DRQ deadline across
+        // independent runs (pure function of the emulated cycle count).
+        expect(first_drq_deadline(0, 5) == first_drq_deadline(0, 5),
+               "RotLatency_Deterministic_SameCycleSameDeadline");
+        expect(first_drq_deadline(123456, 7) == first_drq_deadline(123456, 7),
+               "RotLatency_Deterministic_ArbitraryPhase");
     }
 
     // --- Record Not Found: requested sector does not exist on the current track

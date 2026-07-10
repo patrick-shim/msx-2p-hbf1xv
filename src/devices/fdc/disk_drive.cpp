@@ -87,6 +87,22 @@ std::uint64_t DiskDrive::cycles_until_index_pulse(const std::uint64_t now) const
     return kIndexPeriodCycles - phase;
 }
 
+std::uint64_t DiskDrive::cycles_until_sector_id(const std::uint32_t sector_index,
+                                                const std::uint64_t now) const {
+    // Evenly-spaced sequential sector model (see header): sector k's ID address
+    // mark sits at angle (k / 9) of the rotation. Computed as a fraction of the
+    // FULL period (k * P / 9, not k * (P/9)) so the integer rounding is spread
+    // across the 9 slots rather than accumulating per slot. sector_index is 0..8
+    // (SR 1..9 validated by the WD2793 caller), so sector_angle < kIndexPeriodCycles.
+    const std::uint64_t sector_angle =
+        (static_cast<std::uint64_t>(sector_index) * kIndexPeriodCycles) /
+        DiskImage::kSectorsPerTrack;
+    const std::uint64_t phase = now % kIndexPeriodCycles;
+    // Cycles from the current angle forward to the sector's angle (wrapping once
+    // per rotation). Deterministic function of `now` alone.
+    return (sector_angle + kIndexPeriodCycles - phase) % kIndexPeriodCycles;
+}
+
 bool DiskDrive::read_sector(const std::uint8_t sector, std::uint8_t* out) const {
     if (image_ == nullptr) {
         return false;
