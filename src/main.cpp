@@ -1037,6 +1037,10 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
             return 2;
         }
     }
+    // M41-S1: give the player the machine's joystick so JOY= events drive
+    // STICK/STRIG. Harmless for KEY-only scripts (never touched) -> the KEY
+    // path stays byte-for-byte the pre-M41 behavior.
+    script_player.attach_joystick(&machine.joystick());
 
     // M36 Phase 3: deterministic comprehensive debug-snapshot capture.
     // Default OFF -- only fires when --snapshot <dir> is present, so a run

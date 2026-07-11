@@ -13,11 +13,13 @@
 
 #pragma once
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 #include <vector>
 
+#include "peripherals/joystick.h"
 #include "peripherals/keyboard_matrix.h"
 
 namespace sony_msx::machine {
@@ -40,15 +42,43 @@ namespace sony_msx::machine {
 // deterministic clock basis -- the same field convention DebugEvent::tstate
 // uses, debug_event_log.h:23). Events must be strictly non-decreasing in `T`
 // in the file; `KEY` names are resolved via peripherals::key_name_to_row_col().
-// Only keyboard events are a required deliverable this cycle (joystick-event
-// scripting is an out-of-scope-unless-trivial extension,
-// docs/m27-planner-package.md §1.2) -- so this format has no `JOY=` line kind.
+//
+// M41-S1 (docs/m41-production-qa-plan.md §5.1) adds an ADDITIVE second line
+// kind, `JOY=`, so the same deterministic script format can inject joystick
+// direction/trigger state for the A/B production-QA suite's STICK/STRIG
+// scenarios:
+//   T=<tstate-dec> JOY=<port> <UP|DOWN|LEFT|RIGHT|A|B> DOWN
+//   T=<tstate-dec> JOY=<port> <UP|DOWN|LEFT|RIGHT|A|B> UP
+// where <port> is 1 or 2 (mapped to peripherals::JoystickPorts index port-1)
+// and the trailing DOWN/UP is the press-state (DOWN = pressed). The KEY= line
+// kind and its parse/serialize output are byte-identical to before -- a script
+// with no JOY= line behaves exactly as it did pre-M41 (hard regression guard,
+// input_script_unit_test.cpp). `A`/`B` name trigger A/B; `UP/DOWN/LEFT/RIGHT`
+// name the four directions.
 inline constexpr const char* kInputScriptFormatTag = "HBF1XV-INPUT-SCRIPT v1";
+
+// Discriminates the two line kinds. `Key` is the default so a value-initialized
+// or aggregate-initialized {tstate, key_name, pressed} event (the pre-M41
+// construction form used by existing tests) is a keyboard event unchanged.
+enum class InputEventKind : std::uint8_t { Key, Joy };
+
+// The six joystick controls a JOY= line can name. `A`/`B` are trigger A/B;
+// the other four are directions. Maps 1:1 onto peripherals::JoystickPorts::
+// PortState's fields in InputScriptPlayer::apply_due().
+enum class JoyControl : std::uint8_t { Up, Down, Left, Right, TriggerA, TriggerB };
 
 struct InputScriptEvent {
     std::uint64_t at_tstate = 0;
+    // KEY events only (empty for JOY events).
     std::string key_name;
+    // Shared press-state: DOWN = true, UP = false (both line kinds).
     bool pressed = false;
+    // M41-S1 additive fields; default (Key) keeps pre-M41 aggregate-init
+    // {tstate, key_name, pressed} events keyboard events.
+    InputEventKind kind = InputEventKind::Key;
+    // JOY events only: 1 or 2 (port index = joy_port - 1).
+    int joy_port = 0;
+    JoyControl joy_control = JoyControl::Up;
 };
 
 // Parses the format above. Throws std::runtime_error on any malformed input
@@ -78,6 +108,13 @@ class InputScriptPlayer {
 public:
     explicit InputScriptPlayer(std::vector<InputScriptEvent> events = {});
 
+    // M41-S1: optional joystick sink for JOY= events (default null). When null,
+    // JOY= events are applied as safe no-ops (the monotonic cursor still
+    // advances so no KEY= event is ever skipped) -- so the keyboard-only
+    // apply_due() path is byte-for-byte the pre-M41 behavior. Attaching a
+    // JoystickPorts lets apply_due() drive JoystickPorts::set_port() per event.
+    void attach_joystick(peripherals::JoystickPorts* joystick);
+
     void apply_due(std::uint64_t current_tstate, peripherals::KeyboardMatrix& keyboard);
 
     [[nodiscard]] std::size_t cursor() const { return cursor_; }
@@ -87,6 +124,10 @@ public:
 private:
     std::vector<InputScriptEvent> events_;
     std::size_t cursor_ = 0;
+    // M41-S1: optional joystick target + a shadow per-port PortState the JOY=
+    // events accumulate into (so setting LEFT does not clear a held trigger).
+    peripherals::JoystickPorts* joystick_ = nullptr;
+    std::array<peripherals::JoystickPorts::PortState, 2> joy_state_{};
 };
 
 }  // namespace sony_msx::machine
