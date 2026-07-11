@@ -29,13 +29,13 @@ struct KeyNameBinding {
 
 std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view name) {
     // Re-expression of src/frontend/sdl3_input_mapper.cpp's `kMap` array
-    // literal (71 entries, rows 0-8), re-keyed by the SDL_Scancode
+    // literal (72 entries, rows 0-8), re-keyed by the SDL_Scancode
     // enumerator's suffix string instead of the SDL_Scancode value. Every
     // (row, column) pair below was copied verbatim, in the same
     // order/grouping, from that file (never independently re-derived) --
     // see the header doc comment / R-M27-4. A dedicated SDL3-gated
     // cross-consistency test proves the two tables agree.
-    static const std::array<KeyNameBinding, 71> kMap{{
+    static const std::array<KeyNameBinding, 72> kMap{{
         // Row 0: digits 0-7
         {"0", 0, 0},
         {"1", 0, 1},
@@ -54,8 +54,9 @@ std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view na
         {"LEFTBRACKET", 1, 5},
         {"RIGHTBRACKET", 1, 6},
         {"SEMICOLON", 1, 7},
-        // Row 2: (":" col0 intentionally unmapped, mirrors scancode_map()'s
-        // own disclosed omission) ' , . / ` A B
+        // Row 2: ":"/"*" (col0, mapped to Right-Ctrl -> "RCTRL", mirrors
+        // scancode_map()'s SDL_SCANCODE_RCTRL binding) ' , . / ` A B
+        {"RCTRL", 2, 0},
         {"APOSTROPHE", 2, 1},
         {"COMMA", 2, 2},
         {"PERIOD", 2, 3},

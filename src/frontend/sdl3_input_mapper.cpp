@@ -17,15 +17,16 @@
 
 namespace sony_msx::frontend {
 
-const std::array<ScancodeBinding, 71>& Sdl3InputMapper::scancode_map() {
+const std::array<ScancodeBinding, 72>& Sdl3InputMapper::scancode_map() {
     // Standard MSX international 11x8 keyboard matrix, rows 0-8 (see the
     // header doc comment for the row8/SPACE cross-check against
-    // peripherals::RenshaTurbo's M25 fact). Row 2 column 0 (":") is
-    // intentionally left unmapped -- no dedicated physical PC scancode
-    // exists for a bare colon key (it's a SHIFT combination on a standard
-    // PC keyboard, not a distinct physical key), so it's honestly omitted
-    // rather than guessed.
-    static const std::array<ScancodeBinding, 71> kMap{{
+    // peripherals::RenshaTurbo's M25 fact). Row 2 column 0 is the MSX
+    // ":"/"*" key; no PC key carries that legend, so it's bound to
+    // Right-Ctrl (SDL_SCANCODE_RCTRL) -- a physical key free of any host
+    // hotkey (unlike Right-Alt, which collides with the Alt+Enter/Alt+D
+    // hotkeys). Result: Right-Ctrl -> ":", Shift+Right-Ctrl -> "*", making
+    // the key typeable on a compact PC keyboard with no numeric keypad.
+    static const std::array<ScancodeBinding, 72> kMap{{
         // Row 0: digits 0-7
         {SDL_SCANCODE_0, 0, 0},
         {SDL_SCANCODE_1, 0, 1},
@@ -44,7 +45,8 @@ const std::array<ScancodeBinding, 71>& Sdl3InputMapper::scancode_map() {
         {SDL_SCANCODE_LEFTBRACKET, 1, 5},
         {SDL_SCANCODE_RIGHTBRACKET, 1, 6},
         {SDL_SCANCODE_SEMICOLON, 1, 7},
-        // Row 2: (":" col0 unmapped) ' , . / ` A B
+        // Row 2: ":"/"*" (col0, now mapped to Right-Ctrl) ' , . / ` A B
+        {SDL_SCANCODE_RCTRL, 2, 0},
         {SDL_SCANCODE_APOSTROPHE, 2, 1},
         {SDL_SCANCODE_COMMA, 2, 2},
         {SDL_SCANCODE_PERIOD, 2, 3},

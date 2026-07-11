@@ -86,7 +86,7 @@ public:
     // both production code and the exhaustive M26-S6 ctest (`SDL_PushEvent`-
     // injected, one case per entry) share the SAME single source of truth --
     // never duplicated/hand-copied between the two.
-    static const std::array<ScancodeBinding, 71>& scancode_map();
+    static const std::array<ScancodeBinding, 72>& scancode_map();
 
     // Looks up one scancode in scancode_map(); std::nullopt for anything not
     // present (the regression-guard case: zero observable matrix effect).

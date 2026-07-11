@@ -28,8 +28,9 @@ namespace sony_msx::peripherals {
 // rows 0-8 only (the same numeric-keypad-rows-9-10-excluded boundary that
 // table already established, `sdl3_input_mapper.h:33-34`, inherited here for
 // consistency, never silently extended, per docs/m27-planner-package.md
-// §1.2). Row 2 column 0 (":") is likewise left unmapped, for the same reason
-// `scancode_map()` omits it (no dedicated physical PC key).
+// §1.2). Row 2 column 0 (the MSX ":"/"*" key) is bound to "RCTRL", mirroring
+// `scancode_map()`'s SDL_SCANCODE_RCTRL binding (Right-Ctrl -> ":",
+// Shift+Right-Ctrl -> "*").
 //
 // Names are the literal `SDL_Scancode` enumerator suffix for every entry
 // with a direct SDL3 counterpart (e.g. "MINUS" <-> SDL_SCANCODE_MINUS,
