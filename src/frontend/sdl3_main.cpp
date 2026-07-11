@@ -30,7 +30,14 @@ void print_usage(const char* argv0) {
                  " [--event-log <name>] [--input-script <path>] [--snapshot <dir>]"
                  " [--fmpac-sram <path>] [--no-fmpac-sram]"
                  " [--speed <0..7>] [--scale <1..8>] [--filter <nearest|linear>] [--fullscreen]\n"
-                 " [--capture <on|off>] [--fast-disk]\n"
+                 " [--capture <on|off>] [--fast-disk] [--ram <64|128|256|512>]\n"
+                 "\n"
+                 "--ram <64|128|256|512> sets the main-RAM size in KB (default 64 = the stock\n"
+                 "HB-F1XV spec, byte-identical to omitting the flag). 128/256/512 are OPT-IN,\n"
+                 "NON-STOCK 'fully-populated S1985' mods for loading larger games; 512 KB is the\n"
+                 "internal ceiling (the S1985 5-bit mapper read-back = 32 x 16 KB) -- more than\n"
+                 "512 KB would require an external RAM-expansion cartridge. Any other value is a\n"
+                 "parse error.\n"
                  "\n"
                  "--fast-disk (opt-in; default off) collapses the WD2793/floppy timing so disk\n"
                  "loads are near-instant -- a quality-of-life turbo. The DEFAULT (accurate) FDC\n"
@@ -131,6 +138,11 @@ int main(int argc, char** argv) {
     config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
                                 ? SDL_SCALEMODE_NEAREST
                                 : SDL_SCALEMODE_LINEAR;
+    // M42 (DEC-0061): --ram <64|128|256|512> main-RAM size. Absent -> keep the
+    // Sdl3AppConfig default (stock 64 KB). Present -> KB * 1024 bytes.
+    if (parsed.ram_kb.has_value()) {
+        config.ram_bytes = static_cast<std::size_t>(*parsed.ram_kb) * 1024u;
+    }
     // --scale N -> 320N x 240N window; absent keeps the default 960x720 (= scale 3,
     // M37 Slice F / DEC-0057; the default lives in Sdl3AppConfig).
     if (parsed.scale.has_value()) {

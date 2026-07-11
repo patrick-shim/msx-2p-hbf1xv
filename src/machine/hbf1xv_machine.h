@@ -71,7 +71,16 @@ namespace sony_msx::machine {
 
 class Hbf1xvMachine {
 public:
-    Hbf1xvMachine();
+    // M42 (DEC-0061): the main-RAM (DRAM) size is configurable. The DEFAULT is
+    // the strict target-spec 64 KB (kDramBytes) -- every existing/default
+    // construction is byte-identical to before. The opt-in NON-STOCK `--ram`
+    // sizes 128/256/512 KB (a fully-populated S1985; 512 KB = the 5-bit
+    // mapper-read-back ceiling) allocate a larger dram_ and, through the
+    // size-agnostic MemoryMapperRam, expose 8/16/32 mapper segments. `dram_bytes`
+    // MUST be a positive multiple of MemoryMapperRam::kSegmentBytes whose segment
+    // count is a power of two; the CLI enforces the {64,128,256,512}KB enum, and
+    // MemoryMapperRam asserts the power-of-two invariant defensively.
+    explicit Hbf1xvMachine(std::size_t dram_bytes = kDramBytes);
 
     void cold_boot();
 
@@ -184,6 +193,12 @@ public:
     // ports #98/#99 (+ the S1985 #9C/#9D mirror). Its store + authoritative
     // size now live in devices::video::VdpVram (VdpVram::kVramBytes); access
     // via vdp().vram().
+    //
+    // M42 (DEC-0061): kDramBytes is the STOCK-spec DEFAULT DRAM size (the strict
+    // 64 KB) and the constructor's default argument -- NOT a hard cap. The actual
+    // dram_ region is allocated at the constructor-supplied size (64/128/256/512
+    // KB), and dram_size() reports dram_.size(), so the debug dumps / snapshot /
+    // RAM-search all follow the fitted size automatically.
     static constexpr std::size_t kDramBytes = 64 * 1024;
 
     [[nodiscard]] std::size_t dram_size() const;

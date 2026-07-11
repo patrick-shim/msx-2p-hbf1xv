@@ -37,7 +37,12 @@ namespace {
 constexpr std::uint64_t kFrameCycles = 228 * 262;
 }  // namespace
 
-Sdl3App::Sdl3App(Sdl3AppConfig config) : config_(std::move(config)) {}
+// M42 (DEC-0061): size the machine's main RAM from config_.ram_bytes. config_ is
+// declared BEFORE machine_ (member init order), so config_ is fully constructed
+// (with the moved-in value) when machine_ reads it. Default ram_bytes == stock
+// 64 KB, so a default config yields a byte-identical machine.
+Sdl3App::Sdl3App(Sdl3AppConfig config)
+    : config_(std::move(config)), machine_(config_.ram_bytes) {}
 
 Sdl3App::~Sdl3App() {
     shutdown();

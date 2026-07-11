@@ -80,7 +80,12 @@ resizable and the picture stays aspect-correct letterboxed at any size),
 `--filter <nearest|linear>` (texture scaling filter, default `linear`), `--fullscreen`
 (Alt+Enter toggles at runtime), `--capture <on|off>` (default `off`; gates the F10 live
 capture hotkey so a mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are
-unaffected), `--stream-light`, `--help`. A `--cartN-type` of `auto` (or omitted) triggers
+unaffected), `--stream-light`,
+`--ram <64|128|256|512>` (main-RAM size in KB; default `64` = the stock HB-F1XV spec,
+byte-identical to omitting it — `128`/`256`/`512` are opt-in **non-stock** "fully-populated
+S1985" mods for larger games, `512` KB being the internal ceiling of the S1985 5-bit mapper
+read-back; beyond 512 KB needs an external RAM-expansion cartridge),
+`--help`. A `--cartN-type` of `auto` (or omitted) triggers
 auto-identification; an explicit type is honored byte-for-byte.
 
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
@@ -95,7 +100,8 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.d
 `--event-log`, `--input-script`, `--frames <N>`, `--dump-frame <name>`, `--disk-writable`,
 `--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
 and `--stream-light`. The plain (no-subcommand) boot mode additionally accepts
-`--speed <0..7>`. Other single-purpose modes each print their own usage.
+`--speed <0..7>` and `--ram <64|128|256|512>` (default `64`; the same stock/non-stock
+policy as the SDL3 frontend). Other single-purpose modes each print their own usage.
 
 ## Repository layout
 

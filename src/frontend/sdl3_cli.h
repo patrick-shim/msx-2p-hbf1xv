@@ -129,6 +129,14 @@ struct ParsedSdl3Cli {
     // untouched. --stream-light/--snapshot still parse and configure capture
     // behavior, but only take effect once F10 is enabled+triggered.
     bool capture_enabled = false;
+    // M42 (DEC-0061): --ram <64|128|256|512> main-RAM size in KB. Validated
+    // against the {64,128,256,512} enum via parse_ram_kb() below (any other value
+    // -- non-numeric, 0, 96, 1024 -- is a loud parse error, mirroring the
+    // --max-frames/--speed policy). std::nullopt (default) means the stock 64 KB
+    // spec RAM (byte-identical to before); 128/256/512 are opt-in NON-STOCK
+    // "fully-populated S1985" mods. sdl3_main.cpp maps the value to the machine's
+    // DRAM byte count (kb * 1024).
+    std::optional<int> ram_kb;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).
@@ -136,6 +144,16 @@ struct ParsedSdl3Cli {
 };
 
 [[nodiscard]] ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args);
+
+// M42 (DEC-0061): shared `--ram` value validator, so the {64,128,256,512}KB
+// enum policy has ONE implementation consumed by BOTH parse_sdl3_cli() (above)
+// and src/main.cpp's headless boot path (--ram parity, headless + SDL3). On
+// success sets `out_kb` (one of 64/128/256/512) and returns true; on a
+// non-integer or non-enum value it appends a diagnostic (prefixed with
+// `context`, e.g. "sdl3_cli" or "main") to `errors` and returns false. No SDL3
+// dependency -- headlessly unit-testable (mirrors parse_speed_level).
+[[nodiscard]] bool parse_ram_kb(const std::string& value, int& out_kb, std::vector<std::string>& errors,
+                                const char* context);
 
 // M37 Slice D (DEC-0056): shared `--speed` value validator, so the range
 // policy [0, Mb670836PauseController::kMaxSpeedLevel] has ONE implementation

@@ -15,6 +15,7 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -167,6 +168,12 @@ struct Sdl3AppConfig {
     // (references/sdl3/include/SDL3/SDL_render.h:1260), the "smooth" look,
     // byte-identical to before; SDL_SCALEMODE_NEAREST = crisp pixels.
     SDL_ScaleMode texture_filter = SDL_SCALEMODE_LINEAR;
+
+    // M42 (DEC-0061): main-RAM (DRAM) size in BYTES passed to the Hbf1xvMachine
+    // constructor. Default = the strict stock 64 KB spec (byte-identical to
+    // before). --ram 128/256/512 (opt-in, NON-STOCK) set 128/256/512 KB here;
+    // sdl3_main.cpp maps the parsed KB enum to this byte count (kb * 1024).
+    std::size_t ram_bytes = 64u * 1024u;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real

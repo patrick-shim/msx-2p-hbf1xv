@@ -13,6 +13,8 @@
 
 #include "devices/memory/memory_mapper_ram.h"
 
+#include <cassert>
+
 namespace sony_msx::devices::memory {
 
 namespace {
@@ -22,25 +24,37 @@ constexpr int page_of(const core::BusAddress address) {
 }  // namespace
 
 MemoryMapperRam::MemoryMapperRam(machine::MemoryRegion& ram, const chipset::MapperIo& mapper_io)
-    : ram_(ram), mapper_io_(mapper_io) {
+    : ram_(ram),
+      mapper_io_(mapper_io),
+      num_segments_(static_cast<int>(ram.size() / kSegmentBytes)) {
+    // M42/DEC-0061 defensive invariant: the fold `segment & (num_segments - 1)`
+    // is a correct power-of-two modulo ONLY when num_segments is a power of two.
+    // All four offered sizes satisfy this (64/128/256/512 KB -> 4/8/16/32); the
+    // CLI rejects any other value, so this asserts the contract the caller must
+    // uphold.
+    assert(num_segments_ > 0 && (num_segments_ & (num_segments_ - 1)) == 0 &&
+           "MemoryMapperRam requires a power-of-two segment count");
 }
 
-std::size_t MemoryMapperRam::physical_address(const std::uint8_t segment, const core::BusAddress address) {
-    // numSegments == 4 (power of two): openMSX's `segment & (numSegments - 1)`
-    // wrap reduces to `segment & 3` for every segment value
-    // (MSXMemoryMapperBase.cc:72-83).
-    const std::size_t folded = static_cast<std::size_t>(segment & (kSegments - 1));
+std::size_t MemoryMapperRam::physical_address(const std::uint8_t segment, const core::BusAddress address,
+                                              const int num_segments) {
+    // openMSX MSXMemoryMapperBase.cc:72-83 wraps the segment with
+    // `segment & (numSegments - 1)` (a power-of-two modulo), then adds the 14-bit
+    // in-segment offset. `& 3` at 64 KB (4 seg); the opt-in non-stock sizes use
+    // `& 7/15/31` (128/256/512 KB). At 512 KB the fold mask (0x1F) coincides with
+    // the S1985 5-bit read-back mask -- the exact internal ceiling.
+    const std::size_t folded = static_cast<std::size_t>(segment & (num_segments - 1));
     return folded * kSegmentBytes + (static_cast<std::size_t>(address) & 0x3FFF);
 }
 
 core::BusData MemoryMapperRam::mem_read(const core::BusAddress address) {
     const std::uint8_t segment = mapper_io_.segment(page_of(address));
-    return ram_.read(physical_address(segment, address));
+    return ram_.read(physical_address(segment, address, num_segments_));
 }
 
 void MemoryMapperRam::mem_write(const core::BusAddress address, const core::BusData value) {
     const std::uint8_t segment = mapper_io_.segment(page_of(address));
-    ram_.write(physical_address(segment, address), value);
+    ram_.write(physical_address(segment, address, num_segments_), value);
     // DEC-0052 stream-light watchlog hook (default-off): notify with the
     // CPU-VISIBLE address, never the folded physical offset. No-op unless an
     // observer is installed (only while a stream capture is armed).

@@ -56,6 +56,29 @@ bool parse_speed_level(const std::string& value, int& out_level, std::vector<std
     return true;
 }
 
+bool parse_ram_kb(const std::string& value, int& out_kb, std::vector<std::string>& errors,
+                  const char* context) {
+    int kb = 0;
+    const auto begin = value.data();
+    const auto end = value.data() + value.size();
+    const auto [ptr, ec] = std::from_chars(begin, end, kb);
+    if (ec != std::errc{} || ptr != end) {
+        errors.push_back(std::string(context) + ": --ram value is not a valid integer: '" + value + "'");
+        return false;
+    }
+    // DEC-0061 enum policy: ONLY {64,128,256,512}KB are offered (4/8/16/32 mapper
+    // segments -- all natively probeable within the S1985's 5-bit read-back;
+    // >512 KB would need an external RAM-expansion cartridge). Any other value is
+    // a loud parse error, NOT a silent clamp (mirrors --speed/--max-frames).
+    if (kb != 64 && kb != 128 && kb != 256 && kb != 512) {
+        errors.push_back(std::string(context) +
+                         ": --ram value must be one of 64|128|256|512 (KB): '" + value + "'");
+        return false;
+    }
+    out_kb = kb;
+    return true;
+}
+
 ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
     ParsedSdl3Cli parsed;
 
@@ -174,6 +197,16 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 } else {
                     parsed.errors.push_back("sdl3_cli: --filter value must be 'nearest' or 'linear': '" +
                                             *value + "'");
+                }
+            }
+        } else if (arg == "--ram") {
+            // M42 (DEC-0061): main-RAM size in KB, enum {64,128,256,512}. Absent
+            // -> nullopt -> stock 64 KB. Shared validator = one policy across exes.
+            if (auto value = take_value(args, i, "--ram", parsed.errors)) {
+                ++i;
+                int kb = 0;
+                if (parse_ram_kb(*value, kb, parsed.errors, "sdl3_cli")) {
+                    parsed.ram_kb = kb;
                 }
             }
         } else if (arg == "--fullscreen") {

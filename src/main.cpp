@@ -1620,7 +1620,44 @@ int main(int argc, char** argv) {
         return run_parity_trace(bin_path, base, max_steps, out_path, args, halt_idle_extra_steps);
     }
 
-    sony_msx::machine::Hbf1xvMachine machine;
+    // M42 (DEC-0061): optional --ram <64|128|256|512> main-RAM size (KB) --
+    // headless parity with the SDL3 frontend's --ram. Parsed BEFORE the machine
+    // is constructed (its DRAM is sized at construction). Absent -> the stock
+    // 64 KB spec (kDramBytes), byte-identical to before. Uses the SHARED
+    // parse_ram_kb validator (ONE {64,128,256,512} enum policy across both exes);
+    // an out-of-range/non-numeric/missing value is a loud parse error + non-zero
+    // exit (mirrors the --speed policy below). 128/256/512 are opt-in NON-STOCK
+    // "fully-populated S1985" sizes; 512 KB is the internal ceiling.
+    std::size_t ram_bytes = sony_msx::machine::Hbf1xvMachine::kDramBytes;
+    {
+        std::vector<std::string> ram_errors;
+        std::optional<int> ram_kb;
+        for (std::size_t i = 0; i < args.size(); ++i) {
+            if (args[i] != "--ram") {
+                continue;
+            }
+            if (i + 1 >= args.size()) {
+                ram_errors.push_back("main: --ram requires a value argument");
+                break;
+            }
+            int kb = 0;
+            if (sony_msx::frontend::parse_ram_kb(args[i + 1], kb, ram_errors, "main")) {
+                ram_kb = kb;
+            }
+            ++i;
+        }
+        for (const std::string& err : ram_errors) {
+            std::cerr << err << "\n";
+        }
+        if (!ram_errors.empty()) {
+            return 2;
+        }
+        if (ram_kb.has_value()) {
+            ram_bytes = static_cast<std::size_t>(*ram_kb) * 1024u;
+        }
+    }
+
+    sony_msx::machine::Hbf1xvMachine machine(ram_bytes);
     machine.cold_boot();
     if (const int rc = load_cartridges_from_args(machine, args); rc != 0) {
         return rc;

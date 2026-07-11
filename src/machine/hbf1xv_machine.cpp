@@ -41,7 +41,12 @@ void Hbf1xvMachine::CpuIrqAdapter::set_irq(const bool asserted) {
     }
 }
 
-Hbf1xvMachine::Hbf1xvMachine() : cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
+Hbf1xvMachine::Hbf1xvMachine(const std::size_t dram_bytes)
+    : dram_(dram_bytes), cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
+    // M42 (DEC-0061): dram_ is sized from the constructor argument (default
+    // kDramBytes == stock 64 KB, so every default construction is byte-identical).
+    // ram_mapper_ derives its segment count from dram_.size() -- it is declared
+    // after dram_, so dram_ is already sized when the mapper reads it.
     wire_bus();
 }
 
@@ -426,8 +431,11 @@ void Hbf1xvMachine::initialize_dram_pattern() {
     //   (chr(0)+chr(255))*128 + (chr(255)+chr(0))*128  -> a 512-byte pattern:
     //   bytes 0..255   alternate 00,FF (even index 00, odd FF)
     //   bytes 256..511 alternate FF,00 (even index FF, odd 00)
-    // openMSX repeats this pattern over the whole 64 KB (Ram::clear, Ram.cc:66-73).
-    for (std::size_t i = 0; i < kDramBytes; ++i) {
+    // openMSX repeats this pattern over the whole RAM region (Ram::clear,
+    // Ram.cc:66-73). M42 (DEC-0061): iterate over dram_.size() (the fitted size,
+    // 64/128/256/512 KB), not the kDramBytes default -- so a larger --ram region
+    // is fully pattern-filled; at the default 64 KB this is byte-identical.
+    for (std::size_t i = 0; i < dram_.size(); ++i) {
         const std::size_t p = i & 0x1FFu;  // position within the 512-byte pattern
         std::uint8_t value;
         if (p < 256) {
