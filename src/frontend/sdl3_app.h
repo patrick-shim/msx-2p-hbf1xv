@@ -57,6 +57,11 @@ struct Sdl3AppConfig {
     // read-only unless the user opts in, with a writable data disk as the
     // save target.
     bool disk_writable = false;
+    // Fast-disk (FDC turbo) QoL mode (--fast-disk / Alt+D). Default false = 100%
+    // cycle-accurate FDC timing (byte-identical to before). When true, init()
+    // calls machine_.set_fast_disk(true) after cold_boot() so disk loads finish
+    // near-instantly; Alt+D toggles it live in poll_and_dispatch_events().
+    bool fast_disk = false;
     // M37 Slice F: default window is now scale 3 = 320x3 x 240x3 = 960x720
     // (was 640x480/scale 2 through Slice E) so the out-of-box window is
     // comfortably sized without passing --scale. --scale N still overrides

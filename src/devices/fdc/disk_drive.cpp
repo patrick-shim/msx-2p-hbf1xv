@@ -89,6 +89,15 @@ std::uint64_t DiskDrive::cycles_until_index_pulse(const std::uint64_t now) const
 
 std::uint64_t DiskDrive::cycles_until_sector_id(const std::uint32_t sector_index,
                                                 const std::uint64_t now) const {
+    // Fast-disk (turbo) mode: collapse the rotational latency -- the dominant
+    // disk-load cost (up to a full ~715909-cycle revolution per sector) -- to
+    // zero, treating the requested sector as already under the head. The read
+    // still incurs the small (fast) intra-sector header span the WD2793 adds on
+    // top, so the first-DRQ deadline stays non-zero and the DRQ handshake valid.
+    // Default-off path below is byte-identical to before.
+    if (fast_disk_) {
+        return 0;
+    }
     // Evenly-spaced sequential model (see header): sector k's ID mark sits at
     // angle k/9 of the rotation, computed as k*P/9 (not k*(P/9)) so integer
     // rounding is spread across the 9 slots instead of accumulating. sector_index

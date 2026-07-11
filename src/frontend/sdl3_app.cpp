@@ -239,6 +239,13 @@ bool Sdl3App::init() {
         machine_.pause_controller().set_speed_level(*config_.speed_level);
     }
 
+    // Fast-disk (FDC turbo) launch state. Applied AFTER cold_boot(); the FDC/
+    // drive device reset() deliberately does NOT clear the fast flag, but we set
+    // it here (mirroring the speed-level ordering) so a re-cold_boot mid-session
+    // is robust. Default false => byte-identical accurate FDC timing. Alt+D
+    // flips it live below.
+    machine_.set_fast_disk(config_.fast_disk);
+
     if (!load_configured_assets()) {
         shutdown();
         return false;
@@ -368,6 +375,24 @@ void Sdl3App::poll_and_dispatch_events() {
             (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
             fullscreen_ = !fullscreen_;
             SDL_SetWindowFullscreen(window_, fullscreen_);
+            continue;
+        }
+        // Alt+D toggles fast-disk (FDC turbo) live (fresh key-down only, not a
+        // repeat). Consumed HERE as a HOST hotkey; never dispatched to
+        // input_mapper_ -- 'D' is an MSX matrix key, so it must not leak into the
+        // emulated keyboard (mirrors the Alt+Enter / F10-F12 discipline). Alt+D
+        // is free: F1-F5 are the emulated MSX function keys and F6-F12 + Alt+Enter
+        // are already host-bound, so a modifier combo on a letter key is used
+        // (chosen to avoid any collision with an existing host hotkey). The
+        // standalone Alt keydown still reaches the matrix exactly as it does for
+        // Alt+Enter -- only the 'D' keydown is swallowed. Mod mask SDL_KMOD_ALT
+        // (either Alt) per references/sdl3/include/SDL3/SDL_keycode.h:344.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_D &&
+            (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
+            const bool on = !machine_.fast_disk();
+            machine_.set_fast_disk(on);
+            std::cerr << "sdl3: fast-disk (FDC turbo) " << (on ? "ENABLED" : "disabled")
+                      << " (Alt+D); default is accurate FDC timing\n";
             continue;
         }
         input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),

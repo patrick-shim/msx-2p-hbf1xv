@@ -100,8 +100,34 @@ public:
     // (re)activated -- see start_type1/end_command.
     static constexpr std::uint64_t kHldIdleCycles = 3 * kSystemClockHz;
 
+    // Fast-disk (turbo) timing -- an OPT-IN quality-of-life mode (default OFF).
+    // When fast_disk_ is set, every read/seek WAIT above collapses to these tiny
+    // values so disk loads finish near-instantly, while default-off timing stays
+    // 100% cycle-accurate (byte-identical to now). These are deliberately kept
+    // NON-ZERO so the Busy/DRQ FSM handshake and the status-poll ordering stay
+    // valid: a poll loop still observes Busy->clear and !DRQ->DRQ transitions.
+    // The per-byte cadence is small enough that the DRQ deadline never runs
+    // ahead of a real-speed CPU disk loop, so the loop is never stalled; the
+    // Lost-Data catch-up path is additionally suppressed in fast mode (a faster-
+    // than-real disk would otherwise "outrun" the CPU and spuriously declare
+    // lost data -- see read_data/write_data). Rotational latency (the dominant
+    // cost) collapses in DiskDrive::cycles_until_sector_id under its own flag;
+    // the index-pulse rotation model itself (Type IV i2 timing) is left intact.
+    static constexpr std::uint64_t kFastCyclesPerByte = 8;
+    static constexpr std::uint64_t kFastStepCycles = 64;
+    static constexpr std::uint64_t kFastSettleCycles = 64;
+    static constexpr std::uint64_t kFastReadStartCycles = 2 * kFastCyclesPerByte;       // 16
+    static constexpr std::uint64_t kFastReadSectorHeaderCycles = 4 * kFastCyclesPerByte;  // 32
+
     void attach_clock_source(FdcClockSource* source) { clock_ = source; }
     void attach_drive(DiskDrive* drive) { drive_ = drive; }
+
+    // Fast-disk (turbo) mode toggle. Default OFF => byte-identical accurate FDC
+    // timing. Runtime-settable (CLI --fast-disk / SDL3 Alt+D). Deliberately NOT
+    // cleared by reset() (a config toggle like clock_/drive_/observer), so a
+    // cold_boot mid-session preserves it.
+    void set_fast_disk(bool on) { fast_disk_ = on; }
+    [[nodiscard]] bool fast_disk() const { return fast_disk_; }
 
     // DEC-0052 stream-capture: install (non-null) / remove (nullptr) the
     // non-perturbing sector-read observer. Default null => zero behaviour change;
@@ -197,6 +223,26 @@ private:
     void sync(std::uint64_t t);
     void end_command(std::uint64_t t);
 
+    // Effective timing selectors: the accurate constants by default, the
+    // collapsed kFast* values in fast-disk mode. ONE decision point per knob so
+    // default-off stays byte-identical (fast_disk_==false returns the exact
+    // pre-change constant).
+    [[nodiscard]] std::uint64_t cycles_per_byte() const {
+        return fast_disk_ ? kFastCyclesPerByte : kCyclesPerByte;
+    }
+    [[nodiscard]] std::uint64_t read_start_cycles() const {
+        return fast_disk_ ? kFastReadStartCycles : kReadStartCycles;
+    }
+    [[nodiscard]] std::uint64_t read_sector_header_cycles() const {
+        return fast_disk_ ? kFastReadSectorHeaderCycles : kReadSectorHeaderCycles;
+    }
+    [[nodiscard]] std::uint64_t step_cycles(std::uint8_t cmd) const {
+        return fast_disk_ ? kFastStepCycles : kStepCycles[cmd & 0x03];
+    }
+    [[nodiscard]] std::uint64_t settle_cycles() const {
+        return fast_disk_ ? kFastSettleCycles : kSettleCycles;
+    }
+
     void start_type1(std::uint8_t cmd, std::uint64_t t);
     void start_type2(std::uint8_t cmd, std::uint64_t t);
     void start_type3(std::uint8_t cmd, std::uint64_t t);
@@ -216,6 +262,9 @@ private:
 
     FdcClockSource* clock_ = nullptr;
     DiskDrive* drive_ = nullptr;
+    // Fast-disk (turbo) mode. Default false => accurate timing (byte-identical).
+    // Not touched by reset() (see set_fast_disk).
+    bool fast_disk_ = false;
     // DEC-0052 stream-capture sink (default null => never notified). Externally
     // owned; see set_sector_read_observer.
     FdcSectorReadObserver* sector_read_observer_ = nullptr;

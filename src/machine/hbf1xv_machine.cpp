@@ -1003,6 +1003,21 @@ devices::fdc::DiskImage& Hbf1xvMachine::disk_image() {
     return disk_image_;
 }
 
+void Hbf1xvMachine::set_fast_disk(const bool on) {
+    // Propagate the turbo toggle to BOTH devices that own disk timing: the
+    // WD2793 (per-byte DRQ cadence, first-DRQ header/start, step + settle) and
+    // the DiskDrive (rotational latency). Keeping them in lockstep is the whole
+    // contract -- one without the other would half-collapse the load.
+    fdc_.set_fast_disk(on);
+    disk_drive_.set_fast_disk(on);
+}
+
+bool Hbf1xvMachine::fast_disk() const {
+    // Single source of truth is the WD2793 flag; the drive is always set in
+    // lockstep by set_fast_disk() above.
+    return fdc_.fast_disk();
+}
+
 devices::cartridge::CartridgeLoadResult Hbf1xvMachine::load_cartridge(
     const int slot_number, const devices::cartridge::CartridgeMapperType type, std::vector<std::uint8_t> image) {
     devices::cartridge::CartridgeLoadResult result =

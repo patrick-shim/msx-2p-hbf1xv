@@ -186,7 +186,13 @@ std::uint8_t Wd2793::read_data() {
     if (reading && transfer_drq(t)) {
         // Catch up any DRQ windows the CPU missed: the disk byte is consumed but
         // the CPU never received it -> Lost Data (WD2793.cc:261-267; fact-sheet §8).
-        while (data_available_ > 1 && t >= drq_deadline_ + kCyclesPerByte) {
+        // Suppressed in fast-disk mode: a turbo disk deliberately runs faster than
+        // real, so a real-speed CPU loop would always be "late" -- honouring the
+        // catch-up would skip (drop) bytes and corrupt the transfer. In fast mode
+        // the model instead gates the stream on CPU reads (the DRQ deadline only
+        // advances kFastCyclesPerByte per byte and never runs ahead), so bytes are
+        // delivered SEQUENTIALLY with no loss -- data integrity preserved.
+        while (!fast_disk_ && data_available_ > 1 && t >= drq_deadline_ + kCyclesPerByte) {
             status_ |= kLostData;
             ++data_index_;
             --data_available_;
@@ -195,7 +201,7 @@ std::uint8_t Wd2793::read_data() {
         const bool counting_read_sector = (phase_ == Phase::ReadSector);
         data_reg_ = buffer_[static_cast<std::size_t>(data_index_++)];
         --data_available_;
-        drq_deadline_ += kCyclesPerByte;
+        drq_deadline_ += cycles_per_byte();
         if (counting_read_sector) {
             ++read_sector_bytes_transferred_;
         }
@@ -260,7 +266,12 @@ void Wd2793::write_data(const std::uint8_t value) {
     sync(t);
     data_reg_ = value;
     if (phase_ == Phase::WriteSector && transfer_drq(t)) {
-        while (data_available_ > 1 && t >= drq_deadline_ + kCyclesPerByte) {
+        // Suppressed in fast-disk mode for the same reason as the read path: a
+        // turbo disk outruns a real-speed CPU, so honouring the missed-DRQ path
+        // would substitute 0x00 for genuine bytes and corrupt the write. Fast
+        // mode gates on CPU writes instead (small deadline advance), preserving
+        // every streamed byte.
+        while (!fast_disk_ && data_available_ > 1 && t >= drq_deadline_ + kCyclesPerByte) {
             // Missed DRQ on write: a 0x00 byte is substituted, command continues
             // (WD2793.cc:751-757; fact-sheet §8 "Lost Data ... read vs write").
             status_ |= kLostData;
@@ -270,14 +281,14 @@ void Wd2793::write_data(const std::uint8_t value) {
         }
         buffer_[static_cast<std::size_t>(data_index_++)] = value;
         --data_available_;
-        drq_deadline_ += kCyclesPerByte;
+        drq_deadline_ += cycles_per_byte();
         if (data_available_ == 0) {
             finish_write_sector(t);
         }
     } else if (phase_ == Phase::WriteTrack && transfer_drq(t)) {
         parse_write_track_byte(value);
         --data_available_;
-        drq_deadline_ += kCyclesPerByte;
+        drq_deadline_ += cycles_per_byte();
         if (data_available_ == 0) {
             end_command(t);
         }
@@ -374,9 +385,9 @@ void Wd2793::start_type1(const std::uint8_t cmd, const std::uint64_t t) {
         }
     }
 
-    const std::uint64_t step_rate = kStepCycles[cmd & 0x03];
+    const std::uint64_t step_rate = step_cycles(cmd);
     busy_until_ = t + static_cast<std::uint64_t>(steps) * step_rate +
-                  ((cmd & kVFlag) ? kSettleCycles : 0);
+                  ((cmd & kVFlag) ? settle_cycles() : 0);
 }
 
 void Wd2793::start_type2(const std::uint8_t cmd, const std::uint64_t t) {
@@ -448,7 +459,7 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
     // Inter-byte cadence (kCyclesPerByte) is unchanged -- only the FIRST DRQ
     // moves.
     const std::uint64_t rotational_wait = drive_->cycles_until_sector_id(sector_reg_ - 1u, t);
-    drq_deadline_ = t + rotational_wait + kReadSectorHeaderCycles;
+    drq_deadline_ = t + rotational_wait + read_sector_header_cycles();
     phase_ = Phase::ReadSector;
     status_ |= kBusy;
 }
@@ -458,7 +469,7 @@ void Wd2793::begin_write_sector(const std::uint64_t t) {
     buffer_.assign(DiskImage::kSectorSize, 0);
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
-    drq_deadline_ = t + kReadStartCycles;
+    drq_deadline_ = t + read_start_cycles();
     phase_ = Phase::WriteSector;
     status_ |= kBusy;
 }
@@ -511,13 +522,13 @@ void Wd2793::start_type3(const std::uint8_t cmd, const std::uint64_t t) {
         build_read_address_buffer();
         data_index_ = 0;
         data_available_ = 6;
-        drq_deadline_ = t + kReadStartCycles;
+        drq_deadline_ = t + read_start_cycles();
         phase_ = Phase::ReadAddress;
     } else if (hi == 0xE0) {  // Read Track
         build_read_track_buffer();
         data_index_ = 0;
         data_available_ = static_cast<int>(buffer_.size());
-        drq_deadline_ = t + kReadStartCycles;
+        drq_deadline_ = t + read_start_cycles();
         phase_ = Phase::ReadTrack;
     } else {  // 0xF0 Write Track (format)
         if (drive_->write_protected()) {
@@ -531,7 +542,7 @@ void Wd2793::start_type3(const std::uint8_t cmd, const std::uint64_t t) {
         wt_data_.assign(DiskImage::kSectorSize, 0);
         data_index_ = 0;
         data_available_ = kStandardTrackLength;
-        drq_deadline_ = t + kReadStartCycles;
+        drq_deadline_ = t + read_start_cycles();
         phase_ = Phase::WriteTrack;
     }
     (void)cmd;

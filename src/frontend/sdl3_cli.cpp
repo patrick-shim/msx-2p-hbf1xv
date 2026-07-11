@@ -100,6 +100,8 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             parsed.border_enabled = false;
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
+        } else if (arg == "--fast-disk") {
+            parsed.fast_disk = true;  // opt-in FDC turbo; default off = accurate timing
         } else if (arg == "--stream-light") {
             parsed.stream_light = true;  // DEC-0052: F10 arms lightweight mode
         } else if (arg == "--fmpac-sram") {

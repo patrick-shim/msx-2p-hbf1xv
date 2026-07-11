@@ -285,6 +285,17 @@ public:
     [[nodiscard]] const devices::fdc::DiskImage& disk_image() const;
     devices::fdc::DiskImage& disk_image();
 
+    // Fast-disk (turbo) quality-of-life toggle -- an OPT-IN mode (default OFF)
+    // that collapses the WD2793/floppy read+seek timing waits so disk loads
+    // finish near-instantly, while default-off stays 100% cycle-accurate
+    // (byte-identical). Propagates to BOTH the WD2793 (per-byte cadence / first-
+    // DRQ / step / settle) and the DiskDrive (rotational latency), which each own
+    // their own delays. Runtime-settable (CLI --fast-disk / SDL3 Alt+D); mirrors
+    // the s1985()/pause_controller() toggle-wiring style. NOT a scope/behavior
+    // change to the accurate default -- purely additive on top of it.
+    void set_fast_disk(bool on);
+    [[nodiscard]] bool fast_disk() const;
+
     // External cartridge slots (M19, backlog B7). Primary slots 1 and 2 are
     // bare, unexpanded XML `<primary external="true">` bays (A-M19-1); each is
     // wired to ITS OWN CartridgeSlot device at all 4 CPU pages in wire_bus()

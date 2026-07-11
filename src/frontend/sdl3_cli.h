@@ -64,6 +64,11 @@ struct ParsedSdl3Cli {
     // Default OFF = in-memory-only (never clobbers a real .dsk); a dirty
     // writable image flushes on shutdown and before a swap discards it.
     bool disk_writable = false;
+    // Fast-disk (FDC turbo) QoL mode. --fast-disk OPTS IN to collapsed WD2793/
+    // floppy timing so disk loads finish near-instantly; DEFAULT OFF = 100%
+    // cycle-accurate FDC timing (byte-identical to before). Also toggleable live
+    // via Alt+D in the SDL3 window.
+    bool fast_disk = false;
     machine::ParsedCartridgeCli cartridges;
     // M27-S4/S7 additive debug/scripted-input flags (docs/m27-planner-
     // package.md §2.2/§2.4, items 1/3/4): `--dump-state`/`--trace-cpu`/

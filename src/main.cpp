@@ -739,6 +739,11 @@ struct DebugSessionOptions {
     // real .dsk). When set, each mounted disk gets its host path bound and a
     // dirty image is flushed at end-of-run (and before a scripted swap).
     bool disk_writable = false;
+    // Fast-disk (FDC turbo) QoL mode. --fast-disk OPTS IN to collapsed WD2793/
+    // floppy timing so disk loads finish near-instantly; default false = 100%
+    // cycle-accurate FDC timing (byte-for-byte the pre-change behavior). Applied
+    // once after cold_boot() via machine.set_fast_disk() -- see run_debug_session.
+    bool fast_disk = false;
     // M36 deterministic repro/testing enabler: swap to the next disk in the
     // repeatable --disk list at this frame (frame-loop mode only). Reuses
     // M35's multi-disk cache + swap semantics headlessly so a two-disk game
@@ -860,6 +865,8 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
             }
         } else if (arg == "--disk-writable") {
             opts.disk_writable = true;  // boolean flag, no value
+        } else if (arg == "--fast-disk") {
+            opts.fast_disk = true;  // opt-in FDC turbo (boolean flag); default off = accurate
         } else if (arg == "--swap-disk-frame") {
             if (auto v = take_debug_session_value(args, i, "--swap-disk-frame", errors)) {
                 opts.swap_disk_frame = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
@@ -961,6 +968,15 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     machine.cold_boot();
     for (const std::string& note : machine.rom_diagnostics()) {
         std::cerr << "debug-session: " << note << "\n";
+    }
+
+    // Fast-disk (FDC turbo) QoL mode. Applied AFTER cold_boot() (the FDC/drive
+    // reset() does not clear the flag, but set it here for robustness against a
+    // future re-cold_boot). Default false => byte-identical accurate FDC timing.
+    machine.set_fast_disk(opts.fast_disk);
+    if (opts.fast_disk) {
+        std::cerr << "debug-session: fast-disk (FDC turbo) ENABLED -- disk timing collapsed "
+                     "(accurate timing is the default)\n";
     }
 
     // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
@@ -1531,8 +1547,12 @@ int main(int argc, char** argv) {
                          " [--softwaredb <path>] [--debug-root <path>]"
                          " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
                          " [--input-script <path>] [--frames <N>] [--dump-frame <name>]"
-                         " [--disk-writable] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
+                         " [--disk-writable] [--fast-disk] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
                          " [--snapshot <dir>] [--snapshot-frame <N>]\n"
+                         "  --fast-disk (opt-in; default off) collapses the WD2793/floppy timing so\n"
+                         "  disk loads are near-instant -- a QoL turbo. Absent = 100% cycle-accurate\n"
+                         "  FDC timing (the default); fast-disk deviates from accurate timing and MAY\n"
+                         "  affect rare timing-sensitive/copy-protected disks.\n"
                          "  --snapshot <dir> writes a comprehensive per-component debug snapshot\n"
                          "  to <dir>/snapshot/<id>/ (default: once at end-of-run); --snapshot-frame\n"
                          "  <N> captures at that frame boundary in --frames mode instead.\n"

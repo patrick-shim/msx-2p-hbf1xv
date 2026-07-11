@@ -42,6 +42,17 @@ public:
 
     void reset();
 
+    // Fast-disk (turbo) mode toggle -- an OPT-IN QoL mode (default OFF). When
+    // set, cycles_until_sector_id() collapses the rotational latency (the single
+    // dominant disk-load cost, up to a full ~715909-cycle revolution per sector)
+    // to zero, so the requested sector is treated as already under the head. The
+    // index-pulse rotation model itself (index_pulse / cycles_until_index_pulse,
+    // which drive Type IV i2 timing) is LEFT INTACT -- only the read-path
+    // rotational wait collapses. Default OFF => byte-identical accurate timing;
+    // deliberately NOT cleared by reset() (a config toggle, mirrors Wd2793).
+    void set_fast_disk(bool on) { fast_disk_ = on; }
+    [[nodiscard]] bool fast_disk() const { return fast_disk_; }
+
     void attach_image(DiskImage* image) { image_ = image; }
     [[nodiscard]] DiskImage* image() const { return image_; }
 
@@ -144,6 +155,9 @@ private:
     bool motor_off_pending_ = false;
     std::uint64_t motor_off_deadline_ = 0;
     bool disk_changed_ = false;
+    // Fast-disk (turbo) mode. Default false => accurate rotational latency
+    // (byte-identical). Not touched by reset() (see set_fast_disk).
+    bool fast_disk_ = false;
 };
 
 }  // namespace sony_msx::devices::fdc

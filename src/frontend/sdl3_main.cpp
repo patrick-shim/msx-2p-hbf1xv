@@ -30,7 +30,13 @@ void print_usage(const char* argv0) {
                  " [--event-log <name>] [--input-script <path>] [--snapshot <dir>]"
                  " [--fmpac-sram <path>] [--no-fmpac-sram]"
                  " [--speed <0..7>] [--scale <1..8>] [--filter <nearest|linear>] [--fullscreen]\n"
-                 " [--capture <on|off>]\n"
+                 " [--capture <on|off>] [--fast-disk]\n"
+                 "\n"
+                 "--fast-disk (opt-in; default off) collapses the WD2793/floppy timing so disk\n"
+                 "loads are near-instant -- a quality-of-life turbo. The DEFAULT (accurate) FDC\n"
+                 "timing is preserved when the flag is absent; fast-disk DEVIATES from accurate\n"
+                 "FDC timing and MAY affect rare timing-sensitive or copy-protected disks, so it\n"
+                 "is opt-in only. Alt+D toggles it live in the window (logged to stderr).\n"
                  "\n"
                  "Video framing (default): the bare active display area is presented edge-to-edge\n"
                  "(the Sony-original look) -- the picture fills the window with no framing border.\n"
@@ -107,6 +113,7 @@ int main(int argc, char** argv) {
     config.hidden_window = parsed.hidden_window;
     config.border_enabled = parsed.border_enabled;
     config.disk_writable = parsed.disk_writable;  // M36-S-c
+    config.fast_disk = parsed.fast_disk;          // opt-in FDC turbo (Alt+D toggles live)
     config.dump_state_filename = parsed.dump_state_filename;
     config.trace_cpu_filename = parsed.trace_cpu_filename;
     config.event_log_filename = parsed.event_log_filename;
