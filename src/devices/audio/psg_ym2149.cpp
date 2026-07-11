@@ -46,7 +46,11 @@ void PsgYm2149::Envelope::reset() {
 }
 
 void PsgYm2149::Envelope::set_period(int value) {
-    // "twice as fast as AY8910" (AY8910.cc:369-374): period = max(1, 2*value).
+    // period = max(1, 2*value) (AY8910.cc:369-374). The 2x here is the
+    // RESOLUTION half of the YM2149 "twice as fast" model; the SPEED half is
+    // count += generator_steps*2 in advance(). BOTH are required together to
+    // yield the datasheet envelope rate f_E = f_clk/(256*EP). value==0 clamps to
+    // period 1 (the EP=0 edge case, handled by advance()'s doSteps parity).
     period = std::max(1, 2 * value);
     if (count >= period) {
         count = period - 1;
@@ -68,12 +72,15 @@ void PsgYm2149::Envelope::set_shape(unsigned shape) {
     holding = false;
 }
 
-void PsgYm2149::Envelope::do_step() {
-    // AY8910.cc:419-445 doSteps(1).
+void PsgYm2149::Envelope::do_steps(int steps) {
+    // AY8910.cc:419-445 doSteps(int): decrement `step` by `steps`, then apply the
+    // hold/alternate/wrap logic once on underflow. The wrap block is UNCHANGED
+    // from the prior single-step version (openMSX behaviour reference, never
+    // copied).
     if (holding) {
         return;
     }
-    step -= 1;
+    step -= steps;
     if (step < 0) {
         if (hold) {
             if (alternate) {
@@ -82,6 +89,7 @@ void PsgYm2149::Envelope::do_step() {
             holding = true;
             step = 0;
         } else {
+            // If step looped an odd number of times (usually 1), invert output.
             if (alternate && (step & 0x10)) {
                 attack ^= 0x1F;
             }
@@ -91,14 +99,21 @@ void PsgYm2149::Envelope::do_step() {
 }
 
 void PsgYm2149::Envelope::advance(int generator_steps) {
-    for (int i = 0; i < generator_steps; ++i) {
-        if (holding) {
-            return;
-        }
-        if (++count >= period) {
-            count = 0;
-            do_step();
-        }
+    // AY8910.cc:447-456. The YM2149 envelope clock runs TWICE as fast: each
+    // generator step advances `count` by TWO (count += duration*2, AY8910.cc:450)
+    // -- NOT one. Paired with period = 2*value (set_period), the net rate is one
+    // envelope step per `value` generator steps == the datasheet
+    // f_E = f_clk/(256*EP). The pre-fix `++count` (missing the *2) HALVED f_E
+    // (DEF-M41-PSGENV). EP=0 edge case (period==1): count+=2, steps = 2/1 = 2,
+    // do_steps(2) -- matching openMSX doNextEvent(period==1 ? 2 : 1) (AY8910.cc:461).
+    if (holding) {
+        return;
+    }
+    count += generator_steps * 2;           // AY8910.cc:450
+    if (count >= period) {
+        const int steps = count / period;   // AY8910.cc:452
+        count -= steps * period;            // AY8910.cc:453 (== count %= period)
+        do_steps(steps);                    // AY8910.cc:454
     }
 }
 
@@ -449,8 +464,11 @@ std::uint8_t PsgYm2149::envelope_volume() const {
 }
 
 void PsgYm2149::debug_step_envelope(const int steps) {
+    // Drive the shape logic one step at a time (do_steps(1) per call), bypassing
+    // the period/count clock divider -- exercises the waveform independent of the
+    // envelope rate.
     for (int i = 0; i < steps; ++i) {
-        envelope_.do_step();
+        envelope_.do_steps(1);
     }
 }
 

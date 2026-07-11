@@ -270,7 +270,7 @@ public:
     };
     [[nodiscard]] GeneratorSnapshot generator_snapshot() const;
 
-    // Test-only: invoke do_step() directly `steps` times, bypassing the
+    // Test-only: invoke do_steps(1) directly `steps` times, bypassing the
     // period/count clock divider, to exercise the shape logic deterministically.
     void debug_step_envelope(int steps);
 
@@ -289,7 +289,7 @@ private:
         void set_period(int value);
         void set_shape(unsigned shape);
         [[nodiscard]] int volume() const { return step ^ attack; }
-        void do_step();
+        void do_steps(int steps);
         void advance(int generator_steps);
     };
 
