@@ -171,7 +171,8 @@ int VdpFrameRenderer::bitmap_fine_shift(const int width) const {
 }
 
 void VdpFrameRenderer::compose_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* page_first,
-                                             const std::uint16_t* page_wrap, const int width) const {
+                                             const std::uint16_t* page_wrap, const int width,
+                                             const int content_lead) const {
     // Compose one bitmap scanline from the decoded page content, applying the
     // V9958 horizontal-scroll model re-derived (never copied) from openMSX
     // SDLRasterizer.cc:464-538 + PixelRenderer.cc:586-604:
@@ -190,13 +191,19 @@ void VdpFrameRenderer::compose_bitmap_scroll(std::span<std::uint16_t> out, const
     //      the right border on the full bordered canvas).
     const int coarse = bitmap_coarse_shift(width);
     const int fine = bitmap_fine_shift(width);
+    // The R#27 fine right-shift and the mode-intrinsic YJK/YAE content_lead are
+    // BOTH rightward content displacements that expose BORDER on the vacated
+    // left edge, so they add: the leftmost `left` output dots are border and
+    // the decoded page is registered `content_lead` dots right of its G7 base
+    // (content_lead == 0 for every non-YJK caller => byte-identical to before).
+    const int left = fine + content_lead;
     const std::uint16_t bc = border_color();
     for (int x = 0; x < width; ++x) {
-        if (x < fine) {
-            out[static_cast<std::size_t>(x)] = bc;  // exposed left border strip
+        if (x < left) {
+            out[static_cast<std::size_t>(x)] = bc;  // exposed left border strip (R#27 fine + YJK lead)
             continue;
         }
-        const int cx = x - fine;      // column within the coarse-rotated line
+        const int cx = x - left;      // column within the coarse-rotated line
         const int src = cx + coarse;  // source column before the left rotation
         out[static_cast<std::size_t>(x)] =
             (src < width) ? page_first[src] : page_wrap[src - width];
@@ -752,6 +759,28 @@ void VdpFrameRenderer::render_graphic7(const int line, const Field field, std::s
 
 namespace {
 
+// V9958 YJK/YAE horizontal display latency, in 256-wide-mode dots.
+//
+// Unlike GRAPHIC7 (each byte decodes to one pixel independently), a YJK/YAE
+// 4-pixel group cannot be resolved until ALL FOUR of its bytes are fetched:
+// the shared chroma J is packed into the group's 3rd/4th bytes (fact-sheet
+// references/fact-sheets/Yamaha V9958 VDP.md:104-105, "pixel3 = Y3 J[low],
+// pixel4 = Y4 J[high]"), so the group's first displayable pixel trails the G7
+// base position by one whole group -- four dots. The vacated left edge shows
+// backdrop and the last (clipped) group falls off the right. This four-dot
+// rightward registration is corroborated three ways (DEF-M41-YJKOFFSET, an
+// M41 production-QA finding): (1) openMSX 19.1 A/B -- YJK content lands 4 dots
+// right of the IDENTICAL-base GRAPHIC7 control (which has zero offset); (2)
+// fMSX 6.0 models it EXPLICITLY -- references/fmsx-60/source/fMSX/Common.h:
+// 732-737 (RefreshLine10/YAE) and :778-783 (RefreshLine12/YJK) draw the first
+// four pixels as backdrop (BPal[VDP[7]]) before the YJK groups; (3) the
+// fact-sheet's YJK packing above. GRAPHIC7 keeps content_lead == 0. (openMSX
+// 21.0's BitmapConverter -- the read-only source reference -- does not model
+// this latency; the 19.1 RUNTIME used for the A/B and fMSX both do, and the
+// hardware packing corroborates it, so the corroborated interpretation wins
+// per the two-reference-disagreement guardrail.)
+constexpr int kYjkDisplayLead = 4;
+
 // Shared J/K unpack for the YJK family (BitmapConverter.cc:217-249), per
 // 4-pixel group: p[0]=plane0-even, p[1]=plane1-even, p[2]=plane0-odd,
 // p[3]=plane1-odd.
@@ -794,12 +823,14 @@ void VdpFrameRenderer::render_yjk(const int line, const Field field, std::span<s
     const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
     std::array<std::uint16_t, 256> first{};
     decode_yjk_row(page_first * 0x10000u + stride, first);
+    // kYjkDisplayLead: register the decoded page 4 dots right of the G7 base
+    // (DEF-M41-YJKOFFSET). The R#26/R#27 scroll model is unchanged.
     if (page_first != page_wrap) {
         std::array<std::uint16_t, 256> wrap{};
         decode_yjk_row(page_wrap * 0x10000u + stride, wrap);
-        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256, kYjkDisplayLead);
     } else {
-        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+        compose_bitmap_scroll(out, first.data(), first.data(), 256, kYjkDisplayLead);
     }
 }
 
@@ -837,12 +868,14 @@ void VdpFrameRenderer::render_yjk_yae(const int line, const Field field, std::sp
     const std::uint32_t stride = static_cast<std::uint32_t>(line) * 256u;
     std::array<std::uint16_t, 256> first{};
     decode_yjk_yae_row(page_first * 0x10000u + stride, first);
+    // kYjkDisplayLead: same 4-dot right registration as plain YJK (the YAE
+    // attribute branch does not change the group's display latency).
     if (page_first != page_wrap) {
         std::array<std::uint16_t, 256> wrap{};
         decode_yjk_yae_row(page_wrap * 0x10000u + stride, wrap);
-        compose_bitmap_scroll(out, first.data(), wrap.data(), 256);
+        compose_bitmap_scroll(out, first.data(), wrap.data(), 256, kYjkDisplayLead);
     } else {
-        compose_bitmap_scroll(out, first.data(), first.data(), 256);
+        compose_bitmap_scroll(out, first.data(), first.data(), 256, kYjkDisplayLead);
     }
 }
 

@@ -152,8 +152,15 @@ private:
     // scroll is active; see bitmap_scroll_pages()).
     [[nodiscard]] int bitmap_coarse_shift(int width) const;
     [[nodiscard]] int bitmap_fine_shift(int width) const;
+    // `content_lead` is a fixed, mode-intrinsic RIGHTWARD registration of the
+    // decoded page (0 for every plain bitmap mode; 4 for the V9958 YJK/YAE
+    // modes -- see render_yjk()/render_yjk_yae() and kYjkDisplayLead). It is
+    // ADDED to the R#27 fine shift: the left `fine + content_lead` output dots
+    // show BORDER/backdrop and the content source is displaced by the same
+    // amount, so the page is registered `content_lead` dots right of the G7
+    // base while the R#26/R#27 scroll model is preserved untouched.
     void compose_bitmap_scroll(std::span<std::uint16_t> out, const std::uint16_t* page_first,
-                               const std::uint16_t* page_wrap, int width) const;
+                               const std::uint16_t* page_wrap, int width, int content_lead = 0) const;
 
     // Bitmap-mode page selection (R#2 bits 5-6; VDP.hh getDisplayPage()),
     // multi-page scroll (R#25 bit0 + R#2 bit5; VDP.hh:362-370
