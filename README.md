@@ -7,6 +7,15 @@ full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
 Current release: **v1.1.0**.
 
+## Architecture
+
+![Sony HB-F1XV MSX2+ emulator architecture — Z80A CPU and interrupt controller, Yamaha V9958 VDP and frame buffer, PSG / Konami SCC / YM2413 (OPLL) audio, WD2793 floppy controller, input devices, and the memory-mapper / slot fabric](assets/msx2p_system_architecture.png)
+
+A system-level overview of the emulated machine: the Z80A CPU and interrupt controller, the
+Yamaha V9958 VDP and frame buffer, the PSG / Konami SCC / YM2413 (OPLL) audio path, the WD2793
+floppy controller, input devices, and the memory-mapper / slot fabric. (Illustrative overview;
+the sections below and the source are the authoritative spec.)
+
 ## What works today
 
 - Real Sony BIOS cold boot to the MSX2+ logo and BASIC, with a launch summary of the loaded
