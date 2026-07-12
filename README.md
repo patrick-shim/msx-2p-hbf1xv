@@ -5,21 +5,26 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.0.38**.
+Current release: **v1.1.0**.
 
 ## What works today
 
-- Real Sony BIOS cold boot to the MSX2+ logo and BASIC.
-- MSX-DOS / Disk BASIC boot from `.dsk` images, including multi-disk hot-swap (F11).
-- Cartridge loading with automatic mapper identification (software-database SHA-1 match, then
-  a bank-write heuristic), plus an FM-PAC peripheral cartridge (battery-backed SRAM saves,
-  its OPLL mixed into the machine audio).
-- Sprites and the V9958 command engine with per-line raster rendering.
-- Live audio: PSG, Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
-- WD2793 FDC with index-pulse-relative read-sector rotational latency.
+- Real Sony BIOS cold boot to the MSX2+ logo and BASIC, with a launch summary of the loaded
+  configuration and the in-window hotkeys.
+- MSX-DOS / Disk BASIC boot from `.dsk` images, multi-disk hot-swap (F11), and `--disk-writable`
+  game saves persisted back to the host `.dsk`.
+- Cartridge loading with automatic mapper identification (software-database SHA-1 match, then a
+  bank-write heuristic), plus an FM-PAC peripheral cartridge: its OPLL mixed into the audio, the
+  `CALL FMPAC` backup-manager screen, and 8 KB battery SRAM saved in the openMSX-compatible
+  format (existing saves migrated losslessly).
+- All V9958 screen and graphic modes (text, GRAPHIC 1–7, YJK/YAE), sprites, and the command
+  engine with per-line raster rendering.
+- Live audio: PSG (YM2149), Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
+- WD2793 FDC with index-pulse-relative read-sector rotational latency; `--fast-disk` for
+  near-instant loads.
 - Keyboard / joystick, Ren-Sha Turbo, the hardware PAUSE button, and the Speed Controller.
 - An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
-  with a `--capture`-gated F10 live capture hotkey.
+  a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
 
 ## Build and test
@@ -69,8 +74,10 @@ Flags:
 `--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, the
 first disk inserted at boot, F11 cycles drive A through the rest at runtime), `--cart1 <path>`,
 `--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`, `--softwaredb <path>`,
-`--max-frames <N>`, `--hidden-window`, `--border`, `--disk-writable` (persist disk writes back
-to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
+`--max-frames <N>`, `--hidden-window`, `--border` / `--no-border` (the framed openMSX-matching
+canvas vs the default bare edge-to-edge Sony-original presentation), `--fast-disk` (opt-in FDC
+turbo for near-instant disk loads; Alt+D toggles it live), `--disk-writable` (persist disk writes
+back to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
 `--input-script <path>`, `--snapshot <dir>`, `--fmpac-sram <path>` / `--no-fmpac-sram`
 (override / opt out of the FM-PAC battery-SRAM auto-persistence, which otherwise saves to
 `<cart-rom-path>.sram`), `--speed <0..7>` (initial Speed Controller level — a CPU slow-down
@@ -98,7 +105,7 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.d
 `--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--cart1/--cart1-type`,
 `--cart2/--cart2-type`, `--softwaredb`, `--debug-root`, `--dump-state`, `--trace-cpu`,
 `--event-log`, `--input-script`, `--frames <N>`, `--dump-frame <name>`, `--disk-writable`,
-`--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
+`--fast-disk`, `--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
 and `--stream-light`. The plain (no-subcommand) boot mode additionally accepts
 `--speed <0..7>` and `--ram <64|128|256|512>` (default `64`; the same stock/non-stock
 policy as the SDL3 frontend). Other single-purpose modes each print their own usage.
