@@ -71,6 +71,7 @@ void Wd2793::reset() {
     hld_since_ = 0;
     busy_until_ = 0;
     drq_deadline_ = 0;
+    write_check_deadline_ = 0;
     last_sync_ = clock_ != nullptr ? clock_->cpu_cycles() : 0;
     data_index_ = 0;
     data_available_ = 0;
@@ -93,6 +94,19 @@ void Wd2793::sync(std::uint64_t t) {
         // endType1Cmd -> endCmd, WD2793.cc:512-519) restart any active HLD
         // idle-timeout window -- routed through end_command() so the HLD
         // bookkeeping in end_command() applies here too.
+        end_command(t);
+    }
+    // Write Sector first-byte CHECK_WRITE gate (openMSX checkStartWrite,
+    // WD2793.cc:674-682, DEF-M45-WRITEDRQ). If the FIRST data byte of the sector
+    // has not been supplied by the check deadline, abort with LOST_DATA and
+    // write NOTHING to disk (finish_write_sector is never reached, so no
+    // all-zero sector is committed). data_index_ == 0 => no byte has landed yet;
+    // once the first byte lands the gate closes and a mid-transfer stall never
+    // aborts (the one-byte pipeline waits for each later byte). This is a single
+    // scheduled event, NOT an accumulating deadline -- distinct from the removed
+    // absolute-deadline zero-substitution that corrupted normally-timed writes.
+    if (phase_ == Phase::WriteSector && data_index_ == 0 && t >= write_check_deadline_) {
+        status_ |= kLostData;
         end_command(t);
     }
     if (index_irq_armed_ && t >= index_irq_deadline_) {
@@ -266,29 +280,35 @@ void Wd2793::write_data(const std::uint8_t value) {
     sync(t);
     data_reg_ = value;
     if (phase_ == Phase::WriteSector && transfer_drq(t)) {
-        // Suppressed in fast-disk mode for the same reason as the read path: a
-        // turbo disk outruns a real-speed CPU, so honouring the missed-DRQ path
-        // would substitute 0x00 for genuine bytes and corrupt the write. Fast
-        // mode gates on CPU writes instead (small deadline advance), preserving
-        // every streamed byte.
-        while (!fast_disk_ && data_available_ > 1 && t >= drq_deadline_ + kCyclesPerByte) {
-            // Missed DRQ on write: a 0x00 byte is substituted, command continues
-            // (WD2793.cc:751-757; fact-sheet §8 "Lost Data ... read vs write").
-            status_ |= kLostData;
-            buffer_[static_cast<std::size_t>(data_index_++)] = 0x00;
-            --data_available_;
-            drq_deadline_ += kCyclesPerByte;
-        }
+        // Edge-triggered DRQ handshake + one-byte pipeline (openMSX setDataReg
+        // WD2793.cc:235-247 + writeSectorData :742-782, DEF-M45-WRITEDRQ). A CPU
+        // data-register write commits EXACTLY ONE disk byte and RE-BASES the next
+        // DRQ one byte-period after THIS write (drq_deadline_ = t + cadence), so
+        // per-byte timing drift can never accumulate and a byte that merely
+        // arrives "late" relative to the previous deadline is committed, never
+        // substituted. There is NO absolute-cumulative-deadline zero-substitution
+        // here anymore: LOST_DATA/zero handling is confined to the first-byte
+        // CHECK_WRITE gate (sync()); a mid-transfer stall is absorbed by the
+        // pipeline and stays byte-perfect. Behaviour is IDENTICAL with and
+        // without --fast-disk: fast_disk_ only scales cycles_per_byte(), it is
+        // no longer a bug-suppressing branch. (The old model substituted 0x00 +
+        // LOST_DATA for every byte-period the CPU trailed a rigid deadline, and
+        // each injected zero consumed a data slot -> early finish + dropped tail:
+        // the DEF-M45-WRITEDRQ corruption. Removed.)
         buffer_[static_cast<std::size_t>(data_index_++)] = value;
         --data_available_;
-        drq_deadline_ += cycles_per_byte();
+        drq_deadline_ = t + cycles_per_byte();
         if (data_available_ == 0) {
             finish_write_sector(t);
         }
     } else if (phase_ == Phase::WriteTrack && transfer_drq(t)) {
+        // Same edge handshake for Write Track (openMSX writeTrackData
+        // WD2793.cc:1004-1008 re-bases drqTime.reset(time) each byte). No
+        // zero-substitution was ever present here; the re-base keeps the cadence
+        // drift-free and consistent with Write Sector.
         parse_write_track_byte(value);
         --data_available_;
-        drq_deadline_ += cycles_per_byte();
+        drq_deadline_ = t + cycles_per_byte();
         if (data_available_ == 0) {
             end_command(t);
         }
@@ -466,10 +486,20 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
 
 void Wd2793::begin_write_sector(const std::uint64_t t) {
     write_sector_num_ = sector_reg_;
+    // Pre-size the transfer buffer. Every slot is overwritten by a genuine CPU
+    // byte before finish_write_sector runs (data_available_ only reaches 0 after
+    // 512 real commits), so the pre-fill can no longer leak zeros to disk -- and
+    // finish_write_sector is unreachable unless the full sector was supplied.
     buffer_.assign(DiskImage::kSectorSize, 0);
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
     drq_deadline_ = t + read_start_cycles();
+    // First-byte CHECK_WRITE gate (openMSX checkStartWrite, WD2793.cc:674-701):
+    // the CPU must supply the first data byte within write_check_cycles() of the
+    // DRQ; otherwise sync() aborts with LOST_DATA and writes nothing. Re-armed
+    // per sector (multi-record write re-enters here), matching openMSX which
+    // schedules a fresh CHECK_WRITE for every sector.
+    write_check_deadline_ = drq_deadline_ + write_check_cycles();
     phase_ = Phase::WriteSector;
     status_ |= kBusy;
 }

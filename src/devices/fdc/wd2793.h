@@ -95,6 +95,15 @@ public:
     // kReadStartCycles, which write/read-address/read-track/write-track keep
     // unchanged (DEC-0055 slice C: READ SECTOR only).
     static constexpr std::uint64_t kReadSectorHeaderCycles = 47 * kCyclesPerByte;
+    // Write Sector first-byte CHECK_WRITE gate (openMSX startWriteSector /
+    // checkStartWrite, WD2793.cc:646-701). After the write-sector DRQ first
+    // asserts, the CPU has this many byte-periods to supply the FIRST data byte;
+    // if it does not, the command ABORTS with LOST_DATA and NOTHING is written
+    // to disk (no all-zero sector). openMSX schedules CHECK_WRITE 8 byte-periods
+    // after the DRQ (drqTime + 8). Expressed in byte-periods so it scales with
+    // the per-byte cadence -- fast-disk keeps the SAME 8-byte window (a pure
+    // timing-scale, never a behavioural change).
+    static constexpr std::uint64_t kWriteCheckBytePeriods = 8;
     // HLD (head-load) idle-timeout duration (WD2793.cc:42 `IDLE = 3s`): the
     // Type-I HEAD_LOADED status bit stays set for this long after HLD was last
     // (re)activated -- see start_type1/end_command.
@@ -242,6 +251,12 @@ private:
     [[nodiscard]] std::uint64_t settle_cycles() const {
         return fast_disk_ ? kFastSettleCycles : kSettleCycles;
     }
+    // Write Sector first-byte CHECK_WRITE window in cycles (scales with the
+    // per-byte cadence, so fast-disk uses the same 8-byte gate). See
+    // begin_write_sector / sync (openMSX checkStartWrite, WD2793.cc:674-701).
+    [[nodiscard]] std::uint64_t write_check_cycles() const {
+        return kWriteCheckBytePeriods * cycles_per_byte();
+    }
 
     void start_type1(std::uint8_t cmd, std::uint64_t t);
     void start_type2(std::uint8_t cmd, std::uint64_t t);
@@ -296,6 +311,14 @@ private:
 
     std::uint64_t busy_until_ = 0;   // Type I completion / non-DRQ deadline
     std::uint64_t drq_deadline_ = 0;  // absolute cycle of the next DRQ window
+    // Write Sector first-byte CHECK_WRITE gate (openMSX checkStartWrite,
+    // WD2793.cc:674-682): absolute cycle by which the CPU must supply the FIRST
+    // data byte of the current sector (set in begin_write_sector). If sync()
+    // crosses it while data_index_ == 0 (no byte has landed), the command aborts
+    // with LOST_DATA and writes NOTHING. Once the first byte lands the gate
+    // closes, so a later mid-transfer stall never aborts (the one-byte pipeline
+    // waits for each byte -- see write_data). DEF-M45-WRITEDRQ.
+    std::uint64_t write_check_deadline_ = 0;
     std::uint64_t last_sync_ = 0;
 
     std::vector<std::uint8_t> buffer_;  // transfer buffer (data / addr / track)
