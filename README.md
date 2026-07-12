@@ -5,7 +5,7 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.1**.
+Current release: **v1.1.2**.
 
 ## Architecture
 
@@ -18,8 +18,11 @@ the sections below and the source are the authoritative spec.)
 
 ## What works today
 
-- Real Sony BIOS cold boot to the MSX2+ logo and BASIC, with a launch summary of the loaded
-  configuration and the in-window hotkeys.
+- Real Sony BIOS cold boot to the MSX2+ logo and BASIC, with a detailed launch summary of the
+  loaded configuration (RAM, VRAM, slots, FM-PAC/SRAM status, disk, video) and the in-window hotkeys.
+- Convenience-first launch defaults (v1.1.2): **512 KB RAM, fast-disk ON, and the FM-PAC
+  peripheral auto-loaded into slot 2** so its battery SRAM saves are always available (a game
+  cartridge in slot 1 coexists) — with `--stock` to restore the authentic bare HB-F1XV in one flag.
 - MSX-DOS / Disk BASIC boot from `.dsk` images, multi-disk hot-swap (F11), and `--disk-writable`
   game saves persisted back to the host `.dsk`.
 - Cartridge loading with automatic mapper identification (software-database SHA-1 match, then a
@@ -77,18 +80,20 @@ resolved relative to the current directory).
 
 ```powershell
 build\Debug\sony_msx_sdl3.exe                                  # plain BIOS boot to BASIC
-build\Debug\sony_msx_sdl3.exe --cart1 games\roms\aleste2.rom   # cartridge, mapper auto-identified
+build\Debug\sony_msx_sdl3.exe --slot1 games\roms\aleste2.rom   # cartridge in slot 1 (FM-PAC auto-loads into slot 2)
 build\Debug\sony_msx_sdl3.exe --disk disks\msxdos23.dsk        # MSX-DOS boot floppy
 build\Debug\sony_msx_sdl3.exe --disk games\disks\ys2\d1.dsk --disk games\disks\ys2\d2.dsk --disk-writable   # multi-disk game (F11 swaps; saves persist)
 ```
 
 Flags:
 `--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, the
-first disk inserted at boot, F11 cycles drive A through the rest at runtime), `--cart1 <path>`,
-`--cart1-type <name>|auto`, `--cart2 <path>`, `--cart2-type <name>|auto`, `--softwaredb <path>`,
+first disk inserted at boot, F11 cycles drive A through the rest at runtime), `--slot1 <path>`,
+`--slot1-type <name>|auto`, `--slot2 <path>`, `--slot2-type <name>|auto` (the two cartridge slots;
+the old `--cart1`/`--cart2`[`-type`] names remain accepted as silent aliases), `--softwaredb <path>`,
 `--max-frames <N>`, `--hidden-window`, `--border` / `--no-border` (the framed openMSX-matching
-canvas vs the default bare edge-to-edge Sony-original presentation), `--fast-disk` (opt-in FDC
-turbo for near-instant disk loads; Alt+D toggles it live), `--disk-writable` (persist disk writes
+canvas vs the default bare edge-to-edge Sony-original presentation), `--fast-disk` / `--no-fast-disk`
+(FDC turbo for near-instant disk loads — **ON by default as of v1.1.2**; `--no-fast-disk` restores
+accurate rotational timing; Alt+D toggles it live), `--disk-writable` (persist disk writes
 back to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
 `--input-script <path>`, `--snapshot <dir>`, `--fmpac-sram <path>` / `--no-fmpac-sram`
 (override / opt out of the FM-PAC battery-SRAM auto-persistence, which otherwise saves to
@@ -100,12 +105,21 @@ resizable and the picture stays aspect-correct letterboxed at any size),
 (Alt+Enter toggles at runtime), `--capture <on|off>` (default `off`; gates the F10 live
 capture hotkey so a mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are
 unaffected), `--stream-light`,
-`--ram <64|128|256|512>` (main-RAM size in KB; default `64` = the stock HB-F1XV spec,
-byte-identical to omitting it — `128`/`256`/`512` are opt-in **non-stock** "fully-populated
-S1985" mods for larger games, `512` KB being the internal ceiling of the S1985 5-bit mapper
-read-back; beyond 512 KB needs an external RAM-expansion cartridge),
-`--help`. A `--cartN-type` of `auto` (or omitted) triggers
+`--ram <64|128|256|512>` (main-RAM size in KB; **default `512` as of v1.1.2** — a "fully-populated
+S1985" mod for larger games, `512` KB being the internal ceiling of the S1985 5-bit mapper
+read-back; `--ram 64` restores the stock HB-F1XV spec; beyond 512 KB needs an external
+RAM-expansion cartridge), `--no-fmpac` (skip the default FM-PAC auto-load), `--stock` (one-shot
+authentic bare machine: 64 KB + accurate disk timing + no FM-PAC; explicit per-option flags still
+win, e.g. `--stock --ram 512`),
+`--help`. A `--slotN-type` (or the `--cartN-type` alias) of `auto` (or omitted) triggers
 auto-identification; an explicit type is honored byte-for-byte.
+
+By default (v1.1.2) the machine boots ready-to-play: **512 KB RAM, fast-disk ON, and the FM-PAC
+peripheral auto-loaded into slot 2** (from `roms/fmpac.rom`, SRAM persisted to
+`roms/fmpac.rom.sram`) so its battery saves are always available; a game cartridge in slot 1
+coexists with it. `--no-fmpac` skips the auto-load, an explicit `--slot2 <rom>` overrides it, a
+missing `roms/fmpac.rom` is skipped gracefully, and `--stock` reverts all three defaults to the
+authentic bare HB-F1XV.
 
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 
@@ -114,13 +128,14 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos23.d
     --frames 1000 --dump-frame boot.frame --dump-state state.txt --event-log run.log
 ```
 
-`--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--cart1/--cart1-type`,
-`--cart2/--cart2-type`, `--softwaredb`, `--debug-root`, `--dump-state`, `--trace-cpu`,
-`--event-log`, `--input-script`, `--frames <N>`, `--dump-frame <name>`, `--disk-writable`,
-`--fast-disk`, `--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
-and `--stream-light`. The plain (no-subcommand) boot mode additionally accepts
-`--speed <0..7>` and `--ram <64|128|256|512>` (default `64`; the same stock/non-stock
-policy as the SDL3 frontend). Other single-purpose modes each print their own usage.
+`--debug-session <bios_dir> <max_steps>` accepts `--disk`, `--slot1/--slot1-type`,
+`--slot2/--slot2-type` (aliases `--cart1/--cart2[-type]`), `--softwaredb`, `--debug-root`,
+`--dump-state`, `--trace-cpu`, `--event-log`, `--input-script`, `--frames <N>`,
+`--dump-frame <name>`, `--disk-writable`, `--fast-disk` / `--no-fast-disk`, `--no-fmpac`,
+`--stock`, `--swap-disk-frame <N>`, `--fmpac-sram <path>`, `--snapshot <dir>` / `--snapshot-frame <N>`,
+and `--stream-light`. It shares the SDL3 frontend's v1.1.2 convenience defaults (512 KB, fast-disk,
+FM-PAC into slot 2; `--stock` reverts them). Other single-purpose modes (e.g. the openMSX-parity
+identification path) keep their own stock defaults and each print their own usage.
 
 ## Repository layout
 
