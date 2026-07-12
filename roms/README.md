@@ -1,6 +1,6 @@
-# ROMs Directory
+# ROMs Directory for FMPAC ROM and SRAM FILE (NOT TO BE ALTERED)
 
-Local ROM assets used for emulator bring-up and testing.
+FM-PAC ROM assets used for emulator bring-up and testing.
 
 Usage notes:
 

@@ -150,6 +150,11 @@ CMakeUserPresets.json
 /disks/*
 !/disks/.gitkeep
 
+# Local game library at the repo root (user-provisioned game disks/roms, e.g.
+# games/disks/<title>/*.dsk). Same non-redistributable, never-tracked policy as
+# disks/ and roms/ -- provisioned locally, never committed or pushed.
+/games/
+
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user

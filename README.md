@@ -5,7 +5,7 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.0**.
+Current release: **v1.1.1**.
 
 ## Architecture
 
@@ -27,10 +27,12 @@ the sections below and the source are the authoritative spec.)
   `CALL FMPAC` backup-manager screen, and 8 KB battery SRAM saved in the openMSX-compatible
   format (existing saves migrated losslessly).
 - All V9958 screen and graphic modes (text, GRAPHIC 1–7, YJK/YAE), sprites, and the command
-  engine with per-line raster rendering.
+  engine with per-line raster rendering and hardware-timed command duration (the `CE` busy-wait
+  window paces software that polls it, so command-driven cut-scenes run at the correct speed).
 - Live audio: PSG (YM2149), Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
-- WD2793 FDC with index-pulse-relative read-sector rotational latency; `--fast-disk` for
-  near-instant loads.
+- WD2793 FDC with index-pulse-relative rotational latency on both the read and write paths
+  (edge-triggered DRQ handshake for reliable in-game disk saves); `--fast-disk` for near-instant
+  loads.
 - Keyboard / joystick, Ren-Sha Turbo, the hardware PAUSE button, and the Speed Controller.
 - An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
   a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
@@ -75,8 +77,9 @@ resolved relative to the current directory).
 
 ```powershell
 build\Debug\sony_msx_sdl3.exe                                  # plain BIOS boot to BASIC
-build\Debug\sony_msx_sdl3.exe --cart1 roms\aleste.rom          # cartridge, mapper auto-identified
-build\Debug\sony_msx_sdl3.exe --disk disks\msxdos22.dsk        # MSX-DOS boot floppy
+build\Debug\sony_msx_sdl3.exe --cart1 games\roms\aleste2.rom   # cartridge, mapper auto-identified
+build\Debug\sony_msx_sdl3.exe --disk disks\msxdos23.dsk        # MSX-DOS boot floppy
+build\Debug\sony_msx_sdl3.exe --disk games\disks\ys2\d1.dsk --disk games\disks\ys2\d2.dsk --disk-writable   # multi-disk game (F11 swaps; saves persist)
 ```
 
 Flags:
@@ -107,7 +110,7 @@ auto-identification; an explicit type is honored byte-for-byte.
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 
 ```powershell
-build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos22.dsk `
+build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos23.dsk `
     --frames 1000 --dump-frame boot.frame --dump-state state.txt --event-log run.log
 ```
 
@@ -122,18 +125,19 @@ policy as the SDL3 frontend). Other single-purpose modes each print their own us
 ## Repository layout
 
 - `src/` — emulator source (`core`, `devices`, `peripherals`, `machine`, `frontend`).
-- `bios/`, `roms/`, `disks/` — local, legally-sourced development assets (see below).
+- `bios/`, `roms/`, `disks/`, `games/` — local, legally-sourced development assets (see below).
 - `build/` — the CMake build tree (gitignored; recreate any time with
   `tools/bootstrap-build.ps1`).
 
 ## Assets (BIOS / ROM / disk policy)
 
-`bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (cartridge images), and `disks/`
-(MSX-DOS system disks plus `disks/games/` floppy sets) are local, legally-sourced development
-assets. **They remain third-party intellectual property; this project asserts no
-redistribution rights and makes no provenance claim.** The repository is hosted publicly with
-`bios/` included as the owner's informed, accepted-risk decision (`roms/` and `disks/`
-binaries are untracked). Validate the required assets with:
+`bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (the FM-PAC peripheral ROM `fmpac.rom`
+plus its battery-SRAM `fmpac.rom.sram`), `disks/` (MSX-DOS system disks), and `games/` (the
+game library — `games/disks/<title>/` floppy sets and `games/roms/` cartridge images) are
+local, legally-sourced development assets. **They remain third-party intellectual property;
+this project asserts no redistribution rights and makes no provenance claim.** The repository
+is hosted publicly with `bios/` included as the owner's informed, accepted-risk decision
+(`roms/`, `disks/`, and `games/` binaries are untracked). Validate the required assets with:
 
 ```powershell
 ./tools/validate-assets.ps1
