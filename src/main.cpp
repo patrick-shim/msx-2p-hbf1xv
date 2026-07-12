@@ -25,7 +25,8 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/machine_audio_mixer.h"  // M39-A: full-machine audio mix for --audio-dump
 #include "frontend/psg_audio_dump.h"
-#include "frontend/sdl3_cli.h"  // M37 Slice D (DEC-0056): shared parse_speed_level() validator
+#include "frontend/sdl3_cli.h"  // M37/M46: shared parse_speed_level/parse_ram_kb/resolve_session_defaults
+#include "frontend/session_summary.h"  // M46 (DEC-0071): compact headless "This session" banner
 #include "machine/cartridge_cli.h"
 #include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
@@ -739,11 +740,19 @@ struct DebugSessionOptions {
     // real .dsk). When set, each mounted disk gets its host path bound and a
     // dirty image is flushed at end-of-run (and before a scripted swap).
     bool disk_writable = false;
-    // Fast-disk (FDC turbo) QoL mode. --fast-disk OPTS IN to collapsed WD2793/
-    // floppy timing so disk loads finish near-instantly; default false = 100%
-    // cycle-accurate FDC timing (byte-for-byte the pre-change behavior). Applied
-    // once after cold_boot() via machine.set_fast_disk() -- see run_debug_session.
-    bool fast_disk = false;
+    // Fast-disk (FDC turbo) QoL mode. M46 (DEC-0071) makes this TRI-STATE so the
+    // DEFAULT lives in resolve_session_defaults() (headless/SDL3 parity), NOT the
+    // field: convenience default ON, --no-fast-disk/--stock force OFF, explicit
+    // --fast-disk forces ON. Applied once after cold_boot() via set_fast_disk().
+    std::optional<bool> fast_disk_opt;
+    // M46 (DEC-0071): --ram <64|128|256|512> (tri-state; nullopt = unspecified),
+    // --no-fmpac (opt out of the slot-2 FM-PAC auto-load), and --stock (one-shot
+    // bare machine: RAM 64 + accurate disk + no FM-PAC). Resolved through the
+    // shared resolve_session_defaults() so the headless --debug-session game path
+    // gets the same flipped convenience defaults as the SDL3 exe.
+    std::optional<int> ram_kb;
+    bool no_fmpac = false;
+    bool stock = false;
     // M36 deterministic repro/testing enabler: swap to the next disk in the
     // repeatable --disk list at this frame (frame-loop mode only). Reuses
     // M35's multi-disk cache + swap semantics headlessly so a two-disk game
@@ -866,7 +875,23 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
         } else if (arg == "--disk-writable") {
             opts.disk_writable = true;  // boolean flag, no value
         } else if (arg == "--fast-disk") {
-            opts.fast_disk = true;  // opt-in FDC turbo (boolean flag); default off = accurate
+            opts.fast_disk_opt = true;  // M46: explicit ON (overrides --stock / the default)
+        } else if (arg == "--no-fast-disk") {
+            opts.fast_disk_opt = false;  // M46: explicit OFF (accurate FDC timing)
+        } else if (arg == "--no-fmpac") {
+            opts.no_fmpac = true;  // M46: opt out of the FM-PAC slot-2 auto-load
+        } else if (arg == "--stock") {
+            opts.stock = true;  // M46: one-shot authentic bare machine preset
+        } else if (arg == "--ram") {
+            // M46 (DEC-0071): shared {64,128,256,512} enum validator (headless/
+            // SDL3 parity). A bad/missing value is a loud parse error.
+            if (auto v = take_debug_session_value(args, i, "--ram", errors)) {
+                ++i;
+                int kb = 0;
+                if (sony_msx::frontend::parse_ram_kb(*v, kb, errors, "debug-session")) {
+                    opts.ram_kb = kb;
+                }
+            }
         } else if (arg == "--swap-disk-frame") {
             if (auto v = take_debug_session_value(args, i, "--swap-disk-frame", errors)) {
                 opts.swap_disk_frame = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
@@ -948,7 +973,16 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         return 2;
     }
 
-    sony_msx::machine::Hbf1xvMachine machine;
+    // M46 (DEC-0071): resolve the flipped convenience-vs-stock defaults in the
+    // CLI layer (headless/SDL3 parity, the anti-drift seam of planner §2.7 -- the
+    // Hbf1xvMachine ctor default STAYS 64 KB; this is the only place it flips).
+    // Empty CLI -> {512 KB RAM, fast-disk ON, FM-PAC slot-2 auto-load ON};
+    // --stock/--ram 64/--no-fast-disk/--no-fmpac peel it back (order-independent).
+    const sony_msx::frontend::ResolvedSessionDefaults resolved =
+        sony_msx::frontend::resolve_session_defaults(
+            {opts.ram_kb, opts.fast_disk_opt, opts.no_fmpac, opts.stock});
+
+    sony_msx::machine::Hbf1xvMachine machine(resolved.ram_bytes);
     if (opts.debug_root.has_value()) {
         machine.set_debug_root(*opts.debug_root);
     }
@@ -973,10 +1007,10 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     // Fast-disk (FDC turbo) QoL mode. Applied AFTER cold_boot() (the FDC/drive
     // reset() does not clear the flag, but set it here for robustness against a
     // future re-cold_boot). Default false => byte-identical accurate FDC timing.
-    machine.set_fast_disk(opts.fast_disk);
-    if (opts.fast_disk) {
+    machine.set_fast_disk(resolved.fast_disk);
+    if (resolved.fast_disk) {
         std::cerr << "debug-session: fast-disk (FDC turbo) ENABLED -- disk timing collapsed "
-                     "(accurate timing is the default)\n";
+                     "(M46 convenience default; --no-fast-disk / --stock for accurate timing)\n";
     }
 
     // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
@@ -988,6 +1022,50 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
         return rc;
     }
+
+    // M46 (DEC-0071): FM-PAC slot-2 auto-load (planner §2.5), the headless
+    // analogue of Sdl3App::load_configured_assets(). Runs AFTER the explicit
+    // --slotN carts so the occupancy / already-present checks see the final
+    // state. Gated by resolved.fmpac_autoload. Every skip is a graceful note --
+    // NEVER a boot failure; DEC-0050 "NO S-RAM AVAILABLE" stays correct on skip.
+    constexpr const char* kFmPacAutoloadRom = "roms/fmpac.rom";
+    sony_msx::frontend::FmPacAutoloadOutcome fmpac_outcome =
+        sony_msx::frontend::FmPacAutoloadOutcome::NotAttempted;
+    if (resolved.fmpac_autoload) {
+        const bool slot2_in_use = sony_msx::machine::parse_cartridge_cli(cli_args).slot2.path.has_value();
+        if (slot2_in_use) {
+            fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedSlot2InUse;
+        } else if (machine.fmpac(1) != nullptr || machine.fmpac(2) != nullptr) {
+            fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedAlreadyPresent;
+        } else {
+            std::ifstream fmpac_in(kFmPacAutoloadRom, std::ios::binary);
+            if (!fmpac_in) {
+                fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedAbsent;
+                std::cerr << "debug-session: FM-PAC auto-load skipped: " << kFmPacAutoloadRom
+                          << " not found (boot proceeds; \"NO S-RAM AVAILABLE\" -- DEC-0050)\n";
+            } else {
+                std::vector<std::uint8_t> fmpac_image((std::istreambuf_iterator<char>(fmpac_in)),
+                                                       std::istreambuf_iterator<char>());
+                // Bind the .sram BEFORE the insert (restores on load). Default:
+                // beside the ROM; an explicit --fmpac-sram (bound above) overrides.
+                if (!opts.fmpac_sram_path.has_value()) {
+                    machine.set_fmpac_sram_path(std::string(kFmPacAutoloadRom) + ".sram");
+                }
+                const auto result = machine.load_cartridge(
+                    2, sony_msx::devices::cartridge::CartridgeMapperType::FmPac, std::move(fmpac_image));
+                if (result != sony_msx::devices::cartridge::CartridgeLoadResult::Ok) {
+                    fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedInvalid;
+                    std::cerr << "debug-session: FM-PAC auto-load skipped: " << kFmPacAutoloadRom
+                              << " invalid (not a 1..4 x 16 KB FM-PAC image)\n";
+                } else {
+                    fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::LoadedSlot2;
+                    std::cerr << "debug-session: FM-PAC auto-loaded into slot 2 from "
+                              << kFmPacAutoloadRom << "\n";
+                }
+            }
+        }
+    }
+    (void)fmpac_outcome;  // consumed by the compact session banner below
 
     // A-M27-3 (headless previously had no --disk flag; SDL3 has one, M26).
     // M35-S2: mirrors Sdl3App::load_configured_assets() with a repeatable
@@ -1016,6 +1094,47 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     } else {
         // M35-S2: explicitly detach when no disk in list (safety/clarity)
         machine.disk_drive().attach_image(nullptr);
+    }
+
+    // M46 (DEC-0071): compact headless "This session" banner (planner §2.6,
+    // secondary) so the playtest agent / human see the RESOLVED config, and so
+    // the two exes are consistent. SDL3's banner is the human-facing artifact;
+    // this is the same content in one line block, built from the pure
+    // frontend/session_summary.h helpers.
+    {
+        namespace fe = sony_msx::frontend;
+        const int fmpac_slot =
+            machine.fmpac(1) != nullptr ? 1 : (machine.fmpac(2) != nullptr ? 2 : 0);
+        fe::FmPacBannerInfo fmpac_info;
+        fmpac_info.loaded_slot = fmpac_slot;
+        fmpac_info.outcome = fmpac_outcome;
+        fmpac_info.is_stock = resolved.is_stock;
+        fmpac_info.no_fmpac = opts.no_fmpac;
+        fmpac_info.autoload_rom_path = kFmPacAutoloadRom;
+        const bool sram_available = fmpac_slot != 0 && !machine.fmpac_sram_path().empty();
+        std::cerr << "debug-session: This session " << fe::format_mode_tag(resolved.is_stock) << "\n"
+                  << "  Main RAM  : " << fe::format_ram_line(machine.dram_size()) << "\n"
+                  << "  VRAM      : 128 KB\n"
+                  << "  Slot 1    : "
+                  << (machine.cartridge_slot1().loaded()
+                          ? std::string(sony_msx::devices::cartridge::to_string(
+                                machine.cartridge_slot1().mapper_type()))
+                          : "(empty)")
+                  << "\n"
+                  << "  Slot 2    : "
+                  << (machine.cartridge_slot2().loaded()
+                          ? std::string(sony_msx::devices::cartridge::to_string(
+                                machine.cartridge_slot2().mapper_type()))
+                          : "(empty)")
+                  << "\n"
+                  << "  FM-PAC    : " << fe::format_fmpac_line(fmpac_info) << "\n"
+                  << "  SRAM      : "
+                  << fe::format_sram_line(sram_available,
+                                          machine.fmpac_sram_path().string())
+                  << "\n"
+                  << "  Fast-disk : " << (resolved.fast_disk ? "ON" : "OFF (accurate)") << "\n"
+                  << "  Disk      : " << (disk_cache.empty() ? "(none)" : opts.disk_paths.front())
+                  << "\n";
     }
 
     if (opts.trace_cpu_name.has_value()) {
@@ -1264,9 +1383,14 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // M36-S-d: persist the FM-PAC battery SRAM back to its .sram file.
-    if (opts.fmpac_sram_path.has_value() && machine.flush_fmpac_sram()) {
-        std::cerr << "debug-session: flushed FM-PAC SRAM to \"" << *opts.fmpac_sram_path << "\"\n";
+    // M36-S-d / M46: persist the FM-PAC battery SRAM back to its .sram file --
+    // whether the FM-PAC came from an explicit --slotN cart or the M46 slot-2
+    // auto-load. flush_fmpac_sram() is a no-op (returns false) unless an FM-PAC
+    // is inserted AND a path was bound, so a bare/--stock/--no-fmpac run never
+    // writes anything (DEC-0050).
+    if (machine.flush_fmpac_sram()) {
+        std::cerr << "debug-session: flushed FM-PAC SRAM to \"" << machine.fmpac_sram_path().string()
+                  << "\"\n";
     }
 
     // M39-A Step 1: write the per-frame edge/write-rate diagnostic CSV.
@@ -1546,17 +1670,22 @@ int main(int argc, char** argv) {
     if (argc >= 2 && std::string(argv[1]) == "--debug-session") {
         if (argc < 4) {
             std::cerr << "usage: " << argv[0]
-                      << " --debug-session <bios_dir> <max_steps> [--disk <path>] [--cart1 <path>]"
-                         " [--cart1-type <T>|auto] [--cart2 <path>] [--cart2-type <T>|auto]"
+                      << " --debug-session <bios_dir> <max_steps> [--disk <path>] [--slot1 <path>]"
+                         " [--slot1-type <T>|auto] [--slot2 <path>] [--slot2-type <T>|auto]"
                          " [--softwaredb <path>] [--debug-root <path>]"
                          " [--dump-state <name>] [--trace-cpu <name>] [--event-log <name>]"
                          " [--input-script <path>] [--frames <N>] [--dump-frame <name>]"
-                         " [--disk-writable] [--fast-disk] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
+                         " [--ram <64|128|256|512>] [--stock] [--fast-disk] [--no-fast-disk]"
+                         " [--no-fmpac] [--disk-writable] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
                          " [--snapshot <dir>] [--snapshot-frame <N>]\n"
-                         "  --fast-disk (opt-in; default off) collapses the WD2793/floppy timing so\n"
-                         "  disk loads are near-instant -- a QoL turbo. Absent = 100% cycle-accurate\n"
-                         "  FDC timing (the default); fast-disk deviates from accurate timing and MAY\n"
-                         "  affect rare timing-sensitive/copy-protected disks.\n"
+                         "  (--cart1/--cart2/--cartN-type are accepted as silent aliases for --slotN.)\n"
+                         "  M46 (DEC-0071) convenience defaults: RAM 512 KB, fast-disk ON, and an\n"
+                         "  FM-PAC auto-loaded into slot 2 from roms/fmpac.rom (SRAM roms/fmpac.rom.sram,\n"
+                         "  skipped gracefully if absent). --stock = the authentic bare machine\n"
+                         "  (RAM 64 + accurate disk + no FM-PAC); --no-fast-disk / --no-fmpac / --ram\n"
+                         "  override individual fields (order-independent). --fast-disk collapses the\n"
+                         "  WD2793/floppy timing (near-instant loads) and MAY affect rare\n"
+                         "  copy-protected disks; --no-fast-disk restores 100% cycle-accurate timing.\n"
                          "  --snapshot <dir> writes a comprehensive per-component debug snapshot\n"
                          "  to <dir>/snapshot/<id>/ (default: once at end-of-run); --snapshot-frame\n"
                          "  <N> captures at that frame boundary in --frames mode instead.\n"

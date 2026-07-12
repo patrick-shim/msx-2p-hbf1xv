@@ -117,6 +117,56 @@ bool Sdl3App::load_configured_assets() {
         return false;
     }
 
+    // M46 (DEC-0071): FM-PAC slot-2 auto-load (planner §2.5). Runs AFTER the
+    // explicit --slotN carts above so the occupancy / already-present checks see
+    // the final slot state. Gated by config_.fmpac_autoload (the resolved
+    // convenience default; a bare stock Sdl3AppConfig{} leaves it FALSE, so the
+    // anti-drift default never auto-loads). EVERY skip is a graceful note
+    // recorded in fmpac_autoload_outcome_ (for the banner) -- NEVER a boot
+    // failure. DEC-0050 "NO S-RAM AVAILABLE" stays correct on every skip path:
+    // no FM-PAC is inserted, and no internal SRAM is ever fabricated.
+    fmpac_autoload_outcome_ = FmPacAutoloadOutcome::NotAttempted;
+    if (config_.fmpac_autoload) {
+        if (config_.cart2_path.has_value()) {
+            // An explicit --slot2/--cart2 cart owns slot 2 -- the user cart wins.
+            fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedSlot2InUse;
+        } else if (machine_.fmpac(1) != nullptr || machine_.fmpac(2) != nullptr) {
+            // Avoid a double FM-PAC (the human's slot-1 habit): the already-
+            // present FM-PAC keeps its own per-cart .sram binding from load_cart.
+            fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedAlreadyPresent;
+        } else {
+            std::ifstream in(config_.fmpac_autoload_rom_path, std::ios::binary);
+            if (!in) {
+                fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedAbsent;
+                std::cerr << "sdl3: FM-PAC auto-load skipped: " << config_.fmpac_autoload_rom_path
+                          << " not found (boot proceeds; \"NO S-RAM AVAILABLE\" -- DEC-0050)\n";
+            } else {
+                std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
+                                                std::istreambuf_iterator<char>());
+                // Bind the .sram BEFORE the insert so it restores on load
+                // (mirrors the explicit-cart path). Default: beside the ROM;
+                // --fmpac-sram/--no-fmpac-sram override/opt-out, reusing the
+                // same fields as an explicit FM-PAC cart.
+                if (!config_.fmpac_sram_disabled) {
+                    const std::filesystem::path sram_path =
+                        config_.fmpac_sram_path.has_value()
+                            ? std::filesystem::path(*config_.fmpac_sram_path)
+                            : std::filesystem::path(config_.fmpac_autoload_rom_path + ".sram");
+                    machine_.set_fmpac_sram_path(sram_path);
+                }
+                const CartridgeLoadResult result = machine_.load_cartridge(
+                    2, devices::cartridge::CartridgeMapperType::FmPac, std::move(image));
+                if (result != CartridgeLoadResult::Ok) {
+                    fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedInvalid;
+                    std::cerr << "sdl3: FM-PAC auto-load skipped: " << config_.fmpac_autoload_rom_path
+                              << " invalid (not a 1..4 x 16 KB FM-PAC image)\n";
+                } else {
+                    fmpac_autoload_outcome_ = FmPacAutoloadOutcome::LoadedSlot2;
+                }
+            }
+        }
+    }
+
     // M35-S2: real disk-image loading (A-M26-6 + M35-S2). Pre-load all
     // disks in the repeatable --disk list into memory for deterministic
     // swapping (AC-S2-2). Load the first disk at boot (AC-S2-1). Empty

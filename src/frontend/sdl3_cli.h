@@ -64,11 +64,20 @@ struct ParsedSdl3Cli {
     // Default OFF = in-memory-only (never clobbers a real .dsk); a dirty
     // writable image flushes on shutdown and before a swap discards it.
     bool disk_writable = false;
-    // Fast-disk (FDC turbo) QoL mode. --fast-disk OPTS IN to collapsed WD2793/
-    // floppy timing so disk loads finish near-instantly; DEFAULT OFF = 100%
-    // cycle-accurate FDC timing (byte-identical to before). Also toggleable live
-    // via Alt+D in the SDL3 window.
-    bool fast_disk = false;
+    // Fast-disk (FDC turbo) QoL mode. M46 (DEC-0071) makes this TRI-STATE so the
+    // DEFAULT lives in resolve_session_defaults() (below), NOT this field: the
+    // convenience default is ON, `--no-fast-disk`/`--stock` force it OFF, and an
+    // explicit `--fast-disk` forces it ON. std::nullopt = unspecified. Also
+    // toggleable live via Alt+D in the SDL3 window.
+    std::optional<bool> fast_disk_opt;
+    // M46 (DEC-0071): opt out of the default FM-PAC slot-2 auto-load. Only the
+    // negative needs a field (auto-load is the resolved default); the load layer
+    // also skips when slot 2 is explicitly occupied / an FM-PAC is already present.
+    bool no_fmpac = false;
+    // M46 (DEC-0071): one-shot authentic bare machine (RAM 64 + fast-disk OFF +
+    // no FM-PAC). Explicit per-field flags override the corresponding --stock
+    // field, order-independently (resolve_session_defaults(), planner §2.4).
+    bool stock = false;
     machine::ParsedCartridgeCli cartridges;
     // M27-S4/S7 additive debug/scripted-input flags (docs/m27-planner-
     // package.md §2.2/§2.4, items 1/3/4): `--dump-state`/`--trace-cpu`/
@@ -165,5 +174,34 @@ struct ParsedSdl3Cli {
 // unit-testable.
 [[nodiscard]] bool parse_speed_level(const std::string& value, int& out_level,
                                      std::vector<std::string>& errors, const char* context);
+
+// M46 (DEC-0071): the resolved convenience-vs-stock session defaults. The
+// FLIPPED convenience defaults live ONLY here (the CLI-resolution layer), never
+// in the Hbf1xvMachine ctor default (kDramBytes=64KB) nor the Sdl3AppConfig
+// struct field defaults -- the anti-drift seam (planner §2.7) that keeps every
+// direct-construction test stock. Consumed VERBATIM by BOTH executables
+// (sdl3_main.cpp + src/main.cpp's --debug-session path) so their defaults match.
+struct ResolvedSessionDefaults {
+    std::size_t ram_bytes = 0;
+    bool fast_disk = false;
+    bool fmpac_autoload = false;
+    bool is_stock = false;  // banner label only
+};
+
+// Tri-state CLI intent fed to resolve_session_defaults(): each convenience field
+// carries "user asked" vs "unspecified" so the RESOLVER (not a parser field)
+// owns the default (planner §2.3).
+struct SessionDefaultsRequest {
+    std::optional<int> ram_kb;          // --ram value (nullopt = unspecified)
+    std::optional<bool> fast_disk_opt;  // --fast-disk / --no-fast-disk (nullopt = unspecified)
+    bool no_fmpac = false;              // --no-fmpac
+    bool stock = false;                 // --stock
+};
+
+// Precedence: explicit per-field flag > --stock preset > convenience default;
+// positional-INDEPENDENT (planner §2.4 -- `--stock --ram 512` == `--ram 512
+// --stock` -> 512 KB). Pure, SDL-free, headlessly unit-testable. The empty-CLI
+// result is {512 KB, fast-disk ON, FM-PAC auto-load ON}.
+[[nodiscard]] ResolvedSessionDefaults resolve_session_defaults(const SessionDefaultsRequest& request);
 
 }  // namespace sony_msx::frontend

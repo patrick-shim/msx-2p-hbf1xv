@@ -124,7 +124,15 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
         } else if (arg == "--fast-disk") {
-            parsed.fast_disk = true;  // opt-in FDC turbo; default off = accurate timing
+            // M46 (DEC-0071): tri-state -- explicit ON overrides --stock/the
+            // resolver default. Last-wins vs a later --no-fast-disk (linear scan).
+            parsed.fast_disk_opt = true;
+        } else if (arg == "--no-fast-disk") {
+            parsed.fast_disk_opt = false;  // M46: explicit OFF (accurate FDC timing)
+        } else if (arg == "--no-fmpac") {
+            parsed.no_fmpac = true;  // M46: opt out of the default FM-PAC slot-2 auto-load
+        } else if (arg == "--stock") {
+            parsed.stock = true;  // M46: one-shot authentic bare machine preset
         } else if (arg == "--stream-light") {
             parsed.stream_light = true;  // DEC-0052: F10 arms lightweight mode
         } else if (arg == "--fmpac-sram") {
@@ -237,6 +245,29 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
     }
 
     return parsed;
+}
+
+ResolvedSessionDefaults resolve_session_defaults(const SessionDefaultsRequest& request) {
+    // Precedence = specificity, NOT argv order (planner §2.4): an explicit
+    // per-field flag always wins over --stock's field, which in turn wins over
+    // the convenience default. The empty-CLI result is the ready-to-game config.
+    ResolvedSessionDefaults resolved;
+
+    resolved.ram_bytes = request.ram_kb.has_value()
+                             ? static_cast<std::size_t>(*request.ram_kb) * 1024u  // explicit --ram wins
+                         : request.stock ? 64u * 1024u                            // --stock preset
+                                         : 512u * 1024u;                          // convenience default
+
+    resolved.fast_disk = request.fast_disk_opt.has_value() ? *request.fast_disk_opt  // explicit wins
+                         : request.stock                   ? false                   // --stock preset
+                                                           : true;                   // convenience default
+
+    resolved.fmpac_autoload = request.no_fmpac ? false          // explicit opt-out wins
+                              : request.stock  ? false          // --stock preset
+                                               : true;          // convenience default
+
+    resolved.is_stock = request.stock;  // banner label only
+    return resolved;
 }
 
 }  // namespace sony_msx::frontend

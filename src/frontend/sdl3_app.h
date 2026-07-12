@@ -25,6 +25,7 @@
 #include "frontend/sdl3_audio_presenter.h"
 #include "frontend/sdl3_input_mapper.h"
 #include "frontend/sdl3_video_presenter.h"
+#include "frontend/session_summary.h"
 #include "machine/hbf1xv_machine.h"
 #include "machine/input_script.h"
 
@@ -174,6 +175,23 @@ struct Sdl3AppConfig {
     // before). --ram 128/256/512 (opt-in, NON-STOCK) set 128/256/512 KB here;
     // sdl3_main.cpp maps the parsed KB enum to this byte count (kb * 1024).
     std::size_t ram_bytes = 64u * 1024u;
+
+    // M46 (DEC-0071): auto-load an FM-PAC cartridge into primary slot 2 from
+    // fmpac_autoload_rom_path. Default FALSE = the STOCK anti-drift default
+    // (planner §2.7): a bare Sdl3AppConfig{} never auto-loads, so every
+    // direct-construction test stays stock. sdl3_main.cpp sets it TRUE as the
+    // resolved convenience default. The load layer (load_configured_assets)
+    // additionally skips when slot 2 is explicitly occupied, an FM-PAC is
+    // already present, or the ROM is absent/invalid -- a graceful banner note,
+    // NEVER a boot failure. DEC-0050 "NO S-RAM AVAILABLE" stays correct in every
+    // skip path (no internal SRAM is ever fabricated).
+    bool fmpac_autoload = false;
+    // The FM-PAC auto-load ROM path (CWD-relative production default). Only
+    // consulted when fmpac_autoload==true; overridable (e.g. by an integration
+    // test pointing at a temp copy) so the auto-load never touches a real user
+    // save under roms/. The derived SRAM path is <this>.sram unless
+    // fmpac_sram_path/fmpac_sram_disabled override it.
+    std::string fmpac_autoload_rom_path = "roms/fmpac.rom";
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real
@@ -267,6 +285,9 @@ public:
 
     [[nodiscard]] machine::Hbf1xvMachine& machine() { return machine_; }
     [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return machine_; }
+    // M46 (DEC-0071): the outcome of the FM-PAC slot-2 auto-load attempt during
+    // load_configured_assets(), for the startup banner + integration tests.
+    [[nodiscard]] FmPacAutoloadOutcome fmpac_autoload_outcome() const { return fmpac_autoload_outcome_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
     [[nodiscard]] bool quit_requested() const { return quit_requested_; }
     [[nodiscard]] std::uint64_t frames_run() const { return frames_run_; }
@@ -297,6 +318,9 @@ private:
     Sdl3AppConfig config_;
     machine::Hbf1xvMachine machine_;
     std::string last_error_;
+    // M46 (DEC-0071): recorded by load_configured_assets() (NotAttempted until
+    // then). Read by the startup banner + FM-PAC auto-load integration test.
+    FmPacAutoloadOutcome fmpac_autoload_outcome_ = FmPacAutoloadOutcome::NotAttempted;
     bool sdl_initialized_ = false;
     bool initialized_ = false;
     bool quit_requested_ = false;

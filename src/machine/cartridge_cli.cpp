@@ -55,46 +55,54 @@ std::optional<std::string> take_value(const std::vector<std::string>& args, cons
 ParsedCartridgeCli parse_cartridge_cli(const std::vector<std::string>& args) {
     ParsedCartridgeCli parsed;
 
+    // M46 (DEC-0071): apply a --slotN-type / --cartN-type VALUE to the target
+    // slot spec. Shared by both spellings so `--slotN-type` and `--cartN-type`
+    // write byte-identical results; last occurrence on the linear scan wins
+    // (identical to every other repeated-flag rule here). `flag_name` is only
+    // used for the diagnostic text so the error names the spelling the user typed.
+    const auto apply_type = [&](ParsedCartridgeSlotCli& slot, const std::string& value,
+                                const char* flag_name) {
+        if (is_auto_value(value)) {
+            // M30: `auto` == "as if the flag were omitted" (last occurrence
+            // wins, like every repeated flag here).
+            slot.type = devices::cartridge::CartridgeMapperType::Mirrored;
+            slot.type_was_explicit = false;
+        } else if (const auto type = parse_cartridge_mapper_type(value)) {
+            slot.type = *type;
+            slot.type_was_explicit = true;
+        } else {
+            parsed.errors.push_back(std::string("cartridge_cli: unrecognized ") + flag_name +
+                                    " value: '" + value + "'");
+        }
+    };
+
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& arg = args[i];
 
-        if (arg == "--cart1") {
-            if (auto value = take_value(args, i, "--cart1", parsed.errors)) {
+        // M46 (DEC-0071): `--slotN` is the official-MSX-term rename of `--cartN`;
+        // both spellings write the SAME slot1/slot2 fields, so they parse
+        // byte-identically and a `--slotN`/`--cartN` collision for one slot
+        // last-occurrence-wins (a plain linear-scan overwrite). `--cartN`
+        // remains an accepted silent backward-compat alias (existing scripts).
+        if (arg == "--cart1" || arg == "--slot1") {
+            if (auto value = take_value(args, i, arg.c_str(), parsed.errors)) {
                 parsed.slot1.path = *value;
                 ++i;
             }
-        } else if (arg == "--cart2") {
-            if (auto value = take_value(args, i, "--cart2", parsed.errors)) {
+        } else if (arg == "--cart2" || arg == "--slot2") {
+            if (auto value = take_value(args, i, arg.c_str(), parsed.errors)) {
                 parsed.slot2.path = *value;
                 ++i;
             }
-        } else if (arg == "--cart1-type") {
-            if (auto value = take_value(args, i, "--cart1-type", parsed.errors)) {
+        } else if (arg == "--cart1-type" || arg == "--slot1-type") {
+            if (auto value = take_value(args, i, arg.c_str(), parsed.errors)) {
                 ++i;
-                if (is_auto_value(*value)) {
-                    // M30: `auto` == "as if the flag were omitted" (last
-                    // occurrence wins, like every repeated flag here).
-                    parsed.slot1.type = devices::cartridge::CartridgeMapperType::Mirrored;
-                    parsed.slot1.type_was_explicit = false;
-                } else if (const auto type = parse_cartridge_mapper_type(*value)) {
-                    parsed.slot1.type = *type;
-                    parsed.slot1.type_was_explicit = true;
-                } else {
-                    parsed.errors.push_back("cartridge_cli: unrecognized --cart1-type value: '" + *value + "'");
-                }
+                apply_type(parsed.slot1, *value, arg.c_str());
             }
-        } else if (arg == "--cart2-type") {
-            if (auto value = take_value(args, i, "--cart2-type", parsed.errors)) {
+        } else if (arg == "--cart2-type" || arg == "--slot2-type") {
+            if (auto value = take_value(args, i, arg.c_str(), parsed.errors)) {
                 ++i;
-                if (is_auto_value(*value)) {
-                    parsed.slot2.type = devices::cartridge::CartridgeMapperType::Mirrored;
-                    parsed.slot2.type_was_explicit = false;
-                } else if (const auto type = parse_cartridge_mapper_type(*value)) {
-                    parsed.slot2.type = *type;
-                    parsed.slot2.type_was_explicit = true;
-                } else {
-                    parsed.errors.push_back("cartridge_cli: unrecognized --cart2-type value: '" + *value + "'");
-                }
+                apply_type(parsed.slot2, *value, arg.c_str());
             }
         } else if (arg == "--softwaredb") {
             // M30 (backlog G2): identification-database path override.

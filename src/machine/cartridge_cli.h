@@ -54,7 +54,16 @@ struct ParsedCartridgeCli {
 
 // Pure argv parser (A-M19-4): recognizes `--cart1 <path>`, `--cart1-type
 // <name>`, `--cart2 <path>`, `--cart2-type <name>`, and (M30) `--softwaredb
-// <path>` anywhere in `args` (order-independent). Does no file I/O and has
+// <path>` anywhere in `args` (order-independent).
+//
+// M46 (DEC-0071): `--slot1`/`--slot2`/`--slot1-type`/`--slot2-type` are the
+// official-MSX-term RENAMES and parse to the byte-identical slot fields;
+// `--cartN`/`--cartN-type` are KEPT as accepted silent backward-compat aliases
+// (existing scripts unbroken). Because both spellings write the same field on
+// the linear scan, a `--slotN`/`--cartN` collision for one slot resolves to the
+// LAST occurrence (the parser's standing repeated-flag rule).
+//
+// Does no file I/O and has
 // no Hbf1xvMachine dependency (mirrors RomAssetLoader's separation of
 // "parse/spec" from "load", rom_asset_loader.h:26), so it is directly
 // unit-testable without argv/process plumbing. Omitting --cart1/--cart2
