@@ -71,6 +71,24 @@ public:
     static constexpr std::size_t kSramBytes = 0x2000;   // 8 KB battery SRAM chip
     static constexpr std::uint16_t kSramWindow = 0x1FFE;  // addressable rel 0..0x1FFD
 
+    // openMSX FM-PAC `.sram` file format (adopted BYTE-IDENTICALLY so our
+    // <cart>.rom.sram is interchangeable with openMSX's for the same content):
+    // a 16-byte "PAC2 BACKUP DATA" WRAPPER header followed by the kSramWindow
+    // (0x1FFE = 8190) addressable data bytes -- a 8206-byte file. Grounded in
+    // references/openmsx-21.0/src/sound/MSXFmPac.cc:7,11 (PAC_Header +
+    //   sram(getName()+" SRAM", 0x1FFE, config, PAC_Header)) and
+    // references/openmsx-21.0/src/memory/SRAM.cc:114-131 (save writes header
+    //   then ram) / :83-112 (load validates the header, else warns + blank).
+    // NOTE: the SAME 16 bytes are ALSO the FM-PAC firmware's IN-SRAM signature
+    // (master copy at FM-PAC ROM offset 0x5D7C); openMSX's use here is the
+    // independent FILE wrapper, not that in-SRAM marker. The addressable SRAM is
+    // 8190 bytes (top 2 chip bytes 0x1FFE/0x1FFF are the magic-register shadows,
+    // not real SRAM -- MSXFmPac.cc:11,46-49), so the data section is 8190.
+    static constexpr std::size_t kSramHeaderSize = 16;  // strlen("PAC2 BACKUP DATA")
+    static constexpr std::size_t kSramFileBytes =
+        kSramHeaderSize + static_cast<std::size_t>(kSramWindow);  // 8206
+    static constexpr std::size_t kLegacyRawBytes = kSramBytes;    // 8192 (pre-M43 raw file)
+
     // 1..4 whole 16 KB banks (the real BIOS is one 16 KB bank; 64 KB variants
     // carry 4). A bank register value is masked against the actual bank count
     // so a bank>available never reads past the image (planner §2.1).
@@ -87,14 +105,25 @@ public:
     core::BusData mem_read(core::BusAddress address) override;
     void mem_write(core::BusAddress address, core::BusData value) override;
 
-    // Battery-SRAM persistence (M17 BatteryBackedSram primitive; M20 Halnote
-    // .sram pattern). load(): absent/short file -> store left at its
-    // deterministic zero default (never fabricated). Both round-trip
-    // byte-identical.
+    // Battery-SRAM persistence in openMSX's EXACT `.sram` file format (16-byte
+    // "PAC2 BACKUP DATA" header + 8190 data bytes; see kSramFileBytes above).
+    // load_sram(): reads the file, detects the format, and LOSSLESSLY MIGRATES a
+    // legacy raw-8192 save (our pre-M43 headerless format) by carrying its 8190
+    // addressable bytes forward (the 2 trailing phantom magic-shadow bytes are
+    // not real SRAM); absent/short/wrong-header -> store left at its
+    // deterministic zero default (never fabricated) and returns false. The
+    // migrated file is only written on the next save_sram/flush, so the original
+    // is never destroyed until the new file is safely on disk. save_sram()
+    // writes the new format ATOMICALLY (temp file + rename) for data safety.
+    // Both round-trip byte-identical for the 8190 addressable bytes.
     [[nodiscard]] devices::memory::BatteryBackedSram& sram() { return sram_; }
     [[nodiscard]] const devices::memory::BatteryBackedSram& sram() const { return sram_; }
-    [[nodiscard]] bool load_sram(const std::filesystem::path& path) { return sram_.load(path); }
-    [[nodiscard]] bool save_sram(const std::filesystem::path& path) const { return sram_.save(path); }
+    [[nodiscard]] bool load_sram(const std::filesystem::path& path);
+    [[nodiscard]] bool save_sram(const std::filesystem::path& path) const;
+
+    // True after load_sram() migrated a legacy raw-8192 save into memory (the
+    // new-format file is written on the next save_sram/flush). Debug/test seam.
+    [[nodiscard]] bool sram_migrated_from_legacy() const { return sram_migrated_from_legacy_; }
 
     // The owned FM-PAC OPLL (wiring seam for a future audio-mix follow-on).
     [[nodiscard]] devices::audio::Ym2413Opll& opll() { return opll_; }
@@ -122,6 +151,7 @@ private:
     std::uint8_t r1ffe_ = 0;   // 0x5FFE magic
     std::uint8_t r1fff_ = 0;   // 0x5FFF magic
     bool sram_enabled_ = false;
+    bool sram_migrated_from_legacy_ = false;  // set by load_sram() on migration
 };
 
 }  // namespace sony_msx::devices::cartridge

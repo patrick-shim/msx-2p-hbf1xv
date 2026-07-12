@@ -13,9 +13,30 @@
 
 #include "devices/cartridge/cartridge_fmpac_rom.h"
 
+#include <algorithm>
+#include <array>
+#include <cstddef>
+#include <fstream>
+#include <ios>
+#include <iostream>
+#include <iterator>
+#include <system_error>
 #include <utility>
+#include <vector>
 
 namespace sony_msx::devices::cartridge {
+
+namespace {
+
+// The openMSX FM-PAC `.sram` wrapper header, byte-for-byte
+// (references/openmsx-21.0/src/sound/MSXFmPac.cc:7
+//   `static constexpr const char* const PAC_Header = "PAC2 BACKUP DATA";`).
+// Kept as an explicit char array (NOT a NUL-terminated literal) so exactly the
+// 16 payload bytes are written -- matching SRAM.cc:121-124 `strlen(header)`.
+constexpr std::array<char, CartridgeFmPacRom::kSramHeaderSize> kSramFileHeader = {
+    'P', 'A', 'C', '2', ' ', 'B', 'A', 'C', 'K', 'U', 'P', ' ', 'D', 'A', 'T', 'A'};
+
+}  // namespace
 
 bool CartridgeFmPacRom::is_valid_image_size(const std::size_t size) {
     // 1..4 whole 16 KB banks. The real FM-PAC BIOS is exactly one 16 KB bank;
@@ -142,6 +163,103 @@ void CartridgeFmPacRom::mem_write(const core::BusAddress address, const core::Bu
 void CartridgeFmPacRom::check_sram_enable() {
     // MSXFmPac.cc:137-144: both magic bytes required (AND, not either-or).
     sram_enabled_ = (r1ffe_ == 0x4D) && (r1fff_ == 0x69);
+}
+
+bool CartridgeFmPacRom::load_sram(const std::filesystem::path& path) {
+    // Data-safety contract (the human has real FM-PAC saves): a load NEVER
+    // writes the host file; it only reads. A failed/ambiguous read leaves the
+    // (deterministic zero) store UNTOUCHED. The one destructive step -- replacing
+    // an old file -- happens ONLY on a deliberate save_sram()/flush of a
+    // fully-formed new-format image.
+    sram_migrated_from_legacy_ = false;
+
+    std::ifstream file(path, std::ios::binary);
+    if (!file) {
+        return false;  // absent/unreadable -> deterministic blank (never fabricated)
+    }
+    const std::vector<char> raw((std::istreambuf_iterator<char>(file)),
+                                std::istreambuf_iterator<char>());
+
+    // NEW openMSX format: 16-byte "PAC2 BACKUP DATA" wrapper header + 8190 data
+    // bytes (SRAM.cc:92-100 validates the header, then reads the data). Size and
+    // header must BOTH match -- otherwise it is corrupt and we fail SAFE (blank),
+    // exactly like openMSX's "Warning no correct SRAM file" path (SRAM.cc:101-104).
+    if (raw.size() == kSramFileBytes &&
+        std::equal(kSramFileHeader.begin(), kSramFileHeader.end(), raw.begin())) {
+        for (std::size_t i = 0; i < kSramWindow; ++i) {
+            sram_.write(i, static_cast<std::uint8_t>(raw[kSramHeaderSize + i]));
+        }
+        return true;
+    }
+
+    // LEGACY raw-8192 format (our pre-M43 headerless save): migrate LOSSLESSLY.
+    // Carry the 8190 addressable bytes (rel 0x0000..0x1FFD) forward; the 2
+    // trailing bytes (0x1FFE/0x1FFF) are the magic-register shadows, NOT real
+    // SRAM, so dropping them loses nothing (MSXFmPac.cc:11,46-49). The new-format
+    // file is written only on the next save_sram()/flush -- the original raw file
+    // stays intact until then, so an interrupted session never loses the save.
+    if (raw.size() == kLegacyRawBytes) {
+        for (std::size_t i = 0; i < kSramWindow; ++i) {
+            sram_.write(i, static_cast<std::uint8_t>(raw[i]));
+        }
+        sram_migrated_from_legacy_ = true;
+        std::cerr << "note: migrated legacy raw-8192 FM-PAC SRAM save '" << path.string()
+                  << "' to the openMSX-compatible format (written on next flush; "
+                     "original preserved until then)\n";
+        return true;
+    }
+
+    // Anything else (short/truncated/wrong-size/wrong-header) -> fail SAFE: leave
+    // the store at its deterministic default, do not partial-load garbage.
+    return false;
+}
+
+bool CartridgeFmPacRom::save_sram(const std::filesystem::path& path) const {
+    // Build the openMSX-exact file image in memory first: the 16-byte
+    // "PAC2 BACKUP DATA" header (SRAM.cc:121-124) then the 8190 addressable data
+    // bytes (SRAM.cc:125). Byte-identical to openMSX's SRAM::save() output for the
+    // same content, so <cart>.rom.sram is cross-emulator interchangeable.
+    std::vector<char> image;
+    image.reserve(kSramFileBytes);
+    image.insert(image.end(), kSramFileHeader.begin(), kSramFileHeader.end());
+    for (std::size_t i = 0; i < kSramWindow; ++i) {
+        image.push_back(static_cast<char>(sram_.read(i)));
+    }
+
+    // ATOMIC write for data safety: write the full image to a sibling temp file,
+    // then rename it over the target. If the write fails mid-way, the temp file
+    // (not the real save) is the casualty; the existing save is only replaced once
+    // the new image is completely on disk. (openMSX writes in place; we harden it
+    // because the human has irreplaceable saves.)
+    std::filesystem::path tmp = path;
+    tmp += ".tmp";
+    {
+        std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            return false;
+        }
+        out.write(image.data(), static_cast<std::streamsize>(image.size()));
+        out.flush();
+        if (!out) {
+            std::error_code rm;
+            std::filesystem::remove(tmp, rm);
+            return false;
+        }
+    }  // stream closed before rename
+
+    std::error_code ec;
+    std::filesystem::rename(tmp, path, ec);
+    if (ec) {
+        // Some platforms refuse rename onto an existing file: remove + retry.
+        std::error_code rm;
+        std::filesystem::remove(path, rm);
+        std::filesystem::rename(tmp, path, ec);
+        if (ec) {
+            std::filesystem::remove(tmp, rm);  // clean up the temp on total failure
+            return false;
+        }
+    }
+    return true;
 }
 
 }  // namespace sony_msx::devices::cartridge
