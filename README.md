@@ -5,7 +5,7 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.2**.
+Current release: **v1.1.3**.
 
 ## Architecture
 
@@ -33,9 +33,10 @@ the sections below and the source are the authoritative spec.)
   engine with per-line raster rendering and hardware-timed command duration (the `CE` busy-wait
   window paces software that polls it, so command-driven cut-scenes run at the correct speed).
 - Live audio: PSG (YM2149), Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
-- WD2793 FDC with index-pulse-relative rotational latency on both the read and write paths
-  (edge-triggered DRQ handshake for reliable in-game disk saves); `--fast-disk` for near-instant
-  loads.
+- WD2793 FDC with index-pulse-relative rotational latency on read and write, and a cycle-accurate
+  write byte-stream: the sector data-position is decoupled from CPU write timing (a missed slot
+  substitutes `0x00`+Lost-Data and advances, never drops), so in-game disk saves are byte-exact
+  under any write cadence and land on the latched track/side; `--fast-disk` for near-instant loads.
 - Keyboard / joystick, Ren-Sha Turbo, the hardware PAUSE button, and the Speed Controller.
 - An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
   a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
