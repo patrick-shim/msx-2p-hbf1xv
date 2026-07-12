@@ -11,6 +11,10 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
+#include <algorithm>
+#include <cctype>
+#include <cstddef>
+#include <filesystem>
 #include <iostream>
 #include <string>
 #include <utility>
@@ -108,7 +112,33 @@ void print_startup_summary(const sony_msx::frontend::Sdl3AppConfig& config) {
 
     std::cerr << "    Main RAM   : " << (config.ram_bytes / 1024) << " KB"
               << (config.ram_bytes == 64u * 1024u ? "  (stock)\n" : "  (opt-in --ram)\n");
-    std::cerr << "    BIOS       : " << config.bios_dir << "/\n";
+    // BIOS: resolve to an absolute path and list the ROM files actually present,
+    // so the user sees exactly where (and what) was loaded regardless of the CWD.
+    {
+        namespace fs = std::filesystem;
+        std::error_code ec;
+        const fs::path bios_path(config.bios_dir);
+        const fs::path abs = fs::absolute(bios_path, ec);
+        const std::string shown = ec ? config.bios_dir : abs.lexically_normal().string();
+
+        std::vector<std::string> roms;
+        for (fs::directory_iterator it(bios_path, ec), end; !ec && it != end; it.increment(ec)) {
+            std::string ext = it->path().extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(),
+                           [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+            if (ext == ".rom") {
+                roms.push_back(it->path().filename().string());
+            }
+        }
+        std::sort(roms.begin(), roms.end());
+
+        std::cerr << "    BIOS       : " << shown << "  (" << roms.size() << " ROM"
+                  << (roms.size() == 1 ? "" : "s") << ")\n";
+        for (std::size_t i = 0; i < roms.size(); ++i) {
+            std::cerr << (i % 3 == 0 ? "                 " : "") << roms[i]
+                      << ((i % 3 == 2 || i + 1 == roms.size()) ? "\n" : "  ");
+        }
+    }
 
     if (config.disk_paths.empty()) {
         std::cerr << "    Disk       : (none inserted)\n";
