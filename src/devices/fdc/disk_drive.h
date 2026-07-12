@@ -146,6 +146,19 @@ public:
     bool read_sector(std::uint8_t sector, std::uint8_t* out) const;
     bool write_sector(std::uint8_t sector, const std::uint8_t* in);
 
+    // Write a sector to an EXPLICIT (track, side) instead of the live head
+    // position + side latch (DEF-M47-DISKWRITE H4). The WD2793 latches its
+    // target CHS when the address mark rotates under the head at command START;
+    // the head cannot move while BUSY, so a mid-transfer glue-register write
+    // (e.g. the Sony 0x7FFC side latch, or a seek) must NOT redirect the sector
+    // being committed. The FDC captures (physical_track_, side_) at
+    // begin_write_sector and finishes through THIS path, so a live side/track
+    // change during the DRQ stream cannot land the sector on the wrong CHS (all
+    // 3 YS II corrupt sectors were side 1). `side` is masked to bit 0 exactly as
+    // set_side() does, so the two paths address identically.
+    bool write_sector_at(std::uint8_t track, std::uint8_t side, std::uint8_t sector,
+                         const std::uint8_t* in);
+
 private:
     DiskImage* image_ = nullptr;
     std::uint8_t physical_track_ = 0;

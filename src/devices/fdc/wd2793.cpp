@@ -75,6 +75,10 @@ void Wd2793::reset() {
     last_sync_ = clock_ != nullptr ? clock_->cpu_cycles() : 0;
     data_index_ = 0;
     data_available_ = 0;
+    data_reg_fresh_ = false;
+    write_sector_num_ = 0;
+    write_track_num_ = 0;
+    write_side_ = 0;
     buffer_.clear();
     wt_a1_run_ = 0;
     wt_expect_id_ = false;
@@ -108,6 +112,28 @@ void Wd2793::sync(std::uint64_t t) {
     if (phase_ == Phase::WriteSector && data_index_ == 0 && t >= write_check_deadline_) {
         status_ |= kLostData;
         end_command(t);
+    }
+    // Mid-transfer abandoned Write Sector (DEF-M47-DISKWRITE; PRESERVES M45). This
+    // is DISTINCT from the first-byte CHECK_WRITE gate above (which aborts an
+    // ABSENT first byte, data_index_ == 0). Once the FIRST byte has landed
+    // (data_index_ > 0), the WD2793 lays down a FULL 512-byte sector regardless of
+    // whether the CPU keeps up (fact-sheet "FDC for Sony HB-F1XV.md" §8 "missed
+    // DRQ mid-write -> Lost Data and a 0x00 byte substituted, command continues";
+    // openMSX writeSectorData WD2793.cc:750-757 `if (dataRegWritten) ... else {
+    // dataOutReg = 0; statusReg |= LOST_DATA; }` -- understanding only, never
+    // copied, GPL isolation). So a CPU that stops servicing DRQ after the first
+    // byte does NOT abort: the un-serviced slots are substituted 0x00 + LOST_DATA
+    // and the position still ADVANCES (never drops, never hangs BUSY), and the
+    // sector completes. The full-revolution grace (kWriteFirstByteWindowCycles)
+    // deliberately keeps this OFF the normal poll/stall/drift/burst path -- those
+    // commit EVERY byte on the CPU write (write_data -> commit_write_sector_byte)
+    // and never reach here; it fires only for a genuinely-abandoned mid-sector
+    // write, matching the CPU-gated stream model the read path documents. The gate
+    // above is checked FIRST so this zero-substitution can never fire before the
+    // first real byte lands.
+    while (phase_ == Phase::WriteSector && data_index_ > 0 && data_available_ > 0 &&
+           t >= drq_deadline_ + kWriteFirstByteWindowCycles) {
+        commit_write_sector_byte(t, 0x00, /*substituted=*/true);
     }
     if (index_irq_armed_ && t >= index_irq_deadline_) {
         // Type IV i2 (index-pulse IRQ) fires once its scheduled deadline is
@@ -278,40 +304,80 @@ void Wd2793::write_sector(const std::uint8_t value) {
 void Wd2793::write_data(const std::uint8_t value) {
     const std::uint64_t t = now();
     sync(t);
+    // DEF-M47-DISKWRITE: LATCH the CPU byte, then COMMIT it in-order at the
+    // current sector position -- ALWAYS, never dropped. The byte-POSITION is
+    // DECOUPLED from the CPU-write TIMING. The M45 model gated the commit on
+    // transfer_drq(t) and SILENTLY DROPPED (data_reg_ updated, but buffer_/
+    // data_index_/data_available_ NOT advanced) any byte that did not land
+    // exactly inside the DRQ window -- an early / 2-bytes-per-DRQ-burst /
+    // fixed-cadence-ahead-of-our-rotational-first-DRQ write. A dropped byte
+    // shifts every later byte of the fully-committed sector -> the sporadic YS
+    // II save corruption (DEC-0072: 3 coherent-shifted side-1 sectors). The real
+    // WD2793 NEVER drops: it lays down EXACTLY 512 in-order bytes, substituting
+    // 0x00 + LOST_DATA only for a genuinely UN-SERVICED slot while the position
+    // ALWAYS advances (fact-sheet "FDC for Sony HB-F1XV.md" §8; openMSX
+    // writeSectorData WD2793.cc:742-782; fMSX WD1793.c:344-370 stores every write
+    // unconditionally + advances -- read only, never copied, license isolation).
+    // So an early OR late byte lands at data_index_ and the next DRQ is re-based
+    // on THIS write time: a full Write Sector is EXACTLY 512 in-order bytes for
+    // EVERY cadence (early / late / burst / ISR-perturbed) -- no shift, no drop,
+    // no stall. The un-serviced-slot 0x00 substitution lives in sync() (the
+    // mid-transfer abandoned-write path) + the first-byte CHECK_WRITE gate;
+    // behaviour is identical with and without --fast-disk (fast only scales
+    // cycles_per_byte()).
     data_reg_ = value;
-    if (phase_ == Phase::WriteSector && transfer_drq(t)) {
-        // Edge-triggered DRQ handshake + one-byte pipeline (openMSX setDataReg
-        // WD2793.cc:235-247 + writeSectorData :742-782, DEF-M45-WRITEDRQ). A CPU
-        // data-register write commits EXACTLY ONE disk byte and RE-BASES the next
-        // DRQ one byte-period after THIS write (drq_deadline_ = t + cadence), so
-        // per-byte timing drift can never accumulate and a byte that merely
-        // arrives "late" relative to the previous deadline is committed, never
-        // substituted. There is NO absolute-cumulative-deadline zero-substitution
-        // here anymore: LOST_DATA/zero handling is confined to the first-byte
-        // CHECK_WRITE gate (sync()); a mid-transfer stall is absorbed by the
-        // pipeline and stays byte-perfect. Behaviour is IDENTICAL with and
-        // without --fast-disk: fast_disk_ only scales cycles_per_byte(), it is
-        // no longer a bug-suppressing branch. (The old model substituted 0x00 +
-        // LOST_DATA for every byte-period the CPU trailed a rigid deadline, and
-        // each injected zero consumed a data slot -> early finish + dropped tail:
-        // the DEF-M45-WRITEDRQ corruption. Removed.)
-        buffer_[static_cast<std::size_t>(data_index_++)] = value;
-        --data_available_;
-        drq_deadline_ = t + cycles_per_byte();
-        if (data_available_ == 0) {
-            finish_write_sector(t);
-        }
-    } else if (phase_ == Phase::WriteTrack && transfer_drq(t)) {
-        // Same edge handshake for Write Track (openMSX writeTrackData
-        // WD2793.cc:1004-1008 re-bases drqTime.reset(time) each byte). No
-        // zero-substitution was ever present here; the re-base keeps the cadence
-        // drift-free and consistent with Write Sector.
+    data_reg_fresh_ = true;
+    if (phase_ == Phase::WriteSector) {
+        commit_write_sector_byte(t, value, /*substituted=*/false);
+    } else if (phase_ == Phase::WriteTrack) {
+        // Write Track: parse the streamed template byte, then ALWAYS advance the
+        // track position (same never-drop decoupling as Write Sector), re-basing
+        // the next DRQ on the actual write (openMSX writeTrackData
+        // WD2793.cc:1004-1008 resets drqTime each byte).
         parse_write_track_byte(value);
-        --data_available_;
-        drq_deadline_ = t + cycles_per_byte();
-        if (data_available_ == 0) {
-            end_command(t);
+        data_reg_fresh_ = false;
+        if (data_available_ > 0) {
+            --data_available_;
+            drq_deadline_ = t + cycles_per_byte();
+            if (data_available_ == 0) {
+                end_command(t);
+            }
         }
+    } else {
+        // No active data-accepting write phase: the byte is latched into the data
+        // register (readable) but nothing is committed (the CHECK_WRITE gate has
+        // already aborted, or no write command is running).
+        data_reg_fresh_ = false;
+    }
+}
+
+void Wd2793::commit_write_sector_byte(const std::uint64_t t, const std::uint8_t value,
+                                      const bool substituted) {
+    buffer_[static_cast<std::size_t>(data_index_)] = value;
+    if (sector_write_observer_ != nullptr) {
+        // Non-perturbing trace: log the committed byte (genuine vs 0x00-
+        // substituted), its in-sector index, and the target LBA at the LATCHED
+        // CHS (H4). Default null => this whole path is skipped => byte-identical.
+        sector_write_observer_->on_write_byte(
+            command_reg_, write_track_num_, write_side_, write_sector_num_,
+            DiskImage::chs_to_lba(write_track_num_, write_side_, write_sector_num_), data_index_,
+            value, substituted, drq_deadline_);
+    }
+    ++data_index_;
+    --data_available_;
+    data_reg_fresh_ = false;
+    if (substituted) {
+        // Un-serviced slot: 0x00 + LOST_DATA, position advances on the FIXED disk
+        // cadence (the CPU is not driving it).
+        status_ |= kLostData;
+        drq_deadline_ += cycles_per_byte();
+    } else {
+        // Genuine CPU byte: RE-BASE the next DRQ on the actual service time so
+        // per-byte drift can never accumulate (drift-free, CPU-paced).
+        drq_deadline_ = t + cycles_per_byte();
+    }
+    if (data_available_ == 0) {
+        finish_write_sector(t);
     }
 }
 
@@ -486,6 +552,17 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
 
 void Wd2793::begin_write_sector(const std::uint64_t t) {
     write_sector_num_ = sector_reg_;
+    // H4 (DEF-M47-DISKWRITE): LATCH the target (track, side) at command START, the
+    // moment the sector's address mark is under the head. The head cannot move
+    // and the side cannot be re-selected to a DIFFERENT physical sector while the
+    // command is BUSY, so finish_write_sector commits to THESE latched
+    // coordinates -- NOT the live drive->physical_track()/side(), which a
+    // mid-transfer glue-register write (Sony 0x7FFC side latch / a seek) could
+    // have changed and thereby redirected the committed sector (all 3 YS II
+    // corrupt sectors were side 1). Mirrors the read path capturing at START
+    // (begin_read_sector reads the drive position before the DRQ stream).
+    write_track_num_ = drive_->physical_track();
+    write_side_ = drive_->side();
     // Pre-size the transfer buffer. Every slot is overwritten by a genuine CPU
     // byte before finish_write_sector runs (data_available_ only reaches 0 after
     // 512 real commits), so the pre-fill can no longer leak zeros to disk -- and
@@ -549,7 +626,18 @@ void Wd2793::finish_read_sector(const std::uint64_t t) {
 }
 
 void Wd2793::finish_write_sector(const std::uint64_t t) {
-    drive_->write_sector(write_sector_num_, buffer_.data());
+    // H4 (DEF-M47-DISKWRITE): commit to the LATCHED (track, side) captured at
+    // begin_write_sector, NOT the live drive position -- so a mid-transfer side/
+    // track change cannot land the sector on the wrong CHS.
+    drive_->write_sector_at(write_track_num_, write_side_, write_sector_num_, buffer_.data());
+    if (sector_write_observer_ != nullptr) {
+        // Non-perturbing finish trace: the assembled sector + its CRC at the
+        // latched CHS/LBA. Default null => skipped => byte-identical.
+        sector_write_observer_->on_sector_write(
+            command_reg_, write_track_num_, write_side_, write_sector_num_,
+            DiskImage::chs_to_lba(write_track_num_, write_side_, write_sector_num_), buffer_.data(),
+            buffer_.size(), crc16(buffer_.data(), buffer_.size()));
+    }
     if ((command_reg_ & kMFlag) != 0) {
         ++sector_reg_;
         if (sector_reg_ >= 1 && sector_reg_ <= DiskImage::kSectorsPerTrack) {
@@ -590,6 +678,13 @@ void Wd2793::start_type3(const std::uint8_t cmd, const std::uint64_t t) {
             end_command(t);
             return;
         }
+        // H4 (DEF-M47-DISKWRITE): latch (track, side) at command START, as Write
+        // Sector does -- the formatted sectors commit to these coordinates via
+        // write_sector_at (parse_write_track_byte), so a mid-format side/track
+        // change cannot redirect them. The head stays on the physical track for
+        // the whole revolution while BUSY.
+        write_track_num_ = drive_->physical_track();
+        write_side_ = drive_->side();
         wt_a1_run_ = 0;
         wt_expect_id_ = false;
         wt_in_data_ = false;
@@ -688,7 +783,10 @@ void Wd2793::parse_write_track_byte(const std::uint8_t value) {
     } else if (wt_in_data_) {
         if (value == 0xF7 && wt_data_count_ >= static_cast<int>(DiskImage::kSectorSize)) {
             if (drive_ != nullptr) {
-                drive_->write_sector(wt_sector_num_, wt_data_.data());
+                // H4 (DEF-M47-DISKWRITE): commit to the LATCHED (track, side)
+                // captured at start_type3, not the live drive position.
+                drive_->write_sector_at(write_track_num_, write_side_, wt_sector_num_,
+                                        wt_data_.data());
             }
             wt_in_data_ = false;
         } else if (wt_data_count_ < static_cast<int>(DiskImage::kSectorSize)) {

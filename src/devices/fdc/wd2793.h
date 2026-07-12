@@ -42,6 +42,38 @@ public:
                                 std::size_t size) = 0;
 };
 
+// DEF-M47-DISKWRITE stream-capture: a lightweight, NON-PERTURBING observer of
+// the Write Sector byte stream, mirroring FdcSectorReadObserver. The machine
+// installs one ONLY while live stream-capture is armed (default null => the
+// whole notify path is skipped => byte-for-byte identical FDC behaviour AND
+// timing). on_write_byte is called synchronously as each data byte is committed
+// to the sector buffer (whether a genuine CPU byte or a substituted 0x00), and
+// on_sector_write once the full sector is flushed to the (LATCHED) CHS. Same
+// hard contract as FdcSectorReadObserver: an implementation MUST NOT mutate
+// FDC/drive/timing state, issue reads, or advance any clock -- it only inspects
+// the supplied values (e.g. to log a per-byte trace so a live YS II save can be
+// byte-diffed against the raw .dsk). A pure diagnostic sink, isolated from
+// emulation.
+class FdcSectorWriteObserver {
+public:
+    virtual ~FdcSectorWriteObserver() = default;
+    // command = the WD2793 command register driving this write (Type II Write
+    // Sector); track/side/sector = the LATCHED target CHS (H4); lba = its LBA;
+    // data_index = 0-based byte position within the sector; value = the byte
+    // committed; substituted = true when it is a 0x00 un-serviced-slot fill (CPU
+    // missed the DRQ window) rather than a genuine CPU byte; drq_deadline = the
+    // absolute cycle of the next DRQ window after this commit.
+    virtual void on_write_byte(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                               std::uint8_t sector, std::uint32_t lba, int data_index,
+                               std::uint8_t value, bool substituted,
+                               std::uint64_t drq_deadline) = 0;
+    // Called from finish_write_sector once the assembled 512-byte sector is
+    // committed to the LATCHED CHS. crc = CRC-16-CCITT over the sector data.
+    virtual void on_sector_write(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                                 std::uint8_t sector, std::uint32_t lba, const std::uint8_t* data,
+                                 std::size_t size, std::uint16_t crc) = 0;
+};
+
 // WD2793 floppy-disk controller core (M16-S2/S3). The HB-F1XV physical chip is
 // the Fujitsu MB89311, register- and command-compatible with the Western Digital
 // WD2793 (fact-sheet "FDC for Sony HB-F1XV.md" §1). This models the five
@@ -156,6 +188,14 @@ public:
     // pointer, like clock_/drive_ above, managed by the installing machine).
     void set_sector_read_observer(FdcSectorReadObserver* observer) {
         sector_read_observer_ = observer;
+    }
+
+    // DEF-M47-DISKWRITE stream-capture: install (non-null) / remove (nullptr) the
+    // non-perturbing Write Sector trace observer. Default null => zero behaviour
+    // change; reset() deliberately does NOT clear it (externally-owned lifecycle
+    // pointer, like clock_/drive_/sector_read_observer_ above).
+    void set_sector_write_observer(FdcSectorWriteObserver* observer) {
+        sector_write_observer_ = observer;
     }
 
     void reset();
@@ -275,6 +315,14 @@ private:
     void finish_read_sector(std::uint64_t t);
     void finish_write_sector(std::uint64_t t);
 
+    // DEF-M47-DISKWRITE: commit ONE Write Sector byte in-order at data_index_ and
+    // advance the position (never drop). `substituted` distinguishes a genuine
+    // CPU byte (re-bases the next DRQ on the actual service time `t`) from a
+    // 0x00 un-serviced-slot fill (advances on the fixed disk cadence + sets
+    // LOST_DATA). Fires the write observer and, at data_available_ == 0, flushes
+    // via finish_write_sector.
+    void commit_write_sector_byte(std::uint64_t t, std::uint8_t value, bool substituted);
+
     [[nodiscard]] bool is_type1_status() const;
     [[nodiscard]] bool transfer_drq(std::uint64_t t) const;
 
@@ -290,6 +338,9 @@ private:
     // DEC-0052 stream-capture sink (default null => never notified). Externally
     // owned; see set_sector_read_observer.
     FdcSectorReadObserver* sector_read_observer_ = nullptr;
+    // DEF-M47-DISKWRITE Write Sector trace sink (default null => never notified).
+    // Externally owned; see set_sector_write_observer.
+    FdcSectorWriteObserver* sector_write_observer_ = nullptr;
 
     std::uint8_t status_ = 0;  // sticky bits; dynamic bits recomputed on read
     std::uint8_t command_reg_ = 0;
@@ -334,8 +385,20 @@ private:
     int data_index_ = 0;
     int data_available_ = 0;
 
-    // Write-sector staging: target coordinates + assembled data.
+    // DEF-M47-DISKWRITE: a CPU data-register write is LATCHED here (fresh == a
+    // byte is pending to be laid to disk). write_data commits it in-order at the
+    // current position regardless of DRQ timing (never dropped -- decoupling the
+    // byte-POSITION from the CPU-write TIMING); the flag distinguishes a genuine
+    // CPU byte from a substituted 0x00 for the un-serviced-slot path.
+    bool data_reg_fresh_ = false;
+
+    // Write staging: the LATCHED target coordinates (H4 -- captured at
+    // begin_write_sector / Write Track start, committed by finish_write_sector /
+    // parse_write_track_byte, so a mid-transfer side/track change cannot redirect
+    // the sector) + the assembled data (buffer_).
     std::uint8_t write_sector_num_ = 0;
+    std::uint8_t write_track_num_ = 0;
+    std::uint8_t write_side_ = 0;
 
     // Write-track parser state (standard 9-sector reformat).
     int wt_a1_run_ = 0;

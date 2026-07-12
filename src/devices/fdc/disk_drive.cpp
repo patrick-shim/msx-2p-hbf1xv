@@ -126,4 +126,16 @@ bool DiskDrive::write_sector(const std::uint8_t sector, const std::uint8_t* in) 
     return image_->write_chs(physical_track_, side_, sector, in);
 }
 
+bool DiskDrive::write_sector_at(const std::uint8_t track, const std::uint8_t side,
+                                const std::uint8_t sector, const std::uint8_t* in) {
+    if (image_ == nullptr) {
+        return false;
+    }
+    // Explicit (track, side) commit (DEF-M47-DISKWRITE H4). side is masked to the
+    // single latch bit exactly as set_side()/write_chs already do, so this
+    // addresses byte-identically to write_sector() when the latched coordinates
+    // equal the live head position (the common, non-adversarial case).
+    return image_->write_chs(track, side & 1u, sector, in);
+}
+
 }  // namespace sony_msx::devices::fdc

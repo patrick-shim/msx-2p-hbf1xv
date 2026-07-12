@@ -579,6 +579,17 @@ private:
     // already-read bytes + writes a host file; no emulation/scheduler/CPU effect.
     void log_stream_fdc_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
                              std::uint8_t sector, const std::uint8_t* data, std::size_t size);
+    // DEF-M47-DISKWRITE: append deterministic per-byte + per-sector Write Sector
+    // trace lines to <debug_root>/traces/stream_<id>_fdcwrite.log while streaming
+    // (via the FdcWriteStreamObserver installed on fdc_). Non-perturbing: only
+    // inspects the committed bytes + writes a host file. Lets a live YS II save be
+    // byte-diffed against the raw .dsk / a pristine reference.
+    void log_stream_fdc_write_byte(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                                   std::uint8_t sector, std::uint32_t lba, int data_index,
+                                   std::uint8_t value, bool substituted, std::uint64_t drq_deadline);
+    void log_stream_fdc_write_sector(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                                     std::uint8_t sector, std::uint32_t lba, const std::uint8_t* data,
+                                     std::size_t size, std::uint16_t crc);
     // DEC-0052 stream-light WATCHLOG appenders (called via the mapper-RAM /
     // VDP register-write observers below while streaming). Each appends one
     // deterministic line to <debug_root>/traces/stream_<id>_watch.log for a
@@ -731,6 +742,26 @@ private:
         void on_sector_read(std::uint8_t command, std::uint8_t track, std::uint8_t side,
                             std::uint8_t sector, const std::uint8_t* data,
                             std::size_t size) override;
+
+    private:
+        Hbf1xvMachine& machine_;
+    };
+
+    // DEF-M47-DISKWRITE stream-capture Write Sector observer adapter, mirroring
+    // FdcStreamObserver. Installed on fdc_ only while stream_active_; default-null
+    // => zero behaviour change. Forwards each committed data byte + each finished
+    // sector to log_stream_fdc_write_*(). Non-perturbing (see
+    // FdcSectorWriteObserver's contract).
+    class FdcWriteStreamObserver final : public devices::fdc::FdcSectorWriteObserver {
+    public:
+        explicit FdcWriteStreamObserver(Hbf1xvMachine& machine) : machine_(machine) {}
+        void on_write_byte(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                           std::uint8_t sector, std::uint32_t lba, int data_index,
+                           std::uint8_t value, bool substituted,
+                           std::uint64_t drq_deadline) override;
+        void on_sector_write(std::uint8_t command, std::uint8_t track, std::uint8_t side,
+                             std::uint8_t sector, std::uint32_t lba, const std::uint8_t* data,
+                             std::size_t size, std::uint16_t crc) override;
 
     private:
         Hbf1xvMachine& machine_;
@@ -1072,6 +1103,9 @@ private:
     // FDC per-sector-read logger adapter (installed on fdc_ only while armed). Only
     // holds a reference to *this, so declaration order vs fdc_ is irrelevant.
     FdcStreamObserver fdc_stream_observer_{*this};
+    // DEF-M47-DISKWRITE per-byte/per-sector Write Sector logger adapter (installed
+    // on fdc_ only while armed). Only holds a reference to *this.
+    FdcWriteStreamObserver fdc_write_stream_observer_{*this};
     // DEC-0052 stream-light watchlog observer adapters (installed on ram_mapper_
     // / vdp_ only while armed). Only hold a reference to *this.
     MemWatchObserver mem_watch_observer_{*this};

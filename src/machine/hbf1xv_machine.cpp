@@ -1607,7 +1607,10 @@ void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::st
         // append-mode log is rebuilt byte-identically by an identical armed run.
         std::error_code ec;
         std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_fdc.log"), ec);
+        std::filesystem::remove(
+            debug_root_ / "traces" / ("stream_" + stream_id_ + "_fdcwrite.log"), ec);
         fdc_.set_sector_read_observer(&fdc_stream_observer_);
+        fdc_.set_sector_write_observer(&fdc_write_stream_observer_);
         // DEC-0052 stream-light: the mapper-RAM + VDP register-write watchlog
         // observers are a light-mode-only capability, so the heavy F10 path
         // stays byte-for-byte the prior M36 stream behavior (no watch.log).
@@ -1739,6 +1742,7 @@ void Hbf1xvMachine::finalize_stream_capture(const std::string& reason_note,
     //     the mapper-RAM + VDP register-write watchlog observers are removed here
     //     too, and stream_light_ is cleared so a following heavy arm is unaffected.
     fdc_.set_sector_read_observer(nullptr);
+    fdc_.set_sector_write_observer(nullptr);
     ram_mapper_.set_write_observer(nullptr);
     vdp_.attach_register_write_observer(nullptr);
     stream_light_ = false;
@@ -1791,6 +1795,64 @@ void Hbf1xvMachine::FdcStreamObserver::on_sector_read(const std::uint8_t command
                                                       const std::uint8_t* data,
                                                       const std::size_t size) {
     machine_.log_stream_fdc_read(command, track, side, sector, data, size);
+}
+
+// --- DEF-M47-DISKWRITE Write Sector byte-trace ------------------------------
+
+void Hbf1xvMachine::log_stream_fdc_write_byte(const std::uint8_t command, const std::uint8_t track,
+                                              const std::uint8_t side, const std::uint8_t sector,
+                                              const std::uint32_t lba, const int data_index,
+                                              const std::uint8_t value, const bool substituted,
+                                              const std::uint64_t drq_deadline) {
+    // Defensive: the observer is installed only while armed. Non-perturbing:
+    // inspects the committed byte + appends one line -- no emulation effect.
+    if (!stream_active_) {
+        return;
+    }
+    std::string line = "frame=" + debug_format::to_dec(frame_count_);
+    line += " cmd=" + debug_format::to_hex(command, 2);
+    line += " lba=" + debug_format::to_dec(lba);
+    line += " chs=" + debug_format::to_dec(track) + "/" + debug_format::to_dec(side) + "/" +
+            debug_format::to_dec(sector);
+    line += " idx=" + debug_format::to_dec(static_cast<std::uint32_t>(data_index));
+    line += " val=" + debug_format::to_hex(value, 2);
+    line += substituted ? " SUBST" : " cpu";
+    line += " drq=" + debug_format::to_dec(drq_deadline);
+    line.push_back('\n');
+    append_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_fdcwrite.log", line);
+}
+
+void Hbf1xvMachine::log_stream_fdc_write_sector(const std::uint8_t command, const std::uint8_t track,
+                                                const std::uint8_t side, const std::uint8_t sector,
+                                                const std::uint32_t lba, const std::uint8_t* data,
+                                                const std::size_t size, const std::uint16_t crc) {
+    if (!stream_active_) {
+        return;
+    }
+    std::string line = "frame=" + debug_format::to_dec(frame_count_);
+    line += " FINISH cmd=" + debug_format::to_hex(command, 2);
+    line += " lba=" + debug_format::to_dec(lba);
+    line += " chs=" + debug_format::to_dec(track) + "/" + debug_format::to_dec(side) + "/" +
+            debug_format::to_dec(sector);
+    line += " crc16=" + debug_format::to_hex(crc, 4);
+    line += " crc32=" + debug_format::to_hex(crc32(data, size), 8);
+    line.push_back('\n');
+    append_text_file(debug_root_ / "traces", "stream_" + stream_id_ + "_fdcwrite.log", line);
+}
+
+void Hbf1xvMachine::FdcWriteStreamObserver::on_write_byte(
+    const std::uint8_t command, const std::uint8_t track, const std::uint8_t side,
+    const std::uint8_t sector, const std::uint32_t lba, const int data_index,
+    const std::uint8_t value, const bool substituted, const std::uint64_t drq_deadline) {
+    machine_.log_stream_fdc_write_byte(command, track, side, sector, lba, data_index, value,
+                                       substituted, drq_deadline);
+}
+
+void Hbf1xvMachine::FdcWriteStreamObserver::on_sector_write(
+    const std::uint8_t command, const std::uint8_t track, const std::uint8_t side,
+    const std::uint8_t sector, const std::uint32_t lba, const std::uint8_t* data,
+    const std::size_t size, const std::uint16_t crc) {
+    machine_.log_stream_fdc_write_sector(command, track, side, sector, lba, data, size, crc);
 }
 
 // --- DEC-0052 stream-light WATCHLOG ----------------------------------------
