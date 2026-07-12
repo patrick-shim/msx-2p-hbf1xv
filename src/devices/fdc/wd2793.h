@@ -91,19 +91,31 @@ public:
     // addrIdx). Our IBM System-34 track (build_read_track_buffer: C/H/R/N + CRC +
     // Gap2 + sync + A1A1A1 + DAM) has gapLength = 45, so 45 + 2 = 47 byte
     // periods. The rotational wait for the mark to ARRIVE is added separately
-    // (DiskDrive::cycles_until_sector_id; see begin_read_sector). DISTINCT from
-    // kReadStartCycles, which write/read-address/read-track/write-track keep
-    // unchanged (DEC-0055 slice C: READ SECTOR only).
+    // (DiskDrive::cycles_until_sector_id; see begin_read_sector). Shared by
+    // WRITE Sector too (begin_write_sector, DEF-M45-WRITEDRQ-FIX): the write
+    // first-byte DRQ is likewise rotational-search-relative, so read and write
+    // use the SAME rotational-wait + header model. DISTINCT from kReadStartCycles,
+    // which read-address/read-track/write-track keep unchanged.
     static constexpr std::uint64_t kReadSectorHeaderCycles = 47 * kCyclesPerByte;
-    // Write Sector first-byte CHECK_WRITE gate (openMSX startWriteSector /
+    // Write Sector first-byte CHECK_WRITE window (openMSX startWriteSector /
     // checkStartWrite, WD2793.cc:646-701). After the write-sector DRQ first
-    // asserts, the CPU has this many byte-periods to supply the FIRST data byte;
-    // if it does not, the command ABORTS with LOST_DATA and NOTHING is written
-    // to disk (no all-zero sector). openMSX schedules CHECK_WRITE 8 byte-periods
-    // after the DRQ (drqTime + 8). Expressed in byte-periods so it scales with
-    // the per-byte cadence -- fast-disk keeps the SAME 8-byte window (a pure
-    // timing-scale, never a behavioural change).
-    static constexpr std::uint64_t kWriteCheckBytePeriods = 8;
+    // asserts, the CPU must supply the FIRST data byte within this window; if it
+    // does not, the command ABORTS with LOST_DATA and NOTHING is written to disk
+    // (no all-zero sector). On real hardware the DRQ is asserted only after the
+    // rotational sector-search (begin_write_sector adds that variable latency),
+    // and openMSX's own CHECK_WRITE is just 8 byte-periods after the DRQ because
+    // there the CPU has already finished setup DURING the search (setDataReg
+    // latches the first byte only while DRQ is up, WD2793.cc:235-247). Our model
+    // can present a small (unlucky sector angle) or --fast-disk-collapsed
+    // rotational wait while the CPU still runs real-time, so an 8-byte tail would
+    // wrongly abort a valid slow-first-byte write (the DEF-M45 YS II in-game-save
+    // hang). We therefore allow a FULL further disk revolution after the DRQ --
+    // the natural disk timescale, far beyond any real save-buffer setup, so a
+    // valid write is NEVER aborted while a genuinely-absent first byte still
+    // aborts deterministically. Deliberately NOT fast-scaled: the CPU runs
+    // real-time in fast-disk mode, so the fault-detection window must stay
+    // real-time too (kIndexPeriodCycles == kSystemClockHz / 5, one 300 rpm rev).
+    static constexpr std::uint64_t kWriteFirstByteWindowCycles = kSystemClockHz / 5;
     // HLD (head-load) idle-timeout duration (WD2793.cc:42 `IDLE = 3s`): the
     // Type-I HEAD_LOADED status bit stays set for this long after HLD was last
     // (re)activated -- see start_type1/end_command.
@@ -205,6 +217,7 @@ public:
     [[nodiscard]] std::uint64_t hld_since() const { return hld_since_; }
     [[nodiscard]] std::uint64_t busy_until() const { return busy_until_; }
     [[nodiscard]] std::uint64_t drq_deadline() const { return drq_deadline_; }
+    [[nodiscard]] std::uint64_t write_check_deadline() const { return write_check_deadline_; }
     [[nodiscard]] std::uint64_t last_sync() const { return last_sync_; }
     [[nodiscard]] int data_index() const { return data_index_; }
     [[nodiscard]] int data_available() const { return data_available_; }
@@ -250,12 +263,6 @@ private:
     }
     [[nodiscard]] std::uint64_t settle_cycles() const {
         return fast_disk_ ? kFastSettleCycles : kSettleCycles;
-    }
-    // Write Sector first-byte CHECK_WRITE window in cycles (scales with the
-    // per-byte cadence, so fast-disk uses the same 8-byte gate). See
-    // begin_write_sector / sync (openMSX checkStartWrite, WD2793.cc:674-701).
-    [[nodiscard]] std::uint64_t write_check_cycles() const {
-        return kWriteCheckBytePeriods * cycles_per_byte();
     }
 
     void start_type1(std::uint8_t cmd, std::uint64_t t);
@@ -317,7 +324,9 @@ private:
     // crosses it while data_index_ == 0 (no byte has landed), the command aborts
     // with LOST_DATA and writes NOTHING. Once the first byte lands the gate
     // closes, so a later mid-transfer stall never aborts (the one-byte pipeline
-    // waits for each byte -- see write_data). DEF-M45-WRITEDRQ.
+    // waits for each byte -- see write_data). Set to the rotational first-byte
+    // DRQ + kWriteFirstByteWindowCycles (one revolution), so a valid slow-first-
+    // byte write is never aborted. DEF-M45-WRITEDRQ (window fix).
     std::uint64_t write_check_deadline_ = 0;
     std::uint64_t last_sync_ = 0;
 

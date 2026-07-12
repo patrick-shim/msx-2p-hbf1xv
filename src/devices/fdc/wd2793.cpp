@@ -493,13 +493,37 @@ void Wd2793::begin_write_sector(const std::uint64_t t) {
     buffer_.assign(DiskImage::kSectorSize, 0);
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
-    drq_deadline_ = t + read_start_cycles();
+    // First data-byte DRQ is asserted only AFTER the rotational sector-search --
+    // the SAME variable latency the read path uses (begin_read_sector). On a real
+    // WD2793 / openMSX the write DRQ + CHECK_WRITE are scheduled from the moment
+    // the sector's address mark rotates under the head (startWriteSector,
+    // references/openmsx-21.0/src/fdc/WD2793.cc:646-672, reached via
+    // type2Search/getNextSector's post-search time), NOT a fixed offset from
+    // command issue. The M45 fix wrongly used the fixed 2-byte read_start_cycles()
+    // here (zero rotational latency), so DRQ + the CHECK_WRITE window fired ~1140
+    // cycles after the command -- ABORTING a valid game (e.g. YS II) whose in-game
+    // save does buffer setup before writing byte 1. sector_reg_ is validated 1..9
+    // by the caller (start_type2 / finish_write_sector multi), so sector_reg_ - 1
+    // is a valid 0-based sector index (mirrors begin_read_sector). Fast-disk
+    // collapses the rotational wait + header via the same selectors as the read
+    // path (byte-identical accurate-mode timing when off).
+    const std::uint64_t rotational_wait = drive_->cycles_until_sector_id(sector_reg_ - 1u, t);
+    drq_deadline_ = t + rotational_wait + read_sector_header_cycles();
     // First-byte CHECK_WRITE gate (openMSX checkStartWrite, WD2793.cc:674-701):
-    // the CPU must supply the first data byte within write_check_cycles() of the
-    // DRQ; otherwise sync() aborts with LOST_DATA and writes nothing. Re-armed
-    // per sector (multi-record write re-enters here), matching openMSX which
-    // schedules a fresh CHECK_WRITE for every sector.
-    write_check_deadline_ = drq_deadline_ + write_check_cycles();
+    // if the CPU has not supplied the first data byte by this deadline, sync()
+    // aborts with LOST_DATA and writes NOTHING. openMSX schedules its CHECK_WRITE
+    // only 8 byte-periods after the DRQ -- but there the CPU has ALREADY finished
+    // its setup DURING the (long) rotational search and is polling DRQ when it
+    // asserts (setDataReg latches the first byte only while DRQ is up, WD2793.cc:
+    // 235-247), so 8 byte-periods suffices. Our model likewise gates writes on
+    // transfer_drq, but the rotational wait can be small (unlucky sector angle) or
+    // collapsed to ~0 by --fast-disk while the CPU still runs real-time, so an
+    // 8-byte tail would abort a valid slow-first-byte write. We therefore give the
+    // first byte a FULL further disk revolution after the DRQ -- the natural disk
+    // timescale, far longer than any real save-buffer setup, so a valid write is
+    // NEVER aborted, while a genuinely-absent first byte still aborts
+    // deterministically. Re-armed per sector (multi-record write re-enters here).
+    write_check_deadline_ = drq_deadline_ + kWriteFirstByteWindowCycles;
     phase_ = Phase::WriteSector;
     status_ |= kBusy;
 }
