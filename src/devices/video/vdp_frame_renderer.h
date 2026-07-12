@@ -79,15 +79,21 @@ private:
     // already computed -- so this stays a PURE, read-only consumer.
     void composite_sprites(int line, Field field, std::span<std::uint16_t> out) const;
 
-    // Name/pattern/color table base formulas (VDP.hh:246-262, independently
-    // re-derived). The "forced-1 low bits" hardware mirroring-mask nuance
-    // openMSX's VRAMWindow models is NOT reproduced (out-of-scope depth item,
-    // docs/m21-implementation-report.md); tests use canonical/valid base
-    // register values, matching this project's VRAM-addressing simplification
-    // level.
+    // V9958 table addressing (DEF-M43-FMPAC-SCREEN / DEC-0063). The real V9958
+    // uses the TMS9918-legacy AND-MASK model, NOT an additive base+offset: the
+    // pattern/color table effectiveBaseMask forces the "unused" low bits of the
+    // base register to 1 (mirror bits, not address bits) and ANDs it with the
+    // index (which carries its own high-bit fill). Canonical SCREEN 2 registers
+    // (R#4=0x03, R#3=0xFF) therefore address pattern @ 0x0000 / color @ 0x2000 --
+    // the additive model wrongly landed them at 0x1800 / 0x3FC0 (blank), the
+    // DEF-M43 defect. name_table_base() stays a plain base (name addressing is
+    // additive-equivalent for valid configs and was already correct); the
+    // *_mask() helpers return the openMSX effectiveBaseMask (VDP.cc:1299-1355
+    // updateColorBase/updatePatternBase; VDPVRAM.hh:153-180 setMask / :266-269
+    // readNP `data[effectiveBaseMask & index]`) -- re-derived, never copied.
     [[nodiscard]] std::uint32_t name_table_base() const;
-    [[nodiscard]] std::uint32_t pattern_table_base() const;
-    [[nodiscard]] std::uint32_t color_table_base() const;
+    [[nodiscard]] std::uint32_t pattern_table_mask() const;
+    [[nodiscard]] std::uint32_t color_table_mask() const;
 
     [[nodiscard]] std::uint8_t vram_read(std::uint32_t addr) const;
     [[nodiscard]] std::uint16_t pal16(int index) const;

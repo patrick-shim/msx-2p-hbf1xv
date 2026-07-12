@@ -23,6 +23,22 @@ namespace sony_msx::devices::video {
 
 namespace {
 
+// V9958 table index-mask fills (DEF-M43-FMPAC-SCREEN / DEC-0063): the high-bit
+// "unused bits set to 1" fill that openMSX's readNP index carries
+// (VDPVRAM.hh:263-269), pre-masked to the 17-bit (128 KB) VRAM space. Each is
+// `(~0u << N) & 0x1FFFF`, where N is the per-table/per-mode index width from
+// openMSX's updatePatternBase/updateColorBase (VDP.cc:1299-1355):
+//   pattern -- Text1/Text2/G1/Multicolor: ~0u<<11 ; G2/G3: ~0u<<13
+//   color   -- Text2: ~0u<<9 ; G1: ~0u<<6 ; G2/G3: ~0u<<13
+// ANDing the base register's effectiveBaseMask (pattern_table_mask()/
+// color_table_mask()) with (fill | actualIndex) reproduces readNP's
+// `data[effectiveBaseMask & index]` exactly, so the low mirror bits of R#3/R#4
+// mask the index rather than adding to it.
+constexpr std::uint32_t kFill6 = 0x1FFC0u;   // ~0u<<6  (G1 color)
+constexpr std::uint32_t kFill9 = 0x1FE00u;   // ~0u<<9  (Text2 color)
+constexpr std::uint32_t kFill11 = 0x1F800u;  // ~0u<<11 (Text/G1/Multicolor pattern)
+constexpr std::uint32_t kFill13 = 0x1E000u;  // ~0u<<13 (G2/G3 pattern+color, quarter boundary)
+
 // draw6/draw8: unpack a pattern byte's leading N bits (MSB first) into N
 // foreground/background pixels. Independently re-expressed from the shape of
 // CharacterConverter.cc's draw6/draw8 helpers (:100-120) -- never copied.
@@ -129,14 +145,26 @@ std::uint32_t VdpFrameRenderer::name_table_base() const {
     return static_cast<std::uint32_t>(vdp_->control_register(2)) << 10;  // VDP.hh:255-257
 }
 
-std::uint32_t VdpFrameRenderer::pattern_table_base() const {
-    return static_cast<std::uint32_t>(vdp_->control_register(4)) << 11;  // VDP.hh:249-251
+std::uint32_t VdpFrameRenderer::pattern_table_mask() const {
+    // Pattern-table effectiveBaseMask = (R#4<<11) | ~(~0u<<11), ANDed with the
+    // 128 KB size mask (openMSX VDP.cc:1323-1355 updatePatternBase setMask;
+    // VDPVRAM.hh:153-180/:266-269 readNP). The forced-1 low 11 bits are the
+    // legacy TMS9918 mirror bits, NOT additive address bits: canonical SCREEN 2
+    // R#4=0x03 keeps the pattern generator at 0x0000 (only the two quarter-select
+    // bits 11-12 must be set to let the 3-quarter index through), whereas the old
+    // additive `R#4<<11` wrongly returned 0x1800 (the name table) -- the DEF-M43
+    // blank-screen defect.
+    return ((static_cast<std::uint32_t>(vdp_->control_register(4)) << 11) | 0x7FFu) & 0x1FFFFu;
 }
 
-std::uint32_t VdpFrameRenderer::color_table_base() const {
-    // VDP.hh:252-254.
-    return (static_cast<std::uint32_t>(vdp_->control_register(10)) << 14) |
-           (static_cast<std::uint32_t>(vdp_->control_register(3)) << 6);
+std::uint32_t VdpFrameRenderer::color_table_mask() const {
+    // Color-table effectiveBaseMask = (R#10<<14) | (R#3<<6) | ~(~0u<<6), ANDed
+    // with the size mask (openMSX VDP.cc:1299-1321 updateColorBase). Canonical
+    // SCREEN 2 R#3=0xFF -> colour base 0x2000 (bit 13 comes from R#3 bit 7; the
+    // low 6 bits are mask bits), NOT the additive 0x3FC0 that read past the colour
+    // table into the backdrop.
+    return ((static_cast<std::uint32_t>(vdp_->control_register(10)) << 14) |
+            (static_cast<std::uint32_t>(vdp_->control_register(3)) << 6) | 0x3Fu) & 0x1FFFFu;
 }
 
 int VdpFrameRenderer::vertical_scroll_wrap(const int line) const {
@@ -525,13 +553,14 @@ void VdpFrameRenderer::render_text1(const int line, std::span<std::uint16_t> out
     const std::uint16_t fg = content_pal16(vdp_->control_register(7) >> 4);
     const std::uint16_t bg = content_pal16(vdp_->control_register(7) & 0x0F);
     const std::uint32_t name_base = name_table_base();
-    const std::uint32_t pattern_base = pattern_table_base();
-    const int row_in_cell = (line + vdp_->control_register(23)) & 0x07;
+    const std::uint32_t pat_mask = pattern_table_mask();
+    const std::uint32_t row_in_cell = static_cast<std::uint32_t>((line + vdp_->control_register(23)) & 0x07);
     const int name_row = (line / 8) * 40;
     for (int col = 0; col < 40; ++col) {
         const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + col));
-        const std::uint8_t pattern = vram_read(
-            pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(row_in_cell));
+        // Text1 pattern index (openMSX renderText1 / VDP.cc:1328-1335 ~0u<<11).
+        const std::uint8_t pattern =
+            vram_read(pat_mask & (kFill11 | (static_cast<std::uint32_t>(char_code) * 8u) | row_in_cell));
         draw6(out.data() + col * 6, fg, bg, pattern);
     }
 }
@@ -552,18 +581,21 @@ void VdpFrameRenderer::render_text2(const int line, std::span<std::uint16_t> out
         blink_bg = pal16(bbg);
     }
     const std::uint32_t name_base = name_table_base();
-    const std::uint32_t pattern_base = pattern_table_base();
-    const std::uint32_t color_base = color_table_base();
-    const int row_in_cell = (line + vdp_->control_register(23)) & 0x07;
+    const std::uint32_t pat_mask = pattern_table_mask();
+    const std::uint32_t col_mask = color_table_mask();
+    const std::uint32_t row_in_cell = static_cast<std::uint32_t>((line + vdp_->control_register(23)) & 0x07);
     const int name_row = (line / 8) * 80;
     const int color_row = (line / 8) * 10;
     for (int block = 0; block < 10; ++block) {
-        const std::uint8_t color_byte = vram_read(color_base + static_cast<std::uint32_t>(color_row + block));
+        // Text2 colour index (openMSX renderText2 CharacterConverter.cc:205-210:
+        // readNP((colorStart+i) | (~0u<<9))).
+        const std::uint8_t color_byte =
+            vram_read(col_mask & (kFill9 | static_cast<std::uint32_t>(color_row + block)));
         for (int bit = 0; bit < 8; ++bit) {
             const int col = block * 8 + bit;
             const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + col));
-            const std::uint8_t pattern = vram_read(
-                pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(row_in_cell));
+            const std::uint8_t pattern =
+                vram_read(pat_mask & (kFill11 | (static_cast<std::uint32_t>(char_code) * 8u) | row_in_cell));
             const bool blinking = (color_byte & (0x80 >> bit)) != 0;
             draw6(out.data() + col * 6, blinking ? blink_fg : plain_fg, blinking ? blink_bg : plain_bg, pattern);
         }
@@ -571,55 +603,64 @@ void VdpFrameRenderer::render_text2(const int line, std::span<std::uint16_t> out
 }
 
 void VdpFrameRenderer::render_graphic1(const int line, std::span<std::uint16_t> out) const {
-    // CharacterConverter.cc:255-270.
+    // CharacterConverter.cc:255-272; pattern index ~0u<<11, colour index ~0u<<6
+    // (VDP.cc:1308/1331).
     const std::uint32_t name_base = name_table_base();
-    const std::uint32_t pattern_base = pattern_table_base();
-    const std::uint32_t color_base = color_table_base();
-    const int l = line & 7;
+    const std::uint32_t pat_mask = pattern_table_mask();
+    const std::uint32_t col_mask = color_table_mask();
+    const std::uint32_t l = static_cast<std::uint32_t>(line & 7);
     const int name_row = (line / 8) * 32;
     for (int col = 0; col < 32; ++col) {
         const int src_col = scrolled_name_col(col);
         const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + src_col));
         const std::uint8_t pattern =
-            vram_read(pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(l));
-        const std::uint8_t color = vram_read(color_base + static_cast<std::uint32_t>(char_code) / 8);
+            vram_read(pat_mask & (kFill11 | (static_cast<std::uint32_t>(char_code) * 8u) | l));
+        const std::uint8_t color = vram_read(col_mask & (kFill6 | (static_cast<std::uint32_t>(char_code) / 8u)));
         draw8(out.data() + col * 8, content_pal16(color >> 4), content_pal16(color & 0x0F), pattern);
     }
 }
 
 void VdpFrameRenderer::render_graphic2_or_3(const int line, std::span<std::uint16_t> out) const {
-    // CharacterConverter.cc:272-297 (renderGraphic2, reused for GRAPHIC3):
-    // pattern/color tables are "quartered" into 2048-byte blocks, one per 64
-    // raster lines (3 quarters span the 192-line canvas).
+    // CharacterConverter.cc:299-315 (renderGraphic2 slow path, reused for
+    // GRAPHIC3): the shared table index is baseLine | (charCode*8), baseLine =
+    // (~0u<<13) | quarter8 | line7 (kFill13 in 17-bit VRAM space). The 2048-byte
+    // quarter (bit 11-12) selects one of the 3 blocks per 64 raster lines; readNP
+    // AND-masks the index by each table's effectiveBaseMask (pat_mask / col_mask)
+    // -- the V9958 AND-mask model (DEF-M43-FMPAC-SCREEN / DEC-0063). With
+    // canonical SCREEN 2 registers R#4=0x03 (pat_mask=0x1FFF) and R#3=0xFF
+    // (col_mask=0x3FFF) this addresses pattern @ 0x0000 and colour @ 0x2000; the
+    // former additive model wrongly hit 0x1800 / 0x3FC0 and rendered blank.
     const std::uint32_t name_base = name_table_base();
-    const std::uint32_t pattern_base = pattern_table_base();
-    const std::uint32_t color_base = color_table_base();
-    const std::uint32_t quarter = static_cast<std::uint32_t>(line / 64) * 2048u;
-    const int l7 = line & 7;
+    const std::uint32_t pat_mask = pattern_table_mask();
+    const std::uint32_t col_mask = color_table_mask();
+    const std::uint32_t quarter8 = static_cast<std::uint32_t>(line / 64) * 2048u;
+    const std::uint32_t line7 = static_cast<std::uint32_t>(line & 7);
+    const std::uint32_t base_line = kFill13 | quarter8 | line7;
     const int name_row = (line / 8) * 32;
     for (int col = 0; col < 32; ++col) {
         const int src_col = scrolled_name_col(col);
         const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + src_col));
-        const std::uint32_t offset = quarter + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(l7);
-        const std::uint8_t pattern = vram_read(pattern_base + offset);
-        const std::uint8_t color = vram_read(color_base + offset);
+        const std::uint32_t index = base_line | (static_cast<std::uint32_t>(char_code) * 8u);
+        const std::uint8_t pattern = vram_read(pat_mask & index);
+        const std::uint8_t color = vram_read(col_mask & index);
         draw8(out.data() + col * 8, content_pal16(color >> 4), content_pal16(color & 0x0F), pattern);
     }
 }
 
 void VdpFrameRenderer::render_multicolor(const int line, std::span<std::uint16_t> out) const {
-    // CharacterConverter.cc:299-325 (renderMultiHelper/renderMulti). The
+    // CharacterConverter.cc:318-342 (renderMultiHelper/renderMulti). The
     // real pixel canvas is 256x192 with 4x4-pixel color-cell granularity
-    // (A-M21-9), NOT a literal 64x48-pixel image.
+    // (A-M21-9), NOT a literal 64x48-pixel image. Pattern index mask ~0u<<11
+    // (VDP.cc:1332-1335), index = charCode*8 | ((line/4)&7).
     const std::uint32_t name_base = name_table_base();
-    const std::uint32_t pattern_base = pattern_table_base();
+    const std::uint32_t pat_mask = pattern_table_mask();
     const int name_row = (line / 8) * 32;
-    const int pattern_sub = (line / 4) & 7;
+    const std::uint32_t pattern_sub = static_cast<std::uint32_t>((line / 4) & 7);
     for (int col = 0; col < 32; ++col) {
         const int src_col = scrolled_name_col(col);
         const std::uint8_t char_code = vram_read(name_base + static_cast<std::uint32_t>(name_row + src_col));
-        const std::uint8_t color = vram_read(
-            pattern_base + static_cast<std::uint32_t>(char_code) * 8 + static_cast<std::uint32_t>(pattern_sub));
+        const std::uint8_t color =
+            vram_read(pat_mask & (kFill11 | (static_cast<std::uint32_t>(char_code) * 8u) | pattern_sub));
         const std::uint16_t cl = content_pal16(color >> 4);
         const std::uint16_t cr = content_pal16(color & 0x0F);
         std::uint16_t* p = out.data() + col * 8;
