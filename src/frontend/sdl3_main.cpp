@@ -82,13 +82,70 @@ void print_usage(const char* argv0) {
                  "--softwaredb overrides the default DB path\n"
                  "(references/openmsx-21.0/share/softwaredb.xml, relative to the working dir).\n"
                  "\n"
-                 "Sony HB-F1XV MSX2+ emulator -- SDL3 frontend (backlog C9). Opens a real\n"
-                 "window, drives the machine core at real (throttled) wall-clock pacing,\n"
-                 "presents decoded V9958 video, plays real PSG (YM2149) audio, and reads\n"
+                 "Sony HB-F1XV MSX2+ emulator -- SDL3 frontend. Opens a real window,\n"
+                 "drives the machine core at real (throttled) wall-clock pacing, presents\n"
+                 "decoded V9958 video, plays real PSG (YM2149) audio, and reads\n"
                  "keyboard/joystick input.\n"
                  "\n"
-                 "Audio mix: PSG (YM2149) + Konami SCC + YM2413 (OPLL/MSX-MUSIC) FM synthesis\n"
-                 "are all live (backlog E1 closed by M31; mix calibration M32/DEC-0040).\n";
+                 "Audio mix: PSG (YM2149) + Konami SCC + YM2413 (OPLL/MSX-MUSIC) FM\n"
+                 "synthesis are all live.\n";
+}
+
+// One-time human-readable startup summary: what the machine is, what was
+// loaded for this session (from the resolved config), and the runtime hotkeys.
+// Printed after a successful init() so the user immediately sees their
+// configuration and controls -- replaces the old internal-jargon banner.
+void print_startup_summary(const sony_msx::frontend::Sdl3AppConfig& config) {
+    std::cerr <<
+        "\n"
+        "======================================================================\n"
+        "  Sony HB-F1XV  -  MSX2+ emulator\n"
+        "  Z80A @ 3.58 MHz | Yamaha V9958 VDP (128 KB VRAM)\n"
+        "  Audio: PSG (YM2149) + MSX-MUSIC FM (YM2413) + Konami SCC\n"
+        "  Storage: WD2793 FDC, 720 KB 3.5\" floppy\n"
+        "----------------------------------------------------------------------\n"
+        "  This session:\n";
+
+    std::cerr << "    Main RAM   : " << (config.ram_bytes / 1024) << " KB"
+              << (config.ram_bytes == 64u * 1024u ? "  (stock)\n" : "  (opt-in --ram)\n");
+    std::cerr << "    BIOS       : " << config.bios_dir << "/\n";
+
+    if (config.disk_paths.empty()) {
+        std::cerr << "    Disk       : (none inserted)\n";
+    } else {
+        std::cerr << "    Disk A     : " << config.disk_paths.front();
+        if (config.disk_paths.size() > 1) {
+            std::cerr << "  (+" << (config.disk_paths.size() - 1) << " more; F11 cycles)";
+        }
+        std::cerr << (config.disk_writable ? "  [writable -- saves persist]\n"
+                                           : "  [read-only -- add --disk-writable to save]\n");
+    }
+    if (config.cart1_path.has_value()) {
+        std::cerr << "    Cartridge 1: " << *config.cart1_path << "\n";
+    }
+    if (config.cart2_path.has_value()) {
+        std::cerr << "    Cartridge 2: " << *config.cart2_path << "\n";
+    }
+    std::cerr << "    Video      : " << config.window_width << "x" << config.window_height
+              << (config.fullscreen ? ", fullscreen" : "")
+              << (config.border_enabled ? ", framed border" : ", edge-to-edge (Sony)")
+              << (config.texture_filter == SDL_SCALEMODE_NEAREST ? ", nearest\n" : ", linear\n");
+    if (config.fast_disk) {
+        std::cerr << "    Fast-disk  : ON (near-instant loads; Alt+D toggles)\n";
+    }
+
+    std::cerr <<
+        "----------------------------------------------------------------------\n"
+        "  Hotkeys:\n"
+        "    F11  swap disk            F12  debug snapshot\n"
+        "    F6 / F7   speed slow -/+  (Speed Controller: a slow-motion aid)\n"
+        "    F8 / F9   Ren-Sha auto-fire -/+        PAUSE  hardware pause\n"
+        "    Alt+Enter  toggle fullscreen           Alt+D  toggle fast-disk\n";
+    std::cerr << "    F10  live capture "
+              << (config.capture_enabled ? "(armed)\n" : "(disarmed; launch with --capture on)\n");
+    std::cerr <<
+        "  Run with --help for all launch options.\n"
+        "======================================================================\n\n";
 }
 
 }  // namespace
@@ -169,14 +226,16 @@ int main(int argc, char** argv) {
         config.cart2_type_explicit = parsed.cartridges.slot2.type_was_explicit;
     }
 
-    sony_msx::frontend::Sdl3App app(std::move(config));
+    // Copy (not move) config into the app so it stays valid for the startup
+    // summary printed after a successful init(); a one-time startup copy is
+    // negligible.
+    sony_msx::frontend::Sdl3App app(config);
     if (!app.init()) {
         std::cerr << "sdl3: initialization failed: " << app.last_error() << "\n";
         return 1;
     }
 
-    std::cerr << "sony-msx-hbf1xv SDL3 frontend: window opened, entering real-time loop"
-                 " (PSG + SCC + YM2413 FM audio live -- backlog E1 closed by M31)\n";
+    print_startup_summary(config);
 
     const int rc = app.run_interactive();
     app.shutdown();
