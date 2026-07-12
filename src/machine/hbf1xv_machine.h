@@ -634,11 +634,27 @@ private:
     public:
         explicit VdpRenderSyncAdapter(Hbf1xvMachine& machine) : machine_(machine) {}
         void on_before_state_change() override;
+        // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
+        // destination-row commit primitive. ADVANCE-ONLY -- commits
+        // [watermark, display_line) only when display_line > watermark, which is
+        // exactly the WRAP guard (never trip the accumulator's mid-command
+        // finalize; an already-swept destination row reappears next frame, as on
+        // real hardware). Honors suspended_ (debug_io_write exclusion) and marks
+        // the completed-frame fast path stale, mirroring on_before_state_change.
+        void on_commit_up_to(int display_line) override;
         void set_suspended(const bool suspended) { suspended_ = suspended; }
 
     private:
         Hbf1xvMachine& machine_;
         bool suspended_ = false;
+        // M44: the last beam-derived commit target (raster line + 2) fed to the
+        // accumulator by on_before_state_change. Lets that seam distinguish a
+        // genuine frame wrap / D10 geometry jump (raster line DECREASES -> allow
+        // the accumulator's wrap-safety finalize) from the M44 case where the
+        // command sink advanced the watermark past the beam within one frame
+        // (raster monotonic -> advance-only, never finalize mid-frame). Initial
+        // -1 makes the first active-display write take the normal branch.
+        int last_beam_commit_target_ = -1;
     };
 
     // Line-interrupt delivery (M32-S2, the DEC-0039/RESP-M32-001 D-1

@@ -56,6 +56,16 @@ class VdpRenderSyncListener {
 public:
     virtual ~VdpRenderSyncListener() = default;
     virtual void on_before_state_change() = 0;
+
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): commit the accumulated frame up
+    // to display line `display_line` (exclusive) from the CURRENT live VRAM.
+    // Driven by the command engine's per-destination-row sink so each display
+    // row observes the correct partial-command state (the openMSX
+    // writeCommon->window.notify->renderUntil analog, with the destination
+    // display line standing in for openMSX's EmuTime). DEFAULT EMPTY => every
+    // existing listener (and the M32 render-sync seam unit oracle) is inert and
+    // byte-identical; only the machine's VdpRenderSyncAdapter overrides it.
+    virtual void on_commit_up_to(int /*display_line*/) {}
 };
 
 // DEC-0052 (M36 stream-light): non-perturbing control-register-write observer.
@@ -235,6 +245,34 @@ private:
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
 
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
+    // destination-row render-sync. Applies the strict-superset gates and, when
+    // they pass, forwards a commit-to-display-line request to render_sync_:
+    //   1. bitmap-mode + VISIBLE-PAGE gate -- only when `dy`'s page is one the
+    //      renderer is currently displaying (non-bitmap/text and off-screen
+    //      pages fall back to today's single-beam-line io_write-seam behavior,
+    //      no regression; the openMSX isInside(bitmapVisibleWindow) analog).
+    //   2. ACTIVE-DISPLAY gate -- suppressed while the raster is in vblank/
+    //      border (raster_display_line() < 0), keeping the common vblank-HUD-
+    //      rebuild path byte-identical (the key anti-regression guard).
+    //   3. display-line inverse L = ((dy & 0xFF) - R#23) & 0xFF, the exact
+    //      inverse of VdpFrameRenderer::vertical_scroll_wrap (the horizontal /
+    //      multi-page geometry needs no inversion -- the accumulator's
+    //      render_line reads it live). The WRAP guard (never sealing a partial
+    //      frame mid-command) lives at the commit primitive in the machine
+    //      adapter, where the authoritative accumulator watermark is known.
+    void command_row_sync(unsigned dy);
+
+    // Private adapter binding the command engine's CommandRowSink to this VDP.
+    class CommandRowSyncAdapter final : public VdpCommandEngine::CommandRowSink {
+    public:
+        explicit CommandRowSyncAdapter(V9958Vdp& vdp) : vdp_(vdp) {}
+        void on_dest_row(unsigned dy) override { vdp_.command_row_sync(dy); }
+
+    private:
+        V9958Vdp& vdp_;
+    };
+
     VdpVram vram_;
     std::array<std::uint8_t, kNumControlRegs> control_regs_{};
     std::array<std::uint16_t, kNumPaletteEntries> palette_{};
@@ -284,6 +322,11 @@ private:
     // command-engine writes land directly in the shared VRAM store.
     VdpCommandEngine cmd_engine_;
     SpriteEngine sprite_engine_;
+
+    // M44: the command-engine per-destination-row render-sync adapter, installed
+    // into cmd_engine_ in the constructor. Holds only a reference to *this; the
+    // command engine drives it during atomic command execution.
+    CommandRowSyncAdapter command_row_sink_{*this};
 };
 
 }  // namespace sony_msx::devices::video

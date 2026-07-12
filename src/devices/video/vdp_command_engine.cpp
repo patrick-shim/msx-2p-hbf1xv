@@ -359,6 +359,7 @@ void VdpCommandEngine::run_hmmv() {
         command_done();
         return;
     }
+    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, col_);
         adx = wrap_step(adx, tx);
@@ -368,6 +369,7 @@ void VdpCommandEngine::run_hmmv() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
+            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -388,6 +390,7 @@ void VdpCommandEngine::run_hmmm() {
         command_done();
         return;
     }
+    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(asx, sy) & 0x1FFFFu);
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, byte);
@@ -401,6 +404,7 @@ void VdpCommandEngine::run_hmmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
+            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -422,6 +426,7 @@ void VdpCommandEngine::run_ymmm() {
         command_done();
         return;
     }
+    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(adx, sy) & 0x1FFFFu);
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, byte);
@@ -433,6 +438,7 @@ void VdpCommandEngine::run_ymmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
+            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -444,6 +450,7 @@ void VdpCommandEngine::run_pset() {
     const DecodedOp decoded = decode_op(static_cast<std::uint8_t>(cmd_ & 0x0F));
     const ModeTraits& t = traits_for(scr_mode_);
     const std::uint8_t cl = static_cast<std::uint8_t>(col_ & t.color_mask);
+    notify_dest_row(dy_);  // M44: render-sync BEFORE the single PSET write
     write_pixel(scr_mode_, dx_, dy_, cl, decoded.op, decoded.transparent, vram_);
     command_done();
 }
@@ -462,7 +469,18 @@ void VdpCommandEngine::run_line() {
     unsigned dy = dy_;
     unsigned anx = 0;
 
+    // M44: LINE advances dy per PIXEL; the destination-row sink must fire only
+    // when dy actually changes (R-5), BEFORE that row's write. sync_to_line is
+    // idempotent so a redundant equal-line call would be harmless anyway.
+    bool row_notified = false;
+    unsigned last_notified_dy = 0;
+
     for (int guard = 0; guard < 1'000'000; ++guard) {
+        if (!row_notified || dy != last_notified_dy) {
+            notify_dest_row(dy);
+            last_notified_dy = dy;
+            row_notified = true;
+        }
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
 
         bool done = false;
@@ -516,6 +534,7 @@ void VdpCommandEngine::run_lmmv() {
         command_done();
         return;
     }
+    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
         adx = wrap_step(adx, tx);
@@ -525,6 +544,7 @@ void VdpCommandEngine::run_lmmv() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
+            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -545,6 +565,7 @@ void VdpCommandEngine::run_lmmm() {
         command_done();
         return;
     }
+    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t src = point_pixel(scr_mode_, asx, sy, vram_);
         write_pixel(scr_mode_, adx, dy, src, decoded.op, decoded.transparent, vram_);
@@ -558,6 +579,7 @@ void VdpCommandEngine::run_lmmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
+            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
         }
     }
     command_done();

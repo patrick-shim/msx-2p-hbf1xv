@@ -98,7 +98,51 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // for every game. raster_display_line() itself is UNCHANGED (line-interrupt
     // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
     // render-sync rounding is independent of the VDP line-interrupt counter).
-    machine_.scanline_accumulator_.sync_to_line(line + 2);
+    const int target = line + 2;
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine row sink can
+    // advance the accumulator watermark PAST the beam within a frame (committing
+    // command rows at their destination lines). A subsequent same-frame seam
+    // write would then have target < watermark and trip sync_to_line()'s
+    // wrap-safety finalize() mid-frame. Distinguish the two cases by the raster
+    // line's direction: a DECREASE (target < the last beam target) is a genuine
+    // frame wrap or a D10 geometry jump -> keep the accumulator's wrap-safety
+    // finalize (call sync_to_line unconditionally, as before). Otherwise the
+    // raster is monotonic within the frame -> ADVANCE-ONLY (never finalize).
+    //
+    // Byte-identical to the pre-M44 seam for every non-command path: with the
+    // command sink inert the watermark only ever advances via this seam, so the
+    // beam is monotonic and target >= watermark always held -- the advance-only
+    // branch then calls sync_to_line exactly when the old unconditional call
+    // would have done non-trivial work, and skips only the target==watermark
+    // no-op. The wrap branch is unchanged.
+    if (target < last_beam_commit_target_) {
+        machine_.scanline_accumulator_.sync_to_line(target);  // genuine wrap / D10 seal
+    } else if (target > machine_.scanline_accumulator_.watermark()) {
+        machine_.scanline_accumulator_.sync_to_line(target);  // monotonic advance
+    }
+    last_beam_commit_target_ = target;
+}
+
+void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line) {
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
+    // destination-row commit primitive. V9958Vdp::command_row_sync has already
+    // applied the bitmap-mode / visible-page / active-display gates and computed
+    // `display_line` = the exact vertical-scroll inverse. Here we commit
+    // [watermark, display_line) from the current live VRAM, mirroring
+    // on_before_state_change but with NO +2 beam margin (the destination-line
+    // mapping is exact, not a beam-rounding).
+    if (suspended_) {
+        return;  // debug_io_write exclusion (same as on_before_state_change)
+    }
+    machine_.scanline_accumulator_.mark_completed_frame_stale();
+    // WRAP guard (§2.4 step 4): ADVANCE-ONLY. Skip when the destination display
+    // line is at or below the accumulation point -- that row was already swept
+    // (it reappears next frame, exactly as on real hardware) and a sync_to_line
+    // below the watermark would otherwise seal a partial frame mid-command.
+    if (display_line <= machine_.scanline_accumulator_.watermark()) {
+        return;
+    }
+    machine_.scanline_accumulator_.sync_to_line(display_line);
 }
 
 void Hbf1xvMachine::wire_bus() {

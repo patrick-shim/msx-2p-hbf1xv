@@ -33,6 +33,10 @@ constexpr std::array<std::uint16_t, 16> kBootPalette = {
 }  // namespace
 
 V9958Vdp::V9958Vdp() : cmd_engine_(vram_) {
+    // M44 (DEF-M44-CMDSYNC Phase 1): route the command engine's per-destination-
+    // row writes through this VDP's render-sync gates. Installed once; reset()
+    // does not clear it (externally-owned-lifecycle pattern).
+    cmd_engine_.set_command_row_sink(&command_row_sink_);
     reset();
 }
 
@@ -413,6 +417,79 @@ void V9958Vdp::recompute_mode() {
 
 bool V9958Vdp::is_v9938_mode() const {
     return vdp_base_is_v9938_mode(mode_.base);
+}
+
+void V9958Vdp::command_row_sync(const unsigned dy) {
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065). Fired by the command engine
+    // BEFORE each atomic-command destination row is written; commit the display
+    // rows up to this row's display line from the CURRENT (pre-this-row) live
+    // VRAM, so each display row observes the correct partial-command state.
+    // Structural analog of openMSX routing every command write through
+    // VDPVRAM::writeCommon -> VRAMWindow::notify(addr,time) -> renderUntil(time)
+    // BEFORE committing the byte (references/openmsx-21.0/src/video/VDPVRAM.hh:
+    // 575-593, 309-322), with the destination display line standing in for
+    // openMSX's EmuTime. Behavior reference only -- never copied.
+    if (render_sync_ == nullptr) {
+        return;  // no listener installed -> byte-identical no-op (strict superset)
+    }
+
+    // (1) Bitmap-mode + page-mask selection. Non-bitmap/text modes have no cheap
+    //     address->display-line inverse -> fall back to the io_write-seam
+    //     behavior (the openMSX VRAMWindow::isInside miss), no regression.
+    int page_mask;
+    switch (mode_.mode) {
+    case VdpMode::Graphic4:
+    case VdpMode::Graphic5:
+        page_mask = 0x03;  // 4 pages x 0x8000 (256 lines each)
+        break;
+    case VdpMode::Graphic6:
+    case VdpMode::Graphic7:
+    case VdpMode::ScreenYjk:
+    case VdpMode::ScreenYjkYae:
+        page_mask = 0x01;  // 2 pages x 0x10000 (256 lines each; same page-row inverse)
+        break;
+    default:
+        return;  // non-bitmap / text / sprite-table destinations -> fall back (§2.7)
+    }
+
+    // (2) VISIBLE-PAGE gate (openMSX's isInside(bitmapVisibleWindow) analog).
+    //     The accumulator always renders Field::Progressive, for which
+    //     resolve_bitmap_page() reduces to the base page (EO/blink never alter
+    //     it); the displayed set is {base} normally, or {base&~1, (base&~1)|1}
+    //     under multi-page scrolling (VdpFrameRenderer::bitmap_scroll_pages()).
+    const int base_page = (control_regs_[2] >> 5) & page_mask;
+    const int dest_page = static_cast<int>(dy >> 8) & page_mask;
+    const bool multi_page =
+        (control_regs_[25] & 0x01) != 0 && (control_regs_[2] & 0x20) != 0;
+    bool displayed;
+    if (multi_page) {
+        const int even = base_page & ~0x01;
+        displayed = (dest_page == even) || (dest_page == ((even | 0x01) & page_mask));
+    } else {
+        displayed = (dest_page == base_page);
+    }
+    if (!displayed) {
+        return;  // off-screen source/template page -> commit nothing spuriously
+    }
+
+    // (3) ACTIVE-DISPLAY gate: suppress during vblank/border so the common
+    //     "rebuild HUD in the vblank ISR" path stays byte-identical (the whole
+    //     next frame renders from final VRAM). Also covers the clockless-test
+    //     case (raster_display_line() == INT_MIN < 0 -> inert).
+    if (raster_display_line() < 0) {
+        return;
+    }
+
+    // (4) Display-line inverse: the exact inverse of
+    //     VdpFrameRenderer::vertical_scroll_wrap(line) = (line + R#23) & 0xFF
+    //     (vdp_frame_renderer.cpp:170-171). The horizontal/multi-page geometry
+    //     needs no inversion -- render_line reads it live. The WRAP guard (never
+    //     tripping the accumulator's mid-command finalize) is enforced at the
+    //     commit primitive (Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to),
+    //     which alone knows the authoritative accumulator watermark.
+    const int display_line =
+        (static_cast<int>(dy & 0xFFu) - control_regs_[23]) & 0xFF;
+    render_sync_->on_commit_up_to(display_line);
 }
 
 // --- interrupts -------------------------------------------------------------

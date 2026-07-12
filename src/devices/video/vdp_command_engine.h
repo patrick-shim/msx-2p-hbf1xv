@@ -60,7 +60,36 @@ namespace sony_msx::devices::video {
 // references/openmsx-21.0/src/video/VDPCmdEngine.{hh,cc}.
 class VdpCommandEngine {
 public:
+    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): a default-null per-destination-row
+    // observer. The ATOMIC command writers (run_lmmv/lmmm/hmmv/hmmm/ymmm/pset/
+    // line) invoke it ONCE per destination row, BEFORE that row's VRAM writes,
+    // carrying the destination page-row coordinate `dy` (full 10-bit; the
+    // implementation derives the display line + page from live registers). This
+    // is the structural analog of openMSX routing each command write through
+    // VDPVRAM::writeCommon -> VRAMWindow::notify BEFORE committing the byte
+    // ("Subsystem synchronisation should happen before the commit, to be able to
+    // draw backlog using old state", references/openmsx-21.0/src/video/
+    // VDPVRAM.hh:575-593, 309-322) -- read for behavior only, never copied.
+    //
+    // A NULL sink (the default, and the only state for a bare command engine or
+    // any unit test constructing one directly) means ZERO behavior change: the
+    // writers execute byte-for-byte as before. The event-driven transfers
+    // (LMCM/LMMC/HMMC) and the non-writing commands (POINT/SRCH) do NOT call it
+    // -- transfers are already per-unit synced through the io_write seam
+    // (v9958_vdp.cpp io_write), and POINT/SRCH write no bitmap VRAM.
+    class CommandRowSink {
+    public:
+        virtual ~CommandRowSink() = default;
+        // Called BEFORE the writes of destination page-row `dy` (10-bit VDP Y).
+        virtual void on_dest_row(unsigned dy) = 0;
+    };
+
     explicit VdpCommandEngine(VdpVram& vram) : vram_(vram) {}
+
+    // Install (or detach with nullptr) the M44 per-destination-row sink. The
+    // pointer is externally owned; reset() deliberately does NOT clear it
+    // (X-pattern of the V9958Vdp render-sync/observer wiring).
+    void set_command_row_sink(CommandRowSink* sink) { row_sink_ = sink; }
 
     // R#32..R#46 register-write dispatch (index 0..14). Works identically
     // whether the caller reached it via the #99 two-write latch protocol or
@@ -169,7 +198,17 @@ private:
     void start_hmmc();
     void perform_transfer_step();
 
+    // M44: fire the per-destination-row sink (no-op when unset -> strict superset).
+    void notify_dest_row(const unsigned dy) {
+        if (row_sink_ != nullptr) {
+            row_sink_->on_dest_row(dy);
+        }
+    }
+
     VdpVram& vram_;
+
+    // M44 per-destination-row render-sync sink (default-null = inert).
+    CommandRowSink* row_sink_ = nullptr;
 
     unsigned sx_ = 0, sy_ = 0, dx_ = 0, dy_ = 0, nx_ = 0, ny_ = 0;
     unsigned asx_ = 0;
