@@ -26,73 +26,117 @@
 namespace {
 
 void print_usage(const char* argv0) {
-    std::cout << "usage: " << argv0
-              << " [--bios-dir <path>] [--disk <path>] [--cart1 <path>] [--cart1-type <name>|auto]"
-                 " [--cart2 <path>] [--cart2-type <name>|auto] [--softwaredb <path>]"
-                 " [--max-frames <N>] [--hidden-window]"
-                 " [--border] [--no-border] [--dump-state <name>] [--trace-cpu <name>]"
-                 " [--event-log <name>] [--input-script <path>] [--snapshot <dir>]"
-                 " [--fmpac-sram <path>] [--no-fmpac-sram]"
-                 " [--speed <0..7>] [--scale <1..8>] [--filter <nearest|linear>] [--fullscreen]\n"
-                 " [--capture <on|off>] [--fast-disk] [--ram <64|128|256|512>]\n"
-                 "\n"
-                 "--ram <64|128|256|512> sets the main-RAM size in KB (default 64 = the stock\n"
-                 "HB-F1XV spec, byte-identical to omitting the flag). 128/256/512 are OPT-IN,\n"
-                 "NON-STOCK 'fully-populated S1985' mods for loading larger games; 512 KB is the\n"
-                 "internal ceiling (the S1985 5-bit mapper read-back = 32 x 16 KB) -- more than\n"
-                 "512 KB would require an external RAM-expansion cartridge. Any other value is a\n"
-                 "parse error.\n"
-                 "\n"
-                 "--fast-disk (opt-in; default off) collapses the WD2793/floppy timing so disk\n"
-                 "loads are near-instant -- a quality-of-life turbo. The DEFAULT (accurate) FDC\n"
-                 "timing is preserved when the flag is absent; fast-disk DEVIATES from accurate\n"
-                 "FDC timing and MAY affect rare timing-sensitive or copy-protected disks, so it\n"
-                 "is opt-in only. Alt+D toggles it live in the window (logged to stderr).\n"
-                 "\n"
-                 "Video framing (default): the bare active display area is presented edge-to-edge\n"
-                 "(the Sony-original look) -- the picture fills the window with no framing border.\n"
-                 "--border opts into the openMSX-matching framed canvas instead: the active display\n"
-                 "area sits at its raster-true position (active top row 24 for 192-line, 14 for\n"
-                 "212-line modes) inside the live border-colored 4:3 canvas. --no-border is the\n"
-                 "explicit off and matches the default.\n"
-                 "\n"
-                 "--speed <0..7> sets the initial Sony Speed Controller level (0 = full speed,\n"
-                 "default; 7 = maximum slow-motion -- a CPU slow-down duty cycle, NOT a turbo).\n"
-                 "F6/F7 still step it at runtime. --scale <N> opens the window at 320N x 240N\n"
-                 "(default 3 = 960x720); the window is resizable and the picture is aspect-correct\n"
-                 "letterboxed at any size / fullscreen. --filter picks the scaling filter (default\n"
-                 "linear = smooth; nearest = crisp pixels). --fullscreen starts fullscreen and\n"
-                 "Alt+Enter toggles fullscreen at runtime.\n"
-                 "\n"
-                 "--capture <on|off> (default off) gates the F10 live stream-capture hotkey: with\n"
-                 "--capture off (the default) F10 is INERT, so a mis-struck F10 during gameplay\n"
-                 "does nothing; pass --capture on to arm the F10 toggle (--stream-light then\n"
-                 "selects the lightweight capture mode). F11 disk-swap and F12 snapshot are\n"
-                 "unaffected.\n"
-                 "\n"
-                 "--snapshot <dir> sets the debug-snapshot output root (default debug/); press\n"
-                 "F12 in-session to write a comprehensive per-component snapshot to\n"
-                 "<dir>/snapshot/<id>/ (F12 is always active; read-only, never perturbs the run).\n"
-                 "\n"
-                 "FM-PAC battery SRAM persists AUTOMATICALLY when an inserted cartridge is an\n"
-                 "FM-PAC: the save file defaults to <cart-rom-path>.sram (e.g. roms/fmpac.rom ->\n"
-                 "roms/fmpac.rom.sram), loaded on insert and flushed on exit -- matching a real\n"
-                 "FM-PAC's battery-backed SRAM. --fmpac-sram <path> overrides the default path;\n"
-                 "--no-fmpac-sram keeps the SRAM in-memory-only (no host file). All three are\n"
-                 "no-ops when no FM-PAC cartridge is inserted.\n"
-                 "\n"
-                 "--cartN-type is optional (M30): when omitted (or 'auto') the mapper type is\n"
-                 "auto-identified -- softwaredb SHA1 match first, then a bank-write heuristic.\n"
-                 "--softwaredb overrides the default DB path\n"
-                 "(references/openmsx-21.0/share/softwaredb.xml, relative to the working dir).\n"
-                 "\n"
-                 "Sony HB-F1XV MSX2+ emulator -- SDL3 frontend. Opens a real window,\n"
-                 "drives the machine core at real (throttled) wall-clock pacing, presents\n"
-                 "decoded V9958 video, plays real PSG (YM2149) audio, and reads\n"
-                 "keyboard/joystick input.\n"
-                 "\n"
-                 "Audio mix: PSG (YM2149) + Konami SCC + YM2413 (OPLL/MSX-MUSIC) FM\n"
-                 "synthesis are all live.\n";
+    std::cout <<
+        "Sony HB-F1XV  -  a Sony HitBit F1XV (MSX2+, 1988) home-computer emulator.\n"
+        "Opens a window and runs the real machine at true speed: Z80A @ 3.58 MHz,\n"
+        "Yamaha V9958 video (128 KB VRAM), PSG + MSX-MUSIC FM + Konami SCC sound,\n"
+        "a 720 KB floppy drive, keyboard and joystick.\n"
+        "\n"
+        "USAGE\n"
+        "  " << argv0 << " [options]\n"
+        << R"HELP(
+  Tip: run it from the project root folder so that bios\, roms\ and disks\ are
+  found (or pass full paths). With NO options it boots the Sony BIOS straight to
+  MSX-BASIC (the "Ok" prompt) -- try that first.
+
+GETTING STARTED  (copy a line, then change the paths to your files)
+
+  Just boot to BASIC:
+    sony_msx_sdl3.exe
+
+  Play a cartridge game (the cartridge type is detected automatically):
+    sony_msx_sdl3.exe --cart1 roms\aleste.rom
+
+  Boot a floppy (MSX-DOS, or a disk game):
+    sony_msx_sdl3.exe --disk disks\msxdos22.dsk
+
+  A multi-disk game -- press F11 in the window to swap to the next disk:
+    sony_msx_sdl3.exe --disk disks\game1.dsk --disk disks\game2.dsk
+
+  Save your progress TO DISK (writes are stored back into the .dsk on exit):
+    sony_msx_sdl3.exe --disk disks\rpg.dsk --disk-writable
+
+  A game that saves TO SRAM -- add an FM-PAC cartridge (its save auto-persists):
+    sony_msx_sdl3.exe --disk disks\ys2.dsk --cart1 roms\fmpac.rom
+
+  Bigger + sharper window, and extra RAM for a large game:
+    sony_msx_sdl3.exe --cart1 roms\big.rom --scale 4 --filter nearest --ram 512
+
+OPTIONS
+
+  What to load
+    --bios-dir <path>       Folder holding the 7 Sony BIOS ROMs (default: bios).
+    --disk <path>           Insert a floppy (.dsk). Repeatable -- the first one
+                            is in the drive at boot; F11 cycles through the rest.
+    --cart1 <path>          Cartridge in slot 1 (a .rom game, or the FM-PAC).
+    --cart2 <path>          Cartridge in slot 2.
+    --cart1-type <name>     Force the cartridge mapper instead of auto-detecting.
+    --cart2-type <name>       Names: auto (default), KonamiSCC, Konami, ASCII8,
+                              ASCII16, FMPAC. "auto" is correct for almost every
+                              cartridge -- only set this if a game misdetects.
+    --softwaredb <path>     Override the game database used for auto-detection.
+
+  Memory
+    --ram <64|128|256|512>  Main RAM in KB. Default 64 = the real HB-F1XV.
+                            128/256/512 are opt-in extras for large games; 512 KB
+                            is the machine's built-in ceiling (more would need a
+                            RAM-expansion cartridge).
+
+  Screen
+    --scale <1..8>          Window size = 320N x 240N (default 3 = 960x720). The
+                            window is resizable and stays 4:3 at any size.
+    --filter nearest|linear linear = smooth (default); nearest = sharp pixels.
+    --fullscreen            Start in fullscreen (Alt+Enter toggles it live).
+    --border / --no-border  Framed 4:3 canvas, or bare edge-to-edge (the default,
+                            the Sony-original look).
+
+  Saving & disks
+    --disk-writable         Save in-game disk writes back to the .dsk file (on a
+                            clean exit, or an F11 swap). Without this, disks are
+                            READ-ONLY and any writes are discarded when you quit.
+    --fast-disk             Near-instant disk loads (Alt+D toggles it live). Off
+                            by default (accurate timing); may affect rare
+                            copy-protected disks.
+    --fmpac-sram <path>     Where an inserted FM-PAC's battery save is stored
+                            (default: <cart>.rom.sram, written automatically).
+    --no-fmpac-sram         Keep FM-PAC SRAM in memory only (no save file).
+
+  Speed
+    --speed <0..7>          Sony Speed Controller: a CPU SLOW-DOWN aid, NOT a
+                            turbo. 0 = full speed (default); 7 = maximum slow
+                            motion. F6/F7 also change it live.
+
+  Advanced / debugging  (optional -- you can ignore all of these to start)
+    --capture on|off        Arm the F10 live-capture hotkey (default off = F10
+                            does nothing). --stream-light selects the light mode.
+    --snapshot <dir>        Where F12 writes a debug snapshot (default: debug).
+    --dump-state <name>     Write a final CPU + memory state dump.
+    --trace-cpu <name>      Write a CPU instruction trace.
+    --event-log <name>      Write a deterministic event log.
+    --input-script <path>   Replay a scripted keyboard/joystick sequence.
+    --max-frames <N>        Auto-quit after N frames (for non-interactive runs).
+    --hidden-window         Run without showing a window (testing/automation).
+    -h, --help              Show this help and exit.
+
+IN-WINDOW HOTKEYS
+    F11        swap to the next disk        F12    write a debug snapshot
+    F6 / F7    Speed Controller slow -/+    F8/F9  Ren-Sha auto-fire slow -/+
+    Alt+Enter  toggle fullscreen            Alt+D  toggle fast-disk
+    PAUSE      hardware PAUSE button        F10    live capture (needs --capture on)
+
+GOOD TO KNOW
+    - Paths are relative to the folder you run from -- launch from the project
+      root, or use full paths (e.g. --bios-dir C:\msx\bios).
+    - Game saves: to SRAM -> add the FM-PAC cartridge; to disk -> --disk-writable.
+    - A save disk must be a FORMATTED .dsk. Create one with
+      tools\format-blank-disk.ps1 -- an all-zero blank has no filesystem and a
+      game cannot write to it.
+    - Quit by closing the window normally (do not force-kill / Ctrl+C) so disk
+      and SRAM saves are flushed to their files.
+
+Audio (PSG + Konami SCC + MSX-MUSIC/YM2413 FM) is live; video is the decoded
+V9958 output; the machine runs at throttled real-time wall-clock pacing.
+)HELP";
 }
 
 // One-time human-readable startup summary: what the machine is, what was
