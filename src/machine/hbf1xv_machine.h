@@ -857,6 +857,12 @@ private:
         [[nodiscard]] std::uint64_t cpu_tstates_since_vsync() const override {
             return scheduler_.total_cycles() - last_vsync_cycle_;
         }
+        // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): the ABSOLUTE monotonic cycle
+        // count for the command-engine CE busy window (never reset at vsync).
+        // Reads an EXISTING public core::Scheduler accessor -- no src/core edit.
+        [[nodiscard]] std::uint64_t cpu_total_cycles() const override {
+            return scheduler_.total_cycles();
+        }
 
     private:
         const core::Scheduler& scheduler_;

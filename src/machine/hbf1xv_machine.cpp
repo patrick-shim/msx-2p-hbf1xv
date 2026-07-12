@@ -886,8 +886,14 @@ void Hbf1xvMachine::debug_io_write(const std::uint16_t port, const std::uint8_t 
     // the legacy snapshot semantics this seam always had). The line-int
     // cache needs no special handling: it re-fingerprints R#19/R#23/R#9 by
     // VALUE at the next step_cpu_instruction, independent of the write path.
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): suspend the command-engine CE
+    // busy-window arming across the same debug seam, exactly as the render-sync
+    // adapter is suspended, so debug-issued VDP commands stay byte-identical
+    // (only real CPU-driven OUT command writes pace CE; §2.4.3).
     render_sync_adapter_.set_suspended(true);
+    vdp_.set_command_timing_suspended(true);
     bus_.io_write(port, value);
+    vdp_.set_command_timing_suspended(false);
     render_sync_adapter_.set_suspended(false);
     // A debug write to the VDP ports (#98-#9B + the S1985 #9C-#9F mirror)
     // still moves VDP state past any sealed frame -- drop the boundary fast

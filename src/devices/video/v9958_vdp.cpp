@@ -30,6 +30,42 @@ constexpr std::array<std::uint16_t, 16> kBootPalette = {
     0x171, 0x373, 0x661, 0x664, 0x411, 0x265, 0x555, 0x777,
 };
 
+// M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069) calibration knob (§3.3): the
+// ACTIVE-DISPLAY slot-availability correction -- a per-scrMode scalar (percent,
+// 100 = 1.00x) multiplied into the command engine's BASE duration ONLY while a
+// command is issued during active display. During active display the renderer
+// steals VDP access slots, so a real command runs LONGER than openMSX's
+// deliberately slot-free underestimate (VDPCmdEngine.cc:741-742 "assumes we
+// never have to wait for access slots"), which under-paces a busy-wait-on-CE
+// loop. This is the ONE calibrated constant of Phase 2a. It is a GENERIC
+// per-mode hardware-grounded factor -- NEVER a per-title tuning (universal-fixes
+// rule): the wider-pixel modes (GRAPHIC6/7, 8bpp) surrender proportionally more
+// VRAM bandwidth to display fetch than the packed 4bpp/2bpp modes (GRAPHIC4/5),
+// leaving fewer command slots and a larger correction. Index =
+// VdpCommandEngine::scr_mode() (0=G4,1=G5,2=G6,3=G7/YJK,4=NonBitmap). GRAPHIC4/5
+// = 200% (the "~2x slower during active display" 4bpp hardware rule); GRAPHIC6/7
+// = 300% (8bpp surrenders more bandwidth). This is a coarse per-mode scalar, NOT
+// the openMSX VDPAccessSlots.cc per-raster slot-position table (that is the
+// deferred Phase-2b model + the license-sensitive-scope ban).
+//
+// CALIBRATION FINDING (Laydock 2 .omr A/B, GRAPHIC4/index 0; planner R-1/Q1):
+// this pacing REMOVES the severe pre-fix flicker (the SCORE-digit blue-noise
+// scramble, the "GAME OVER" bleed, the LMMC-style corruption). But NO coarse
+// per-mode factor FULLY stabilizes the HUD: within the in-sync range (~100-250%)
+// a residual per-few-frame label jitter (a red bar / thin line through the right
+// "OPTION"/left "OPTION-SCORE" labels) persists, and pushing higher (>=300%)
+// over-inflates the game's LARGE active-display blits too, desyncing the game
+// (it lags onto the PLAYER-SELECT screen). Full frame-to-frame parity needs the
+// per-raster-position slot accuracy of Phase 2b -- this is the documented
+// Phase-2a/2b boundary (DEC-0069 Q1; do NOT pull the slot table forward here).
+constexpr int kActiveDisplaySlotFactorPercent[5] = {
+    /* 0 GRAPHIC4      */ 200,
+    /* 1 GRAPHIC5      */ 200,
+    /* 2 GRAPHIC6      */ 300,
+    /* 3 GRAPHIC7/YJK  */ 300,
+    /* 4 NonBitmap     */ 200,
+};
+
 }  // namespace
 
 V9958Vdp::V9958Vdp() : cmd_engine_(vram_) {
@@ -66,6 +102,11 @@ void V9958Vdp::reset() {
     irq_vertical_ = false;
     irq_horizontal_ = false;
 
+    // M44 Phase 2a: no command busy window survives a reset (both the engine's
+    // pure duration -- cleared in cmd_engine_.reset() above -- and this VDP-side
+    // expiry timestamp reset to 0 == already-expired).
+    cmd_busy_until_cycles_ = 0;
+
     // Color-burst registers default 00/3B/05 (fact-sheet §4 line 77; VDP.cc
     // reset). Stored only (no visual consequence in M14).
     control_regs_[20] = 0x00;
@@ -100,6 +141,29 @@ void V9958Vdp::attach_render_sync(VdpRenderSyncListener* const listener) {
 
 void V9958Vdp::attach_register_write_observer(VdpRegisterWriteObserver* const observer) {
     register_write_observer_ = observer;
+}
+
+void V9958Vdp::set_command_timing_suspended(const bool suspended) {
+    command_timing_suspended_ = suspended;
+}
+
+void V9958Vdp::arm_command_busy_window() {
+    // Caller guarantees clock_source_ != nullptr && !command_timing_suspended_.
+    // M44 Phase 2a: turn the command engine's pure, clock-free base duration into
+    // an absolute expiry timestamp for the S#2-bit0 CE busy window.
+    std::uint64_t duration = cmd_engine_.last_cmd_duration_tstates();
+    if (duration != 0 && raster_display_line() >= 0) {
+        // Active display: apply the per-mode slot-availability correction
+        // (rounding up) so the busy-wait exit lands after the beam has passed the
+        // phase-sensitive region.
+        const int m = cmd_engine_.scr_mode();
+        if (m >= 0 && m < 5) {
+            const auto pct = static_cast<std::uint64_t>(
+                kActiveDisplaySlotFactorPercent[static_cast<std::size_t>(m)]);
+            duration = (duration * pct + 99u) / 100u;
+        }
+    }
+    cmd_busy_until_cycles_ = clock_source_->cpu_total_cycles() + duration;
 }
 
 // --- core::IoDevice ---------------------------------------------------------
@@ -321,6 +385,15 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         // -- both already route through this function.
         if (reg < 47) {
             cmd_engine_.write_register(static_cast<int>(reg) - 32, value);
+            // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): an R#46 (CMD) write just
+            // ran the burst and recomputed the engine's pure duration; arm the
+            // S#2-bit0 CE busy window from it. Only for real CPU-driven writes
+            // (a clock is attached) that are not the machine's non-perturbing
+            // debug seam (command_timing_suspended_). ABRT / degenerate / instant
+            // commands report duration 0 -> cmd_busy_until == now -> inert.
+            if (reg == 46 && clock_source_ != nullptr && !command_timing_suspended_) {
+                arm_command_busy_window();
+            }
         }
         return;
     }
@@ -647,7 +720,16 @@ std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
         }
         if (cmd_engine_.tr()) s2 = static_cast<std::uint8_t>(s2 | 0x80);
         if (cmd_engine_.bd()) s2 = static_cast<std::uint8_t>(s2 | 0x10);
-        if (cmd_engine_.ce()) s2 = static_cast<std::uint8_t>(s2 | 0x01);
+        // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): CE (bit0) = the UNION of the
+        // engine-level status bit (unchanged: event-driven transfers hold it
+        // across their handshake; atomic commands clear it in command_done) and
+        // the atomic busy window armed at the last R#46 write. The absolute u64
+        // compare needs no wrap/epoch bookkeeping and correctly stays busy across
+        // a vsync. Same pull-style clock read as the VR/HR bits above.
+        const bool ce = cmd_engine_.ce() ||
+                        (clock_source_ != nullptr &&
+                         cmd_busy_until_cycles_ > clock_source_->cpu_total_cycles());
+        if (ce) s2 = static_cast<std::uint8_t>(s2 | 0x01);
         return s2;
     }
     case 3:

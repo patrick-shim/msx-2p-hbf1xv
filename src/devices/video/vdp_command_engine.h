@@ -124,6 +124,23 @@ public:
     // Deterministic power-on reset.
     void reset();
 
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): the estimated emulated DURATION
+    // (in CPU T-states) of the command most recently issued through
+    // write_register(R#46). PURE function of the command parameters -- no clock,
+    // no "now" -- so the value is fully unit-testable in isolation and the VDP
+    // (which owns the clock) turns it into the S#2-bit0 CE busy window. Set at
+    // command issue from the already-clipped work count (tmp_nx*tmp_ny for
+    // rectangle ops; the drawn/searched pixel count for LINE/SRCH) times the
+    // per-command access-slot cost, converted VDP-cycles -> T-states by ceil(/6).
+    // 0 for ABRT/degenerate-no-op/POINT/PSET and the event-driven transfers
+    // (LMCM/LMMC/HMMC are paced by their own held kCe + TR handshake). Grounding
+    // (behavior reference only, never copied): openMSX VDPCmdEngine::calcFinishTime
+    // (references/openmsx-21.0/src/video/VDPCmdEngine.cc:733-747) + the
+    // per-command ticksPerPixel (:980,1105,1365,1470,1606). reset() clears it.
+    [[nodiscard]] std::uint64_t last_cmd_duration_tstates() const {
+        return last_cmd_duration_tstates_;
+    }
+
     // --- M36 Phase 3 debug snapshot: additive, read-only introspection of
     //     the register file + transfer FSM (docs/m36-phase3-planner-package.md
     //     §2.4 item 4); zero behavior change. Enum fields return numeric
@@ -216,6 +233,10 @@ private:
 
     std::uint8_t status_ = 0;
     int scr_mode_ = -1;
+
+    // M44 Phase 2a: estimated T-state duration of the last-issued command
+    // (see last_cmd_duration_tstates()); recomputed on every execute_command().
+    std::uint64_t last_cmd_duration_tstates_ = 0;
 
     // Event-driven transfer state (LMCM/LMMC/HMMC only).
     // transfer_pending_ mirrors the reference's `transfer` flag

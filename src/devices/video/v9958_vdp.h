@@ -36,6 +36,19 @@ class VdpClockSource {
 public:
     virtual ~VdpClockSource() = default;
     [[nodiscard]] virtual std::uint64_t cpu_tstates_since_vsync() const = 0;
+
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): the ABSOLUTE monotonic CPU-cycle
+    // count (never reset at vsync), used ONLY by the command-engine CE busy
+    // window so a command's busy duration can span a frame boundary as a trivial
+    // u64 comparison (the direct analog of openMSX's monotonic EmuTime). NON-PURE
+    // with a default so the two existing test mock clocks -- which implement only
+    // cpu_tstates_since_vsync() and never exercise CE-duration -- keep compiling
+    // UNEDITED and inert. The machine's VdpRasterClock overrides it with the
+    // scheduler's absolute total_cycles() (reads an existing core::Scheduler
+    // accessor; does NOT edit src/core).
+    [[nodiscard]] virtual std::uint64_t cpu_total_cycles() const {
+        return cpu_tstates_since_vsync();
+    }
 };
 
 // Render-sync seam (M32-S1, Defect A of DEC-0039; docs/m32-planner-package.md
@@ -142,6 +155,13 @@ public:
     // byte-identical no-op. Not cleared by reset().
     void attach_register_write_observer(VdpRegisterWriteObserver* observer);
 
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): while set, an R#46 command write
+    // does NOT arm the S#2-bit0 CE busy window (§2.4.3). The machine brackets its
+    // non-perturbing debug_io_write with this exactly as it brackets the
+    // render-sync adapter's set_suspended, so debug/inspection-issued commands
+    // stay byte-identical (only real CPU-driven OUT writes pace CE). Default false.
+    void set_command_timing_suspended(bool suspended);
+
     // --- core::IoDevice (dispatch on port & 0x03; the S1985 mirror #9C-#9F
     //     collapses to the same 0..3, A-2). ---
     core::BusData io_read(core::BusAddress port) override;
@@ -245,6 +265,15 @@ private:
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
 
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): arm the S#2-bit0 CE busy window
+    // from the command engine's just-computed pure duration. Called after an
+    // R#46 command dispatch when a clock is attached and command timing is not
+    // suspended. Applies a per-mode active-display slot-availability correction
+    // to the base (openMSX-underestimate) duration -- the single calibrated
+    // knob (§3.3). Sets cmd_busy_until_cycles_ to the absolute cycle at which CE
+    // clears; a 0 base duration yields cmd_busy_until == now (inert).
+    void arm_command_busy_window();
+
     // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
     // destination-row render-sync. Applies the strict-superset gates and, when
     // they pass, forwards a commit-to-display-line request to render_sync_:
@@ -302,6 +331,18 @@ private:
     // S#2 VR/HR raster-position clock source (bug fix, post-M28). Nullptr by
     // default; attached by the machine in wire_bus().
     VdpClockSource* clock_source_ = nullptr;
+
+    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): the ABSOLUTE CPU cycle at which
+    // the last atomic command's reported S#2-bit0 CE busy window expires. CE is
+    // reported busy while cmd_busy_until_cycles_ > clock_source_->cpu_total_cycles().
+    // 0 (== an already-expired window) at reset and whenever no window is armed.
+    // Only ever read when clock_source_ != nullptr.
+    std::uint64_t cmd_busy_until_cycles_ = 0;
+    // When true, an R#46 command write does NOT arm the busy window above
+    // (debug_io_write exclusion; see set_command_timing_suspended). Default false;
+    // toggled by the machine around its non-perturbing debug seam. Not a piece of
+    // emulated device state -> deliberately NOT touched by reset().
+    bool command_timing_suspended_ = false;
 
     // Render-sync listener (M32-S1). Nullptr by default (byte-identical
     // no-op); attached by the machine in wire_bus().

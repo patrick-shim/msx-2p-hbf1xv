@@ -15,11 +15,56 @@
 
 #include <algorithm>
 
+#include "devices/video/vdp_access_timing.h"
 #include "devices/video/vdp_command_address.h"
 
 namespace sony_msx::devices::video {
 
 namespace {
+
+// M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): per-command VDP-cycle cost per work
+// unit, re-derived as sums of the named VdpAccessDelta values ALREADY present +
+// license-blessed in vdp_access_timing.h:72-88 (the header re-derived those as
+// "hardware fact, not copied code", :65-71). This is a COMPOSITION of existing
+// deltas -- NOT a transcription of openMSX's ~340-entry VDPAccessSlots.cc slot-
+// position table (that is the deferred Phase-2b cycle-exact model + the
+// license-sensitive-scope ban). Grounded in openMSX VDPCmdEngine.cc's
+// per-command ticksPerPixel (behavior reference only, never copied):
+//   HMMV 48 (:1365); YMMM 24+40=64 (:1606); HMMM 24+64=88 (:1470);
+//   LMMV 72+24=96 (:980); LMMM 64+32+24=120 (:1105); LINE ~D88/px (:878/882);
+//   SRCH ~D88/searched-px (:827/862).
+using vdp_access_timing::VdpAccessDelta;
+constexpr int kD(const VdpAccessDelta delta) { return static_cast<int>(delta); }
+
+constexpr int kTicksHmmv = kD(VdpAccessDelta::D48);                                    // 48  / byte
+constexpr int kTicksYmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D40);          // 64  / byte
+constexpr int kTicksHmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D64);          // 88  / byte
+constexpr int kTicksLmmv = kD(VdpAccessDelta::D72) + kD(VdpAccessDelta::D24);          // 96  / pixel
+constexpr int kTicksLmmm =
+    kD(VdpAccessDelta::D64) + kD(VdpAccessDelta::D32) + kD(VdpAccessDelta::D24);       // 120 / pixel
+constexpr int kTicksLine = kD(VdpAccessDelta::D88);                                    // 88  / pixel
+constexpr int kTicksSrch = kD(VdpAccessDelta::D88);                                    // 88  / searched px
+
+// ceil(ticks_per_unit * work_units / 6): VDP cycles -> CPU T-states, the /6
+// being the project's fact-sheet-grounded kCpuTstatesPerVdpCycleRatio
+// (vdp_access_timing.h:93-95). Clock-free / pure.
+std::uint64_t duration_tstates(const int ticks_per_unit, const std::uint64_t work_units) {
+    const std::uint64_t vdp_cycles = static_cast<std::uint64_t>(ticks_per_unit) * work_units;
+    const auto ratio = static_cast<std::uint64_t>(vdp_access_timing::kCpuTstatesPerVdpCycleRatio);
+    return (vdp_cycles + ratio - 1) / ratio;
+}
+
+// Rectangle/fill commands: openMSX's calcFinishTime uses nx*(ny-1)+(ANX-1),
+// which at command issue (ANX==tmp_nx) reduces exactly to tmp_nx*tmp_ny - 1
+// (VDPCmdEngine.cc:745). Degenerate (either count 0) => 0 (no busy window).
+std::uint64_t rect_duration_tstates(const int ticks_per_unit, const unsigned tmp_nx,
+                                    const unsigned tmp_ny) {
+    const std::uint64_t units = static_cast<std::uint64_t>(tmp_nx) * static_cast<std::uint64_t>(tmp_ny);
+    if (units == 0) {
+        return 0;
+    }
+    return duration_tstates(ticks_per_unit, units - 1);
+}
 
 // Per-scrMode addressing/packing traits (VDPCmdEngine.cc:155-410's
 // Graphic4Mode/Graphic5Mode/Graphic6Mode/Graphic7Mode/NonBitmapMode structs),
@@ -188,6 +233,7 @@ void VdpCommandEngine::reset() {
     col_ = arg_ = cmd_ = 0;
     status_ = 0;
     scr_mode_ = -1;
+    last_cmd_duration_tstates_ = 0;
     transfer_pending_ = false;
     transfer_kind_ = TransferKind::None;
     transfer_adx_ = transfer_dy_ = transfer_dx_start_ = 0;
@@ -281,6 +327,11 @@ void VdpCommandEngine::write_pixel(const int scr_mode, const unsigned x, const u
 // --- command dispatch ------------------------------------------------------
 
 void VdpCommandEngine::execute_command() {
+    // M44 Phase 2a: default this command's reported duration to 0 (instant).
+    // Every atomic rectangle/LINE/SRCH command below overwrites it from its own
+    // work count; ABRT, degenerate no-ops, POINT/PSET, illegal-mode, and the
+    // event-driven transfers all leave it 0 (paced by their own mechanism).
+    last_cmd_duration_tstates_ = 0;
     if (scr_mode_ < 0) {
         // No commands possible at all (A-M22-6): writing CMD immediately
         // behaves as ABRT (VDPCmdEngine.cc:1944-1947).
@@ -329,7 +380,9 @@ void VdpCommandEngine::run_srch() {
     const int tx = (arg_ & kDix) ? -1 : 1;
     const bool aeq = (arg_ & kEq) != 0;
     asx_ = sx_;
+    std::uint64_t searched = 0;  // M44 Phase 2a: examined-pixel count
     for (;;) {
+        ++searched;
         const std::uint8_t p = point_pixel(scr_mode_, asx_, sy_, vram_);
         if ((p == cl) != aeq) {
             status_ = static_cast<std::uint8_t>(status_ | kBd);  // border detected
@@ -342,6 +395,7 @@ void VdpCommandEngine::run_srch() {
             break;
         }
     }
+    last_cmd_duration_tstates_ = duration_tstates(kTicksSrch, searched);  // M44 Phase 2a
     command_done();
 }
 
@@ -359,6 +413,7 @@ void VdpCommandEngine::run_hmmv() {
         command_done();
         return;
     }
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmv, tmp_nx, tmp_ny);  // M44 Phase 2a
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, col_);
@@ -390,6 +445,7 @@ void VdpCommandEngine::run_hmmm() {
         command_done();
         return;
     }
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(asx, sy) & 0x1FFFFu);
@@ -426,6 +482,7 @@ void VdpCommandEngine::run_ymmm() {
         command_done();
         return;
     }
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksYmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(adx, sy) & 0x1FFFFu);
@@ -474,6 +531,7 @@ void VdpCommandEngine::run_line() {
     // idempotent so a redundant equal-line call would be harmless anyway.
     bool row_notified = false;
     unsigned last_notified_dy = 0;
+    std::uint64_t line_pixels = 0;  // M44 Phase 2a: drawn major-axis pixel count
 
     for (int guard = 0; guard < 1'000'000; ++guard) {
         if (!row_notified || dy != last_notified_dy) {
@@ -482,6 +540,7 @@ void VdpCommandEngine::run_line() {
             row_notified = true;
         }
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
+        ++line_pixels;
 
         bool done = false;
         if (!major_y) {
@@ -515,6 +574,7 @@ void VdpCommandEngine::run_line() {
         }
         if (done) break;
     }
+    last_cmd_duration_tstates_ = duration_tstates(kTicksLine, line_pixels);  // M44 Phase 2a
     command_done();
 }
 
@@ -534,6 +594,7 @@ void VdpCommandEngine::run_lmmv() {
         command_done();
         return;
     }
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmv, tmp_nx, tmp_ny);  // M44 Phase 2a
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
@@ -565,6 +626,7 @@ void VdpCommandEngine::run_lmmm() {
         command_done();
         return;
     }
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t src = point_pixel(scr_mode_, asx, sy, vram_);
