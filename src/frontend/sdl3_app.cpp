@@ -24,6 +24,7 @@
 
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/fdc/disk_image.h"
+#include "frontend/app_icon_data.h"
 #include "frontend/audio_pacer.h"
 #include "machine/cartridge_identifier.h"
 #include "machine/debug_format.h"
@@ -234,6 +235,20 @@ bool Sdl3App::init() {
         last_error_ = SDL_GetError();
         shutdown();
         return false;
+    }
+
+    // Give the live window (and thus the Windows taskbar button) an explicit
+    // icon. The .exe's Explorer icon comes from the linked app_icon.rc resource;
+    // this covers the running window/taskbar. The pixels are embedded
+    // (app_icon_data.h, 64x64 RGBA) so this is fully self-contained -- no icon
+    // file to locate and no SDL_image dependency. Every step is non-fatal: a
+    // failure here just leaves the default icon, never aborts startup.
+    // SDL_SetWindowIcon copies the surface, so we free it immediately.
+    if (SDL_Surface* icon = SDL_CreateSurfaceFrom(
+            kAppIconWidth, kAppIconHeight, SDL_PIXELFORMAT_RGBA32,
+            const_cast<unsigned char*>(kAppIconRGBA), kAppIconWidth * 4)) {
+        SDL_SetWindowIcon(window_, icon);
+        SDL_DestroySurface(icon);
     }
 
     // M37 Slice E (DEC-0056): aspect-correct, never-distorted letterboxed

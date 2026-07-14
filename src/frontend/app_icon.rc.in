@@ -1,0 +1,14 @@
+// ============================================================================
+//  Sony HB-F1XV MSX2+ Emulator — Windows resource script (template)
+//
+//  CMake's configure_file() turns this .rc.in into ${build}/app_icon.rc with an
+//  ABSOLUTE, forward-slash path to the tracked assets/app_icon.ico, so the icon
+//  resolves regardless of the build tree location, generator, or working dir.
+//  The FIRST icon resource in the linked executable becomes its Explorer icon;
+//  Windows also uses it for the taskbar button when no window icon is set.
+//
+//  This file is Windows-only: it is added to sony_msx_sdl3 solely inside an
+//  if(WIN32) guard in the top-level CMakeLists.txt.
+// ============================================================================
+#define IDI_APPICON 101
+IDI_APPICON ICON "@SONY_MSX_APP_ICON_ICO@"

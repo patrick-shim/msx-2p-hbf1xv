@@ -149,6 +149,21 @@ if(SONY_MSX_ENABLE_SDL3)
     add_executable(sony_msx_sdl3 src/frontend/sdl3_main.cpp)
     target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_sdl3_frontend)
     sony_msx_stage_sdl3_dll(sony_msx_sdl3)
+
+    # Windows-only: give sony_msx_sdl3.exe its Explorer/taskbar icon via a
+    # compiled resource. configure_file() bakes an absolute, forward-slash path
+    # to the tracked assets/app_icon.ico into ${build}/app_icon.rc so the .rc
+    # resolves from any build tree or fresh clone (RC does not search the .rc's
+    # own directory). MSVC (and MinGW windres) compile the .rc automatically.
+    # Runtime window/taskbar icon is additionally set via SDL_SetWindowIcon().
+    if(WIN32)
+        set(SONY_MSX_APP_ICON_ICO "${CMAKE_SOURCE_DIR}/assets/icons/msx_app.ico")
+        configure_file(
+            "${CMAKE_SOURCE_DIR}/src/frontend/app_icon.rc.in"
+            "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc"
+            @ONLY)
+        target_sources(sony_msx_sdl3 PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/app_icon.rc")
+    endif()
 endif()
 
 # Guarded for lean remote checkouts (DEC-0044): a clone without tests/ (the
