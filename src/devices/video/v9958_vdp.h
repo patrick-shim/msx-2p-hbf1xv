@@ -249,6 +249,14 @@ public:
     [[nodiscard]] bool irq_level() const { return irq_level_; }
     [[nodiscard]] int blink_countdown() const { return blink_countdown_; }
 
+    // M48 Slice 2 (DEC-0075) test/debug accessor: the ABSOLUTE CPU cycle at which
+    // the current command's S#2-bit0 CE busy window expires (0 == none armed /
+    // already expired). A const return of an existing private member -- ZERO
+    // behavior change (same read-only-introspection idiom as the M36 accessors
+    // above). Lets the CPU-priority slot-steal oracle assert the window was
+    // extended by exactly N * slot_cost_tstates() without polling the CE bit.
+    [[nodiscard]] std::uint64_t cmd_busy_until_cycles() const { return cmd_busy_until_cycles_; }
+
 private:
     // #98 VRAM data path.
     void vram_data_write(std::uint8_t value);
@@ -273,14 +281,38 @@ private:
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
 
+    // M48 Slice 1 (DEC-0075): the live 3-way CPU/command VRAM access-slot regime
+    // for the command-throughput cap -- one of the three tier-1 per-line slot
+    // COUNTS (vdp_access_timing::kSlotsPerLine{DisplayOff=154,SpritesOff=88,
+    // SpritesOn=31}, fact-sheet §8 line 163) selected from live R#1 BL +
+    // raster_display_line() + R#8 SPD + mode (A-M48-2). Pure/const; consulted at
+    // command-issue time by arm_command_busy_window() (Slice 1) and per CPU #98
+    // access by the io paths (Slice 2). NEVER gates CPU T-states.
+    [[nodiscard]] int effective_slots_per_line() const;
+
     // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): arm the S#2-bit0 CE busy window
     // from the command engine's just-computed pure duration. Called after an
     // R#46 command dispatch when a clock is attached and command timing is not
-    // suspended. Applies a per-mode active-display slot-availability correction
-    // to the base (openMSX-underestimate) duration -- the single calibrated
-    // knob (§3.3). Sets cmd_busy_until_cycles_ to the absolute cycle at which CE
-    // clears; a 0 base duration yields cmd_busy_until == now (inert).
+    // suspended. M48 Slice 1 (DEC-0075): inflates the base (max-availability,
+    // 154-slot) duration by slot_factor = 154 / effective_slots_per_line()
+    // (~1.00 / 1.75 / 4.97 for the three tier-1 slot counts, fact-sheet §8 line
+    // 163) -- SUPERSEDING the empirical per-mode kActiveDisplaySlotFactorPercent
+    // placeholder. Sets cmd_busy_until_cycles_ to the absolute cycle at which CE
+    // clears; a 0 base duration yields cmd_busy_until == now (inert). Pure
+    // timing/STATUS overlay -- VRAM mutation stays atomic.
     void arm_command_busy_window();
+
+    // M48 Slice 2 (DEC-0075): the CPU-priority VRAM access-slot steal. Called on
+    // every CPU #98 VRAM data-port access (io_read/io_write, port & 3 == 0). If a
+    // command is BUSY at this access, extends cmd_busy_until_cycles_ by ONE stolen
+    // slot = slot_cost_tstates(effective_slots_per_line()) T-states (fact-sheet §8
+    // line 163 "CPU VRAM access takes priority over the command engine and steals
+    // slots"). ONE-DIRECTIONAL: the CPU access is NEVER stalled/delayed/dropped
+    // (the HB-F1XV does not wire /WAIT, fact-sheet §1/§7) -- this ONLY lengthens
+    // the reported S#2-bit0 CE busy window (STATUS/timing overlay; VRAM mutation
+    // stays atomic). Inert without a clock or while command timing is suspended,
+    // exactly like arm_command_busy_window().
+    void steal_command_slot_for_cpu_vram_access();
 
     // VDP command-timing parity: arm the S#2 TR (transfer-ready, bit7) drop-then-
     // rearm window after the command engine services one event-driven transfer

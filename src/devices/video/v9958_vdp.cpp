@@ -30,41 +30,14 @@ constexpr std::array<std::uint16_t, 16> kBootPalette = {
     0x171, 0x373, 0x661, 0x664, 0x411, 0x265, 0x555, 0x777,
 };
 
-// M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069) calibration knob (§3.3): the
-// ACTIVE-DISPLAY slot-availability correction -- a per-scrMode scalar (percent,
-// 100 = 1.00x) multiplied into the command engine's BASE duration ONLY while a
-// command is issued during active display. During active display the renderer
-// steals VDP access slots, so a real command runs LONGER than openMSX's
-// deliberately slot-free underestimate (VDPCmdEngine.cc:741-742 "assumes we
-// never have to wait for access slots"), which under-paces a busy-wait-on-CE
-// loop. This is the ONE calibrated constant of Phase 2a. It is a GENERIC
-// per-mode hardware-grounded factor -- NEVER a per-title tuning (universal-fixes
-// rule): the wider-pixel modes (GRAPHIC6/7, 8bpp) surrender proportionally more
-// VRAM bandwidth to display fetch than the packed 4bpp/2bpp modes (GRAPHIC4/5),
-// leaving fewer command slots and a larger correction. Index =
-// VdpCommandEngine::scr_mode() (0=G4,1=G5,2=G6,3=G7/YJK,4=NonBitmap). GRAPHIC4/5
-// = 200% (the "~2x slower during active display" 4bpp hardware rule); GRAPHIC6/7
-// = 300% (8bpp surrenders more bandwidth). This is a coarse per-mode scalar, NOT
-// the openMSX VDPAccessSlots.cc per-raster slot-position table (that is the
-// deferred Phase-2b model + the license-sensitive-scope ban).
-//
-// CALIBRATION FINDING (Laydock 2 .omr A/B, GRAPHIC4/index 0; planner R-1/Q1):
-// this pacing REMOVES the severe pre-fix flicker (the SCORE-digit blue-noise
-// scramble, the "GAME OVER" bleed, the LMMC-style corruption). But NO coarse
-// per-mode factor FULLY stabilizes the HUD: within the in-sync range (~100-250%)
-// a residual per-few-frame label jitter (a red bar / thin line through the right
-// "OPTION"/left "OPTION-SCORE" labels) persists, and pushing higher (>=300%)
-// over-inflates the game's LARGE active-display blits too, desyncing the game
-// (it lags onto the PLAYER-SELECT screen). Full frame-to-frame parity needs the
-// per-raster-position slot accuracy of Phase 2b -- this is the documented
-// Phase-2a/2b boundary (DEC-0069 Q1; do NOT pull the slot table forward here).
-constexpr int kActiveDisplaySlotFactorPercent[5] = {
-    /* 0 GRAPHIC4      */ 200,
-    /* 1 GRAPHIC5      */ 200,
-    /* 2 GRAPHIC6      */ 300,
-    /* 3 GRAPHIC7/YJK  */ 300,
-    /* 4 NonBitmap     */ 200,
-};
+// M48 Slice 1 (DEC-0075) SUPERSEDED the M44 Phase-2a empirical per-mode
+// kActiveDisplaySlotFactorPercent[] placeholder (200% GRAPHIC4/5, 300%
+// GRAPHIC6/7). The active-display command-throughput cap is now the principled,
+// sprite-aware tier-1 slot-availability factor slot_factor = 154 /
+// effective_slots_per_line() applied in arm_command_busy_window() (fact-sheet
+// §8 line 163; the three per-line slot COUNTS live in vdp_access_timing.h). The
+// old placeholder was a coarse per-mode scalar that was NOT sprite-aware and NOT
+// grounded in the 154/88/31 slot counts; it is removed here per M48 AC-1.
 
 }  // namespace
 
@@ -149,24 +122,62 @@ void V9958Vdp::set_command_timing_suspended(const bool suspended) {
     command_timing_suspended_ = suspended;
 }
 
+int V9958Vdp::effective_slots_per_line() const {
+    // M48 Slice 1 (DEC-0075): select the live 3-way CPU/command VRAM access-slot
+    // regime (fact-sheet §8 line 163: 154 display-off / 88 sprites-off / 31
+    // sprites-on) from live registers per A-M48-2.
+    //
+    // display ON  = R#1 bit6 (BL, display enable; fact-sheet §4 line 71) AND the
+    //               raster is inside the active display region
+    //               (raster_display_line() >= 0, fact-sheet §7). A blanked screen
+    //               or the border/vblank region frees ALL slots -> 154.
+    // sprites ON  = R#8 bit1 (SPD; SPD=0 means sprites are NOT disabled;
+    //               fact-sheet §4 line 72) AND the current mode actually has
+    //               sprites (vdp_sprite_mode(base) != 0 -> excludes TEXT1/TEXT2,
+    //               fact-sheet §6 lines 116-120).
+    //
+    // Sprites-on slows the command engine IDENTICALLY regardless of how many
+    // sprites are active on the line (fact-sheet §6(a) line 120: the sprite
+    // subsystem always runs the same VRAM fetch pattern even with fewer/no
+    // sprites), so this keys on sprites-ENABLED, never on sprite count.
+    const bool display_on = (control_regs_[1] & 0x40) != 0 && raster_display_line() >= 0;
+    if (!display_on) {
+        return vdp_access_timing::kSlotsPerLineDisplayOff;  // 154
+    }
+    const bool sprites_on =
+        (control_regs_[8] & 0x02) == 0 && vdp_sprite_mode(mode_.base) != 0;
+    return sprites_on ? vdp_access_timing::kSlotsPerLineSpritesOn      // 31
+                      : vdp_access_timing::kSlotsPerLineSpritesOff;    // 88
+}
+
 void V9958Vdp::arm_command_busy_window() {
     // Caller guarantees clock_source_ != nullptr && !command_timing_suspended_.
     // M44 Phase 2a: turn the command engine's pure, clock-free base duration into
     // an absolute expiry timestamp for the S#2-bit0 CE busy window.
     std::uint64_t duration = cmd_engine_.last_cmd_duration_tstates();
-    if (duration != 0 && raster_display_line() >= 0) {
-        // Active display: apply the per-mode slot-availability correction
-        // (rounding up) so the busy-wait exit lands after the beam has passed the
-        // phase-sensitive region.
-        const int m = cmd_engine_.scr_mode();
-        if (m >= 0 && m < 5) {
-            const auto pct = static_cast<std::uint64_t>(
-                kActiveDisplaySlotFactorPercent[static_cast<std::size_t>(m)]);
-            duration = (duration * pct + 99u) / 100u;
-        }
+    if (duration != 0) {
+        // M48 Slice 1 (DEC-0075): per-line slot-availability throughput cap. The
+        // engine's base duration corresponds to the MAX-availability 154-slot
+        // regime (A-M48-3); inflate it by slot_factor = 154 / S_effective when
+        // fewer slots are free. From the three tier-1 counts (fact-sheet §8 line
+        // 163) this is a 3-valued, sprite-aware factor:
+        //   S=154 -> 1.00x (display off/border/vblank -> byte-identical to v1.1.4,
+        //            A-M48-4: (d*154 + 153)/154 == d exactly),
+        //   S= 88 -> 1.75x (display on, sprites off),
+        //   S= 31 -> 4.97x (display on, sprites on).
+        // Integer ceil of duration * 154 / S. This SUPERSEDES the empirical
+        // per-mode kActiveDisplaySlotFactorPercent placeholder (DEC-0069). It is
+        // a pure CE busy-WINDOW / S#2 STATUS overlay ONLY: VRAM mutation stays
+        // atomic (§5) and the engine's pure duration + M44 per-command render-sync
+        // oracle are untouched (the engine stays state-agnostic).
+        const auto s_eff = static_cast<std::uint64_t>(effective_slots_per_line());
+        const auto s_base =
+            static_cast<std::uint64_t>(vdp_access_timing::kSlotsPerLineDisplayOff);
+        duration = (duration * s_base + s_eff - 1u) / s_eff;
     }
-    // DEC-0072 diagnostic bias (default 0). Clamp the biased duration at 0 so a
-    // large negative bias cannot underflow the unsigned expiry.
+    // DEC-0072 diagnostic bias (default 0), applied AFTER the slot factor. Clamp
+    // the biased duration at 0 so a large negative bias cannot underflow the
+    // unsigned expiry.
     std::int64_t biased = static_cast<std::int64_t>(duration) + cmd_busy_bias_tstates_;
     if (biased < 0) {
         biased = 0;
@@ -188,6 +199,43 @@ void V9958Vdp::arm_transfer_ready_window() {
         clock_source_->cpu_total_cycles() + cmd_engine_.transfer_unit_cost_tstates();
 }
 
+void V9958Vdp::steal_command_slot_for_cpu_vram_access() {
+    // M48 Slice 2 (DEC-0075; backlog C1/D4 CONTENTION remainder): CPU-priority
+    // VRAM access-slot STEAL. On real hardware a CPU VRAM access through #98 takes
+    // priority over the command engine and STEALS an access slot from it,
+    // lengthening the command's completion -- while the CPU access itself is
+    // serviced with its normal timing (fact-sheet §8 line 163: "CPU VRAM access
+    // takes priority over the command engine and steals slots -- with sprites on,
+    // a HMMV can be cut ~2x by simultaneous OUT (#98),A").
+    //
+    // ONE-DIRECTIONAL, by tier-1 hardware fact: the HB-F1XV does NOT wire the
+    // V9958 /WAIT generator (fact-sheet §1 line 34 / §7 line 129), so the VDP can
+    // NEVER hold the CPU. This model therefore ONLY extends the command's reported
+    // S#2-bit0 CE busy window (a STATUS/timing overlay); the CPU #98 read/write in
+    // io_read/io_write completes UNCHANGED -- no stall, no delay, no dropped byte,
+    // no CPU T-state change (AC-4). VRAM mutation stays atomic (§5) and
+    // vdp_command_engine.* is untouched.
+    //
+    // Inert without a clock or while command timing is suspended -- exactly like
+    // arm_command_busy_window() (the null-clock headless / non-perturbing debug-
+    // seam paths stay byte-identical).
+    if (clock_source_ == nullptr || command_timing_suspended_) {
+        return;
+    }
+    // Only a command that is genuinely BUSY at THIS CPU access can lose a slot; an
+    // access after the CE window has already closed contends with nothing (no
+    // phantom extension). Same absolute-u64 clock compare the S#2 CE bit uses.
+    if (cmd_busy_until_cycles_ <= clock_source_->cpu_total_cycles()) {
+        return;
+    }
+    // One stolen slot's worth of command progress at the CURRENT live slot regime
+    // (Slice 1's S_effective): slot_cost_tstates(S) = ceil(1368 / (6 * S)) ->
+    // 154->2, 88->3, 31->8 T-states/slot. The sprites-on 8 T/access steal is what
+    // reproduces the §8 "~2x HMMV cut by a concurrent OUT (#98)" on average.
+    cmd_busy_until_cycles_ += static_cast<std::uint64_t>(
+        vdp_access_timing::slot_cost_tstates(effective_slots_per_line()));
+}
+
 // --- core::IoDevice ---------------------------------------------------------
 
 core::BusData V9958Vdp::io_read(const core::BusAddress port) {
@@ -196,6 +244,10 @@ core::BusData V9958Vdp::io_read(const core::BusAddress port) {
 
     switch (port & 0x03) {
     case 0:  // #98 VRAM data read
+        // M48 Slice 2 (DEC-0075): CPU-priority slot steal -- a concurrent CPU #98
+        // access lengthens a BUSY command's CE window ONLY; the read below is
+        // serviced with unchanged timing (never stalls the CPU).
+        steal_command_slot_for_cpu_vram_access();
         return vram_data_read();
     case 1:  // #99 status register read via the R#15 pointer
         return read_status(control_regs_[15] & 0x0F);
@@ -218,6 +270,10 @@ void V9958Vdp::io_write(const core::BusAddress port, const core::BusData value) 
     const auto byte = static_cast<std::uint8_t>(value & 0xFF);
     switch (port & 0x03) {
     case 0:  // #98 VRAM data write
+        // M48 Slice 2 (DEC-0075): CPU-priority slot steal -- extends a BUSY
+        // command's CE window ONLY; the VRAM write below commits atomically with
+        // unchanged CPU timing (never stalls the CPU, never drops the byte).
+        steal_command_slot_for_cpu_vram_access();
         vram_data_write(byte);
         register_data_stored_ = false;  // VDP.cc:661
         break;

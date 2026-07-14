@@ -102,6 +102,39 @@ constexpr int kCpuTstatesPerVdpCycleRatio = 6;
 // constant.
 constexpr int kCpuTstatesPerLine = kVdpCyclesPerLine / kCpuTstatesPerVdpCycleRatio;
 
+// ---------------------------------------------------------------------------
+// M48 Slice 1 (DEC-0075; backlog C1/D4 CONTENTION-model remainder): the three
+// tier-1 per-line CPU/command VRAM ACCESS-SLOT COUNTS. These three integers
+// (plus kVdpCyclesPerLine=1368 and kCpuTstatesPerVdpCycleRatio=6 above) are the
+// ENTIRE numeric surface of the M48 average-throughput contention model. There
+// is deliberately NO per-slot POSITION array here: the ~340-entry per-mode slot-
+// position tables at references/openmsx-21.0/src/video/VDPAccessSlots.cc:14-141
+// stay BANNED and un-transcribed (read for effect only; license-sensitive-scope
+// ban, guardrails license-isolation). Values are the published per-line slot
+// counts from references/fact-sheets/Yamaha V9958 VDP.md §8 line 163: "Actual
+// speed depends on access-slot availability: 154 slots/line (screen off), 88
+// (sprites off), 31 (sprites on)."
+constexpr int kSlotsPerLineDisplayOff = 154;  // display OFF / border / vblank
+constexpr int kSlotsPerLineSpritesOff = 88;   // display ON, sprites disabled
+constexpr int kSlotsPerLineSpritesOn = 31;    // display ON, sprites enabled
+
+// Average CPU-T-state cost of ONE VRAM access slot when `slots_per_line` slots
+// are distributed across the 1368-VDP-cycle line: the mean VDP-cycle spacing
+// between adjacent slots is 1368 / slots_per_line, converted to CPU T-states by
+// the fixed /6 clock ratio -- a single ceiling:
+//   ceil(1368 / slots_per_line / 6)
+//   = ceil(kVdpCyclesPerLine / (kCpuTstatesPerVdpCycleRatio * slots_per_line)).
+// This is an AVERAGE RATE derived PURELY from the slot COUNT (fact-sheet §7
+// line 124 = 1368; §1 line 30/34 = /6); it carries NO positional information --
+// that positional knowledge is exactly the banned VDPAccessSlots.cc table. Used
+// by the M48 CPU-priority slot-steal model (Slice 2: one stolen slot's worth of
+// time per concurrent CPU #98 access). For the three tier-1 counts this yields
+// 154 -> 2, 88 -> 3, 31 -> 8 T-states/slot.
+constexpr int slot_cost_tstates(const int slots_per_line) {
+    const int divisor = kCpuTstatesPerVdpCycleRatio * slots_per_line;
+    return (kVdpCyclesPerLine + divisor - 1) / divisor;
+}
+
 // Raster-position derivation (the informational half, planner package §3.2).
 // Returns the CPU-T-state-granularity position (0..kCpuTstatesPerLine-1)
 // within the current scanline, given CPU T-states elapsed since the
