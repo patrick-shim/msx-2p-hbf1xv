@@ -58,6 +58,8 @@ void V9958Vdp::reset() {
     // mode (GRAPHIC1, no commands legal -> scrMode = -1).
     cmd_engine_.reset();
     sprite_engine_.reset();
+    // M49 Slice 2 (backlog D9): no progressive sprite-split pass survives a reset.
+    sprite_split_active_ = false;
 
     data_latch_ = 0;
     register_data_stored_ = false;
@@ -264,6 +266,10 @@ void V9958Vdp::io_write(const core::BusAddress port, const core::BusData value) 
     // renderUntil(time) FIRST, then applies the change). Zero interrupt/
     // status/VRAM side effects here -- the listener only reads state and
     // writes into its own pixel store (docs/m32-planner-package.md §2.3).
+    // M49-S2 (backlog D9): the adapter now ALSO keeps the incremental sprite plane
+    // in pace with the background BEFORE the background commits (sprite THEN
+    // background), so a mid-frame sprite-relevant change splits the sprite plane at
+    // the SAME line as the background split -- see commit_sprite_split().
     if (render_sync_ != nullptr) {
         render_sync_->on_before_state_change();
     }
@@ -388,6 +394,11 @@ std::uint8_t V9958Vdp::read_status(const int reg) {
         // 70-100 sync()/checkSprites), so C re-latches per colliding LINE,
         // not per frame -- the HB-F1XV BIOS boot-logo wobble paces one
         // scroll-register write per S#0-C poll exit and needs this.
+        //
+        // M49-S2 (backlog D9): the collision-event queue is FRAME-ATOMIC (collected
+        // by recompute_frame at on_vsync, exactly as pre-M49) -- the seam's render-
+        // only split pass never touches it -- so this re-latch is byte-identical for
+        // every game (DEC-0031 boot-logo pacing unchanged).
         sprite_engine_.sync_collision_to_raster(raster_display_line());
     }
     const std::uint8_t ret = peek_status_register(reg);
@@ -660,6 +671,54 @@ void V9958Vdp::command_row_sync(const unsigned dy) {
     render_sync_->on_commit_up_to(display_line);
 }
 
+// --- M49 Slice 2 (backlog D9): progressive per-frame sprite-split lifecycle ------
+
+int V9958Vdp::sprite_frame_height() const {
+    // The exact pre-M49 on_vsync() height formula, extracted verbatim.
+    switch (mode_.mode) {
+    case VdpMode::Text1:
+    case VdpMode::Text2:
+    case VdpMode::Text1Q:
+    case VdpMode::MulticolorQ:
+    case VdpMode::Unknown:
+        return 192;
+    default:
+        return (control_regs_[9] & 0x80) ? 212 : 192;
+    }
+}
+
+void V9958Vdp::begin_sprite_frame() {
+    // Bind the LIVE VRAM/registers + capture the frame geometry (height/mode) for
+    // the render-only progressive pass, resetting the watermark. Collision/status
+    // are DELIBERATELY untouched (begin_frame preserves them) -- they stay the
+    // previous frame's frame-atomic result until on_vsync's recompute.
+    sprite_engine_.begin_frame(vram_, control_regs_span(), mode_, sprite_frame_height());
+}
+
+void V9958Vdp::commit_sprite_split(const int target, const bool wrap) {
+    // Lazy-open the per-frame RENDERING-ONLY progressive pass on the FIRST active-
+    // display write; a genuine frame wrap / D10 geometry jump (`wrap`) re-opens it,
+    // mirroring the background accumulator's wrap-safety restart. Until first opened,
+    // the sprite buffers hold the previous on_vsync() recompute (fully populated --
+    // no empty-sprite regression on the lines already committed).
+    if (!sprite_split_active_ || wrap) {
+        begin_sprite_frame();
+        sprite_split_active_ = true;
+    }
+    // `target` is the EXCLUSIVE beam+2 commit boundary the background sync_to_line
+    // uses; check_until_visible_only() is INCLUSIVE, so target-1 commits sprite lines
+    // [wm, target) -- the SAME lines the background commits, split at the SAME line
+    // (AC-S2). RENDERING-ONLY: it populates the visible-sprite buffers per-line-live
+    // WITHOUT touching the frame-atomic collision/status the CPU reads (no
+    // game-behaviour change). Advance-only within a frame (no-op when target <=
+    // watermark) satisfies the M44 "never move the watermark backwards" discipline;
+    // no command-row sink drives the sprite watermark, so a partial pass can never be
+    // sealed mid-command. Reading the LIVE registers/VRAM HERE -- before the pending
+    // write applies -- is what makes a mid-frame sprite-relevant change (still the
+    // OLD value) split the RENDERED plane at exactly `target`.
+    sprite_engine_.check_until_visible_only(target - 1);
+}
+
 // --- interrupts -------------------------------------------------------------
 
 void V9958Vdp::on_vsync() {
@@ -682,27 +741,25 @@ void V9958Vdp::on_vsync() {
         }
     }
 
-    // Sprite check/collision/5th-sprite recompute (M22-S1/S2, backlog D2).
-    // Once per frame boundary, mirroring the blink-countdown precedent -- no
-    // new clock consumer. `height` deliberately duplicates
-    // VdpFrameRenderer::height()'s own formula: V9958Vdp (core) has no
-    // dependency on VdpFrameRenderer (presentation), keeping the existing
-    // one-directional layering intact.
-    int height = 192;
-    switch (mode_.mode) {
-    case VdpMode::Text1:
-    case VdpMode::Text2:
-    case VdpMode::Text1Q:
-    case VdpMode::MulticolorQ:
-    case VdpMode::Unknown:
-        height = 192;
-        break;
-    default:
-        height = (control_regs_[9] & 0x80) ? 212 : 192;
-        break;
-    }
-    sprite_engine_.recompute_frame(vram_, std::span<const std::uint8_t, kNumControlRegs>(control_regs_), mode_,
-                                    height);
+    // Sprite check/collision/5th-sprite pass (M22-S1/S2 backlog D2; M49-S2
+    // backlog D9). Once per frame boundary, mirroring the blink-countdown
+    // precedent -- no new clock consumer. `height` deliberately duplicates
+    // VdpFrameRenderer::height()'s own formula (sprite_frame_height()): V9958Vdp
+    // (core) has no dependency on VdpFrameRenderer (presentation), keeping the
+    // existing one-directional layering intact.
+    // M49-S2 (backlog D9): ALWAYS the frame-atomic recompute -- collision /
+    // 5th-sprite / S#0 status are byte-identical to pre-M49 for EVERY game (DEC-0031
+    // boot-logo path preserved AND no game-behaviour change from the split). The
+    // per-line-live sprite RENDERING split was applied DURING the frame by the seam's
+    // render-only pass (commit_sprite_split -> check_until_visible_only), whose
+    // visible buffers the scanline accumulator already consumed as it committed each
+    // line; this recompute overwrites those buffers with the frame-atomic result the
+    // finalize's remaining (uncommitted) lines render from, and computes the
+    // frame-atomic collision/status the CPU reads. sprite_split_active_ rolls to
+    // false so next frame's first ACTIVE-display write re-opens the render-only pass.
+    const int height = sprite_frame_height();
+    sprite_engine_.recompute_frame(vram_, control_regs_span(), mode_, height);
+    sprite_split_active_ = false;
 
     update_irq();
 }

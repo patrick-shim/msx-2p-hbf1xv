@@ -73,39 +73,125 @@ std::uint32_t calculate_pattern(const VdpVram& vram, const std::uint32_t pattern
 
 void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uint8_t, 32> control_regs,
                                    const VdpModeState& mode, const int height) {
+    // M49-S1 (backlog D9): the pre-M49 single all-lines sweep, re-expressed as
+    // "bind the frame + check every line in ONE segment". begin_frame() takes
+    // the frameStart() per-line clear + the frame-boundary geometry; the single
+    // check_until(height-1) below runs the identical sprite loop + collision
+    // pass over [1, height) against the identical register/VRAM snapshot and
+    // finalizes S#0/collision -- byte-identical to the old code (AC-S1). This is
+    // the only caller in S1, so on_vsync() behavior is unchanged.
+    begin_frame(vram, control_regs, mode, height);
+    if (height > 0) {
+        check_until(height - 1);
+    }
+}
+
+void SpriteEngine::begin_frame(const VdpVram& vram, std::span<const std::uint8_t, 32> control_regs,
+                               const VdpModeState& mode, const int height) {
     // frameStart() unconditionally clears the per-line visible-sprite counts
     // every frame, regardless of sprite mode (SpriteChecker.hh:228-233).
     lines_.assign(height > 0 ? static_cast<std::size_t>(height) : 0, {});
-    if (height <= 0) {
-        return;
+
+    // Bind the LIVE state read by check_until()/process_segment(). The pointers
+    // stay valid for the frame's duration (the caller owns control_regs + vram);
+    // reading them LIVE at each check_until() is what makes a mid-frame write
+    // affect only the lines after its commit boundary (the S2 seam drives this).
+    vram_ptr_ = &vram;
+    regs_ptr_ = control_regs.data();
+    mode_captured_ = mode;  // A-M49-2: sprite-mode/planar are per-frame decisions
+    height_ = height;
+    watermark_ = 1;  // line 0 is unconditionally sprite-free (A-M22-9)
+    finalized_ = false;
+    frame_active_ = false;
+    fifth_num_ = -1;         // no 5th/9th sprite detected yet
+    fifth_line_ = height;    // larger than any valid line index
+    sprite_end_ = 32;        // sentinel-Y loop-stop index (32 = loop never broke)
+
+    // NOTE: collision_events_, next_collision_event_ and status_ are DELIBERATELY
+    // not reset here. The pre-M49 code only cleared them inside the enabled path
+    // (right before its collision loop) and left them frozen on the disabled /
+    // sprite-mode-0 / height<=0 early return; the first ACTIVE segment clears
+    // them (check_until()), preserving that exact behavior.
+}
+
+void SpriteEngine::check_until(const int line) {
+    if (finalized_ || height_ <= 0) {
+        return;  // frame already sealed, or the degenerate height<=0 no-op
+    }
+    int end = line + 1;  // exclusive
+    if (end > height_) {
+        end = height_;
+    }
+    if (end <= watermark_) {
+        return;  // idempotent: nothing new to check (advance-only watermark)
+    }
+    const int lo = watermark_ < 1 ? 1 : watermark_;
+
+    // Per-SEGMENT (per-line-live) gates, read from the LIVE bound state:
+    //  * sprite-mode-0 (SpriteChecker.hh:82-87 no-ops entirely; status frozen);
+    //  * spritesEnabledFast() (VDP.hh:313-319): R#1 bit6 displayEnabled AND
+    //    R#8 bit1 clear (SPD). A freshly reset VDP (VRAM all-zero, phantom
+    //    sprites at Y=0) must not populate S#0 -- the M14 VBlank status tests
+    //    call on_vsync() with no sprites configured and rely on this gate.
+    // This is the actual D9 fix: a mid-frame R#1 BL / R#8 SPD / mode toggle now
+    // affects only the lines checked after its commit boundary, not the frame.
+    const int sprite_mode = vdp_sprite_mode(mode_captured_.base);
+    const bool display_enabled = (regs_ptr_[1] & 0x40) != 0;
+    const bool sprite_enabled = (regs_ptr_[8] & 0x02) == 0;
+    if (sprite_mode != 0 && display_enabled && sprite_enabled) {
+        if (!frame_active_) {
+            // First active segment: clear the collision-event queue exactly
+            // where the pre-M49 enabled path did (before its collision loop).
+            frame_active_ = true;
+            collision_events_.clear();
+            next_collision_event_ = 0;
+        }
+        process_segment(lo, end);
     }
 
-    const int sprite_mode = vdp_sprite_mode(mode.base);
-    if (sprite_mode == 0) {
-        // SpriteChecker::sync() no-ops entirely in sprite mode 0
-        // (SpriteChecker.hh:82-87, "skip vram sync and sprite checks in
-        // sprite mode 0"): status stays frozen at whatever it last was.
+    watermark_ = end;
+    if (watermark_ >= height_) {
+        finalize_frame();
+    }
+}
+
+void SpriteEngine::check_until_visible_only(const int line) {
+    // M49-S2 (backlog D9): the RENDERING-ONLY analogue of check_until -- populate
+    // the per-line visible-sprite buffers up to `line`, but NEVER touch the
+    // collision-event queue or the S#0 status (no clear, no collection, no
+    // finalize). The seam drives THIS during the frame so the RENDERED sprite plane
+    // splits per-line-live, while the CPU-visible collision/status is left frozen
+    // (the previous frame's frame-atomic result) until on_vsync's recompute_frame
+    // recomputes it -- byte-identical to pre-M49 for every game (DEC-0031 + no
+    // game-behaviour change).
+    if (finalized_ || height_ <= 0) {
         return;
     }
-
-    // spritesEnabledFast() gate (VDP.hh:313-319): `displayEnabled` (R#1
-    // bit6, the display-enable/BLANK bit -- false at reset, VDP.cc:284/437)
-    // AND `spriteEnabled` (R#8 bit1 clear, SPD). updateSprites1/2 do nothing
-    // at all (not even per-line visible-sprite population) when this is
-    // false; only frameStart()'s unconditional spriteCount clear (already
-    // applied above via lines_.assign()) still happens. Without this gate, a
-    // freshly reset/unconfigured VDP (VRAM all-zero, so all 32 "phantom"
-    // sprites read Y=0) would spuriously populate S#0 on every on_vsync() --
-    // wrong (real hardware/openMSX gate this identically), and caught by a
-    // regression against the M14 VBlank status tests, which call on_vsync()
-    // without configuring any sprites.
-    const bool display_enabled = (control_regs[1] & 0x40) != 0;
-    const bool sprite_enabled = (control_regs[8] & 0x02) == 0;
-    if (!display_enabled || !sprite_enabled) {
-        return;
+    int end = line + 1;  // exclusive
+    if (end > height_) {
+        end = height_;
     }
+    if (end <= watermark_) {
+        return;  // advance-only (never move the watermark backwards)
+    }
+    const int lo = watermark_ < 1 ? 1 : watermark_;
+    // Per-SEGMENT (per-line-live) gates, identical to check_until's, read LIVE.
+    const int sprite_mode = vdp_sprite_mode(mode_captured_.base);
+    const bool display_enabled = (regs_ptr_[1] & 0x40) != 0;
+    const bool sprite_enabled = (regs_ptr_[8] & 0x02) == 0;
+    if (sprite_mode != 0 && display_enabled && sprite_enabled) {
+        process_segment(lo, end, /*collect_collision=*/false);
+    }
+    watermark_ = end;
+    // DELIBERATELY no finalize_frame(): status/collision stay frozen for the CPU.
+}
 
-    const std::uint8_t r1 = control_regs[1];
+void SpriteEngine::process_segment(const int lo, const int hi, const bool collect_collision) {
+    const VdpVram& vram = *vram_ptr_;
+    const std::uint8_t* const regs = regs_ptr_;
+    const int sprite_mode = vdp_sprite_mode(mode_captured_.base);
+
+    const std::uint8_t r1 = regs[1];
     const bool size16 = (r1 & 0x02) != 0;
     const bool mag = (r1 & 0x01) != 0;
     const int size = size16 ? 16 : 8;
@@ -113,8 +199,8 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
     const std::uint8_t pattern_index_mask = size16 ? std::uint8_t{0xFC} : std::uint8_t{0xFF};
 
     // Table base formulas (VDP.hh:262-268, A-M22-16).
-    const std::uint32_t attrib_base = (static_cast<std::uint32_t>(control_regs[11]) << 15) |
-                                       (static_cast<std::uint32_t>(control_regs[5]) << 7);
+    const std::uint32_t attrib_base = (static_cast<std::uint32_t>(regs[11]) << 15) |
+                                       (static_cast<std::uint32_t>(regs[5]) << 7);
     // Sprite mode 2 attribute-table addressing (the Metal Gear sprite-
     // invisibility fix): the effective address of a mode-2 table read is
     //   baseMask & (indexMask | index)
@@ -133,15 +219,13 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
     const auto mode2_attr_addr = [attrib_base_mask](const std::uint32_t index) {
         return attrib_base_mask & (~0x3FFu | index);
     };
-    const std::uint32_t pattern_base = static_cast<std::uint32_t>(control_regs[6]) << 11;
-    const bool planar = vdp_base_is_planar(mode.base);
-    const int r23 = control_regs[23];
+    const std::uint32_t pattern_base = static_cast<std::uint32_t>(regs[6]) << 11;
+    const bool planar = vdp_base_is_planar(mode_captured_.base);
+    const int r23 = regs[23];
     const int y_sentinel = (sprite_mode == 1) ? 208 : 216;
     const int max_per_line = (sprite_mode == 1) ? 4 : 8;
 
-    int fifth_num = -1;      // no 5th/9th sprite detected yet
-    int fifth_line = height;  // larger than any valid line index
-    int sprite_end = 32;      // sentinel-Y loop-stop index (32 = loop never broke)
+    int local_sprite_end = 32;  // sentinel-Y loop-stop index (32 = never broke)
 
     for (int sprite = 0; sprite < 32; ++sprite) {
         int y;
@@ -168,7 +252,7 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             pattern_index_addr = mode2_attr_addr(512u + static_cast<std::uint32_t>(sprite) * 4u + 2u);
         }
         if (y == y_sentinel) {
-            sprite_end = sprite;
+            local_sprite_end = sprite;
             break;
         }
 
@@ -176,10 +260,10 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             read_table_byte(vram, pattern_index_addr, sprite_planar) & pattern_index_mask);
         const int x_base = read_table_byte(vram, x_addr, sprite_planar);
 
-        for (int line = 1; line < height; ++line) {
+        for (int line = lo; line < hi; ++line) {
             // 1-pixel vertical shift (A-M22-9): sprites are checked one line
             // earlier than displayed; output line 0 is unconditionally
-            // sprite-free (the loop starts at line 1).
+            // sprite-free (the checked range starts at line 1).
             const int sprite_line = ((line - 1) + r23 - y) & 0xFF;
             if (sprite_line >= mag_size) {
                 continue;
@@ -187,9 +271,9 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
 
             auto& vis = lines_[static_cast<std::size_t>(line)];
             if (vis.size() == static_cast<std::size_t>(max_per_line)) {
-                if (line < fifth_line) {
-                    fifth_line = line;
-                    fifth_num = sprite;
+                if (line < fifth_line_) {
+                    fifth_line_ = line;
+                    fifth_num_ = sprite;
                 }
                 continue;
             }
@@ -221,32 +305,25 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             vis.push_back(VisibleSprite{pattern, x, color_attrib});
         }
     }
+    sprite_end_ = local_sprite_end;
 
-    // S#0 composition (SpriteChecker.cc:157-171/387-402). Unlike the
-    // reference's combined byte (which also gates on bit7/F), this project
-    // keeps F inside V9958Vdp, so the gate here is simply "5S/9S bit (bit6)
-    // not already latched" -- behaviorally equivalent for this project's
-    // frame-wide, non-progressive recompute model.
-    const int last_sprite_num = std::min(sprite_end, 31);
-    if (fifth_num != -1 && (status_ & 0x40) == 0) {
-        status_ = static_cast<std::uint8_t>(0x40 | (status_ & 0x20) | fifth_num);
-    }
-    if ((status_ & 0x40) == 0) {
-        status_ = static_cast<std::uint8_t>((status_ & 0x20) | last_sprite_num);
+    // M49-S2 (backlog D9): the RENDERING-ONLY pass (check_until_visible_only) skips
+    // this entire collision block, so the incremental per-line split NEVER perturbs
+    // the CPU-visible collision -- that stays frame-atomic (recompute_frame at
+    // on_vsync), byte-identical to pre-M49 for every game.
+    if (!collect_collision) {
+        return;
     }
 
-    // Collision detection (SpriteChecker.cc:196-241/410-479). The frame's
-    // per-line collision EVENTS are always collected (raster order) so the
-    // S#0 read path can re-latch C at raster/line granularity mid-frame
-    // (sync_collision_to_raster(), the boot-logo fix); the stored collision
-    // X/Y and the C bit itself are only (re)latched when C is not already
-    // latched-and-unread -- the stored coordinates persist until an explicit
-    // S#5 read, exactly as before.
-    collision_events_.clear();
-    next_collision_event_ = 0;
-    const bool can0collide = (control_regs[8] & 0x20) != 0;  // TP bit SET (VDP.hh:195-201)
+    // Collision detection (SpriteChecker.cc:196-241/410-479), collected in
+    // raster order for THIS segment's lines and APPENDED to the frame's event
+    // queue (segments are checked in increasing line order, so the queue stays
+    // raster-ordered across segments -- what the boot-logo S#0 re-latch path
+    // consumes). The per-line collision uses this segment's LIVE mag_size /
+    // sprite_mode / can0collide, so it too is per-line-live.
+    const bool can0collide = (regs[8] & 0x20) != 0;  // TP bit SET (VDP.hh:195-201)
 
-    for (int line = 0; line < height; ++line) {
+    for (int line = lo; line < hi; ++line) {
         const auto& vis = lines_[static_cast<std::size_t>(line)];
         int min_x_collision = 999;
         for (int i = static_cast<int>(vis.size()) - 1; i >= 1; --i) {
@@ -288,6 +365,30 @@ void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uin
             // contract (SpriteChecker.cc:236-238/474-476).
             collision_events_.push_back(CollisionEvent{line, min_x_collision + 12, line + 8});
         }
+    }
+}
+
+void SpriteEngine::finalize_frame() {
+    if (finalized_) {
+        return;
+    }
+    finalized_ = true;
+    if (!frame_active_) {
+        // Disabled / sprite-mode-0 / height<=0 frame: status + collision stay
+        // frozen (the pre-M49 early-return behavior).
+        return;
+    }
+
+    // S#0 composition (SpriteChecker.cc:157-171/387-402). Unlike the
+    // reference's combined byte (which also gates on bit7/F), this project
+    // keeps F inside V9958Vdp, so the gate here is simply "5S/9S bit (bit6)
+    // not already latched".
+    const int last_sprite_num = std::min(sprite_end_, 31);
+    if (fifth_num_ != -1 && (status_ & 0x40) == 0) {
+        status_ = static_cast<std::uint8_t>(0x40 | (status_ & 0x20) | fifth_num_);
+    }
+    if ((status_ & 0x40) == 0) {
+        status_ = static_cast<std::uint8_t>((status_ & 0x20) | last_sprite_num);
     }
 
     // Frame-boundary latch: preserves the pre-fix contract (C set right after
@@ -347,6 +448,17 @@ void SpriteEngine::reset() {
     status_ = 0;
     collision_x_ = 0;
     collision_y_ = 0;
+    // M49-S1: deterministic power-on reset of the progressive-frame state too.
+    vram_ptr_ = nullptr;
+    regs_ptr_ = nullptr;
+    mode_captured_ = {};
+    height_ = 0;
+    watermark_ = 1;
+    finalized_ = false;
+    frame_active_ = false;
+    fifth_num_ = -1;
+    fifth_line_ = 0;
+    sprite_end_ = 32;
 }
 
 }  // namespace sony_msx::devices::video

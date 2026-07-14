@@ -15,6 +15,7 @@
 
 #include <array>
 #include <cstdint>
+#include <span>
 
 #include "core/device_contracts.h"
 #include "devices/video/irq_line.h"
@@ -184,6 +185,24 @@ public:
     // (VDP.cc:409-415). Provided as a deterministic hook for the line-int model.
     void on_line_match();
 
+    // M49 Slice 2 (backlog D9): the machine's render-sync adapter calls this from
+    // on_before_state_change() -- BEFORE it commits the background -- to keep the
+    // incremental sprite plane in pace with the background at `target`, the
+    // EXCLUSIVE beam+2 commit boundary the background VdpScanlineAccumulator::
+    // sync_to_line uses (hbf1xv_machine.cpp:101). Committing the sprite lines FIRST
+    // (from the CURRENT pre-write state) makes the background read a per-line-live
+    // sprite table AND makes a mid-frame sprite-relevant register change (still the
+    // OLD value here) split the sprite plane at the SAME display line as the
+    // background split (AC-S2). Lazy-opens the per-frame progressive pass on the
+    // first ACTIVE-display write (binding live VRAM/registers + capturing the frame
+    // geometry, watermark reset); `wrap` (a genuine frame wrap / D10 geometry jump,
+    // the raster line DECREASED) re-opens it, mirroring the accumulator's wrap-safety
+    // restart. on_vsync() completes + finalizes it. Advance-only within a frame
+    // (SpriteEngine::check_until never moves the watermark backwards -- the M44
+    // direction discipline); no command-row sink drives the sprite watermark, so a
+    // partial pass can never be sealed mid-command.
+    void commit_sprite_split(int target, bool wrap);
+
     // Current combined /INT level (vertical OR horizontal). The machine level-
     // samples this to re-assert the held line after the CPU accept clears its
     // internal pending flag (R-1: the VDP owns the level; release only on the
@@ -280,6 +299,19 @@ private:
     void recompute_mode();
     void update_irq();
     [[nodiscard]] bool is_v9938_mode() const;
+
+    // --- M49 Slice 2 (backlog D9): the progressive per-frame sprite-split lifecycle. ---
+    // The active-display pixel height for the CURRENT mode -- the on_vsync() sprite
+    // buffer height (A-M49-2: a per-frame decision). Extracted so begin_sprite_frame()
+    // and on_vsync() compute it identically.
+    [[nodiscard]] int sprite_frame_height() const;
+    // (Re)bind the progressive sprite pass to the live VRAM/registers + capture the
+    // current geometry (mode base + height), resetting the watermark. Called at the
+    // lazy-open of the split pass.
+    void begin_sprite_frame();
+    [[nodiscard]] std::span<const std::uint8_t, kNumControlRegs> control_regs_span() const {
+        return std::span<const std::uint8_t, kNumControlRegs>(control_regs_);
+    }
 
     // M48 Slice 1 (DEC-0075): the live 3-way CPU/command VRAM access-slot regime
     // for the command-throughput cap -- one of the three tier-1 per-line slot
@@ -419,6 +451,15 @@ private:
     // command-engine writes land directly in the shared VRAM store.
     VdpCommandEngine cmd_engine_;
     SpriteEngine sprite_engine_;
+
+    // M49 Slice 2 (backlog D9): the RENDERING-ONLY progressive sprite pass is
+    // "split-active" for the current frame once an ACTIVE-display write lazy-opened
+    // it (commit_sprite_split), so subsequent same-frame writes advance the SAME pass
+    // instead of re-beginning. It gates ONLY the visible-sprite buffer split; the
+    // CPU-visible collision/status is ALWAYS the frame-atomic recompute_frame() at
+    // on_vsync (byte-identical to pre-M49 for every game). Reset each frame at
+    // on_vsync() and at reset().
+    bool sprite_split_active_ = false;
 
     // M44: the command-engine per-destination-row render-sync adapter, installed
     // into cmd_engine_ in the constructor. Holds only a reference to *this; the

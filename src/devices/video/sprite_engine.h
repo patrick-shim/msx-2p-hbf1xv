@@ -64,8 +64,64 @@ public:
     // VdpFrameRenderer::height()'s own formula -- duplicated at the
     // V9958Vdp::on_vsync() call site rather than introducing a cross-layer
     // dependency from the VDP core onto the presentation-layer renderer).
+    //
+    // M49-S1 (backlog D9): now a thin single-shot convenience WRAPPER over the
+    // stateful progressive engine below -- `begin_frame(); check_until(height-1)`.
+    // Byte-identical to the pre-M49 single-sweep pass (AC-S1): the whole frame
+    // is checked in one segment against one register/VRAM snapshot, so every
+    // per-line visible-sprite buffer + S#0/S#3-S#6 status is unchanged. This is
+    // the entry `V9958Vdp::on_vsync()` still calls, so absent S2's seam wiring
+    // the whole subsystem behaves exactly as today.
     void recompute_frame(const VdpVram& vram, std::span<const std::uint8_t, 32> control_regs,
                          const VdpModeState& mode, int height);
+
+    // --- M49-S1 progressive per-line LIVE sprite check (backlog D9) -----------
+    //
+    // The sprite subsystem's analogue of VdpScanlineAccumulator's watermark
+    // idiom (vdp_scanline_accumulator.h:61-145): the background renderer already
+    // commits display lines up to the beam from LIVE registers; sprites did not.
+    // `begin_frame()` binds the LIVE VRAM + control-register file (read through
+    // the stored pointers by every later `check_until()`) and captures the
+    // frame-boundary geometry (height, mode -> sprite-mode/planar; A-M49-2:
+    // height/mode stay a per-frame decision), resetting the watermark. Each
+    // `check_until(line)` advances the watermark so that all display lines up to
+    // and INCLUDING `line` (clamped to height) have been checked using the bound
+    // state AS IT STANDS AT THAT CALL -- so a caller that mutates a sprite-
+    // relevant register (R#1 BL / R#5 / R#6 / R#8 SPD / R#11 / R#23) or sprite-
+    // attribute VRAM between two `check_until()` calls makes the lines before the
+    // second call reflect the OLD state and the lines after it the NEW state
+    // (the actual D9 fix; the per-line R#1 BL / R#8 SPD / sprite-mode-0 gates are
+    // evaluated per SEGMENT, i.e. per-line-live). When the watermark reaches
+    // height the S#0 5S/number + frame-boundary collision latch are composed
+    // exactly as the pre-M49 single sweep did. Grounding (behavior/model only,
+    // never copied): tier-1 fact-sheet Yamaha V9958 VDP.md §6 line 120 (sprite
+    // data for line N fetched during line N-1 -> per-scanline, not per-frame);
+    // tier-2 openMSX SpriteChecker::checkUntil() (the incremental sync-before-
+    // change model our background M32 seam already implements).
+    //
+    // S2 (the seam wiring, a later slice) drives this from
+    // Hbf1xvMachine's render-sync seam; S1 is deliberately a NO-OP vs today --
+    // the only caller is recompute_frame()'s single full-height sweep.
+    void begin_frame(const VdpVram& vram, std::span<const std::uint8_t, 32> control_regs,
+                     const VdpModeState& mode, int height);
+    void check_until(int line);
+
+    // M49-S2 (backlog D9): RENDERING-ONLY progressive pass. Populates the per-line
+    // VISIBLE-sprite buffers up to (and including) `line` from the bound LIVE state
+    // AT THIS CALL -- exactly like check_until -- but does NOT touch the DEC-0031
+    // collision / 5th-sprite / S#0-status machinery (no event collection, no
+    // frame-boundary finalize). The seam drives THIS from the render-sync path so a
+    // mid-frame sprite-relevant change splits the RENDERED sprite plane per-line-live
+    // (the D9 fix) while the CPU-visible collision/status stays frame-atomic
+    // (recompute_frame at on_vsync), byte-identical to pre-M49 for EVERY game -- no
+    // game-behaviour change (the collision per-line-live migration is Slice 3's
+    // separately-verified scope). Advance-only; shares check_until's range logic.
+    void check_until_visible_only(int line);
+
+    // First display line NOT yet checked this frame (watermark). Test/observer
+    // accessor; monotonic within a frame, reset to 1 by begin_frame() (line 0 is
+    // unconditionally sprite-free, A-M22-9, so it is never in the checked range).
+    [[nodiscard]] int watermark() const { return watermark_; }
 
     // Visible sprites for 0-based active-display output line `line`. Empty
     // for line 0 (A-M22-9: the 1-pixel vertical shift means output line 0 is
@@ -127,12 +183,45 @@ private:
 
     void latch_collision(const CollisionEvent& event);
 
+    // M49-S1: check + collect collision for display lines [lo, hi) (lo>=1,
+    // hi<=height_) using the bound LIVE state, advancing fifth_num_/fifth_line_/
+    // sprite_end_ and appending collision events in raster order. Preserves the
+    // pre-M49 per-line Y/X/pattern/mode-2-base-mask/planar formulas VERBATIM --
+    // only the line RANGE is bounded and the register/VRAM reads are taken from
+    // the bound pointers (LIVE at the call), so a single [1, height) segment is
+    // byte-identical to the old sprite loop.
+    // M49-S2: `collect_collision` (default true) gates ONLY the collision-event
+    // loop -- the per-line visible-sprite population + 5th-sprite/sentinel tracking
+    // always run. check_until_visible_only() passes false so the rendering split
+    // never perturbs the frame-atomic collision the CPU reads.
+    void process_segment(int lo, int hi, bool collect_collision = true);
+    // M49-S1: compose S#0 (5S/number) + the frame-boundary collision latch once
+    // the whole frame has been checked -- byte-identical to the tail of the
+    // pre-M49 recompute_frame(). No-op if the frame never became active
+    // (disabled / sprite-mode-0 / height<=0), leaving status + collision frozen
+    // exactly as the old early-return did.
+    void finalize_frame();
+
     std::vector<std::vector<VisibleSprite>> lines_;
     std::vector<CollisionEvent> collision_events_;
     std::size_t next_collision_event_ = 0;
     std::uint8_t status_ = 0;
     int collision_x_ = 0;
     int collision_y_ = 0;
+
+    // --- M49-S1 progressive-frame state (backlog D9) --------------------------
+    // Bound LIVE state (read by check_until()/process_segment()); valid only
+    // between begin_frame() and the frame's finalize. Never owns the data.
+    const VdpVram* vram_ptr_ = nullptr;
+    const std::uint8_t* regs_ptr_ = nullptr;
+    VdpModeState mode_captured_{};  // A-M49-2: sprite-mode/planar are per-frame
+    int height_ = 0;
+    int watermark_ = 1;             // first line NOT yet checked (line 0 skipped)
+    bool finalized_ = false;        // frame's S#0/collision latch already composed
+    bool frame_active_ = false;     // any checked segment had sprites enabled
+    int fifth_num_ = -1;            // 5th/9th-sprite number (S#0 bits 4-0) or -1
+    int fifth_line_ = 0;            // earliest overflow line (== height sentinel)
+    int sprite_end_ = 32;           // sentinel-Y loop-stop index (S#0 number src)
 };
 
 }  // namespace sony_msx::devices::video

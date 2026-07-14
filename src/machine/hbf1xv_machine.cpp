@@ -99,6 +99,18 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
     // render-sync rounding is independent of the VDP line-interrupt counter).
     const int target = line + 2;
+    // M49-S2 (docs/m49-planner-package.md §3 S2, backlog D9): keep the incremental
+    // sprite plane in pace with the background BEFORE the background commits, at the
+    // IDENTICAL beam+2 boundary. Driving the sprite check FIRST (from the CURRENT
+    // pre-write registers/VRAM) makes the background read a per-line-live sprite
+    // table for the lines it is about to commit, AND makes a mid-frame sprite-
+    // relevant register change -- whose new value has NOT yet applied at this point
+    // (io_write calls on_before_state_change before decode/commit, incl. the #99
+    // two-write DATA byte) -- split the sprite plane at exactly the same line as the
+    // background split (AC-S2). commit_sprite_split()'s check_until is advance-only,
+    // so a non-sprite write is a cheap no-op once the beam's line is already checked.
+    // `wrap` uses the same raster-DECREASE test the background uses below.
+    machine_.vdp_.commit_sprite_split(target, target < last_beam_commit_target_);
     // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine row sink can
     // advance the accumulator watermark PAST the beam within a frame (committing
     // command rows at their destination lines). A subsequent same-frame seam
