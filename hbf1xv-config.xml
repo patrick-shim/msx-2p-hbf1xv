@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ==========================================================================
+   Sony HB-F1XV MSX2+ Emulator  -  reference configuration (hbf1xv-config.xml)
+  ==========================================================================
+
+  This file externalizes the emulator's DEFAULTS and KNOBS so the machine is
+  configurable WITHOUT recompiling. It is the annotated reference: EVERY
+  externalized field is listed below set to its exact BUILT-IN DEFAULT, with a
+  comment describing what it does, its type, and its allowed range/enum. Copy
+  this file, edit the values you care about, and point the emulator at it.
+
+  HOW IT IS USED
+  --------------
+    * This file is OPTIONAL. With no config file present the emulator prints
+      ONE warning line and runs on the built-in defaults (it always runs
+      standalone with zero config).
+    * It is auto-loaded ONLY by an interactive SDL3 launch (a real window). The
+      auto-load search order (first found wins) is:
+          <exe-dir>/hbf1xv-config.xml   ->   <cwd>/hbf1xv-config.xml
+      The headless executable and the deterministic hidden-window / test paths
+      NEVER auto-load a config file. To force-load in ANY mode, pass the CLI
+      option 'config' with a path (long-option form, two leading dashes).
+    * This reference lives at the repository ROOT and is NOT auto-found from
+      build/Debug/. To activate it, copy it next to the executable (or into the
+      working directory), then edit.
+
+  PRECEDENCE  (highest wins)
+  --------------------------
+        command-line flag   >   this config file   >   built-in default
+    An explicit CLI flag always beats the config file; the config file beats
+    the compiled default. An omitted knob simply keeps its default.
+
+  VALIDATION  (strict, but never fatal)
+  -------------------------------------
+    Every value is type- and range/enum-checked. A bad value NEVER crashes and
+    NEVER silently corrupts state: it prints a warning naming the offending key
+    and falls back to that key's built-in default; every other valid key still
+    applies. An unknown element/attribute warns and is ignored. A file that is
+    not a recognizable <hbf1xv-config> document warns once and is ignored whole.
+
+  WHAT IS NOT HERE  (intentionally)
+  ---------------------------------
+    Hardware-TIMING constants are NOT configurable. The Z80A 3.58 MHz clock,
+    the interrupt-acknowledge timings, the V9958 access-slot counts and cycles
+    per line, and the WD2793 FDC timing are the silicon spec of the real
+    HB-F1XV machine and stay fixed in code so no edit here can ever break
+    emulation accuracy. VRAM is likewise fixed at the strict 128 KB spec.
+
+  CLI note: each knob lists its matching command-line option NAME in
+  parentheses (invoke it in the usual long-option form with two leading
+  dashes, e.g. the 'ram' option is typed as the ram flag with the dash prefix).
+  ==========================================================================
+-->
+<hbf1xv-config version="1">
+
+  <!-- ============ Session / CLI-option defaults ============ -->
+  <!-- These mirror the interactive-launch convenience defaults (RAM 512 KB,
+       fast-disk ON, FM-PAC auto-load ON). Use the machine 'stock' CLI option to
+       revert RAM/fast-disk/FM-PAC to the authentic bare HB-F1XV in one flag. -->
+  <defaults>
+
+    <!-- Fast-disk (FDC turbo): near-instant disk loads.
+         type: bool (true|false)   default: true   (CLI: fast-disk / no-fast-disk) -->
+    <fast-disk enabled="true"/>
+
+    <!-- FM-PAC peripheral auto-load + target cartridge slot.
+         autoload type: bool (true|false)  default: true   (CLI: no-fmpac opts out)
+         slot     type: int  (1|2)         default: 2 -->
+    <fmpac autoload="true" slot="2"/>
+
+    <!-- Border presentation: framed canvas vs edge-to-edge Sony-original.
+         type: bool (true|false)   default: false   (CLI: border / no-border) -->
+    <border enabled="false"/>
+
+    <!-- Persist disk writes back to the host .dsk (else in-memory only).
+         type: bool (true|false)   default: false   (CLI: disk-writable) -->
+    <disk-writable enabled="false"/>
+
+    <!-- Initial Speed Controller level (a CPU slow-down duty cycle, NOT a
+         turbo). 0 = full speed.
+         type: int (0..7)   default: 0   (CLI: speed) -->
+    <speed level="0"/>
+
+    <!-- SDL3-presentation only (never affects emulation, determinism, or the
+         headless output). -->
+
+    <!-- Initial window size (320N x 240N) and texture scaling filter.
+         scale  type: int  (1..8)              default: 3  (960x720)  (CLI: scale)
+         filter type: enum (nearest|linear)    default: linear        (CLI: filter) -->
+    <video scale="3" filter="linear"/>
+
+    <!-- Phosphor-persistence flicker-softener.
+         percent type: int  (0..100)   default: 0  (off)   (CLI: persistence)
+         mode    type: enum (avg|peak)  default: avg        (CLI: persistence-mode) -->
+    <persistence percent="0" mode="avg"/>
+
+    <!-- Start in fullscreen (Alt+Enter toggles at runtime).
+         type: bool (true|false)   default: false   (CLI: fullscreen) -->
+    <fullscreen enabled="false"/>
+
+    <!-- Arm the F10 live-capture hotkey (off = a mis-struck F10 is inert).
+         type: bool (true|false)   default: false   (CLI: capture) -->
+    <capture enabled="false"/>
+
+  </defaults>
+
+  <!-- ============ Machine sizing + asset paths ============ -->
+  <machine>
+
+    <!-- Main RAM size in KB. 512 is a fully-populated S1985 mapper (the 5-bit
+         read-back ceiling); 64 is the authentic stock HB-F1XV. Beyond 512 KB
+         needs an external RAM-expansion cartridge.
+         type: enum (64|128|256|512)   default: 512   (CLI: ram) -->
+    <ram kb="512"/>
+
+    <!-- Video RAM in KB. STRICT HB-F1XV spec: 128 ONLY (any other value warns
+         and is clamped to 128). Present here for documentation.
+         type: int (128 only)   default: 128 -->
+    <vram kb="128"/>
+
+    <!-- BIOS/system-ROM directory + the seven role-keyed ROM filenames. Only
+         the directory and filenames externalize; the expected SIZE per role is
+         a spec fact and stays fixed in code. A missing file is filled with 0xFF
+         and reported, so a typo degrades gracefully rather than crashing.
+         dir  type: path   default: bios   (CLI: bios-dir)
+         rom@role must be one of: bios|sub|kanji-driver|disk|fm-music|kanji-font|firmware
+         rom@file type: filename -->
+    <bios dir="bios">
+      <rom role="bios"         file="f1xvbios.rom"/>  <!-- 32 KB BIOS+BASIC -->
+      <rom role="sub"          file="f1xvext.rom"/>   <!-- 16 KB SUB (MSX-BASIC V3.0) -->
+      <rom role="kanji-driver" file="f1xvkdr.rom"/>   <!-- 32 KB Kanji driver -->
+      <rom role="disk"         file="f1xvdisk.rom"/>  <!-- 16 KB DISK ROM -->
+      <rom role="fm-music"     file="f1xvmus.rom"/>   <!-- 16 KB MSX-MUSIC BIOS (APRLOPLL) -->
+      <rom role="kanji-font"   file="f1xvkfn.rom"/>   <!-- 256 KB Kanji font (#D8-DB) -->
+      <rom role="firmware"     file="f1xvfirm.rom"/>  <!-- 1 MB Halnote/MSX-JE -->
+    </bios>
+
+    <!-- FM-PAC peripheral ROM + its battery-SRAM save file.
+         rom  type: path   default: roms/fmpac.rom
+         sram type: path   default: roms/fmpac.rom.sram   (CLI: fmpac-sram) -->
+    <fmpac rom="roms/fmpac.rom" sram="roms/fmpac.rom.sram"/>
+
+    <!-- openMSX software-database used for cartridge mapper auto-identification.
+         type: path   default: references/openmsx-21.0/share/softwaredb.xml   (CLI: softwaredb) -->
+    <softwaredb path="references/openmsx-21.0/share/softwaredb.xml"/>
+
+    <!-- <slots> is OPTIONAL/advanced and is intentionally OMITTED here: the
+         built-in HB-F1XV slot map (BIOS 0-0, RAM 3-0, SUB+Kanji 3-1, DISK 3-2,
+         FM-MUSIC 3-3, Halnote 0-3; slots 0 and 3 expanded) is used verbatim.
+         Slot remapping is not user-configurable in this version. -->
+
+  </machine>
+
+</hbf1xv-config>

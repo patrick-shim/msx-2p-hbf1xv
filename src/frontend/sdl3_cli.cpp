@@ -112,18 +112,29 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--hidden-window") {
             parsed.hidden_window = true;
+        } else if (arg == "--config") {
+            // M50-S2 (DEC-0077): force-load an externalized strict-XML config from
+            // <path> in ANY mode (the determinism opt-in, §4.6). Only records the
+            // path; the load + precedence application happen in config_runtime.h.
+            if (auto value = take_value(args, i, "--config", parsed.errors)) {
+                parsed.config_path = *value;
+                ++i;
+            }
         } else if (arg == "--border") {
             // M39-D (human preference revert): the active OPT-IN to the openMSX-
             // matching framed canvas (the default is now the bare Sony edge-to-
             // edge present). Last-wins vs a later --no-border on the linear scan.
             parsed.border_enabled = true;
+            parsed.border_specified = true;  // M50-S2 precedence: user chose explicitly
         } else if (arg == "--no-border") {
             // M39-D: explicit OFF -- the bare edge-to-edge active-area present
             // (matches the default). Last-wins vs an earlier --border, since
             // this is a plain linear scan (mirrors the other boolean flags).
             parsed.border_enabled = false;
+            parsed.border_specified = true;  // M50-S2 precedence: user chose explicitly
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
+            parsed.disk_writable_specified = true;  // M50-S2 precedence
         } else if (arg == "--fast-disk") {
             // M46 (DEC-0071): tri-state -- explicit ON overrides --stock/the
             // resolver default. Last-wins vs a later --no-fast-disk (linear scan).
@@ -242,8 +253,10 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 ++i;
                 if (*value == "avg" || *value == "average") {
                     parsed.persistence_mode = PhosphorMode::Average;
+                    parsed.persistence_mode_specified = true;  // M50-S2 precedence
                 } else if (*value == "peak") {
                     parsed.persistence_mode = PhosphorMode::Peak;
+                    parsed.persistence_mode_specified = true;  // M50-S2 precedence
                 } else {
                     parsed.errors.push_back("sdl3_cli: --persistence-mode value must be 'avg' or 'peak': '" +
                                             *value + "'");
@@ -255,8 +268,10 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 ++i;
                 if (*value == "nearest") {
                     parsed.filter = TextureFilter::Nearest;
+                    parsed.filter_specified = true;  // M50-S2 precedence
                 } else if (*value == "linear") {
                     parsed.filter = TextureFilter::Linear;
+                    parsed.filter_specified = true;  // M50-S2 precedence
                 } else {
                     parsed.errors.push_back("sdl3_cli: --filter value must be 'nearest' or 'linear': '" +
                                             *value + "'");
@@ -274,6 +289,7 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
             }
         } else if (arg == "--fullscreen") {
             parsed.fullscreen = true;  // M37 Slice E: start fullscreen (Alt+Enter toggles at runtime)
+            parsed.fullscreen_specified = true;  // M50-S2 precedence
         } else if (arg == "--capture") {
             // M37 Slice F: gate the F10 live stream-capture hotkey; default OFF.
             // Value must be 'on' or 'off' (mirrors the --filter value policy).
@@ -281,8 +297,10 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 ++i;
                 if (*value == "on") {
                     parsed.capture_enabled = true;
+                    parsed.capture_specified = true;  // M50-S2 precedence
                 } else if (*value == "off") {
                     parsed.capture_enabled = false;
+                    parsed.capture_specified = true;  // M50-S2 precedence
                 } else {
                     parsed.errors.push_back("sdl3_cli: --capture value must be 'on' or 'off': '" +
                                             *value + "'");
@@ -308,18 +326,23 @@ ResolvedSessionDefaults resolve_session_defaults(const SessionDefaultsRequest& r
     // the convenience default. The empty-CLI result is the ready-to-game config.
     ResolvedSessionDefaults resolved;
 
+    // M50-S2 (§4.1): the final "else" of each chain is the XML BASE DEFAULT
+    // (request.base_*), which defaults to the M46 convenience value -- so an
+    // unspecified request stays byte-identical while a loaded config replaces the
+    // fallback. Explicit per-field CLI still wins; --stock still forces the bare
+    // machine over the XML base.
     resolved.ram_bytes = request.ram_kb.has_value()
                              ? static_cast<std::size_t>(*request.ram_kb) * 1024u  // explicit --ram wins
                          : request.stock ? 64u * 1024u                            // --stock preset
-                                         : 512u * 1024u;                          // convenience default
+                                         : static_cast<std::size_t>(request.base_ram_kb) * 1024u;  // XML/conv base
 
     resolved.fast_disk = request.fast_disk_opt.has_value() ? *request.fast_disk_opt  // explicit wins
                          : request.stock                   ? false                   // --stock preset
-                                                           : true;                   // convenience default
+                                                           : request.base_fast_disk;  // XML/conv base
 
-    resolved.fmpac_autoload = request.no_fmpac ? false          // explicit opt-out wins
-                              : request.stock  ? false          // --stock preset
-                                               : true;          // convenience default
+    resolved.fmpac_autoload = request.no_fmpac ? false                       // explicit opt-out wins
+                              : request.stock  ? false                       // --stock preset
+                                               : request.base_fmpac_autoload;  // XML/conv base
 
     resolved.is_stock = request.stock;  // banner label only
     return resolved;

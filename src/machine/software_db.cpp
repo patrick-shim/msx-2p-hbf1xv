@@ -17,175 +17,20 @@
 #include <fstream>
 #include <iterator>
 
+#include "machine/xml_tokenizer.h"
+
 namespace sony_msx::machine {
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Tolerant tag tokenizer. Produces open/close/self-close tags and accumulates
-// intervening character data (incl. CDATA content); comments, DOCTYPE and
-// processing instructions are skipped wholesale. Never throws.
-// ---------------------------------------------------------------------------
-
-enum class TokenKind { OpenTag, CloseTag, SelfCloseTag, Eof };
-
-struct Token {
-    TokenKind kind = TokenKind::Eof;
-    std::string name;  // lowercased element name (this schema is lowercase)
-};
-
-class TagScanner {
-public:
-    explicit TagScanner(std::string_view text) : text_(text) {}
-
-    // Advances to the next tag token. Character data encountered on the way
-    // (including CDATA payloads) is APPENDED to `text_accum` when non-null.
-    Token next(std::string* text_accum) {
-        while (pos_ < text_.size()) {
-            const std::size_t lt = text_.find('<', pos_);
-            if (lt == std::string_view::npos) {
-                if (text_accum != nullptr) {
-                    text_accum->append(text_, pos_, text_.size() - pos_);
-                }
-                pos_ = text_.size();
-                return {TokenKind::Eof, {}};
-            }
-            if (text_accum != nullptr && lt > pos_) {
-                text_accum->append(text_, pos_, lt - pos_);
-            }
-            pos_ = lt;
-
-            if (starts_with("<!--")) {
-                const std::size_t end = text_.find("-->", pos_ + 4);
-                pos_ = (end == std::string_view::npos) ? text_.size() : end + 3;
-                continue;
-            }
-            if (starts_with("<![CDATA[")) {
-                const std::size_t end = text_.find("]]>", pos_ + 9);
-                const std::size_t content_end = (end == std::string_view::npos) ? text_.size() : end;
-                if (text_accum != nullptr) {
-                    text_accum->append(text_, pos_ + 9, content_end - (pos_ + 9));
-                }
-                pos_ = (end == std::string_view::npos) ? text_.size() : end + 3;
-                continue;
-            }
-            if (starts_with("<!") || starts_with("<?")) {
-                // DOCTYPE / processing instruction: skip to the closing '>'.
-                const std::size_t end = text_.find('>', pos_ + 2);
-                pos_ = (end == std::string_view::npos) ? text_.size() : end + 1;
-                continue;
-            }
-
-            // A real tag. Parse `</name ...>` / `<name ...>` / `<name .../>`,
-            // honoring quoted attribute values.
-            std::size_t p = pos_ + 1;
-            bool closing = false;
-            if (p < text_.size() && text_[p] == '/') {
-                closing = true;
-                ++p;
-            }
-            std::string name;
-            while (p < text_.size() && is_name_char(text_[p])) {
-                name.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(text_[p]))));
-                ++p;
-            }
-            char quote = '\0';
-            bool self_close = false;
-            while (p < text_.size()) {
-                const char ch = text_[p];
-                if (quote != '\0') {
-                    if (ch == quote) {
-                        quote = '\0';
-                    }
-                } else if (ch == '"' || ch == '\'') {
-                    quote = ch;
-                } else if (ch == '>') {
-                    self_close = (!closing && p > pos_ + 1 && text_[p - 1] == '/');
-                    ++p;
-                    break;
-                }
-                ++p;
-            }
-            pos_ = p;
-            if (name.empty()) {
-                continue;  // stray '<': tolerated, skipped
-            }
-            if (closing) {
-                return {TokenKind::CloseTag, std::move(name)};
-            }
-            if (self_close) {
-                return {TokenKind::SelfCloseTag, std::move(name)};
-            }
-            return {TokenKind::OpenTag, std::move(name)};
-        }
-        return {TokenKind::Eof, {}};
-    }
-
-private:
-    [[nodiscard]] bool starts_with(std::string_view prefix) const {
-        return text_.compare(pos_, prefix.size(), prefix) == 0;
-    }
-
-    static bool is_name_char(const char c) {
-        return (std::isalnum(static_cast<unsigned char>(c)) != 0) || c == '_' || c == '-' || c == ':' ||
-               c == '.';
-    }
-
-    std::string_view text_;
-    std::size_t pos_ = 0;
-};
-
-std::string trim(const std::string& s) {
-    std::size_t begin = 0;
-    std::size_t end = s.size();
-    while (begin < end && std::isspace(static_cast<unsigned char>(s[begin])) != 0) {
-        ++begin;
-    }
-    while (end > begin && std::isspace(static_cast<unsigned char>(s[end - 1])) != 0) {
-        --end;
-    }
-    return s.substr(begin, end - begin);
-}
-
-// The five predefined XML entities (display fidelity for titles like
-// "Snake &amp; Ladder"); anything unrecognized is left verbatim.
-std::string decode_entities(const std::string& s) {
-    std::string out;
-    out.reserve(s.size());
-    std::size_t i = 0;
-    while (i < s.size()) {
-        if (s[i] == '&') {
-            if (s.compare(i, 5, "&amp;") == 0) {
-                out.push_back('&');
-                i += 5;
-                continue;
-            }
-            if (s.compare(i, 4, "&lt;") == 0) {
-                out.push_back('<');
-                i += 4;
-                continue;
-            }
-            if (s.compare(i, 4, "&gt;") == 0) {
-                out.push_back('>');
-                i += 4;
-                continue;
-            }
-            if (s.compare(i, 6, "&quot;") == 0) {
-                out.push_back('"');
-                i += 6;
-                continue;
-            }
-            if (s.compare(i, 6, "&apos;") == 0) {
-                out.push_back('\'');
-                i += 6;
-                continue;
-            }
-        }
-        out.push_back(s[i]);
-        ++i;
-    }
-    return out;
-}
+// The tolerant XML tokenizer (TagScanner) + xml_trim()/xml_decode_entities() that used
+// to live here file-local were extracted to machine/xml_tokenizer.{h,cpp} in
+// M50-S1 (docs/m50-planner-package.md §5) so software_db and the new
+// emulator_config parser share ONE reader. This file now consumes the shared
+// XmlTagScanner / xml_trim() / xml_decode_entities() with capture_attributes
+// left OFF (the default) -- the softwaredb schema is element-TEXT based, so the
+// tokenization is byte-for-byte identical to the pre-extraction code (the
+// software_db unit tests are the behavior-preserving guard, AC-S1-4).
 
 bool is_valid_sha1_hex(const std::string& s) {
     if (s.size() != 40) {
@@ -236,7 +81,7 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
     const std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 
     SoftwareDb db;
-    TagScanner scanner(content);
+    XmlTagScanner scanner(content);
 
     // Flat state machine over the schema subset (mirrors the SHAPE of the
     // reference's DBParser states -- re-derived, never copied).
@@ -254,11 +99,11 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
     auto resync_after_malformed = [&](const std::string& why) {
         diagnostics.push_back("software_db: malformed entry skipped (" + why + ")");
         for (;;) {
-            const Token t = scanner.next(nullptr);
-            if (t.kind == TokenKind::Eof) {
+            const XmlToken t = scanner.next(nullptr);
+            if (t.kind == XmlTokenKind::Eof) {
                 return false;
             }
-            if (t.kind == TokenKind::CloseTag && t.name == "software") {
+            if (t.kind == XmlTokenKind::CloseTag && t.name == "software") {
                 return true;
             }
         }
@@ -290,57 +135,57 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
             (state == State::Title || state == State::TypeElem || state == State::HashElem ||
              state == State::StartElem) &&
             unknown_level == 0;
-        const Token token = scanner.next(capture_text ? &text_accum : nullptr);
+        const XmlToken token = scanner.next(capture_text ? &text_accum : nullptr);
 
-        if (token.kind == TokenKind::Eof) {
+        if (token.kind == XmlTokenKind::Eof) {
             break;
         }
         if (unknown_level > 0) {
-            if (token.kind == TokenKind::OpenTag) {
+            if (token.kind == XmlTokenKind::OpenTag) {
                 ++unknown_level;
-            } else if (token.kind == TokenKind::CloseTag) {
+            } else if (token.kind == XmlTokenKind::CloseTag) {
                 --unknown_level;
             }
             continue;
         }
-        if (token.kind == TokenKind::SelfCloseTag) {
+        if (token.kind == XmlTokenKind::SelfCloseTag) {
             continue;  // no state change; tolerated everywhere
         }
 
         switch (state) {
             case State::Top:
-                if (token.kind == TokenKind::OpenTag && token.name == "softwaredb") {
+                if (token.kind == XmlTokenKind::OpenTag && token.name == "softwaredb") {
                     state = State::SoftwareDb_;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
                 }
                 break;
 
             case State::SoftwareDb_:
-                if (token.kind == TokenKind::OpenTag && token.name == "software") {
+                if (token.kind == XmlTokenKind::OpenTag && token.name == "software") {
                     title.clear();
                     dumps.clear();
                     state = State::Software;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
-                } else if (token.kind == TokenKind::CloseTag && token.name == "softwaredb") {
+                } else if (token.kind == XmlTokenKind::CloseTag && token.name == "softwaredb") {
                     state = State::Top;
                 }
                 break;
 
             case State::Software:
-                if (token.kind == TokenKind::OpenTag && token.name == "title") {
+                if (token.kind == XmlTokenKind::OpenTag && token.name == "title") {
                     text_accum.clear();
                     state = State::Title;
-                } else if (token.kind == TokenKind::OpenTag && token.name == "dump") {
+                } else if (token.kind == XmlTokenKind::OpenTag && token.name == "dump") {
                     dumps.emplace_back();
                     state = State::Dump;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;  // <genmsxid>/<company>/<year>/<country>/<system>/...
-                } else if (token.kind == TokenKind::CloseTag && token.name == "software") {
+                } else if (token.kind == XmlTokenKind::CloseTag && token.name == "software") {
                     commit_software();
                     state = State::SoftwareDb_;
-                } else if (token.kind == TokenKind::CloseTag) {
+                } else if (token.kind == XmlTokenKind::CloseTag) {
                     if (!resync_after_malformed("unexpected </" + token.name + "> inside <software>")) {
                         done = true;
                     }
@@ -351,17 +196,17 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
                 break;
 
             case State::Title:
-                if (token.kind == TokenKind::CloseTag && token.name == "title") {
-                    title = decode_entities(trim(text_accum));
+                if (token.kind == XmlTokenKind::CloseTag && token.name == "title") {
+                    title = xml_decode_entities(xml_trim(text_accum));
                     text_accum.clear();
                     state = State::Software;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
                 }
                 break;
 
             case State::Dump:
-                if (token.kind == TokenKind::OpenTag && (token.name == "rom" || token.name == "megarom")) {
+                if (token.kind == XmlTokenKind::OpenTag && (token.name == "rom" || token.name == "megarom")) {
                     PendingDump& dump = dumps.back();
                     dump.element_name = token.name;
                     dump.has_payload = true;
@@ -369,11 +214,11 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
                     dump.type = (token.name == "rom") ? "Mirrored" : "";
                     dump.start.clear();
                     state = State::RomElem;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;  // <original>...
-                } else if (token.kind == TokenKind::CloseTag && token.name == "dump") {
+                } else if (token.kind == XmlTokenKind::CloseTag && token.name == "dump") {
                     state = State::Software;
-                } else if (token.kind == TokenKind::CloseTag) {
+                } else if (token.kind == XmlTokenKind::CloseTag) {
                     if (!resync_after_malformed("unexpected </" + token.name + "> inside <dump>")) {
                         done = true;
                     }
@@ -384,20 +229,20 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
                 break;
 
             case State::RomElem:
-                if (token.kind == TokenKind::OpenTag && token.name == "type") {
+                if (token.kind == XmlTokenKind::OpenTag && token.name == "type") {
                     text_accum.clear();
                     state = State::TypeElem;
-                } else if (token.kind == TokenKind::OpenTag && token.name == "hash") {
+                } else if (token.kind == XmlTokenKind::OpenTag && token.name == "hash") {
                     text_accum.clear();
                     state = State::HashElem;
-                } else if (token.kind == TokenKind::OpenTag && token.name == "start") {
+                } else if (token.kind == XmlTokenKind::OpenTag && token.name == "start") {
                     text_accum.clear();
                     state = State::StartElem;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;  // <remark>...
-                } else if (token.kind == TokenKind::CloseTag && token.name == dumps.back().element_name) {
+                } else if (token.kind == XmlTokenKind::CloseTag && token.name == dumps.back().element_name) {
                     state = State::Dump;
-                } else if (token.kind == TokenKind::CloseTag) {
+                } else if (token.kind == XmlTokenKind::CloseTag) {
                     if (!resync_after_malformed("unexpected </" + token.name + "> inside <" +
                                                 dumps.back().element_name + ">")) {
                         done = true;
@@ -409,31 +254,31 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
                 break;
 
             case State::TypeElem:
-                if (token.kind == TokenKind::CloseTag && token.name == "type") {
-                    dumps.back().type = trim(text_accum);
+                if (token.kind == XmlTokenKind::CloseTag && token.name == "type") {
+                    dumps.back().type = xml_trim(text_accum);
                     text_accum.clear();
                     state = State::RomElem;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
                 }
                 break;
 
             case State::HashElem:
-                if (token.kind == TokenKind::CloseTag && token.name == "hash") {
-                    dumps.back().hash = trim(text_accum);
+                if (token.kind == XmlTokenKind::CloseTag && token.name == "hash") {
+                    dumps.back().hash = xml_trim(text_accum);
                     text_accum.clear();
                     state = State::RomElem;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
                 }
                 break;
 
             case State::StartElem:
-                if (token.kind == TokenKind::CloseTag && token.name == "start") {
-                    dumps.back().start = trim(text_accum);
+                if (token.kind == XmlTokenKind::CloseTag && token.name == "start") {
+                    dumps.back().start = xml_trim(text_accum);
                     text_accum.clear();
                     state = State::RomElem;
-                } else if (token.kind == TokenKind::OpenTag) {
+                } else if (token.kind == XmlTokenKind::OpenTag) {
                     ++unknown_level;
                 }
                 break;

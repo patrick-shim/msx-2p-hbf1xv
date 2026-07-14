@@ -510,14 +510,24 @@ void Hbf1xvMachine::load_rom_assets() {
     // filename / expected window size / slot-role label. Sizes are the XML <mem>
     // window sizes (§2). Local SHA1s were confirmed to match the XML "confirmed
     // by Meits" revisions via tools/checksum-assets.ps1 (A-1) — never asserted here.
-    bios_rom_.set_image(loader.load({"f1xvbios.rom", 0x8000, "slot 0-0 pages 0-1 (BIOS+BASIC)"}));
-    sub_rom_.set_image(loader.load({"f1xvext.rom", 0x4000, "slot 3-1 page 0 (SUB)"}));
-    kanji_rom_.set_image(loader.load({"f1xvkdr.rom", 0x8000, "slot 3-1 pages 1-2 (Kanji driver)"}));
-    disk_rom_.set_image(loader.load({"f1xvdisk.rom", 0x4000, "slot 3-2 page 1 (DISK presence)"}));
-    fmmusic_rom_.set_image(loader.load({"f1xvmus.rom", 0x4000, "slot 3-3 page 1 (FM-MUSIC presence)"}));
-    kanji_font_rom_.set_image(loader.load({"f1xvkfn.rom", 0x40000, "Kanji font ROM (I/O #D8-#DB)"}));
+    // M50-S3 (DEC-0077): the FILENAME comes from bios_filenames_ (config-fed,
+    // default = the strict HB-F1XV spec set) so a user can point at differently-
+    // named BIOS files via config; the expected size + role label stay code-owned
+    // (a spec fact, not a user knob). A bare machine keeps the default filenames,
+    // byte-identical to the pre-M50 literals.
+    bios_rom_.set_image(
+        loader.load({bios_filenames_.bios, 0x8000, "slot 0-0 pages 0-1 (BIOS+BASIC)"}));
+    sub_rom_.set_image(loader.load({bios_filenames_.sub, 0x4000, "slot 3-1 page 0 (SUB)"}));
+    kanji_rom_.set_image(
+        loader.load({bios_filenames_.kanji_driver, 0x8000, "slot 3-1 pages 1-2 (Kanji driver)"}));
+    disk_rom_.set_image(
+        loader.load({bios_filenames_.disk, 0x4000, "slot 3-2 page 1 (DISK presence)"}));
+    fmmusic_rom_.set_image(
+        loader.load({bios_filenames_.fm_music, 0x4000, "slot 3-3 page 1 (FM-MUSIC presence)"}));
+    kanji_font_rom_.set_image(
+        loader.load({bios_filenames_.kanji_font, 0x40000, "Kanji font ROM (I/O #D8-#DB)"}));
     halnote_.set_image(
-        loader.load({"f1xvfirm.rom", 0x100000, "slot 0-3 pages 0-3 (Halnote/MSX-JE firmware)"}));
+        loader.load({bios_filenames_.firmware, 0x100000, "slot 0-3 pages 0-3 (Halnote/MSX-JE firmware)"}));
 
     // Diagnostics go to the machine diagnostics list only (rom_diagnostics()),
     // NOT the execution-event log: the event stream must stay byte-deterministic
@@ -545,6 +555,14 @@ void Hbf1xvMachine::set_asset_root(std::filesystem::path root) {
 
 const std::filesystem::path& Hbf1xvMachine::asset_root() const {
     return asset_root_;
+}
+
+void Hbf1xvMachine::set_bios_filenames(EmulatorConfig::BiosRoms names) {
+    bios_filenames_ = std::move(names);
+}
+
+const EmulatorConfig::BiosRoms& Hbf1xvMachine::bios_filenames() const {
+    return bios_filenames_;
 }
 
 const std::vector<std::string>& Hbf1xvMachine::rom_diagnostics() const {

@@ -5,12 +5,17 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.8** — an **MSX-logo Windows app icon** (shown on the `.exe`/Explorer and the
-running window/taskbar). On top of v1.1.7's optional **phosphor-persistence** flicker-softener
-(`--persistence`, `--persistence-mode avg|peak`, Alt+B/Alt+M, default off), v1.1.6 **per-line-live V9958
-sprite rendering** (split-screen HUD titles like Space Manbow / Laydock 2 no longer cull their top-region
-sprites — backlog D9), the v1.1.5 command-engine access-slot contention model, and the v1.1.4
-Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC peripheral firmware (`roms/fmpac.rom`) is bundled.
+Current release: **v1.2.0** — an optional **strict-XML external configuration** (`hbf1xv-config.xml`):
+every launch knob and default lives in an annotated, publishable file at the repo root, resolved
+**CLI > XML > built-in default**; the file is optional (a missing/malformed one warns and continues on
+built-in defaults, and hardware-timing constants are deliberately not configurable), and a round-trip
+guard fails the build if the shipped file ever drifts from the compiled defaults. On top of v1.1.8's
+**MSX-logo Windows app icon** (shown on the `.exe`/Explorer and the running window/taskbar), v1.1.7's
+optional **phosphor-persistence** flicker-softener (`--persistence`, `--persistence-mode avg|peak`,
+Alt+B/Alt+M, default off), v1.1.6 **per-line-live V9958 sprite rendering** (split-screen HUD titles like
+Space Manbow / Laydock 2 no longer cull their top-region sprites — backlog D9), the v1.1.5 command-engine
+access-slot contention model, and the v1.1.4 Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC
+peripheral firmware (`roms/fmpac.rom`) is bundled.
 
 ## Architecture
 
@@ -142,6 +147,31 @@ build\Debug\sony_msx_headless.exe --debug-session bios 0 --disk disks\msxdos23.d
 and `--stream-light`. It shares the SDL3 frontend's v1.1.2 convenience defaults (512 KB, fast-disk,
 FM-PAC into slot 2; `--stock` reverts them). Other single-purpose modes (e.g. the openMSX-parity
 identification path) keep their own stock defaults and each print their own usage.
+
+## Configuration file (optional)
+
+Every default and knob can be externalized to a strict XML config file, so the machine is
+configurable without recompiling. The annotated reference [`hbf1xv-config.xml`](hbf1xv-config.xml)
+at the repository root lists **every** externalized field (RAM/VRAM, fast-disk, FM-PAC auto-load,
+video scale/filter, persistence, border, disk-writable, speed, fullscreen, capture, BIOS
+directory + the seven ROM filenames, FM-PAC ROM/SRAM paths, and the software-database path) set to
+its exact built-in default, each commented with its type and allowed range/enum.
+
+- **Optional.** The emulator always runs standalone with zero config; if no config file is found it
+  prints one warning line and continues on the built-in defaults.
+- **Precedence:** command-line flag **>** config file **>** built-in default. An explicit CLI flag
+  always wins; the config file overrides the compiled default; an omitted knob keeps its default.
+- **Auto-load** happens only on an interactive SDL3 launch (a real window), searching
+  `<exe-dir>/hbf1xv-config.xml` then `<cwd>/hbf1xv-config.xml`. The headless executable and the
+  deterministic hidden-window/test paths never auto-load. `--config <path>` force-loads in any mode.
+  The shipped reference lives at the repo root and is not auto-found from `build/Debug/` — copy it
+  next to the executable (or into the working directory) and edit it to activate.
+- **Strict but never fatal:** each value is type- and range/enum-checked; a bad value warns naming
+  the offending key and falls back to that key's default (the rest of the file still applies), never
+  crashing.
+- **Hardware timing is not configurable.** The Z80A clock, interrupt-acknowledge timings, V9958
+  access-slot/line cycles, WD2793 FDC timing, and the strict 128 KB VRAM are the silicon spec and
+  stay fixed in code, so no config edit can degrade emulation accuracy.
 
 ## Repository layout
 

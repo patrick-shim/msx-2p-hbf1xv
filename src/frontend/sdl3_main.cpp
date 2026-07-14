@@ -21,11 +21,31 @@
 #include <vector>
 
 #include "devices/cartridge/cartridge_mapper_type.h"
+#include "frontend/config_runtime.h"
 #include "frontend/sdl3_app.h"
 #include "frontend/sdl3_cli.h"
 #include "frontend/session_summary.h"
+#include "machine/emulator_config.h"
 
 namespace {
+
+// M50-S2 (DEC-0077): the directory holding this executable, for the config
+// auto-load search order (<exe-dir>/hbf1xv-config.xml first, then <cwd>). A
+// best-effort resolution of argv[0]; an empty result simply drops the exe-dir
+// candidate (the CWD candidate still applies).
+std::string exe_directory(const char* argv0) {
+    if (argv0 == nullptr) {
+        return std::string();
+    }
+    std::error_code ec;
+    const std::filesystem::path self(argv0);
+    const std::filesystem::path dir = self.parent_path();
+    if (dir.empty()) {
+        return std::string();
+    }
+    const std::filesystem::path abs = std::filesystem::absolute(dir, ec);
+    return ec ? dir.string() : abs.lexically_normal().string();
+}
 
 void print_usage(const char* argv0) {
     std::cout <<
@@ -149,6 +169,11 @@ OPTIONS
                             each F11 swap prints a --swap-disk-frame <N> value).
     --max-frames <N>        Auto-quit after N frames (for non-interactive runs).
     --hidden-window         Run without showing a window (testing/automation).
+    --config <path>         Load settings from a strict-XML config file (see
+                            hbf1xv-config.xml). Without this, an interactive
+                            launch auto-loads hbf1xv-config.xml from next to the
+                            exe or the current folder; explicit CLI flags always
+                            win over the file.
     -h, --help              Show this help and exit.
 
 IN-WINDOW HOTKEYS
@@ -338,15 +363,52 @@ int main(int argc, char** argv) {
         return 2;
     }
 
-    sony_msx::frontend::Sdl3AppConfig config;
-    if (parsed.bios_dir.has_value()) {
-        config.bios_dir = *parsed.bios_dir;
+    // M50-S2 (DEC-0077, docs/m50-planner-package.md §4.6): the DETERMINISM gate.
+    // A genuinely interactive SDL3 launch (no --hidden-window) MAY auto-load a
+    // config; --config <path> forces a load in any mode. --hidden-window (the
+    // ctest/CI harness mode) NEVER auto-loads, so the deterministic suite stays
+    // byte-identical. When the gate is false, `cfg` stays all-built-in-defaults
+    // and resolve_runtime_config() reproduces the exact pre-M50 resolution.
+    sony_msx::machine::EmulatorConfig cfg;  // built-in defaults
+    {
+        const bool interactive = !parsed.hidden_window;
+        if (sony_msx::frontend::config_should_load(interactive, parsed.config_path.has_value())) {
+            std::vector<std::string> auto_paths;
+            const std::string exe_dir = exe_directory(argv[0]);
+            if (!exe_dir.empty()) {
+                auto_paths.push_back((std::filesystem::path(exe_dir) / "hbf1xv-config.xml").string());
+            }
+            auto_paths.emplace_back("hbf1xv-config.xml");  // CWD candidate
+            std::vector<std::string> config_warnings;
+            cfg = sony_msx::frontend::load_config_with_search(parsed.config_path, auto_paths,
+                                                              config_warnings);
+            for (const std::string& w : config_warnings) {
+                std::cerr << w << "\n";
+            }
+        }
     }
+    // Apply precedence CLI > XML(cfg) > built-in default across every S2-scope
+    // knob (single tested seam, config_runtime.h). With no config loaded this is
+    // byte-identical to pre-M50.
+    const sony_msx::frontend::ResolvedRuntimeConfig runtime =
+        sony_msx::frontend::resolve_runtime_config(cfg, parsed);
+    // M50-S3 (DEC-0077): the machine-sizing/path fields (BIOS dir + filenames,
+    // FM-PAC ROM/SRAM, softwaredb) resolved with the SAME precedence. Byte-
+    // identical to pre-M50 when no config was loaded.
+    const sony_msx::frontend::ResolvedMachineConfig machine_cfg =
+        sony_msx::frontend::resolve_machine_config(cfg, parsed);
+
+    sony_msx::frontend::Sdl3AppConfig config;
+    // M50-S3: BIOS dir + the 7 role-keyed filenames (CLI --bios-dir > XML > "bios").
+    config.bios_dir = machine_cfg.bios_dir;
+    config.bios_roms = machine_cfg.bios_roms;
     config.disk_paths = parsed.disk_paths;  // M35-S1: repeatable --disk list
     config.max_frames = parsed.max_frames;
     config.hidden_window = parsed.hidden_window;
-    config.border_enabled = parsed.border_enabled;
-    config.disk_writable = parsed.disk_writable;  // M36-S-c
+    // M50-S2: border / disk-writable resolved with config precedence (CLI > XML
+    // > default). runtime.* == parsed.* when no config was loaded (byte-identical).
+    config.border_enabled = runtime.border_enabled;
+    config.disk_writable = runtime.disk_writable;  // M36-S-c
     config.dump_state_filename = parsed.dump_state_filename;
     config.trace_cpu_filename = parsed.trace_cpu_filename;
     config.event_log_filename = parsed.event_log_filename;
@@ -356,52 +418,53 @@ int main(int argc, char** argv) {
     config.swap_disk_frame = parsed.swap_disk_frame;  // DEC-0072 scripted disk swap
     config.fingerprint_path = parsed.fingerprint_path;  // DEC-0072 per-frame CPU fingerprint
     config.stream_light = parsed.stream_light;  // DEC-0052: F10 arms lightweight mode
-    // M37 Slice D (DEC-0056): --speed <0..7> launch-time initial Speed
-    // Controller level (std::nullopt -> untouched, level 0/full speed).
-    config.speed_level = parsed.speed_level;
-    // M37 Slice E (DEC-0056): --fullscreen / --filter / --scale window scaling.
-    config.fullscreen = parsed.fullscreen;
-    // M37 Slice F: --capture <on|off> gates the F10 stream-capture hotkey
-    // (default off = F10 inert). No effect on gameplay when off.
-    config.capture_enabled = parsed.capture_enabled;
-    config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
+    // M37/M50-S2: launch-time initial Speed Controller level, resolved with
+    // config precedence (CLI > XML > default). Level 0 (full speed) is mapped to
+    // std::nullopt so it stays byte-identical to the pre-M50 "untouched" path.
+    config.speed_level = (runtime.speed_level == 0) ? std::optional<int>{}
+                                               : std::optional<int>{runtime.speed_level};
+    // M37/M50-S2: --fullscreen / --filter / --capture / --persistence(-mode) all
+    // resolved with config precedence. runtime.* == parsed.* when no config was loaded.
+    config.fullscreen = runtime.fullscreen;
+    config.capture_enabled = runtime.capture_enabled;
+    config.texture_filter = (runtime.filter == sony_msx::frontend::TextureFilter::Nearest)
                                 ? SDL_SCALEMODE_NEAREST
                                 : SDL_SCALEMODE_LINEAR;
-    // Phosphor-persistence inter-frame blend (--persistence <0..100>). Absent ->
-    // the Sdl3AppConfig default 0 (OFF), so the present path is byte-identical.
-    if (parsed.persistence.has_value()) {
-        config.persistence = *parsed.persistence;
-    }
-    // Phosphor blend mode (--persistence-mode <avg|peak>). Absent -> the
-    // Sdl3AppConfig default Average (byte-identical). Alt+M toggles it live.
-    config.persistence_mode = parsed.persistence_mode;
-    // M46 (DEC-0071): resolve the flipped convenience-vs-stock defaults in the
-    // CLI layer (the anti-drift seam, planner §2.7 -- the Sdl3AppConfig struct
-    // defaults ABOVE stay stock; this is the ONLY place they flip to convenience).
-    // Empty CLI -> {512 KB RAM, fast-disk ON, FM-PAC slot-2 auto-load ON};
-    // `--stock`/`--ram 64`/`--no-fast-disk`/`--no-fmpac` peel it back. --ram is
-    // the explicit per-field override (order-independent, wins over --stock).
-    const sony_msx::frontend::ResolvedSessionDefaults resolved =
-        sony_msx::frontend::resolve_session_defaults(
-            {parsed.ram_kb, parsed.fast_disk_opt, parsed.no_fmpac, parsed.stock});
-    config.ram_bytes = resolved.ram_bytes;
-    config.fast_disk = resolved.fast_disk;          // convenience default ON (Alt+D toggles live)
-    config.fmpac_autoload = resolved.fmpac_autoload; // FM-PAC slot-2 auto-load (skips gracefully)
-    // --scale N -> 320N x 240N window; absent keeps the default 960x720 (= scale 3,
-    // M37 Slice F / DEC-0057; the default lives in Sdl3AppConfig).
-    if (parsed.scale.has_value()) {
-        config.window_width = 320 * *parsed.scale;
-        config.window_height = 240 * *parsed.scale;
-    }
+    config.persistence = runtime.persistence;
+    config.persistence_mode = runtime.persistence_mode;
+    // M46/M50-S2: the flipped convenience-vs-stock session defaults, now with the
+    // externalized config as the base default (CLI > XML > convenience). The
+    // Sdl3AppConfig struct defaults stay stock (anti-drift, A-2); resolve_runtime_
+    // config() -- via resolve_session_defaults() -- is the ONLY place they flip.
+    sony_msx::frontend::ResolvedSessionDefaults resolved;
+    resolved.ram_bytes = runtime.ram_bytes;
+    resolved.fast_disk = runtime.fast_disk;
+    resolved.fmpac_autoload = runtime.fmpac_autoload;
+    resolved.is_stock = runtime.is_stock;
+    config.ram_bytes = runtime.ram_bytes;
+    config.fast_disk = runtime.fast_disk;               // convenience default ON (Alt+D toggles live)
+    config.fmpac_autoload = runtime.fmpac_autoload;      // FM-PAC auto-load (skips gracefully)
+    config.fmpac_autoload_slot = runtime.fmpac_autoload_slot;  // M50-S2: configurable slot (default 2)
+    // M50-S3: the FM-PAC auto-load ROM path (XML > built-in "roms/fmpac.rom"; an
+    // explicit --slot2 occupies the bay and the auto-load skips gracefully).
+    config.fmpac_autoload_rom_path = machine_cfg.fmpac_autoload_rom;
+    // --scale N -> 320N x 240N window; runtime.scale is the resolved scale (CLI > XML >
+    // default 3 = 960x720). Always set explicitly from the resolved value.
+    config.window_width = 320 * runtime.scale;
+    config.window_height = 240 * runtime.scale;
     // M36 FM-PAC SRAM persistence: override/opt-out of the auto-derived
-    // <fmpac-cart>.rom.sram default (default persistence is automatic).
-    config.fmpac_sram_path = parsed.fmpac_sram_path;
+    // <fmpac-cart>.rom.sram default (default persistence is automatic). M50-S3:
+    // resolved CLI --fmpac-sram > XML > auto-derive (std::nullopt = auto-derive,
+    // byte-identical to pre-M50 when no config set it).
+    config.fmpac_sram_path = machine_cfg.fmpac_sram;
     config.fmpac_sram_disabled = parsed.fmpac_sram_disabled;
     // M30 (backlog G2): carry the parser's type_was_explicit through so a
     // type-less --cartN triggers auto-identification inside
     // load_configured_assets() (the ONE shared resolver); an explicit
     // --cartN-type keeps byte-for-byte pre-M30 behavior.
-    config.softwaredb_path = parsed.cartridges.softwaredb_path;
+    // M50-S3: softwaredb path resolved CLI --softwaredb > XML > default
+    // (std::nullopt = kDefaultSoftwareDbPath, byte-identical to pre-M50).
+    config.softwaredb_path = machine_cfg.softwaredb;
     if (parsed.cartridges.slot1.path.has_value()) {
         config.cart1_path = parsed.cartridges.slot1.path;
         config.cart1_type = parsed.cartridges.slot1.type;

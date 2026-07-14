@@ -31,6 +31,7 @@
 #include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
 #include "machine/debug_format.h"
+#include "machine/emulator_config.h"  // M50-S2 (DEC-0077): --config strict-XML session defaults
 #include "machine/hbf1xv_machine.h"
 #include "machine/input_script.h"
 
@@ -45,7 +46,8 @@ namespace {
 // only to this cartridge_cli/load_cartridge path; must not leak into
 // RomAssetLoader's graceful-degradation call sites
 // (Hbf1xvMachine::load_rom_assets).
-int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const std::vector<std::string>& args) {
+int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const std::vector<std::string>& args,
+                              std::optional<std::string> softwaredb_override = std::nullopt) {
     using sony_msx::devices::cartridge::CartridgeLoadResult;
     using sony_msx::devices::cartridge::to_string;
     using sony_msx::machine::ParsedCartridgeSlotCli;
@@ -62,7 +64,12 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
     // shared resolver (cartridge_identifier.h, also used by the SDL3
     // frontend). Explicit --cartN-type specs pass through untouched.
     // Identified-but-unsupported -> loud message + exit 2.
-    sony_msx::machine::CartridgeIdentificationSession ident_session(parsed.softwaredb_path);
+    // M50-S3 (DEC-0077): softwaredb path precedence CLI --softwaredb > XML
+    // override > default. softwaredb_override is std::nullopt unless a loaded
+    // config set a NON-default path (byte-identical to pre-M50 otherwise).
+    const std::optional<std::string> softwaredb_path =
+        parsed.softwaredb_path.has_value() ? parsed.softwaredb_path : softwaredb_override;
+    sony_msx::machine::CartridgeIdentificationSession ident_session(softwaredb_path);
 
     auto load_one = [&](const int slot_number, const ParsedCartridgeSlotCli& spec) -> int {
         if (!spec.path.has_value()) {
@@ -754,6 +761,14 @@ struct DebugSessionOptions {
     std::optional<int> ram_kb;
     bool no_fmpac = false;
     bool stock = false;
+    // M50-S2 (DEC-0077, docs/m50-planner-package.md §4.6): --config <path>
+    // FORCE-loads an externalized strict-XML config even headless (the opt-in
+    // that overrides the determinism gate). std::nullopt (default, every ctest
+    // invocation) = the headless path NEVER auto-loads a config -> the resolved
+    // session defaults stay byte-identical to pre-M50. Only the session/machine
+    // knobs (RAM / fast-disk / FM-PAC auto-load) apply headless; the presentation
+    // knobs are SDL3-only and ignored here.
+    std::optional<std::string> config_path;
     // M36 deterministic repro/testing enabler: swap to the next disk in the
     // repeatable --disk list at this frame (frame-loop mode only). Reuses
     // M35's multi-disk cache + swap semantics headlessly so a two-disk game
@@ -926,6 +941,12 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
             opts.no_fmpac = true;  // M46: opt out of the FM-PAC slot-2 auto-load
         } else if (arg == "--stock") {
             opts.stock = true;  // M46: one-shot authentic bare machine preset
+        } else if (arg == "--config") {
+            // M50-S2 (DEC-0077): force-load a strict-XML config even headless.
+            if (auto v = take_debug_session_value(args, i, "--config", errors)) {
+                opts.config_path = *v;
+                ++i;
+            }
         } else if (arg == "--ram") {
             // M46 (DEC-0071): shared {64,128,256,512} enum validator (headless/
             // SDL3 parity). A bad/missing value is a loud parse error.
@@ -1059,14 +1080,53 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         return 2;
     }
 
+    // M50-S2 (DEC-0077, §4.6): the headless path NEVER auto-loads a config; only
+    // an explicit --config <path> force-loads one (no ctest invocation passes it,
+    // so the resolved defaults stay byte-identical). The loaded config supplies
+    // the BASE session defaults (RAM / fast-disk / FM-PAC) that resolve_session_
+    // defaults() falls back to -- precedence CLI > XML > convenience default.
+    sony_msx::machine::EmulatorConfig cfg;  // built-in defaults
+    if (opts.config_path.has_value()) {
+        std::vector<std::string> config_warnings;
+        cfg = sony_msx::machine::EmulatorConfig::load_from_file(*opts.config_path, config_warnings);
+        for (const std::string& w : config_warnings) {
+            std::cerr << "debug-session: " << w << "\n";
+        }
+    }
+
+    // M50-S3 (DEC-0077, docs/m50-planner-package.md §6-S3): resolve the machine-
+    // sizing/path fields with precedence CLI > XML > built-in default. Each XML
+    // value is surfaced ONLY when it differs from the built-in default, so with no
+    // --config (every ctest invocation) these stay byte-identical to pre-M50. The
+    // headless <bios_dir> is a mandatory positional CLI arg, so it always wins the
+    // BIOS-dir precedence (CLI > XML) and no XML bios-dir applies here by design.
+    const sony_msx::machine::EmulatorConfig config_defaults;  // for "XML differs from default"
+    const std::string fmpac_autoload_rom = cfg.fmpac_rom;     // XML > "roms/fmpac.rom"
+    std::optional<std::string> resolved_fmpac_sram = opts.fmpac_sram_path;  // CLI > XML > derive
+    if (!resolved_fmpac_sram.has_value() && cfg.fmpac_sram != config_defaults.fmpac_sram) {
+        resolved_fmpac_sram = cfg.fmpac_sram;
+    }
+    std::optional<std::string> resolved_softwaredb;  // XML override (CLI wins inside loader)
+    if (cfg.softwaredb_path != config_defaults.softwaredb_path) {
+        resolved_softwaredb = cfg.softwaredb_path;
+    }
+
     // M46 (DEC-0071): resolve the flipped convenience-vs-stock defaults in the
     // CLI layer (headless/SDL3 parity, the anti-drift seam of planner §2.7 -- the
     // Hbf1xvMachine ctor default STAYS 64 KB; this is the only place it flips).
-    // Empty CLI -> {512 KB RAM, fast-disk ON, FM-PAC slot-2 auto-load ON};
-    // --stock/--ram 64/--no-fast-disk/--no-fmpac peel it back (order-independent).
+    // Empty CLI + no config -> {512 KB RAM, fast-disk ON, FM-PAC slot-2 auto-load
+    // ON}; --stock/--ram 64/--no-fast-disk/--no-fmpac peel it back (order-
+    // independent); a loaded config replaces the convenience base default.
+    sony_msx::frontend::SessionDefaultsRequest session_request;
+    session_request.ram_kb = opts.ram_kb;
+    session_request.fast_disk_opt = opts.fast_disk_opt;
+    session_request.no_fmpac = opts.no_fmpac;
+    session_request.stock = opts.stock;
+    session_request.base_ram_kb = cfg.ram_kb;
+    session_request.base_fast_disk = cfg.fast_disk;
+    session_request.base_fmpac_autoload = cfg.fmpac_autoload;
     const sony_msx::frontend::ResolvedSessionDefaults resolved =
-        sony_msx::frontend::resolve_session_defaults(
-            {opts.ram_kb, opts.fast_disk_opt, opts.no_fmpac, opts.stock});
+        sony_msx::frontend::resolve_session_defaults(session_request);
 
     sony_msx::machine::Hbf1xvMachine machine(resolved.ram_bytes);
     if (opts.debug_root.has_value()) {
@@ -1084,6 +1144,10 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (opts.event_log_name.has_value()) {
         machine.set_event_logging_enabled(true);
     }
+    // M50-S3 (DEC-0077): apply the config-resolved role-keyed BIOS filenames
+    // BEFORE cold_boot (which drives load_rom_assets). A bare/no-config cfg keeps
+    // the strict spec filenames, byte-identical to before.
+    machine.set_bios_filenames(cfg.bios_roms);
     machine.set_asset_root(bios_dir);
     machine.cold_boot();
     for (const std::string& note : machine.rom_diagnostics()) {
@@ -1107,12 +1171,15 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     }
 
     // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
-    // freshly-inserted FM-PAC loads its battery SRAM on insertion.
-    if (opts.fmpac_sram_path.has_value()) {
-        machine.set_fmpac_sram_path(*opts.fmpac_sram_path);
+    // freshly-inserted FM-PAC loads its battery SRAM on insertion. M50-S3: the
+    // resolved path honors CLI --fmpac-sram > XML > auto-derive.
+    if (resolved_fmpac_sram.has_value()) {
+        machine.set_fmpac_sram_path(*resolved_fmpac_sram);
     }
 
-    if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
+    // M50-S3: pass the XML softwaredb override (CLI --softwaredb still wins inside
+    // the loader); std::nullopt when no config set a non-default path.
+    if (const int rc = load_cartridges_from_args(machine, cli_args, resolved_softwaredb); rc != 0) {
         return rc;
     }
 
@@ -1121,7 +1188,8 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     // --slotN carts so the occupancy / already-present checks see the final
     // state. Gated by resolved.fmpac_autoload. Every skip is a graceful note --
     // NEVER a boot failure; DEC-0050 "NO S-RAM AVAILABLE" stays correct on skip.
-    constexpr const char* kFmPacAutoloadRom = "roms/fmpac.rom";
+    // M50-S3 (DEC-0077): the auto-load ROM path is config-resolved (XML > the
+    // built-in "roms/fmpac.rom"); byte-identical to pre-M50 with no config.
     sony_msx::frontend::FmPacAutoloadOutcome fmpac_outcome =
         sony_msx::frontend::FmPacAutoloadOutcome::NotAttempted;
     if (resolved.fmpac_autoload) {
@@ -1131,29 +1199,30 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         } else if (machine.fmpac(1) != nullptr || machine.fmpac(2) != nullptr) {
             fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedAlreadyPresent;
         } else {
-            std::ifstream fmpac_in(kFmPacAutoloadRom, std::ios::binary);
+            std::ifstream fmpac_in(fmpac_autoload_rom, std::ios::binary);
             if (!fmpac_in) {
                 fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedAbsent;
-                std::cerr << "debug-session: FM-PAC auto-load skipped: " << kFmPacAutoloadRom
+                std::cerr << "debug-session: FM-PAC auto-load skipped: " << fmpac_autoload_rom
                           << " not found (boot proceeds; \"NO S-RAM AVAILABLE\" -- DEC-0050)\n";
             } else {
                 std::vector<std::uint8_t> fmpac_image((std::istreambuf_iterator<char>(fmpac_in)),
                                                        std::istreambuf_iterator<char>());
                 // Bind the .sram BEFORE the insert (restores on load). Default:
-                // beside the ROM; an explicit --fmpac-sram (bound above) overrides.
-                if (!opts.fmpac_sram_path.has_value()) {
-                    machine.set_fmpac_sram_path(std::string(kFmPacAutoloadRom) + ".sram");
+                // beside the ROM; a resolved --fmpac-sram/XML path (bound above)
+                // overrides (M50-S3: resolved_fmpac_sram already incorporates it).
+                if (!resolved_fmpac_sram.has_value()) {
+                    machine.set_fmpac_sram_path(fmpac_autoload_rom + ".sram");
                 }
                 const auto result = machine.load_cartridge(
                     2, sony_msx::devices::cartridge::CartridgeMapperType::FmPac, std::move(fmpac_image));
                 if (result != sony_msx::devices::cartridge::CartridgeLoadResult::Ok) {
                     fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::SkippedInvalid;
-                    std::cerr << "debug-session: FM-PAC auto-load skipped: " << kFmPacAutoloadRom
+                    std::cerr << "debug-session: FM-PAC auto-load skipped: " << fmpac_autoload_rom
                               << " invalid (not a 1..4 x 16 KB FM-PAC image)\n";
                 } else {
                     fmpac_outcome = sony_msx::frontend::FmPacAutoloadOutcome::LoadedSlot2;
                     std::cerr << "debug-session: FM-PAC auto-loaded into slot 2 from "
-                              << kFmPacAutoloadRom << "\n";
+                              << fmpac_autoload_rom << "\n";
                 }
             }
         }
@@ -1203,7 +1272,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         fmpac_info.outcome = fmpac_outcome;
         fmpac_info.is_stock = resolved.is_stock;
         fmpac_info.no_fmpac = opts.no_fmpac;
-        fmpac_info.autoload_rom_path = kFmPacAutoloadRom;
+        fmpac_info.autoload_rom_path = fmpac_autoload_rom;
         const bool sram_available = fmpac_slot != 0 && !machine.fmpac_sram_path().empty();
         std::cerr << "debug-session: This session " << fe::format_mode_tag(resolved.is_stock) << "\n"
                   << "  Main RAM  : " << fe::format_ram_line(machine.dram_size()) << "\n"

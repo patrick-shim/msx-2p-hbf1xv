@@ -130,8 +130,14 @@ bool Sdl3App::load_configured_assets() {
     // no FM-PAC is inserted, and no internal SRAM is ever fabricated.
     fmpac_autoload_outcome_ = FmPacAutoloadOutcome::NotAttempted;
     if (config_.fmpac_autoload) {
-        if (config_.cart2_path.has_value()) {
-            // An explicit --slot2/--cart2 cart owns slot 2 -- the user cart wins.
+        // M50-S2 (DEC-0077): the target slot is configurable (<defaults><fmpac
+        // slot>), default 2 (byte-identical). Occupancy is checked against the
+        // matching explicit --slotN cart path.
+        const int autoload_slot = config_.fmpac_autoload_slot;
+        const std::optional<std::string>& slot_cart_path =
+            (autoload_slot == 1) ? config_.cart1_path : config_.cart2_path;
+        if (slot_cart_path.has_value()) {
+            // An explicit --slotN/--cartN cart owns the auto-load slot -- user wins.
             fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedSlot2InUse;
         } else if (machine_.fmpac(1) != nullptr || machine_.fmpac(2) != nullptr) {
             // Avoid a double FM-PAC (the human's slot-1 habit): the already-
@@ -158,7 +164,7 @@ bool Sdl3App::load_configured_assets() {
                     machine_.set_fmpac_sram_path(sram_path);
                 }
                 const CartridgeLoadResult result = machine_.load_cartridge(
-                    2, devices::cartridge::CartridgeMapperType::FmPac, std::move(image));
+                    autoload_slot, devices::cartridge::CartridgeMapperType::FmPac, std::move(image));
                 if (result != CartridgeLoadResult::Ok) {
                     fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedInvalid;
                     std::cerr << "sdl3: FM-PAC auto-load skipped: " << config_.fmpac_autoload_rom_path
@@ -289,6 +295,10 @@ bool Sdl3App::init() {
         machine_.set_debug_root(*config_.snapshot_dir);
     }
 
+    // M50-S3 (DEC-0077): apply the config-resolved BIOS dir + role-keyed BIOS
+    // filenames BEFORE cold_boot (which drives load_rom_assets). A bare config
+    // keeps the strict spec dir/filenames, byte-identical to before.
+    machine_.set_bios_filenames(config_.bios_roms);
     machine_.set_asset_root(config_.bios_dir);
     machine_.cold_boot();
 

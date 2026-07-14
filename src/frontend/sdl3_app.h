@@ -34,6 +34,11 @@ namespace sony_msx::frontend {
 // Session configuration (M26-S2/S7, docs/m26-planner-package.md §2.8).
 struct Sdl3AppConfig {
     std::string bios_dir = "bios";
+    // M50-S3 (DEC-0077): role-keyed BIOS ROM filenames resolved from config
+    // (CLI/XML/built-in default). Default = the strict HB-F1XV spec set, so a
+    // bare Sdl3AppConfig{} loads the same 7 files as before (byte-identical).
+    // init() applies these via machine_.set_bios_filenames() before cold_boot.
+    machine::EmulatorConfig::BiosRoms bios_roms{};
     std::optional<std::string> cart1_path;
     devices::cartridge::CartridgeMapperType cart1_type = devices::cartridge::CartridgeMapperType::Mirrored;
     std::optional<std::string> cart2_path;
@@ -218,6 +223,13 @@ struct Sdl3AppConfig {
     // save under roms/. The derived SRAM path is <this>.sram unless
     // fmpac_sram_path/fmpac_sram_disabled override it.
     std::string fmpac_autoload_rom_path = "roms/fmpac.rom";
+
+    // M50-S2 (DEC-0077): the primary slot the FM-PAC auto-load targets. Default 2
+    // (the byte-identical M46 behavior; a bare Sdl3AppConfig{} keeps slot 2, so
+    // every direct-construction test is unchanged). Externalized via
+    // <defaults><fmpac slot="1|2">; sdl3_main.cpp maps the resolved config value
+    // here. Only consulted when fmpac_autoload==true.
+    int fmpac_autoload_slot = 2;
 
     // DEC-0072 replay-fidelity diagnostic (M47-followup): reproduce the headless
     // `--swap-disk-frame <N>` scripted disk hot-swap on the SDL3 path so a

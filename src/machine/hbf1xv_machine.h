@@ -59,6 +59,7 @@
 #include "machine/cpu_trace_sink.h"
 #include "machine/debug_event_log.h"
 #include "machine/debug_snapshot.h"
+#include "machine/emulator_config.h"
 #include "machine/memory_region.h"
 #include "machine/rom_asset_loader.h"
 #include "peripherals/cassette_interface.h"
@@ -90,6 +91,16 @@ public:
     // loading independent of the working directory (tests inject the repo path).
     void set_asset_root(std::filesystem::path root);
     [[nodiscard]] const std::filesystem::path& asset_root() const;
+
+    // M50-S3 (DEC-0077, docs/m50-planner-package.md §6-S3): the role-keyed BIOS
+    // ROM FILENAMES the loader resolves under asset_root_. Defaults are the strict
+    // HB-F1XV spec set (EmulatorConfig::BiosRoms) -- a bare machine loads the same
+    // 7 files as the pre-M50 hardcoded literals (byte-identical). Only the filename
+    // externalizes to config; the EXPECTED SIZE + slot-role LABEL per role stay
+    // code-owned in load_rom_assets() (a spec fact, not a user knob). Set BEFORE
+    // cold_boot() so the (re)load picks them up.
+    void set_bios_filenames(EmulatorConfig::BiosRoms names);
+    [[nodiscard]] const EmulatorConfig::BiosRoms& bios_filenames() const;
 
     // Missing-asset diagnostics recorded by the most recent cold_boot (empty when
     // every required ROM was present + correctly sized). Never fabricated.
@@ -1041,6 +1052,10 @@ private:
     devices::chipset::SystemBus bus_{slot_bus_, io_bus_};
 
     std::filesystem::path asset_root_{"bios"};
+    // M50-S3 (DEC-0077): role-keyed BIOS ROM filenames (default = the strict
+    // HB-F1XV spec set). Consumed by load_rom_assets(); overridable via
+    // set_bios_filenames() before cold_boot (config-fed, CLI > XML > default).
+    EmulatorConfig::BiosRoms bios_filenames_{};
     std::vector<std::string> rom_diagnostics_;
 
     devices::cpu::CpuBusClient cpu_bus_client_;

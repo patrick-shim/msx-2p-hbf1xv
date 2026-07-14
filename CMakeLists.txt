@@ -90,7 +90,9 @@ add_library(sony_msx_core STATIC
     src/machine/rom_asset_loader.cpp
     src/machine/cartridge_cli.cpp
     src/machine/sha1.cpp
+    src/machine/xml_tokenizer.cpp
     src/machine/software_db.cpp
+    src/machine/emulator_config.cpp
     src/machine/cartridge_identifier.cpp
     src/machine/cpu_trace_sink.cpp
     src/machine/cpm_bdos_harness.cpp
@@ -101,6 +103,7 @@ add_library(sony_msx_core STATIC
     src/machine/frame_dump.cpp
     src/machine/input_script.cpp
     src/frontend/sdl3_cli.cpp
+    src/frontend/config_runtime.cpp
     src/frontend/session_summary.cpp
     src/frontend/border_composer.cpp
     src/frontend/audio_pacer.cpp

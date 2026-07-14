@@ -176,6 +176,28 @@ struct ParsedSdl3Cli {
     // default (no effect; existing sessions byte-for-byte unchanged).
     std::optional<std::uint32_t> swap_disk_frame;
     std::optional<std::string> fingerprint_path;
+    // M50-S2 (DEC-0077, docs/m50-planner-package.md §4.6): --config <path>
+    // forces load of an externalized strict-XML config from that path in ANY
+    // mode (headless or SDL3, hidden or not) -- the opt-in that overrides the
+    // determinism auto-load gating. std::nullopt (default) = no explicit config;
+    // an interactive SDL3 launch then AUTO-searches (<exe-dir> then <cwd>) while
+    // headless / --hidden-window never auto-load, so the ctest suite (no test
+    // passes --config) stays on the byte-identical no-config path.
+    std::optional<std::string> config_path;
+    // M50-S2 explicit-tracking (config precedence CLI > XML > built-in default).
+    // The plain-bool / plain-enum presentation knobs below default to a value
+    // indistinguishable from an explicit CLI pass, so the config resolver
+    // (config_runtime.h) must know whether the user ACTUALLY passed the flag to
+    // honor precedence. Each is set true only when the corresponding flag appears
+    // on argv. (The optional<> knobs -- fast_disk_opt / speed_level / scale /
+    // persistence / ram_kb -- already encode "specified" via has_value(), so they
+    // need no shadow.)
+    bool border_specified = false;
+    bool disk_writable_specified = false;
+    bool fullscreen_specified = false;
+    bool capture_specified = false;
+    bool filter_specified = false;
+    bool persistence_mode_specified = false;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).
@@ -226,12 +248,26 @@ struct SessionDefaultsRequest {
     std::optional<bool> fast_disk_opt;  // --fast-disk / --no-fast-disk (nullopt = unspecified)
     bool no_fmpac = false;              // --no-fmpac
     bool stock = false;                 // --stock
+    // M50-S2 (DEC-0077, docs/m50-planner-package.md §4.1): the XML-sourced BASE
+    // defaults the resolver falls back to when the CLI field is unspecified AND
+    // --stock is not set. The externalized config REPLACES the hardcoded
+    // convenience default here (precedence CLI > XML > built-in default); an
+    // explicit per-field CLI flag still wins, and --stock still forces the bare
+    // machine. These default to the M46 convenience values so an unspecified
+    // request (every pre-M50 caller, and every no-config launch) is BYTE-IDENTICAL
+    // to pre-M50 -- the anti-drift seam (A-2/AC-S2-3) is preserved because the
+    // Sdl3AppConfig/ctor stock defaults are untouched; only THIS resolver's
+    // fallback source moves from a literal to the config value.
+    int base_ram_kb = 512;              // convenience default (KB)
+    bool base_fast_disk = true;         // convenience default
+    bool base_fmpac_autoload = true;    // convenience default
 };
 
-// Precedence: explicit per-field flag > --stock preset > convenience default;
-// positional-INDEPENDENT (planner §2.4 -- `--stock --ram 512` == `--ram 512
-// --stock` -> 512 KB). Pure, SDL-free, headlessly unit-testable. The empty-CLI
-// result is {512 KB, fast-disk ON, FM-PAC auto-load ON}.
+// Precedence: explicit per-field flag > --stock preset > (M50-S2) XML base
+// default > convenience default; positional-INDEPENDENT (planner §2.4 --
+// `--stock --ram 512` == `--ram 512 --stock` -> 512 KB). Pure, SDL-free,
+// headlessly unit-testable. With the base_* fields left at their convenience
+// defaults, the empty-CLI result is {512 KB, fast-disk ON, FM-PAC auto-load ON}.
 [[nodiscard]] ResolvedSessionDefaults resolve_session_defaults(const SessionDefaultsRequest& request);
 
 }  // namespace sony_msx::frontend
