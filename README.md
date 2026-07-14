@@ -5,12 +5,12 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.7** — optional **phosphor-persistence** inter-frame blend (`--persistence 0..100`,
-`--persistence-mode avg|peak`, live Alt+B/Alt+M) that softens genuine MSX sprite-multiplexing flicker on
-LCDs (default off). On top of v1.1.6 **per-line-live V9958 sprite rendering** (split-screen HUD titles like
-Space Manbow / Laydock 2 no longer cull their top-region sprites — backlog D9), the v1.1.5 command-engine
-access-slot contention model, and the v1.1.4 Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC
-peripheral firmware (`roms/fmpac.rom`) is bundled.
+Current release: **v1.1.8** — an **MSX-logo Windows app icon** (shown on the `.exe`/Explorer and the
+running window/taskbar). On top of v1.1.7's optional **phosphor-persistence** flicker-softener
+(`--persistence`, `--persistence-mode avg|peak`, Alt+B/Alt+M, default off), v1.1.6 **per-line-live V9958
+sprite rendering** (split-screen HUD titles like Space Manbow / Laydock 2 no longer cull their top-region
+sprites — backlog D9), the v1.1.5 command-engine access-slot contention model, and the v1.1.4
+Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC peripheral firmware (`roms/fmpac.rom`) is bundled.
 
 ## Architecture
 
