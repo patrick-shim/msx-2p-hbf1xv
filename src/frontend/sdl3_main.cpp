@@ -30,7 +30,7 @@
 namespace {
 
 // M50-S2 (DEC-0077): the directory holding this executable, for the config
-// auto-load search order (<exe-dir>/hbf1xv-config.xml first, then <cwd>). A
+// auto-load search order (<exe-dir>/sony_msx_hbf1xv.xml first, then <cwd>). A
 // best-effort resolution of argv[0]; an empty result simply drops the exe-dir
 // candidate (the CWD candidate still applies).
 std::string exe_directory(const char* argv0) {
@@ -170,8 +170,8 @@ OPTIONS
     --max-frames <N>        Auto-quit after N frames (for non-interactive runs).
     --hidden-window         Run without showing a window (testing/automation).
     --config <path>         Load settings from a strict-XML config file (see
-                            hbf1xv-config.xml). Without this, an interactive
-                            launch auto-loads hbf1xv-config.xml from next to the
+                            sony_msx_hbf1xv.xml). Without this, an interactive
+                            launch auto-loads sony_msx_hbf1xv.xml from next to the
                             exe or the current folder; explicit CLI flags always
                             win over the file.
     -h, --help              Show this help and exit.
@@ -376,9 +376,9 @@ int main(int argc, char** argv) {
             std::vector<std::string> auto_paths;
             const std::string exe_dir = exe_directory(argv[0]);
             if (!exe_dir.empty()) {
-                auto_paths.push_back((std::filesystem::path(exe_dir) / "hbf1xv-config.xml").string());
+                auto_paths.push_back((std::filesystem::path(exe_dir) / "sony_msx_hbf1xv.xml").string());
             }
-            auto_paths.emplace_back("hbf1xv-config.xml");  // CWD candidate
+            auto_paths.emplace_back("sony_msx_hbf1xv.xml");  // CWD candidate
             std::vector<std::string> config_warnings;
             cfg = sony_msx::frontend::load_config_with_search(parsed.config_path, auto_paths,
                                                               config_warnings);

@@ -5,7 +5,7 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.2.0** — an optional **strict-XML external configuration** (`hbf1xv-config.xml`):
+Current release: **v1.2.0** — an optional **strict-XML external configuration** (`sony_msx_hbf1xv.xml`):
 every launch knob and default lives in an annotated, publishable file at the repo root, resolved
 **CLI > XML > built-in default**; the file is optional (a missing/malformed one warns and continues on
 built-in defaults, and hardware-timing constants are deliberately not configurable), and a round-trip
@@ -151,7 +151,7 @@ identification path) keep their own stock defaults and each print their own usag
 ## Configuration file (optional)
 
 Every default and knob can be externalized to a strict XML config file, so the machine is
-configurable without recompiling. The annotated reference [`hbf1xv-config.xml`](hbf1xv-config.xml)
+configurable without recompiling. The annotated reference [`sony_msx_hbf1xv.xml`](sony_msx_hbf1xv.xml)
 at the repository root lists **every** externalized field (RAM/VRAM, fast-disk, FM-PAC auto-load,
 video scale/filter, persistence, border, disk-writable, speed, fullscreen, capture, BIOS
 directory + the seven ROM filenames, FM-PAC ROM/SRAM paths, and the software-database path) set to
@@ -162,7 +162,7 @@ its exact built-in default, each commented with its type and allowed range/enum.
 - **Precedence:** command-line flag **>** config file **>** built-in default. An explicit CLI flag
   always wins; the config file overrides the compiled default; an omitted knob keeps its default.
 - **Auto-load** happens only on an interactive SDL3 launch (a real window), searching
-  `<exe-dir>/hbf1xv-config.xml` then `<cwd>/hbf1xv-config.xml`. The headless executable and the
+  `<exe-dir>/sony_msx_hbf1xv.xml` then `<cwd>/sony_msx_hbf1xv.xml`. The headless executable and the
   deterministic hidden-window/test paths never auto-load. `--config <path>` force-loads in any mode.
   The shipped reference lives at the repo root and is not auto-found from `build/Debug/` — copy it
   next to the executable (or into the working directory) and edit it to activate.

@@ -59,7 +59,7 @@ machine::EmulatorConfig load_config_with_search(const std::optional<std::string>
             searched += ", ";
         }
     }
-    warnings.push_back("config: WARNING no hbf1xv-config.xml found (searched: " + searched +
+    warnings.push_back("config: WARNING no sony_msx_hbf1xv.xml found (searched: " + searched +
                        "); using built-in defaults");
     return machine::EmulatorConfig{};
 }

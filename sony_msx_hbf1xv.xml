@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
   ==========================================================================
-   Sony HB-F1XV MSX2+ Emulator  -  reference configuration (hbf1xv-config.xml)
+   Sony HB-F1XV MSX2+ Emulator  -  reference configuration (sony_msx_hbf1xv.xml)
   ==========================================================================
 
   This file externalizes the emulator's DEFAULTS and KNOBS so the machine is
@@ -17,7 +17,7 @@
       standalone with zero config).
     * It is auto-loaded ONLY by an interactive SDL3 launch (a real window). The
       auto-load search order (first found wins) is:
-          <exe-dir>/hbf1xv-config.xml   ->   <cwd>/hbf1xv-config.xml
+          <exe-dir>/sony_msx_hbf1xv.xml   ->   <cwd>/sony_msx_hbf1xv.xml
       The headless executable and the deterministic hidden-window / test paths
       NEVER auto-load a config file. To force-load in ANY mode, pass the CLI
       option 'config' with a path (long-option form, two leading dashes).
