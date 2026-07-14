@@ -214,6 +214,41 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                     parsed.scale = scale;
                 }
             }
+        } else if (arg == "--persistence") {
+            // Phosphor-persistence inter-frame blend weight (percent of the
+            // previous presented frame retained), [0,100]. Absent -> OFF (0).
+            // Out-of-range / non-numeric -> loud error (mirrors --scale).
+            if (auto value = take_value(args, i, "--persistence", parsed.errors)) {
+                ++i;
+                int pct = 0;
+                const auto begin = value->data();
+                const auto end = value->data() + value->size();
+                const auto [ptr, ec] = std::from_chars(begin, end, pct);
+                if (ec != std::errc{} || ptr != end) {
+                    parsed.errors.push_back("sdl3_cli: --persistence value is not a valid integer: '" +
+                                            *value + "'");
+                } else if (pct < 0 || pct > 100) {
+                    parsed.errors.push_back("sdl3_cli: --persistence value out of range [0..100]: '" +
+                                            *value + "'");
+                } else {
+                    parsed.persistence = pct;
+                }
+            }
+        } else if (arg == "--persistence-mode") {
+            // Phosphor blend mode: 'avg' (weighted mean, default) or 'peak'
+            // (peak-hold-with-decay -- no sprite dimming). Value policy mirrors
+            // --filter: an unrecognized value is a loud error; absent stays avg.
+            if (auto value = take_value(args, i, "--persistence-mode", parsed.errors)) {
+                ++i;
+                if (*value == "avg" || *value == "average") {
+                    parsed.persistence_mode = PhosphorMode::Average;
+                } else if (*value == "peak") {
+                    parsed.persistence_mode = PhosphorMode::Peak;
+                } else {
+                    parsed.errors.push_back("sdl3_cli: --persistence-mode value must be 'avg' or 'peak': '" +
+                                            *value + "'");
+                }
+            }
         } else if (arg == "--filter") {
             // M37 Slice E (DEC-0056): texture scale mode; default (absent) Linear.
             if (auto value = take_value(args, i, "--filter", parsed.errors)) {

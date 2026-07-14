@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "frontend/phosphor_blend.h"  // PhosphorMode (Average / Peak) -- SDL-free, header-only
 #include "machine/cartridge_cli.h"
 
 namespace sony_msx::frontend {
@@ -132,6 +133,22 @@ struct ParsedSdl3Cli {
     // M37 Slice E (DEC-0056): --filter <nearest|linear>; DEFAULT Linear (see
     // TextureFilter). A bad value pushes into `.errors`; absent stays Linear.
     TextureFilter filter = TextureFilter::Linear;
+    // Phosphor-persistence inter-frame blend (--persistence <0..100>): the
+    // percent of the previously presented frame retained by the SDL3 present
+    // post-process (frontend/phosphor_blend.h). Validated to [0,100]; a
+    // non-numeric / out-of-range value pushes into `.errors` (mirrors --scale).
+    // std::nullopt (default) means OFF -> sdl3_main.cpp leaves the Sdl3AppConfig
+    // default 0, so the present path is byte-identical to before. This is a
+    // frontend PRESENTATION knob only: it never affects emulation/determinism/
+    // headless output.
+    std::optional<int> persistence;
+    // Phosphor-persistence blend MODE (--persistence-mode <avg|peak>). DEFAULT
+    // Average (byte-identical to the original blend behavior); Peak selects the
+    // peak-hold-with-decay blend that keeps multiplexed sprites full-brightness
+    // instead of dimming them (frontend/phosphor_blend.h). A bad value pushes a
+    // `.errors` entry (mirrors --filter's value policy); absent stays Average.
+    // Presentation-only: never affects emulation/determinism/headless output.
+    PhosphorMode persistence_mode = PhosphorMode::Average;
     // M37 Slice E (DEC-0056): --fullscreen starts the window fullscreen
     // (Alt+Enter toggles at runtime). Bare boolean flag; default false.
     bool fullscreen = false;

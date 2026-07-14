@@ -13,13 +13,34 @@
 
 #include "frontend/sdl3_video_presenter.h"
 
+#include <cstddef>
+
 #include "frontend/border_composer.h"
+#include "frontend/phosphor_blend.h"
 
 namespace sony_msx::frontend {
 
 Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border_enabled,
-                                       const SDL_ScaleMode scale_mode)
-    : renderer_(renderer), border_enabled_(border_enabled), scale_mode_(scale_mode) {}
+                                       const SDL_ScaleMode scale_mode, const int persistence,
+                                       const PhosphorMode persistence_mode)
+    : renderer_(renderer),
+      border_enabled_(border_enabled),
+      scale_mode_(scale_mode),
+      persistence_(persistence < 0 ? 0 : (persistence > 100 ? 100 : persistence)),
+      persistence_mode_(persistence_mode) {}
+
+void Sdl3VideoPresenter::set_persistence(const int persistence) {
+    const int clamped = persistence < 0 ? 0 : (persistence > 100 ? 100 : persistence);
+    if (clamped != persistence_) {
+        persistence_ = clamped;
+        // Restart the accumulation: drop the retained previous frame so the next
+        // blit re-seeds cleanly (a freshly (dis|en)abled blend never mixes a
+        // stale frame, and turning it OFF leaves no dangling state).
+        prev_width_ = 0;
+        prev_height_ = 0;
+        prev_pixels_.clear();
+    }
+}
 
 Sdl3VideoPresenter::~Sdl3VideoPresenter() {
     if (texture_ != nullptr) {
@@ -80,7 +101,51 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
     // buffer, pitch = width * sizeof(uint16_t)); composition copies pixels but never
     // converts them.
     const int pitch = source->width * static_cast<int>(sizeof(std::uint16_t));
-    if (!SDL_UpdateTexture(texture_, nullptr, source->pixels.data(), pitch)) {
+    const std::uint16_t* upload = source->pixels.data();
+
+    // Phosphor-persistence inter-frame blend (PRESENTATION-ONLY, frontend/
+    // phosphor_blend.h): simulate a CRT phosphor's decay so multiplexed
+    // (per-frame-cycled) sprites read as steady dimmer sprites instead of LCD
+    // flicker. Entirely GATED behind persistence_>0: when 0 (the default) this
+    // block is skipped, `upload` stays source->pixels.data(), and the present
+    // path is byte-for-byte the pre-existing path (no prev buffer, no
+    // allocation). This is downstream-neutral to the scale/filter path: the
+    // blended pixels are handed to the SAME SDL_UpdateTexture -> scale_mode_
+    // texture the un-blended pixels would be.
+    if (persistence_ > 0) {
+        const std::size_t n = source->pixels.size();
+        const bool prev_matches = prev_width_ == source->width && prev_height_ == source->height &&
+                                  prev_pixels_.size() == n;
+        if (prev_matches) {
+            // Combine the retained (previously PRESENTED) output with this frame,
+            // per pixel, under the selected mode (frontend/phosphor_blend.h):
+            //   Average -> weighted mean (blend_rgb555): steadies flicker, dims.
+            //   Peak    -> peak-hold-with-decay (peak_rgb555): a pixel bright in
+            //              either frame stays bright -> no sprite dimming.
+            // The mode branch is HOISTED out of the per-pixel loop (one test per
+            // frame, not per pixel).
+            blended_pixels_.resize(n);
+            if (persistence_mode_ == PhosphorMode::Peak) {
+                for (std::size_t i = 0; i < n; ++i) {
+                    blended_pixels_[i] = peak_rgb555(prev_pixels_[i], source->pixels[i], persistence_);
+                }
+            } else {
+                for (std::size_t i = 0; i < n; ++i) {
+                    blended_pixels_[i] = blend_rgb555(prev_pixels_[i], source->pixels[i], persistence_);
+                }
+            }
+            prev_pixels_.swap(blended_pixels_);  // prev_pixels_ now holds this frame's output (O(1))
+            upload = prev_pixels_.data();
+        } else {
+            // First blended frame (or a mode-switch changed the dimensions):
+            // present the current frame as-is and seed the accumulator.
+            prev_pixels_.assign(source->pixels.begin(), source->pixels.end());
+        }
+        prev_width_ = source->width;
+        prev_height_ = source->height;
+    }
+
+    if (!SDL_UpdateTexture(texture_, nullptr, upload, pitch)) {
         last_error_ = SDL_GetError();
         return false;
     }

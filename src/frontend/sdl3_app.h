@@ -179,6 +179,23 @@ struct Sdl3AppConfig {
     // byte-identical to before; SDL_SCALEMODE_NEAREST = crisp pixels.
     SDL_ScaleMode texture_filter = SDL_SCALEMODE_LINEAR;
 
+    // Phosphor-persistence inter-frame blend weight fed to the video presenter
+    // (--persistence <0..100>; Alt+B cycles it live). DEFAULT 0 = OFF, so the
+    // present path is byte-for-byte the current path (no blend buffer, no extra
+    // allocation) and every existing test is unaffected. > 0 simulates a CRT
+    // phosphor's decay so multiplexed sprites stop flickering on an LCD -- a
+    // PRESENTATION-ONLY post-process (frontend/phosphor_blend.h) that never
+    // affects emulation, determinism, or headless output.
+    int persistence = 0;
+
+    // Phosphor blend MODE fed to the video presenter (--persistence-mode; Alt+M
+    // toggles it live). DEFAULT Average = the original weighted-mean blend
+    // (byte-identical to before, and irrelevant while persistence == 0). Peak =
+    // peak-hold-with-decay, which keeps multiplexed sprites full-brightness
+    // instead of dimming them (frontend/phosphor_blend.h). PRESENTATION-ONLY:
+    // never affects emulation, determinism, or headless output.
+    PhosphorMode persistence_mode = PhosphorMode::Average;
+
     // M42 (DEC-0061): main-RAM (DRAM) size in BYTES passed to the Hbf1xvMachine
     // constructor. Default = the strict stock 64 KB spec (byte-identical to
     // before). --ram 128/256/512 (opt-in, NON-STOCK) set 128/256/512 KB here;
@@ -298,6 +315,27 @@ public:
     void request_stream_toggle() { on_stream_toggle_hotkey(); }
     [[nodiscard]] bool stream_capture_active() const { return machine_.stream_capture_active(); }
 
+    // Phosphor-persistence live-control seams, exposed publicly so an
+    // integration test can drive them without SDL event injection (mirrors
+    // request_snapshot()/swap_to_next_disk()). Presentation-only: they adjust the
+    // video presenter's inter-frame blend, never perturb emulation.
+    //   * step_persistence_up/down: +/-10% (wrapping 0..100), the FINE control
+    //     (Alt+B / Shift+Alt+B). cycle_persistence() is retained as an alias for
+    //     the up-step (backward-compatible seam name).
+    //   * toggle_persistence_mode: Average <-> Peak (Alt+M).
+    // persistence()/persistence_mode() read the presenter's current state (0 /
+    // Average when no presenter / not initialized).
+    void step_persistence_up() { on_persistence_step_hotkey(+1); }
+    void step_persistence_down() { on_persistence_step_hotkey(-1); }
+    void cycle_persistence() { on_persistence_step_hotkey(+1); }
+    void toggle_persistence_mode() { on_persistence_mode_hotkey(); }
+    [[nodiscard]] int persistence() const {
+        return video_presenter_ ? video_presenter_->persistence() : 0;
+    }
+    [[nodiscard]] PhosphorMode persistence_mode() const {
+        return video_presenter_ ? video_presenter_->persistence_mode() : PhosphorMode::Average;
+    }
+
     // M36-S-c: explicit flush of the mounted disk's writes back to its host
     // `.dsk` (no-op unless disk-writable was set + a host path is bound).
     // Called on shutdown; also directly callable after a bounded run.
@@ -332,6 +370,15 @@ private:
     // machine level. Consumed as a HOST hotkey, never routed to the MSX keyboard
     // matrix (mirrors on_disk_swap_hotkey/on_snapshot_hotkey discipline).
     void on_stream_toggle_hotkey();
+    // Alt+B / Shift+Alt+B hotkey handler -- steps the video presenter's
+    // phosphor-persistence blend weight by +/-10% (dir = +1 / -1), wrapping
+    // 0..100, and prints the new value to stderr. Consumed as a HOST hotkey,
+    // never routed to the MSX keyboard matrix (mirrors the Alt+D / Alt+Enter
+    // discipline). Presentation-only.
+    void on_persistence_step_hotkey(int dir);
+    // Alt+M hotkey handler -- toggles the phosphor blend mode (Average <-> Peak)
+    // and prints it to stderr. Same HOST-hotkey discipline. Presentation-only.
+    void on_persistence_mode_hotkey();
     void update_window_title_for_current_disk();
     void log_disk_swap();
 

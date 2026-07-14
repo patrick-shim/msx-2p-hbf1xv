@@ -103,6 +103,19 @@ OPTIONS
     --fullscreen            Start in fullscreen (Alt+Enter toggles it live).
     --border / --no-border  Framed 4:3 canvas, or bare edge-to-edge (the default,
                             the Sony-original look).
+    --persistence <0..100>  Phosphor-persistence blend: keep this % of the
+                            previous frame to smooth sprite-multiplexing flicker
+                            (like a real CRT's glow). Default 0 = OFF. Alt+B /
+                            Shift+Alt+B step it +/-10% live. Try 50 if sprites
+                            flicker.
+    --persistence-mode avg|peak
+                            How the blend combines frames. avg (default) = a
+                            weighted mean (can dim/ghost sprites). peak = peak-
+                            hold: a pixel bright in EITHER frame stays FULL
+                            brightness (fixes sprite flicker WITHOUT dimming);
+                            old trails fade at the --persistence rate. Alt+M
+                            toggles it live. Try: --persistence 50
+                            --persistence-mode peak.
 
   Saving & disks
     --disk-writable         Save in-game disk writes back to the .dsk file (on a
@@ -142,7 +155,9 @@ IN-WINDOW HOTKEYS
     F11        swap to the next disk        F12    write a debug snapshot
     F6 / F7    Speed Controller slow -/+    F8/F9  Ren-Sha auto-fire slow -/+
     Alt+Enter  toggle fullscreen            Alt+D  toggle fast-disk
-    PAUSE      hardware PAUSE button        F10    live capture (needs --capture on)
+    Alt+B / Shift+Alt+B  phosphor persistence +/-10%
+    Alt+M      toggle phosphor mode avg/peak   PAUSE  hardware PAUSE button
+    F10        live capture (needs --capture on)
 
 GOOD TO KNOW
     - Paths are relative to the folder you run from -- launch from the project
@@ -280,7 +295,12 @@ void print_startup_summary(const sony_msx::frontend::Sdl3App& app,
     std::cerr << "    Video      : " << config.window_width << "x" << config.window_height
               << (config.fullscreen ? ", fullscreen" : "")
               << (config.border_enabled ? ", framed border" : ", edge-to-edge (Sony)")
-              << (config.texture_filter == SDL_SCALEMODE_NEAREST ? ", nearest\n" : ", linear\n");
+              << (config.texture_filter == SDL_SCALEMODE_NEAREST ? ", nearest" : ", linear");
+    if (config.persistence > 0) {
+        std::cerr << ", phosphor " << config.persistence << "% "
+                  << (config.persistence_mode == sony_msx::frontend::PhosphorMode::Peak ? "peak" : "avg");
+    }
+    std::cerr << "\n";
 
     std::cerr <<
         "----------------------------------------------------------------------\n"
@@ -288,7 +308,9 @@ void print_startup_summary(const sony_msx::frontend::Sdl3App& app,
         "    F11  swap disk            F12  debug snapshot\n"
         "    F6 / F7   speed slow -/+  (Speed Controller: a slow-motion aid)\n"
         "    F8 / F9   Ren-Sha auto-fire -/+        PAUSE  hardware pause\n"
-        "    Alt+Enter  toggle fullscreen           Alt+D  toggle fast-disk\n";
+        "    Alt+Enter  toggle fullscreen           Alt+D  toggle fast-disk\n"
+        "    Alt+B / Shift+Alt+B  phosphor persistence +/-10% (smooths sprite flicker)\n"
+        "    Alt+M  toggle phosphor mode avg<->peak (peak keeps sprites full-bright)\n";
     std::cerr << "    F10  live capture "
               << (config.capture_enabled ? "(armed)\n" : "(disarmed; launch with --capture on)\n");
     std::cerr <<
@@ -345,6 +367,14 @@ int main(int argc, char** argv) {
     config.texture_filter = (parsed.filter == sony_msx::frontend::TextureFilter::Nearest)
                                 ? SDL_SCALEMODE_NEAREST
                                 : SDL_SCALEMODE_LINEAR;
+    // Phosphor-persistence inter-frame blend (--persistence <0..100>). Absent ->
+    // the Sdl3AppConfig default 0 (OFF), so the present path is byte-identical.
+    if (parsed.persistence.has_value()) {
+        config.persistence = *parsed.persistence;
+    }
+    // Phosphor blend mode (--persistence-mode <avg|peak>). Absent -> the
+    // Sdl3AppConfig default Average (byte-identical). Alt+M toggles it live.
+    config.persistence_mode = parsed.persistence_mode;
     // M46 (DEC-0071): resolve the flipped convenience-vs-stock defaults in the
     // CLI layer (the anti-drift seam, planner §2.7 -- the Sdl3AppConfig struct
     // defaults ABOVE stay stock; this is the ONLY place they flip to convenience).

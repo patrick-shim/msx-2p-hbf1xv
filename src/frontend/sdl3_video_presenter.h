@@ -15,9 +15,12 @@
 
 #include <SDL3/SDL.h>
 
+#include <cstdint>
 #include <string>
+#include <vector>
 
 #include "devices/video/frame_buffer.h"
+#include "frontend/phosphor_blend.h"  // PhosphorMode (Average / Peak)
 
 namespace sony_msx::frontend {
 
@@ -55,8 +58,23 @@ public:
     // SDL_SCALEMODE_LINEAR matches the renderer's own default (SDL_render.h:1260), so an
     // unspecified filter is byte-identical to the pre-M37 presentation; SDL_SCALEMODE_NEAREST
     // gives crisp pixels (--filter nearest).
+    //
+    // `persistence` (0..100, DEFAULT 0 = OFF) is the phosphor-persistence
+    // inter-frame blend weight (--persistence): the percent of the previously
+    // presented frame carried into the current one before upload (see
+    // frontend/phosphor_blend.h for the CRT rationale). DEFAULT 0 makes
+    // blit_frame() byte-for-byte the pre-existing present path -- no blend, no
+    // prev-frame buffer, no extra allocation.
+    //
+    // `persistence_mode` (DEFAULT Average) selects HOW the retained frame
+    // combines (--persistence-mode; frontend/phosphor_blend.h): Average = the
+    // original weighted-mean blend; Peak = peak-hold-with-decay (a bright pixel
+    // in EITHER frame stays bright, so multiplexed sprites keep full brightness
+    // instead of the Average mode's dimming). The mode is irrelevant when
+    // persistence == 0 (the blend block is skipped entirely).
     explicit Sdl3VideoPresenter(SDL_Renderer* renderer, bool border_enabled = false,
-                                SDL_ScaleMode scale_mode = SDL_SCALEMODE_LINEAR);
+                                SDL_ScaleMode scale_mode = SDL_SCALEMODE_LINEAR, int persistence = 0,
+                                PhosphorMode persistence_mode = PhosphorMode::Average);
     ~Sdl3VideoPresenter();
 
     Sdl3VideoPresenter(const Sdl3VideoPresenter&) = delete;
@@ -74,6 +92,22 @@ public:
     // M37 Slice E (DEC-0056): the configured texture scale mode (--filter).
     [[nodiscard]] SDL_ScaleMode scale_mode() const { return scale_mode_; }
 
+    // Phosphor-persistence blend weight (--persistence / Alt+B). 0 = OFF (the
+    // present path is byte-for-byte the current path). Setting a NEW value
+    // restarts the accumulation cleanly (the previous-frame buffer is dropped
+    // so a freshly (dis|en)abled blend never mixes a stale frame).
+    [[nodiscard]] int persistence() const { return persistence_; }
+    void set_persistence(int persistence);
+
+    // Phosphor blend MODE (--persistence-mode / Alt+M). Average = weighted mean;
+    // Peak = peak-hold-with-decay (frontend/phosphor_blend.h). Switching the mode
+    // does NOT drop the retained frame -- the buffer is just "the last presented
+    // output" either way, so the next blit simply combines it under the new rule
+    // (no reseed needed, unlike a persistence VALUE change which restarts the
+    // accumulation). Irrelevant while persistence == 0.
+    [[nodiscard]] PhosphorMode persistence_mode() const { return persistence_mode_; }
+    void set_persistence_mode(PhosphorMode mode) { persistence_mode_ = mode; }
+
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept separate from
     // blit_frame() (see class doc).
     bool present();
@@ -87,6 +121,23 @@ private:
     SDL_Renderer* renderer_;
     bool border_enabled_ = false;
     SDL_ScaleMode scale_mode_ = SDL_SCALEMODE_LINEAR;  // M37 Slice E (DEC-0056): --filter
+    // Phosphor-persistence blend (--persistence): weight in [0,100] of the
+    // previously presented frame. 0 = OFF (skips the entire blend block, so no
+    // prev buffer is ever touched/allocated -- the byte-identical default path).
+    int persistence_ = 0;
+    // Phosphor blend mode (--persistence-mode / Alt+M). Average = weighted mean
+    // (blend_rgb555); Peak = peak-hold-with-decay (peak_rgb555). Only consulted
+    // inside the persistence_>0 block, so it never touches the default OFF path.
+    PhosphorMode persistence_mode_ = PhosphorMode::Average;
+    // Previous PRESENTED (blended) output, retained only while persistence_>0
+    // for the exponential inter-frame blend (out = p*prev + (100-p)*cur, IIR).
+    // prev_width_/prev_height_ guard against blending across a mode-switch.
+    std::vector<std::uint16_t> prev_pixels_;
+    int prev_width_ = 0;
+    int prev_height_ = 0;
+    // Reused per-frame scratch for the blended result (swapped into prev_pixels_
+    // each frame -- avoids a per-frame full copy).
+    std::vector<std::uint16_t> blended_pixels_;
     SDL_Texture* texture_ = nullptr;
     int texture_width_ = 0;
     int texture_height_ = 0;

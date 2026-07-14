@@ -248,7 +248,9 @@ bool Sdl3App::init() {
         return false;
     }
 
-    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_, config_.border_enabled, config_.texture_filter);
+    video_presenter_ = std::make_unique<Sdl3VideoPresenter>(renderer_, config_.border_enabled,
+                                                            config_.texture_filter, config_.persistence,
+                                                            config_.persistence_mode);
 
     audio_presenter_ = std::make_unique<Sdl3AudioPresenter>();
     if (!audio_presenter_->init()) {
@@ -497,6 +499,32 @@ void Sdl3App::poll_and_dispatch_events() {
                       << " (Alt+D); default is accurate FDC timing\n";
             continue;
         }
+        // Alt+B / Shift+Alt+B step the phosphor-persistence inter-frame blend
+        // weight in FINE 10% increments (Alt+B = +10, Shift+Alt+B = -10, both
+        // wrapping 0..100) live, so the owner can dial in the CRT-persistence
+        // smoothing per game (frontend/phosphor_blend.h). Consumed HERE as a HOST
+        // hotkey; never dispatched to input_mapper_ -- 'B' is an MSX matrix key,
+        // so it must not leak into the emulated keyboard (mirrors the Alt+D
+        // discipline; the standalone Alt/Shift keydowns still reach the matrix --
+        // only the 'B' keydown is swallowed). Alt+B is free (F1-F5 are the
+        // emulated MSX function keys and F6-F12 + Alt+Enter/Alt+D are already
+        // host-bound). Mod mask SDL_KMOD_ALT (either Alt) / SDL_KMOD_SHIFT per
+        // references/sdl3/include/SDL3/SDL_keycode.h:344.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_B &&
+            (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
+            on_persistence_step_hotkey((event.key.mod & SDL_KMOD_SHIFT) != 0 ? -1 : +1);
+            continue;
+        }
+        // Alt+M toggles the phosphor blend MODE (Average <-> Peak). Same HOST-
+        // hotkey discipline as Alt+B/Alt+D -- 'M' is an MSX matrix key, so only
+        // the 'M' keydown is swallowed; the standalone Alt keydown still reaches
+        // the matrix. Peak mode keeps multiplexed sprites full-brightness (no
+        // dimming), the fix for the Average-mode flicker-vs-ghost tradeoff.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_M &&
+            (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
+            on_persistence_mode_hotkey();
+            continue;
+        }
         // Input RECORDER (DEC-0072): capture MSX matrix key edges just before
         // they are dispatched to the keyboard matrix. This point is reached only
         // AFTER every host-hotkey branch above has had its chance to `continue`
@@ -718,6 +746,38 @@ void Sdl3App::on_stream_toggle_hotkey() {
         std::cerr << "Stream capture ON: stream_" << stream_id
                   << (config_.stream_light ? " (light)" : " (heavy)") << "\n";
     }
+}
+
+void Sdl3App::on_persistence_step_hotkey(const int dir) {
+    // Presentation-only: step the video presenter's phosphor-persistence blend
+    // weight by +/-10% on a 0,10,...,100 grid, wrapping at the ends (Alt+B = +10,
+    // Shift+Alt+B = -10). Derives the next step from the presenter's CURRENT
+    // weight so the presenter stays the single source of truth. Snaps a non-grid
+    // launch value (e.g. --persistence 55) to the nearest grid point first. No-op
+    // with no presenter (never happens post-init).
+    if (!video_presenter_) {
+        return;
+    }
+    const int cur = video_presenter_->persistence();
+    int idx = (cur + 5) / 10;              // nearest 0..10 grid index
+    idx = (idx + dir + 11) % 11;           // wrap inclusive [0..100]
+    const int next = idx * 10;
+    video_presenter_->set_persistence(next);
+    std::cerr << "sdl3: phosphor persistence " << next << "%"
+              << (next == 0 ? " (off)" : " (inter-frame blend; Alt+B +10 / Shift+Alt+B -10)") << "\n";
+}
+
+void Sdl3App::on_persistence_mode_hotkey() {
+    // Presentation-only: toggle the phosphor blend mode Average <-> Peak (Alt+M).
+    // No-op with no presenter (never happens post-init).
+    if (!video_presenter_) {
+        return;
+    }
+    const bool to_peak = video_presenter_->persistence_mode() == PhosphorMode::Average;
+    video_presenter_->set_persistence_mode(to_peak ? PhosphorMode::Peak : PhosphorMode::Average);
+    std::cerr << "sdl3: phosphor mode " << (to_peak ? "PEAK (peak-hold; sprites stay full brightness)"
+                                                    : "AVERAGE (weighted mean)")
+              << " (Alt+M)\n";
 }
 
 bool Sdl3App::flush_current_disk() {
