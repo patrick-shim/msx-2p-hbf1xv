@@ -8,6 +8,10 @@ Usage notes:
 - Treat these files as third-party development assets.
 - Do not assume redistribution rights.
 - Test plans should reference exact ROM paths used for reproducibility.
-- Per **DEC-0047** the repo is hosted on a PUBLIC remote by the owner's decision. This directory's
-  *content* is untracked (only this README + `.gitkeep` are committed; provision `.rom` files
-  locally), but ROM binaries committed before `b5efd29` remain in git history.
+- Per **DEC-0047** (+ **AMENDMENT-B**, 2026-07-14) the repo is hosted on a PUBLIC remote by the
+  owner's decision. The game cartridge ROMs were moved to `games/` (untracked, local-only); this
+  directory now holds ONLY the FM-PAC peripheral firmware `fmpac.rom` + its battery-save
+  `fmpac.rom.sram`, which are **tracked and published** here — the same owner-accepted-risk
+  category as `bios/` (proprietary peripheral firmware; no redistribution rights asserted). Any
+  other `roms/` content stays untracked (provision locally). ROM binaries committed before
+  `b5efd29` also remain in git history.

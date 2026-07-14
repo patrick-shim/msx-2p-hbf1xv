@@ -139,14 +139,19 @@ CMakeUserPresets.json
 !/debug/sounds/m32-fm-aleste-fmON.wav
 !/debug/sounds/m32-fm-aleste-fmOFF.wav
 
-# --- Non-redistributable assets: roms/ and disks/ (directories kept, content ignored) ---
-# Per owner request: keep the roms/ and disks/ directory scaffolding tracked (via
-# .gitkeep) but do NOT track their content -- the .rom/.dsk binaries and MSX-DOS
-# disk trees are non-redistributable and are provisioned locally, not from git.
+# --- Non-redistributable assets: roms/ and disks/ ---
+# DEC-0047-AMENDMENT-B (2026-07-14): the owner moved the game cartridge ROMs to
+# games/ (which stays fully untracked, local-only). roms/ now holds ONLY the FM-PAC
+# peripheral firmware (fmpac.rom) + its battery-save (fmpac.rom.sram), which the owner
+# publishes per DEC-0047 -- the SAME accepted-risk category as bios/ (proprietary
+# system/peripheral firmware; NO redistribution rights asserted, no provenance claim).
+# disks/ content, and any OTHER roms/ content, stay untracked (provisioned locally).
 # roms/README.md (folder documentation, human-authored) stays tracked explicitly.
 /roms/*
 !/roms/.gitkeep
 !/roms/README.md
+!/roms/fmpac.rom
+!/roms/fmpac.rom.sram
 /disks/*
 !/disks/.gitkeep
 
@@ -169,11 +174,12 @@ Desktop.ini
 # this project asserts NO redistribution rights and makes no provenance claim.
 # Per DEC-0047 the repository OWNER has made an informed decision to host the full
 # repo -- bios/ included -- on a PUBLIC remote (github.com/patrick-shim/msx-2p-hbf1xv).
-# bios/ stays fully tracked and is published per the owner's instruction. roms/ and
-# disks/ CONTENT is untracked (provisioned locally, not from git); only the directory
-# scaffolding (.gitkeep) and roms/README.md are tracked -- see the roms//disks/ block
-# above. Those roms/disks binaries nonetheless remain in PRE-b5efd29 history and are
-# published by any push; purging them would require history rewriting, not untracking.
+# bios/ AND roms/'s FM-PAC firmware (fmpac.rom + fmpac.rom.sram) are tracked and
+# published per the owner's instruction (DEC-0047 + AMENDMENT-B). disks/ CONTENT and
+# any other roms/ content stay untracked (provisioned locally, not from git); only the
+# directory scaffolding (.gitkeep) + roms/README.md + the FM-PAC pair are tracked --
+# see the roms//disks/ block above. Those roms/disks binaries nonetheless remain in
+# PRE-b5efd29 history and are published by any push; purging would require history rewrite.
 # The public-exposure risk is the owner's accepted responsibility (DEC-0047).
 #
 # DEC-0047 supersedes DEC-0044's lean-export scope AND the private-mirror intent
