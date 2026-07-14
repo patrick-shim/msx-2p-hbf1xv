@@ -5,10 +5,11 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.5** — V9958 command-engine **access-slot contention** modelled (sprite-aware
-per-line throughput + CPU-concurrent slot-steal, grounded on the fact-sheet §8 slot counts), on top of
-the v1.1.4 Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC peripheral firmware
-(`roms/fmpac.rom`) is bundled.
+Current release: **v1.1.6** — **per-line-live V9958 sprite rendering**: split-screen HUD titles that
+reprogram the VDP mid-frame (Space Manbow, Laydock 2) no longer cull/flicker their top-region sprites,
+because sprites now split per scanline at the same boundary as the background (backlog D9). On top of
+the v1.1.5 command-engine access-slot contention model and the v1.1.4 Z80A/V9958/PSG Sony-hardware
+timing parity; the FM-PAC peripheral firmware (`roms/fmpac.rom`) is bundled.
 
 ## Architecture
 
