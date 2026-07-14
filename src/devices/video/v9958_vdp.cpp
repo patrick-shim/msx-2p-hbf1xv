@@ -13,12 +13,69 @@
 
 #include "devices/video/v9958_vdp.h"
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <span>
 
 #include "devices/video/vdp_access_timing.h"
 
 namespace sony_msx::devices::video {
+
+namespace {
+
+// --- M51 (DEC-0078) Task 2 diagnostic sprite trace --------------------------
+// Env-gated singleton (SONY_MSX_M51_SPRITE_TRACE = path, or "1" -> stderr).
+// DEFAULT-OFF: with the env var unset enabled() is a cached `false`, every
+// call site short-circuits, and the emulated state is untouched (A-M51-4 /
+// EG-8 byte-identity; M47 logger precedent). Owns the frame counter so all
+// five event classes land in one ordered stream with "F<n> " prefixes.
+class M51SpriteTrace {
+public:
+    static M51SpriteTrace& instance() {
+        static M51SpriteTrace trace;
+        return trace;
+    }
+    [[nodiscard]] bool enabled() const { return out_ != nullptr; }
+    void write(const char* fmt, std::va_list args) {
+        if (out_ == nullptr) {
+            return;
+        }
+        std::fprintf(out_, "F%d ", frame_);
+        std::vfprintf(out_, fmt, args);
+        std::fputc('\n', out_);
+    }
+    void next_frame() { ++frame_; }
+
+private:
+    M51SpriteTrace() {
+        const char* value = std::getenv("SONY_MSX_M51_SPRITE_TRACE");
+        if (value != nullptr && value[0] != '\0') {
+            out_ = (std::strcmp(value, "1") == 0) ? stderr : std::fopen(value, "w");
+        }
+    }
+    std::FILE* out_ = nullptr;
+    int frame_ = 0;
+};
+
+}  // namespace
+
+bool m51_sprite_trace_enabled() {
+    return M51SpriteTrace::instance().enabled();
+}
+
+void m51_sprite_trace(const char* fmt, ...) {
+    std::va_list args;
+    va_start(args, fmt);
+    M51SpriteTrace::instance().write(fmt, args);
+    va_end(args);
+}
+
+void m51_sprite_trace_next_frame() {
+    M51SpriteTrace::instance().next_frame();
+}
 
 namespace {
 
@@ -668,6 +725,13 @@ void V9958Vdp::command_row_sync(const unsigned dy) {
     //     which alone knows the authoritative accumulator watermark.
     const int display_line =
         (static_cast<int>(dy & 0xFFu) - control_regs_[23]) & 0xFF;
+    // M51 Task 2 trace (event class 3 context): the command-engine row sink's
+    // source coordinates, BEFORE the machine adapter decides commit/skip.
+    if (m51_sprite_trace_enabled()) {
+        m51_sprite_trace("CMDROW dy=%d r23=%d display_line=%d raster=%d",
+                         static_cast<int>(dy & 0xFFu), control_regs_[23],
+                         display_line, raster_display_line());
+    }
     render_sync_->on_commit_up_to(display_line);
 }
 
@@ -701,6 +765,19 @@ void V9958Vdp::commit_sprite_split(const int target, const bool wrap) {
     // mirroring the background accumulator's wrap-safety restart. Until first opened,
     // the sprite buffers hold the previous on_vsync() recompute (fully populated --
     // no empty-sprite regression on the lines already committed).
+    // M51 Task 2 trace (event classes 1+2): lazy-open / wrap-reopen with the
+    // prior watermark, then the visible-only segment with its LIVE gates.
+    if (m51_sprite_trace_enabled()) {
+        if (!sprite_split_active_ || wrap) {
+            m51_sprite_trace("SPLIT-OPEN raster=%d target=%d wrap=%d prior_wm=%d was_active=%d",
+                             raster_display_line(), target, wrap ? 1 : 0,
+                             sprite_engine_.watermark(), sprite_split_active_ ? 1 : 0);
+        }
+        m51_sprite_trace("SPRITE-SEG lo=%d end=%d r1=%02X r8=%02X r23=%d mode_base=%d",
+                         (!sprite_split_active_ || wrap) ? 1 : sprite_engine_.watermark(),
+                         target, control_regs_[1], control_regs_[8], control_regs_[23],
+                         static_cast<int>(mode_.base));
+    }
     if (!sprite_split_active_ || wrap) {
         begin_sprite_frame();
         sprite_split_active_ = true;
@@ -711,11 +788,33 @@ void V9958Vdp::commit_sprite_split(const int target, const bool wrap) {
     // (AC-S2). RENDERING-ONLY: it populates the visible-sprite buffers per-line-live
     // WITHOUT touching the frame-atomic collision/status the CPU reads (no
     // game-behaviour change). Advance-only within a frame (no-op when target <=
-    // watermark) satisfies the M44 "never move the watermark backwards" discipline;
-    // no command-row sink drives the sprite watermark, so a partial pass can never be
-    // sealed mid-command. Reading the LIVE registers/VRAM HERE -- before the pending
+    // watermark) satisfies the M44 "never move the watermark backwards" discipline.
+    // Reading the LIVE registers/VRAM HERE -- before the pending
     // write applies -- is what makes a mid-frame sprite-relevant change (still the
     // OLD value) split the RENDERED plane at exactly `target`.
+    sprite_engine_.check_until_visible_only(target - 1);
+}
+
+void V9958Vdp::commit_sprite_rows(const int target) {
+    // M51 (DEC-0078) fix, branch (a) shape (i) -- see the header contract. The
+    // consumer-side pacing rule (openMSX PixelRenderer.cc:580-584 /
+    // SpriteChecker.hh:242-247, effect only): no background row may be committed
+    // from a sprite line-buffer that is empty purely because of the lazy-open
+    // begin_frame() clear. ADVANCE-ONLY-WHEN-ACTIVE: split not open -> buffers
+    // hold the previous on_vsync() recompute (populated; the documented
+    // 1-frame-stale fallback), so pacing is neither needed nor wanted (opening
+    // here would CLEAR lines the beam already passed). check_until_visible_only
+    // clamps to the frame height internally, so a wrap-space destination row
+    // (e.g. Aleste 2's dy inverse mapping to display line 231 > 212) simply
+    // paces the remaining visible rows. RENDER-ONLY: frame-atomic
+    // collision/5th-sprite/S#0 stay untouched (DEC-0031).
+    if (!sprite_split_active_) {
+        return;
+    }
+    if (m51_sprite_trace_enabled()) {
+        m51_sprite_trace("CMDSPRITE target=%d sprite_wm=%d", target,
+                         sprite_engine_.watermark());
+    }
     sprite_engine_.check_until_visible_only(target - 1);
 }
 
@@ -758,6 +857,12 @@ void V9958Vdp::on_vsync() {
     // frame-atomic collision/status the CPU reads. sprite_split_active_ rolls to
     // false so next frame's first ACTIVE-display write re-opens the render-only pass.
     const int height = sprite_frame_height();
+    // M51 Task 2 trace (event class 5): the frame-atomic recompute boundary.
+    if (m51_sprite_trace_enabled()) {
+        m51_sprite_trace("VSYNC recompute height=%d split_was_active=%d sprite_wm=%d",
+                         height, sprite_split_active_ ? 1 : 0, sprite_engine_.watermark());
+        m51_sprite_trace_next_frame();
+    }
     sprite_engine_.recompute_frame(vram_, control_regs_span(), mode_, height);
     sprite_split_active_ = false;
 

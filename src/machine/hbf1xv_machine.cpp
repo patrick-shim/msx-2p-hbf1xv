@@ -14,6 +14,8 @@
 #include "machine/hbf1xv_machine.h"
 
 #include <array>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <ios>
 #include <system_error>
@@ -99,6 +101,14 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
     // render-sync rounding is independent of the VDP line-interrupt counter).
     const int target = line + 2;
+    // M51 Task 2 trace: the beam seam's commit decision inputs (context for
+    // event classes 1-4; identifies which VDP write opened/advanced the split).
+    if (devices::video::m51_sprite_trace_enabled()) {
+        devices::video::m51_sprite_trace(
+            "SEAM raster=%d target=%d acc_wm=%d sprite_wm=%d last_beam=%d", line, target,
+            machine_.scanline_accumulator_.watermark(),
+            machine_.vdp_.sprite_engine().watermark(), last_beam_commit_target_);
+    }
     // M49-S2 (docs/m49-planner-package.md §3 S2, backlog D9): keep the incremental
     // sprite plane in pace with the background BEFORE the background commits, at the
     // IDENTICAL beam+2 boundary. Driving the sprite check FIRST (from the CURRENT
@@ -152,8 +162,55 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // (it reappears next frame, exactly as on real hardware) and a sync_to_line
     // below the watermark would otherwise seal a partial frame mid-command.
     if (display_line <= machine_.scanline_accumulator_.watermark()) {
+        if (devices::video::m51_sprite_trace_enabled()) {
+            devices::video::m51_sprite_trace(
+                "CMDCOMMIT-SKIP display_line=%d acc_wm=%d sprite_wm=%d", display_line,
+                machine_.scanline_accumulator_.watermark(),
+                machine_.vdp_.sprite_engine().watermark());
+        }
         return;
     }
+    // M51 Task 2 trace (event classes 3+4): the command-row commit range
+    // [acc_wm, display_line) with the SPRITE watermark at this instant, plus
+    // the per-line visible-sprite counts the imminent sync_to_line() will
+    // composite from, over the designated player band
+    // (SONY_MSX_M51_TRACE_BAND="lo:hi", default 148:176 -- the Aleste 2 plane
+    // rows; the counts here ARE the composite-time values because
+    // sync_to_line() renders synchronously right after this hook).
+    if (devices::video::m51_sprite_trace_enabled()) {
+        static const auto band = [] {
+            int lo = 148;
+            int hi = 176;
+            if (const char* b = std::getenv("SONY_MSX_M51_TRACE_BAND")) {
+                (void)std::sscanf(b, "%d:%d", &lo, &hi);
+            }
+            return std::pair<int, int>(lo, hi);
+        }();
+        const int acc_wm = machine_.scanline_accumulator_.watermark();
+        const int sprite_wm = machine_.vdp_.sprite_engine().watermark();
+        devices::video::m51_sprite_trace("CMDCOMMIT range=[%d,%d) sprite_wm=%d", acc_wm,
+                                         display_line, sprite_wm);
+        const int lo = acc_wm > band.first ? acc_wm : band.first;
+        const int hi = display_line < band.second ? display_line : band.second;
+        for (int line = lo; line < hi; ++line) {
+            devices::video::m51_sprite_trace(
+                "BAND-ROW line=%d visible=%zu past_sprite_wm=%d", line,
+                machine_.vdp_.sprite_engine().visible_sprites(line).size(),
+                line >= sprite_wm ? 1 : 0);
+        }
+    }
+    // M51 (DEC-0078) fix, branch (a) shape (i): pace the render-only sprite
+    // pass to the SAME exclusive boundary BEFORE the background commits, so no
+    // committed row composites from a per-line buffer that is empty purely
+    // because of the lazy-open clear (the Aleste 2 / Firebird / Laydock 2
+    // sprite-disappearance mechanism -- Task 2 trace: "CMDCOMMIT range=[69,231)
+    // sprite_wm=69" sealing plane rows 148-175 with visible=0). This is the
+    // consumer-side sync contract openMSX documents and implements
+    // (PixelRenderer.cc:580-584 / SpriteChecker.hh:242-247, effect only) and
+    // the M49 seam already applies on the beam path (commit_sprite_split at
+    // on_before_state_change); the command sink now honors it too.
+    // Advance-only-when-active: see V9958Vdp::commit_sprite_rows.
+    machine_.vdp_.commit_sprite_rows(display_line);
     machine_.scanline_accumulator_.sync_to_line(display_line);
 }
 
@@ -578,6 +635,15 @@ void Hbf1xvMachine::on_vsync_boundary() {
     // VBlank delivery, the M25 Speed-Controller duty-cycle hook, and the M23-S2
     // last-vsync bookkeeping.
     ++frame_count_;
+
+    // M51 Task 2 trace (event class 5): the boundary BEFORE on_vsync's
+    // frame-atomic recompute and the accumulator finalize -- names how far the
+    // committed (sealed) region reached when the frame ended.
+    if (devices::video::m51_sprite_trace_enabled()) {
+        devices::video::m51_sprite_trace("BOUNDARY acc_wm=%d sprite_wm=%d",
+                                         scanline_accumulator_.watermark(),
+                                         vdp_.sprite_engine().watermark());
+    }
 
     // Deterministic per-frame VBlank delivery (M14-S5). run_frame advances the
     // clock a whole frame atomically, so the VDP VBlank is modeled at the frame
@@ -1024,6 +1090,15 @@ devices::video::FrameBuffer Hbf1xvMachine::render_frame(const devices::video::Fi
         // Mid-display call: commit the lines the beam has already passed
         // (memoization -- see the logical-constness note in the header),
         // then compose accumulated past + live-projected future.
+        // M51 (DEC-0078) fix, shape (i) invariant guard: pace the render-only
+        // sprite pass to the same boundary FIRST, so a capture/debug caller's
+        // memoization commit can never seal rows from the lazy-open-cleared
+        // (empty) sprite buffers (same consumer-side rule as on_commit_up_to;
+        // const_cast = the identical logical-constness memoization rationale
+        // the accumulator sync on the next line already relies on -- the
+        // render-only sprite watermark is presentation memoization state, not
+        // CPU-visible machine state).
+        const_cast<devices::video::V9958Vdp&>(vdp_).commit_sprite_rows(line + 1);
         scanline_accumulator_.sync_to_line(line + 1);
         return scanline_accumulator_.compose(field);
     }
@@ -1032,6 +1107,9 @@ devices::video::FrameBuffer Hbf1xvMachine::render_frame(const devices::video::Fi
         // frame (a step-only caller that never finalizes): the beam has
         // passed the whole display area -- committing to the bottom is
         // memoization too.
+        // M51: same invariant guard as the mid-display branch above.
+        const_cast<devices::video::V9958Vdp&>(vdp_).commit_sprite_rows(
+            vdp_frame_renderer_.height());
         scanline_accumulator_.sync_to_line(vdp_frame_renderer_.height());
         return scanline_accumulator_.compose(field);
     }

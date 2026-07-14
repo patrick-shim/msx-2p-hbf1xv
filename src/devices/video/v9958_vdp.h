@@ -26,6 +26,20 @@
 
 namespace sony_msx::devices::video {
 
+// --- M51 (DEC-0078) Task 2 diagnostic sprite trace --------------------------
+// Env-gated (SONY_MSX_M51_SPRITE_TRACE = output file path, or "1" -> stderr);
+// DEFAULT-OFF and emulation-invisible: when the env var is unset every call
+// site is a cached branch-not-taken and NO emulated state is touched
+// (A-M51-4 / EG-8 dual-run byte-identity; the M47 env-gated FDC write-logger
+// precedent). Declared here (no new header) so V9958Vdp AND the machine
+// render-sync seam (hbf1xv_machine.cpp) write the five M51 event classes
+// (docs/m51-planner-package.md §3 Task 2) into ONE raster-ordered stream.
+// Lines carry an "F<n> " prefix from the trace's own vsync counter
+// (advanced by V9958Vdp::on_vsync()).
+[[nodiscard]] bool m51_sprite_trace_enabled();
+void m51_sprite_trace(const char* fmt, ...);
+void m51_sprite_trace_next_frame();
+
 // Deterministic emulated-cycle clock source for the S#2 VR/HR raster-position
 // status bits (bug fix, post-M28). X-pattern of rtc::RtcClockSource/
 // fdc::FdcClockSource/peripherals::CassetteClockSource/RenshaTurboClockSource/
@@ -199,9 +213,35 @@ public:
     // the raster line DECREASED) re-opens it, mirroring the accumulator's wrap-safety
     // restart. on_vsync() completes + finalizes it. Advance-only within a frame
     // (SpriteEngine::check_until never moves the watermark backwards -- the M44
-    // direction discipline); no command-row sink drives the sprite watermark, so a
-    // partial pass can never be sealed mid-command.
+    // direction discipline).
     void commit_sprite_split(int target, bool wrap);
+
+    // M51 (DEC-0078) fix, branch (a) shape (i): CONSUMER-side sprite pacing for
+    // every non-seam background commit -- the M44 command-row sink
+    // (VdpRenderSyncAdapter::on_commit_up_to) and the render_frame() mid-display
+    // memoization syncs. Before M51 the command sink advanced/committed
+    // background rows PAST the render-only sprite watermark while the per-line
+    // buffers above it were still empty from commit_sprite_split's lazy-open
+    // begin_frame() clear, sealing those rows sprite-less for the whole frame
+    // (the Aleste 2 / Firebird / Laydock 2 sprite-disappearance defect; trace
+    // evidence docs/m51-implementation-report.md). openMSX makes the CONSUMER
+    // responsible for pacing the checker before reading it: every renderUntil()
+    // calls spriteChecker.checkUntil(time) BEFORE rasterizing, regardless of
+    // what triggered the render (references/openmsx-21.0/src/video/
+    // PixelRenderer.cc:580-584, SpriteChecker.hh:242-247 -- EFFECT re-expressed
+    // at our line-granular seam, never transcribed); fMSX's fused per-scanline
+    // Sprites()/ColorSprites() selection makes the same invariant structural
+    // (references/fmsx-60/source/fMSX/Common.h:99-155). ADVANCE-ONLY-WHEN-
+    // ACTIVE: while the split is not open the buffers still hold the previous
+    // on_vsync() recompute (fully populated -- the documented pre-M49
+    // 1-frame-stale fallback, never absence), and the real CPU OUT that started
+    // the command already lazy-opened the split via on_before_state_change, so
+    // a command commit never needs to open it (Task 2 trace confirms: every
+    // failing CMDCOMMIT ran with the split active). `target` is the EXCLUSIVE
+    // boundary of the rows about to be committed (same convention as
+    // commit_sprite_split); RENDER-ONLY (frame-atomic collision/status
+    // untouched, DEC-0031).
+    void commit_sprite_rows(int target);
 
     // Current combined /INT level (vertical OR horizontal). The machine level-
     // samples this to re-assert the held line after the CPU accept clears its
