@@ -5,7 +5,9 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.1.3**.
+Current release: **v1.1.4** — Z80A interrupt-acknowledge, V9958 command-engine, and PSG timing
+brought to Sony-hardware parity (grounded on real-hardware spec, openMSX-corroborated), and the
+FM-PAC peripheral firmware (`roms/fmpac.rom`) is now bundled.
 
 ## Architecture
 
