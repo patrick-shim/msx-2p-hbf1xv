@@ -44,4 +44,14 @@ namespace sony_msx::peripherals {
 // A-M27-8's `src/peripherals/`-is-frontend-independent boundary rule.
 [[nodiscard]] std::optional<std::pair<int, int>> key_name_to_row_col(std::string_view name);
 
+// Exact inverse of key_name_to_row_col(): the (row, column) -> symbolic key-name
+// lookup, sharing the SAME single-source 72-entry table. std::nullopt for any
+// (row, column) that has no bound key (e.g. the intentionally-unmapped MSX
+// ":"/"*" cell at row 2 column 0, or any out-of-range coordinate). Added for the
+// input RECORDER (src/frontend/input_recorder path): the SDL3 mapper resolves a
+// scancode to (row, column), and this converts that back to the KEY= name the
+// HBF1XV-INPUT-SCRIPT v1 parser resolves through key_name_to_row_col() -- so a
+// recorded key round-trips through replay to the identical matrix cell.
+[[nodiscard]] std::optional<std::string_view> row_col_to_key_name(int row, int column);
+
 }  // namespace sony_msx::peripherals

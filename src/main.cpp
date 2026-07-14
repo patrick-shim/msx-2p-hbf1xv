@@ -30,6 +30,7 @@
 #include "machine/cartridge_cli.h"
 #include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
+#include "machine/debug_format.h"
 #include "machine/hbf1xv_machine.h"
 #include "machine/input_script.h"
 
@@ -811,6 +812,49 @@ struct DebugSessionOptions {
     // method -- cleanly exposing the software-PCM voice without the SCC music
     // (which Aleste 2 plays loudly) masking it.
     bool audio_psg_only = false;
+    // DEC-0072 replay-fidelity diagnostic (M47-followup, this run). The default
+    // --input-script replay applies key edges AFTER the frame's first instruction
+    // (script_player.apply_due() sits inside the CPU step sub-loop). The LIVE SDL3
+    // recorder instead applied the very same edges via poll_and_dispatch_events()
+    // at FRAME-START, BEFORE the first instruction of the frame (and stamped the
+    // frame-start cycle as the event T). --input-frame-start makes the headless
+    // replay apply due events at frame-start too, cycle-faithful to how the live
+    // run drove them -- so a cycle-identical run reproduces the same state at save
+    // time. Opt-in; absent leaves the pre-existing after-instruction replay path
+    // byte-for-byte unchanged.
+    bool input_frame_start = false;
+    // Per-frame CPU-state fingerprint CSV (frame,cycles,pc,sp,af,bc,de,hl,ix,iy,r)
+    // sampled at each frame boundary (after on_vsync_boundary()). Used to diff two
+    // drivers (headless vs SDL3 hidden-window) and name the first divergence frame.
+    std::optional<std::string> fingerprint_name;
+    // DEC-0072 watchpoint (Step 2): watch writes to a physical-DRAM window and log
+    // any byte whose value != the SRAM-correct reference at the matching in-sector
+    // index. --watch-save <out.log> enables; the window/reference are wired in the
+    // frames loop. Opt-in, off by default.
+    std::optional<std::string> watch_save_name;
+    // DEC-0072 physical-DRAM memory-write WATCHPOINT (M47 kill-step). --watch-mem
+    // <LO> <HI> <out.csv> traps every CPU write whose folded PHYSICAL DRAM address
+    // is in [LO, HI) (both hex, e.g. E000 E200 -- the YS II save-build buffer) and
+    // logs the writing instruction's PC + live A/BC/DE/HL/IX/IY/SP + cycle to the
+    // CSV. --watch-from/--watch-to bound the logged FRAME window (default: whole
+    // run). Opt-in, off by default; byte-identical when absent.
+    std::optional<std::string> watch_mem_name;
+    std::size_t watch_mem_lo = 0;
+    std::size_t watch_mem_hi = 0;
+    std::uint32_t watch_mem_from = 0;
+    std::uint32_t watch_mem_to = 0xFFFFFFFFu;
+    // DEC-0072 causal probe: signed T-state bias added to the VDP command-engine
+    // CE busy-window duration (V9958Vdp::set_cmd_busy_bias). Sweeping this tests
+    // whether the save-build corruption is gated by the command-engine finish
+    // timing (the openMSX calcFinishTime approximation). 0 (default) = unchanged.
+    std::int64_t vdp_cmd_bias = 0;
+    // DEC-0072 raster-phase sweep: add a constant T-state offset to EVERY input
+    // event, delaying the whole (relative-timing-preserved) input timeline so the
+    // save-build runs at a shifted raster/VBlank phase. The live corruption is
+    // phase-sensitive (a corrupting session saved at a different frame than the
+    // clean owner script), so sweeping this probes for the "bad" phase that
+    // reproduces the -0x8A save corruption deterministically. 0 = unchanged.
+    std::uint64_t input_shift = 0;
 };
 
 std::optional<std::string> take_debug_session_value(const std::vector<std::string>& args, const std::size_t i,
@@ -930,6 +974,48 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
             opts.audio_sync = true;  // M39-A Fix B: interleaved sync-before-change (AFTER leg)
         } else if (arg == "--audio-psg-only") {
             opts.audio_psg_only = true;  // M39-A: isolate the PSG voice for a clean A/B
+        } else if (arg == "--input-frame-start") {
+            opts.input_frame_start = true;  // DEC-0072: apply script edges at frame-start (live-faithful)
+        } else if (arg == "--fingerprint") {
+            if (auto v = take_debug_session_value(args, i, "--fingerprint", errors)) {
+                opts.fingerprint_name = *v;  // per-frame CPU fingerprint CSV
+                ++i;
+            }
+        } else if (arg == "--watch-save") {
+            if (auto v = take_debug_session_value(args, i, "--watch-save", errors)) {
+                opts.watch_save_name = *v;  // DEC-0072 Step 2 memory-write watchpoint log
+                ++i;
+            }
+        } else if (arg == "--watch-mem") {
+            // Three values: LO HI OUT (LO/HI hex physical addresses).
+            if (i + 3 >= args.size()) {
+                errors.push_back("debug-session: --watch-mem requires <LO_hex> <HI_hex> <out.csv>");
+            } else {
+                opts.watch_mem_lo = static_cast<std::size_t>(std::strtoull(args[i + 1].c_str(), nullptr, 16));
+                opts.watch_mem_hi = static_cast<std::size_t>(std::strtoull(args[i + 2].c_str(), nullptr, 16));
+                opts.watch_mem_name = args[i + 3];
+                i += 3;
+            }
+        } else if (arg == "--watch-from") {
+            if (auto v = take_debug_session_value(args, i, "--watch-from", errors)) {
+                opts.watch_mem_from = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--watch-to") {
+            if (auto v = take_debug_session_value(args, i, "--watch-to", errors)) {
+                opts.watch_mem_to = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--vdp-cmd-bias") {
+            if (auto v = take_debug_session_value(args, i, "--vdp-cmd-bias", errors)) {
+                opts.vdp_cmd_bias = static_cast<std::int64_t>(std::strtoll(v->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--input-shift") {
+            if (auto v = take_debug_session_value(args, i, "--input-shift", errors)) {
+                opts.input_shift = static_cast<std::uint64_t>(std::strtoull(v->c_str(), nullptr, 10));
+                ++i;
+            }
         } else if (arg == "--audio-from") {
             if (auto v = take_debug_session_value(args, i, "--audio-from", errors)) {
                 opts.audio_from = static_cast<std::uint32_t>(std::strtoul(v->c_str(), nullptr, 10));
@@ -1011,6 +1097,13 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (resolved.fast_disk) {
         std::cerr << "debug-session: fast-disk (FDC turbo) ENABLED -- disk timing collapsed "
                      "(M46 convenience default; --no-fast-disk / --stock for accurate timing)\n";
+    }
+
+    // DEC-0072 causal probe: apply the VDP command-engine CE busy-window bias.
+    if (opts.vdp_cmd_bias != 0) {
+        machine.vdp().set_cmd_busy_bias(opts.vdp_cmd_bias);
+        std::cerr << "debug-session: VDP command-engine CE busy-window bias = " << opts.vdp_cmd_bias
+                  << " T-states (DEC-0072 diagnostic)\n";
     }
 
     // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
@@ -1150,7 +1243,16 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         try {
-            script_player = sony_msx::machine::InputScriptPlayer(sony_msx::machine::parse_input_script(text));
+            std::vector<sony_msx::machine::InputScriptEvent> ev = sony_msx::machine::parse_input_script(text);
+            // DEC-0072 raster-phase sweep: delay the whole timeline by a constant.
+            if (opts.input_shift != 0) {
+                for (auto& e : ev) {
+                    e.at_tstate += opts.input_shift;
+                }
+                std::cerr << "debug-session: input timeline shifted by " << opts.input_shift
+                          << " T-states (DEC-0072 raster-phase sweep)\n";
+            }
+            script_player = sony_msx::machine::InputScriptPlayer(std::move(ev));
         } catch (const std::exception& e) {
             std::cerr << "debug-session: malformed --input-script: " << e.what() << "\n";
             return 2;
@@ -1215,6 +1317,32 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     std::uint64_t prev_psg_total = 0;
     if (opts.io_observe_name.has_value()) {
         io_observe_csv = "frame,click_bit7_edges,psg_vol_writes,psg_total_writes\n";
+    }
+    // DEC-0072 per-frame CPU fingerprint buffer (opt-in --fingerprint).
+    std::string fingerprint_csv;
+    if (opts.fingerprint_name.has_value()) {
+        fingerprint_csv = "frame,cycles,pc,sp,af,bc,de,hl,ix,iy,r\n";
+    }
+    // DEC-0072 save-frame detector (--watch-save): per-frame diff of the disk
+    // save-slot region (LBA 9..16 = offsets 0x1200..0x2200) to find WHICH frame
+    // each slot save lands at (and its first 16 bytes), for bounding the trace.
+    std::string watch_save_csv;
+    std::vector<std::uint8_t> watch_prev_slots;
+    if (opts.watch_save_name.has_value()) {
+        watch_save_csv = "frame,cycles,slot,lba,first16,ndiff_vs_prev\n";
+    }
+    // DEC-0072 physical-DRAM watchpoint: arm BEFORE the frame loop so every
+    // in-window write is captured. Off unless --watch-mem was supplied.
+    if (opts.watch_mem_name.has_value()) {
+        machine.set_mem_watch(opts.watch_mem_lo, opts.watch_mem_hi, opts.watch_mem_from,
+                              opts.watch_mem_to);
+        std::cerr << "debug-session: mem-watch armed phys=[0x"
+                  << sony_msx::machine::debug_format::to_hex(
+                         static_cast<std::uint64_t>(opts.watch_mem_lo), 5)
+                  << ",0x"
+                  << sony_msx::machine::debug_format::to_hex(
+                         static_cast<std::uint64_t>(opts.watch_mem_hi), 5)
+                  << ") frames[" << opts.watch_mem_from << "," << opts.watch_mem_to << "]\n";
     }
 
     // Step 3: a MachineAudioMixer mixing the FULL machine audio (the same law +
@@ -1282,7 +1410,16 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         // HALT-wait for VBlank). Deterministic: a pure function of the frame
         // count and the input script's cycle stamps.
         const std::uint64_t target = machine.frame_cycles_per_frame();
-        for (std::uint32_t frame = 0; frame < *opts.frames; ++frame) {
+        // DEC-0072 DIAGNOSTIC (env-gated; default off => unchanged): stop AT the
+        // terminal crash-halt (HALT with interrupts disabled => can never wake)
+        // instead of stepping idle for the remaining frames, so a bounded
+        // --trace-cpu ring retains the DERAILMENT rather than the post-halt spin.
+        const bool halt_break_env = [] {
+            const char* p = std::getenv("SONY_MSX_HALT_BREAK");
+            return p != nullptr && *p != '\0';
+        }();
+        bool terminal_halt = false;
+        for (std::uint32_t frame = 0; frame < *opts.frames && !terminal_halt; ++frame) {
             // M36: deterministic scripted disk swap at a frame boundary (the
             // headless analogue of the SDL3 F11 swap), for driving a two-disk
             // game past its "insert data disk" prompt reproducibly.
@@ -1303,16 +1440,80 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                           << opts.disk_paths[current_disk_index] << "\") at frame " << frame << "\n";
             }
             const std::uint64_t start = machine.elapsed_cycles();
+            // DEC-0072 replay fidelity: in --input-frame-start mode, apply every
+            // due key edge at FRAME-START (before the first instruction), exactly
+            // as the live SDL3 poll_and_dispatch_events() did (it ran before the
+            // frame's CPU loop and stamped this same frame-start cycle as T). The
+            // in-loop apply_due below is then SKIPPED so the edge is not re-timed
+            // one instruction late -- making a cycle-identical run bit-faithful to
+            // the recording. Default (flag off) keeps the pre-existing
+            // after-instruction application byte-for-byte.
+            if (opts.input_frame_start) {
+                script_player.apply_due(start, machine.keyboard());
+            }
             while (machine.elapsed_cycles() - start < target) {
                 machine.step_cpu_instruction();
-                script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
+                if (!opts.input_frame_start) {
+                    script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
+                }
                 ++steps;
                 // M39-A Fix B: interleaved sub-frame-accurate audio production.
                 if (audio_sync_dump) {
                     emit_synced_audio(frame);
                 }
+                if (halt_break_env && machine.cpu().state().halted() &&
+                    !machine.cpu().state().iff1()) {
+                    terminal_halt = true;
+                    break;
+                }
             }
             machine.on_vsync_boundary();
+            // DEC-0072 save-frame detector: compare the disk save-slot region to
+            // the previous frame; log any slot whose bytes changed this frame.
+            if (opts.watch_save_name.has_value()) {
+                const std::vector<std::uint8_t>& disk = machine.disk_image().data();
+                constexpr std::size_t kBase = 9u * 512u;   // LBA 9
+                constexpr std::size_t kSpan = 8u * 512u;   // slots 9..16
+                if (disk.size() >= kBase + kSpan) {
+                    if (watch_prev_slots.size() == kSpan) {
+                        for (int s = 0; s < 8; ++s) {
+                            const std::size_t off = static_cast<std::size_t>(s) * 512u;
+                            int nd = 0;
+                            for (std::size_t k = 0; k < 512u; ++k) {
+                                if (disk[kBase + off + k] != watch_prev_slots[off + k]) ++nd;
+                            }
+                            if (nd != 0) {
+                                std::string first16;
+                                for (std::size_t k = 0; k < 16u; ++k) {
+                                    first16 += sony_msx::machine::debug_format::to_hex(disk[kBase + off + k], 2);
+                                }
+                                watch_save_csv += std::to_string(frame) + "," +
+                                                  std::to_string(machine.elapsed_cycles()) + "," +
+                                                  std::to_string(s + 1) + "," + std::to_string(9 + s) + "," +
+                                                  first16 + "," + std::to_string(nd) + "\n";
+                            }
+                        }
+                    }
+                    watch_prev_slots.assign(disk.begin() + static_cast<std::ptrdiff_t>(kBase),
+                                            disk.begin() + static_cast<std::ptrdiff_t>(kBase + kSpan));
+                }
+            }
+            // DEC-0072 per-frame CPU-state fingerprint (post-boundary), for the
+            // headless-vs-SDL3 determinism cross-check and first-divergence hunt.
+            if (opts.fingerprint_name.has_value()) {
+                const auto& r = machine.cpu().state().regs();
+                fingerprint_csv += std::to_string(frame) + "," +
+                                   std::to_string(machine.elapsed_cycles()) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.pc, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.sp, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.af, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.bc, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.de, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.hl, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.ix, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.iy, 4) + "," +
+                                   sony_msx::machine::debug_format::to_hex(r.r, 2) + "\n";
+            }
             // M39-A Step 1: per-frame edge/write-rate diagnostic row (deltas).
             if (opts.io_observe_name.has_value()) {
                 const std::uint64_t edges = machine.click_dac().edge_count();
@@ -1407,6 +1608,37 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                   << " total_psg_writes=" << prev_psg_total << "\n";
     }
 
+    // DEC-0072 per-frame CPU fingerprint dump.
+    if (opts.fingerprint_name.has_value()) {
+        std::ofstream fp(*opts.fingerprint_name, std::ios::binary | std::ios::trunc);
+        if (!fp) {
+            std::cerr << "debug-session: cannot write --fingerprint " << *opts.fingerprint_name << "\n";
+            return 2;
+        }
+        fp.write(fingerprint_csv.data(), static_cast<std::streamsize>(fingerprint_csv.size()));
+        std::cerr << "debug-session: wrote fingerprint CSV " << *opts.fingerprint_name << "\n";
+    }
+
+    // DEC-0072 save-frame detector dump.
+    if (opts.watch_save_name.has_value()) {
+        std::ofstream ws(*opts.watch_save_name, std::ios::binary | std::ios::trunc);
+        if (ws) {
+            ws.write(watch_save_csv.data(), static_cast<std::streamsize>(watch_save_csv.size()));
+            std::cerr << "debug-session: wrote save-frame log " << *opts.watch_save_name << "\n";
+        }
+    }
+
+    // DEC-0072 physical-DRAM watchpoint dump.
+    if (opts.watch_mem_name.has_value()) {
+        const std::string& log = machine.mem_watch_log();
+        std::ofstream wm(*opts.watch_mem_name, std::ios::binary | std::ios::trunc);
+        if (wm) {
+            wm.write(log.data(), static_cast<std::streamsize>(log.size()));
+            std::cerr << "debug-session: wrote mem-watch CSV " << *opts.watch_mem_name
+                      << " (dropped_over_cap=" << machine.mem_watch_dropped() << ")\n";
+        }
+    }
+
     // M39-A Step 3: write the voice-window full-machine audio dump.
     if (audio_dump) {
         if (!sony_msx::frontend::write_pcm_audio_dump(machine.debug_root(), *opts.audio_dump_name,
@@ -1445,6 +1677,9 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     std::cerr << "debug-session: steps=" << steps << " halted=" << (machine.cpu().state().halted() ? 1 : 0)
               << " final_pc=" << std::hex << machine.cpu().state().regs().pc << std::dec
               << " elapsed_cycles=" << machine.elapsed_cycles() << "\n";
+    // DEC-0072 diagnostic: did the run exercise the VDP command-engine color/LMCM path?
+    std::cerr << "debug-session: vdp S#7-color-reads=" << machine.vdp().cmd_engine().color_read_count()
+              << " LMCM-issues=" << machine.vdp().cmd_engine().lmcm_start_count() << "\n";
     return 0;
 }
 

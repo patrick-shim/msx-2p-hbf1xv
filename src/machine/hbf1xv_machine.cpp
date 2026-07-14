@@ -702,9 +702,11 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     if (stream_active_) {
         stream_pre_record = capture_stream_pre_record(pre_pc, opcode0);
         stream_a8 = debug_io_read(0xA8);
-        // DEC-0052 stream-light: stamp this instruction's PC for the watchlog.
-        // The mapper-RAM / VDP register-write observers fire DURING cpu_.step()
-        // below and read this to report which instruction performed the write.
+    }
+    // DEC-0052 stream-light + DEC-0072 phys watchpoint: stamp this instruction's
+    // PC. The mapper-RAM / VDP register-write observers fire DURING cpu_.step()
+    // below and read this to report which instruction performed the write.
+    if (stream_active_ || mem_watch_active_) {
         stream_pc_ = pre_pc;
     }
 
@@ -1621,7 +1623,7 @@ void Hbf1xvMachine::set_stream_capture_enabled(const bool enabled, const std::st
         if (stream_light_) {
             std::filesystem::remove(debug_root_ / "traces" / ("stream_" + stream_id_ + "_watch.log"),
                                     ec);
-            ram_mapper_.set_write_observer(&mem_watch_observer_);
+            refresh_ram_write_observer();
             vdp_.attach_register_write_observer(&vdp_reg_watch_observer_);
         }
     } else {
@@ -1743,10 +1745,80 @@ void Hbf1xvMachine::finalize_stream_capture(const std::string& reason_note,
     //     too, and stream_light_ is cleared so a following heavy arm is unaffected.
     fdc_.set_sector_read_observer(nullptr);
     fdc_.set_sector_write_observer(nullptr);
-    ram_mapper_.set_write_observer(nullptr);
     vdp_.attach_register_write_observer(nullptr);
     stream_light_ = false;
     stream_active_ = false;
+    // DEC-0072: keep the ram_mapper_ observer installed if the phys watchpoint
+    // still wants it; only stream-light's need for it is gone here.
+    refresh_ram_write_observer();
+}
+
+// --- DEC-0072 physical-DRAM memory-write watchpoint ------------------------
+
+void Hbf1xvMachine::refresh_ram_write_observer() {
+    const bool want = (stream_active_ && stream_light_) || mem_watch_active_;
+    ram_mapper_.set_write_observer(want ? &mem_watch_observer_ : nullptr);
+}
+
+void Hbf1xvMachine::set_mem_watch(const std::size_t phys_lo, const std::size_t phys_hi,
+                                  const std::uint32_t frame_from, const std::uint32_t frame_to) {
+    mem_watch_lo_ = phys_lo;
+    mem_watch_hi_ = phys_hi;
+    mem_watch_from_ = frame_from;
+    mem_watch_to_ = frame_to;
+    mem_watch_dropped_ = 0;
+    mem_watch_active_ = true;
+    mem_watch_log_ =
+        "frame,cyc,pc,seg,logical,phys,val,A,BC,DE,HL,IX,IY,SP\n";  // CSV header
+    refresh_ram_write_observer();
+}
+
+void Hbf1xvMachine::clear_mem_watch() {
+    mem_watch_active_ = false;
+    refresh_ram_write_observer();
+}
+
+void Hbf1xvMachine::mem_watch_record(const core::BusAddress logical, const core::BusData value) {
+    if (!mem_watch_active_) {
+        return;
+    }
+    if (frame_count_ < mem_watch_from_ || frame_count_ > mem_watch_to_) {
+        return;
+    }
+    // Fold the CPU-visible address onto the physical DRAM store exactly as
+    // MemoryMapperRam::mem_write does, so the window is a TRUE physical range
+    // (segment-independent): the game reaches its fixed save-build buffer through
+    // whichever mapper segment currently pages it in.
+    const int page = (logical >> 14) & 0x03;
+    const std::uint8_t seg = mapper_io_.segment(page);
+    const int nseg =
+        static_cast<int>(dram_.size() / devices::memory::MemoryMapperRam::kSegmentBytes);
+    const std::size_t phys =
+        devices::memory::MemoryMapperRam::physical_address(seg, logical, nseg);
+    if (phys < mem_watch_lo_ || phys >= mem_watch_hi_) {
+        return;
+    }
+    if (mem_watch_log_.size() > 1 &&
+        static_cast<std::uint64_t>(mem_watch_log_.size()) / 48u >= kMemWatchMaxRows) {
+        ++mem_watch_dropped_;
+        return;
+    }
+    const devices::cpu::Z80aRegisters& r = cpu_.state().regs();
+    mem_watch_log_ += debug_format::to_dec(frame_count_);
+    mem_watch_log_ += ',' + debug_format::to_dec(elapsed_cycles());
+    mem_watch_log_ += ',' + debug_format::to_hex(stream_pc_, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(seg, 2);
+    mem_watch_log_ += ',' + debug_format::to_hex(logical, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(static_cast<std::uint64_t>(phys), 5);
+    mem_watch_log_ += ',' + debug_format::to_hex(value, 2);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.a(), 2);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.bc, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.de, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.hl, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.ix, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.iy, 4);
+    mem_watch_log_ += ',' + debug_format::to_hex(r.sp, 4);
+    mem_watch_log_.push_back('\n');
 }
 
 std::uint32_t Hbf1xvMachine::crc32(const std::uint8_t* data, const std::size_t size) {
@@ -1900,7 +1972,8 @@ void Hbf1xvMachine::log_stream_vdp_register(const std::uint8_t reg, const std::u
 
 void Hbf1xvMachine::MemWatchObserver::on_mem_write(const core::BusAddress address,
                                                    const core::BusData value) {
-    machine_.log_stream_mem_write(address, value);
+    machine_.log_stream_mem_write(address, value);   // DEC-0052 stream-light (self-guarded)
+    machine_.mem_watch_record(address, value);       // DEC-0072 phys watchpoint (self-guarded)
 }
 
 void Hbf1xvMachine::VdpRegWatchObserver::on_register_write(const std::uint8_t reg,

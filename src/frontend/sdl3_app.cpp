@@ -26,6 +26,8 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/audio_pacer.h"
 #include "machine/cartridge_identifier.h"
+#include "machine/debug_format.h"
+#include "peripherals/msx_key_names.h"
 
 namespace sony_msx::frontend {
 
@@ -331,6 +333,22 @@ bool Sdl3App::init() {
         }
     }
 
+    // Input RECORDER (DEC-0072): open the record file (writes the format tag)
+    // BEFORE any run_one_frame(), so the very first frame's input is captured. A
+    // file that cannot be opened is a real init() failure (mirrors the
+    // --input-script "never partially initialize" contract above), never a silent
+    // no-op. Left closed (default) when --record-input is absent -> every
+    // record_*() call is a no-op and the session is byte-for-byte unchanged.
+    if (config_.record_input_path.has_value()) {
+        if (!input_recorder_.open(*config_.record_input_path)) {
+            last_error_ = "cannot open --record-input file: " + *config_.record_input_path;
+            shutdown();
+            return false;
+        }
+        std::cerr << "sdl3: recording input to \"" << *config_.record_input_path
+                  << "\" (replay with --input-script; F11 swaps -> --swap-disk-frame <N>)\n";
+    }
+
     initialized_ = true;
     return true;
 }
@@ -349,9 +367,26 @@ void Sdl3App::flush_debug_session_outputs() {
     if (config_.event_log_filename.has_value()) {
         machine_.write_event_log(*config_.event_log_filename);
     }
+    // DEC-0072 per-frame CPU fingerprint CSV (diagnostic).
+    if (config_.fingerprint_path.has_value()) {
+        std::ofstream fp(*config_.fingerprint_path, std::ios::binary | std::ios::trunc);
+        if (fp) {
+            fp << "frame,cycles,pc,sp,af,bc,de,hl,ix,iy,r\n";
+            fp.write(fingerprint_csv_.data(), static_cast<std::streamsize>(fingerprint_csv_.size()));
+            std::cerr << "sdl3: wrote fingerprint CSV " << *config_.fingerprint_path << "\n";
+        } else {
+            std::cerr << "sdl3: cannot write --fingerprint " << *config_.fingerprint_path << "\n";
+        }
+    }
 }
 
 void Sdl3App::shutdown() {
+    // Input RECORDER (DEC-0072): finalize the record file (writes the trailing
+    // "[END]" line) so it's a complete, replayable HBF1XV-INPUT-SCRIPT v1. Safe
+    // to call unconditionally -- a no-op when --record-input was absent (the
+    // recorder was never opened). Done first so the script is flushed even if a
+    // later teardown step is skipped.
+    input_recorder_.close();
     // M36-S-c: persist any pending writable-disk writes before tearing down.
     // No-op unless disk-writable bound a host path (default behavior unchanged).
     if (initialized_ && !disk_images_.empty()) {
@@ -396,6 +431,18 @@ void Sdl3App::poll_and_dispatch_events() {
         // would otherwise feed it into the MSX keyboard matrix.
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F11 && !event.key.repeat) {
             on_disk_swap_hotkey();
+            // Input RECORDER (DEC-0072): capture the swap ONLY when one actually
+            // occurred (a >1-disk list; on_disk_swap_hotkey() no-ops otherwise,
+            // exactly as the replay's --swap-disk-frame guard does). Stamp the
+            // CURRENT frame index (frames_run_ is incremented at the END of
+            // run_one_frame(), so during this poll it is the 0-based index of the
+            // frame about to run) -- the same frame the headless replay swaps at
+            // the top of when given --swap-disk-frame <this>.
+            if (input_recorder_.is_open() && disk_images_.size() > 1) {
+                input_recorder_.record_disk_swap(frames_run_);
+                std::cerr << "sdl3: [record] disk swap at frame " << frames_run_
+                          << " -> replay with --swap-disk-frame " << frames_run_ << "\n";
+            }
             continue;
         }
         // M36 Phase 3: F12 hotkey for a comprehensive debug snapshot (fresh
@@ -450,6 +497,31 @@ void Sdl3App::poll_and_dispatch_events() {
                       << " (Alt+D); default is accurate FDC timing\n";
             continue;
         }
+        // Input RECORDER (DEC-0072): capture MSX matrix key edges just before
+        // they are dispatched to the keyboard matrix. This point is reached only
+        // AFTER every host-hotkey branch above has had its chance to `continue`
+        // (F6-F12 / PAUSE / Alt+Enter / Alt+D), so those are naturally excluded:
+        // Sdl3InputMapper::map_scancode() returns a coordinate ONLY for the 72
+        // real matrix keys (F6-F9/PAUSE are not in the table), the SAME single
+        // source of truth the mapper uses to drive KeyboardMatrix::set_key(). The
+        // cycle stamp is machine_.elapsed_cycles() at this poll (the frame-start
+        // cycle), so replay via --input-script fires the key on the same frame.
+        // OS auto-repeat DOWNs are skipped: the matrix is level-based, so a repeat
+        // is an idempotent no-op -- recording edges only keeps the script clean
+        // and matches the openMSX-derived example format.
+        if (input_recorder_.is_open() &&
+            (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)) {
+            const bool pressed = event.key.down;
+            if (!(pressed && event.key.repeat)) {
+                const auto coord = Sdl3InputMapper::map_scancode(event.key.scancode);
+                if (coord.has_value()) {
+                    const auto name = peripherals::row_col_to_key_name(coord->first, coord->second);
+                    if (name.has_value()) {
+                        input_recorder_.record_key(machine_.elapsed_cycles(), std::string(*name), pressed);
+                    }
+                }
+            }
+        }
         input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),
                                      machine_.rensha_turbo());
     }
@@ -457,6 +529,16 @@ void Sdl3App::poll_and_dispatch_events() {
 
 void Sdl3App::run_one_frame() {
     poll_and_dispatch_events();
+
+    // DEC-0072 replay-fidelity diagnostic: scripted disk hot-swap at a frame
+    // boundary (the SDL3 analogue of the headless --swap-disk-frame), applied at
+    // frame-START just like the live F11 poll path, so a recorded owner script
+    // replays cycle-for-cycle here. No-op unless config_.swap_disk_frame matches
+    // this frame index and there is more than one disk (mirrors on_disk_swap_hotkey).
+    if (config_.swap_disk_frame.has_value() &&
+        frames_run_ == static_cast<std::uint64_t>(*config_.swap_disk_frame) && disk_images_.size() > 1) {
+        on_disk_swap_hotkey();
+    }
 
     // The deterministic core step (§2.3): step the CPU purely via
     // step_cpu_instruction() until the next frame boundary, then call
@@ -502,6 +584,24 @@ void Sdl3App::run_one_frame() {
         }
     }
     machine_.on_vsync_boundary();
+
+    // DEC-0072 per-frame CPU-state fingerprint (post-boundary), byte-format
+    // identical to the headless --fingerprint CSV, so the two drivers can be
+    // diffed frame-for-frame to find the first divergence.
+    if (config_.fingerprint_path.has_value()) {
+        const auto& r = machine_.cpu().state().regs();
+        fingerprint_csv_ += std::to_string(frames_run_) + "," +
+                            std::to_string(machine_.elapsed_cycles()) + "," +
+                            machine::debug_format::to_hex(r.pc, 4) + "," +
+                            machine::debug_format::to_hex(r.sp, 4) + "," +
+                            machine::debug_format::to_hex(r.af, 4) + "," +
+                            machine::debug_format::to_hex(r.bc, 4) + "," +
+                            machine::debug_format::to_hex(r.de, 4) + "," +
+                            machine::debug_format::to_hex(r.hl, 4) + "," +
+                            machine::debug_format::to_hex(r.ix, 4) + "," +
+                            machine::debug_format::to_hex(r.iy, 4) + "," +
+                            machine::debug_format::to_hex(r.r, 2) + "\n";
+    }
 
     // M36 Phase 3: service a pending F12 snapshot request at this clean frame
     // boundary, where the deterministic id (frame_count()/elapsed_cycles()) is
@@ -693,6 +793,13 @@ int Sdl3App::run_interactive() {
             break;
         }
 
+        // DEC-0072 diagnostic: fingerprint mode runs UNTHROTTLED (skip real-time
+        // pacing) so an 8000-frame cross-check completes in seconds, not minutes.
+        // The emulation is wall-clock-independent, so this changes nothing about
+        // the deterministic per-frame state -- only how fast frames are produced.
+        if (config_.fingerprint_path.has_value()) {
+            continue;
+        }
         paced_cycles += machine_.frame_cycles_per_frame();
         const Uint64 deadline_ns =
             base_ns + AudioPacer::scale_cycles(paced_cycles, 1'000'000'000ull, kSystemClockHz);

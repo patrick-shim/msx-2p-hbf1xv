@@ -14,10 +14,23 @@
 #include "devices/fdc/wd2793.h"
 
 #include <cstdlib>
+#include <cstdio>
 
 namespace sony_msx::devices::fdc {
 
 namespace {
+
+// DEC-0072 DIAGNOSTIC (env-gated; default OFF => this whole path is skipped and
+// emulation is byte-identical). Set SONY_MSX_FDCWLOG=<path> to stream every
+// committed Write-Sector byte (genuine vs 0x00-substituted) for offline audit of
+// whether our FDC lays the game's bytes down faithfully. Opened once, lazily.
+std::FILE* fdc_write_log() {
+    static std::FILE* f = []() -> std::FILE* {
+        const char* p = std::getenv("SONY_MSX_FDCWLOG");
+        return (p != nullptr && *p != '\0') ? std::fopen(p, "w") : nullptr;
+    }();
+    return f;
+}
 
 // Command-register flag bits (WD2793.cc:28-39).
 constexpr std::uint8_t kVFlag = 0x04;   // Type I verify (settle delay)
@@ -354,6 +367,16 @@ void Wd2793::write_data(const std::uint8_t value) {
 void Wd2793::commit_write_sector_byte(const std::uint64_t t, const std::uint8_t value,
                                       const bool substituted) {
     buffer_[static_cast<std::size_t>(data_index_)] = value;
+    if (std::FILE* wlog = fdc_write_log()) {
+        std::fprintf(wlog, "cmd=%02X lba=%d idx=%d val=%02X sub=%d t=%llu dl=%llu avail=%d\n",
+                     command_reg_,
+                     static_cast<int>(DiskImage::chs_to_lba(write_track_num_, write_side_,
+                                                            write_sector_num_)),
+                     static_cast<int>(data_index_), value, substituted ? 1 : 0,
+                     static_cast<unsigned long long>(t),
+                     static_cast<unsigned long long>(drq_deadline_),
+                     static_cast<int>(data_available_));
+    }
     if (sector_write_observer_ != nullptr) {
         // Non-perturbing trace: log the committed byte (genuine vs 0x00-
         // substituted), its in-sector index, and the target LBA at the LATCHED

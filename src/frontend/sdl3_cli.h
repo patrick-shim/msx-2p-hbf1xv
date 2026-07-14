@@ -88,6 +88,12 @@ struct ParsedSdl3Cli {
     std::optional<std::string> trace_cpu_filename;
     std::optional<std::string> event_log_filename;
     std::optional<std::string> input_script_path;
+    // Input RECORDER (DEC-0072 diagnostic tooling): --record-input <path> streams
+    // the live keyboard session + F11 disk hot-swaps into an HBF1XV-INPUT-SCRIPT
+    // v1 file (machine::InputScriptRecorder) that replays deterministically via
+    // --input-script (+ --swap-disk-frame <N> for the recorded swaps). std::nullopt
+    // (default) = no recording, byte-for-byte the prior behavior.
+    std::optional<std::string> record_input_path;
     // M36 Phase 3 (DEC-0051): --snapshot <dir> overrides the debug-snapshot
     // output root (<dir>/snapshot/<id>/). F12 in-session capture is ALWAYS
     // active (read-only, harmless); this flag only controls where captures
@@ -146,6 +152,13 @@ struct ParsedSdl3Cli {
     // "fully-populated S1985" mods. sdl3_main.cpp maps the value to the machine's
     // DRAM byte count (kb * 1024).
     std::optional<int> ram_kb;
+    // DEC-0072 replay-fidelity diagnostic (M47-followup): --swap-disk-frame <N>
+    // reproduces the headless scripted disk hot-swap on the SDL3 path (so a
+    // recorded owner script replays on a hidden-window SDL3 build), and
+    // --fingerprint <path> dumps a per-frame CPU-state CSV. Both std::nullopt by
+    // default (no effect; existing sessions byte-for-byte unchanged).
+    std::optional<std::uint32_t> swap_disk_frame;
+    std::optional<std::string> fingerprint_path;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or a non-numeric --max-frames). Never silently swallowed by
     // the caller (mirrors cartridge_cli's own `errors` field/policy).

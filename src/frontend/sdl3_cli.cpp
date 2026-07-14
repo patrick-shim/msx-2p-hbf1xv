@@ -14,6 +14,7 @@
 #include "frontend/sdl3_cli.h"
 
 #include <charconv>
+#include <cstdlib>
 #include <string>
 
 #include "devices/chipset/mb670836_pause.h"
@@ -164,9 +165,28 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                 parsed.input_script_path = *value;
                 ++i;
             }
+        } else if (arg == "--record-input") {
+            // Input RECORDER (DEC-0072): stream this live session's keystrokes +
+            // F11 disk swaps to <path> as a replayable HBF1XV-INPUT-SCRIPT v1.
+            if (auto value = take_value(args, i, "--record-input", parsed.errors)) {
+                parsed.record_input_path = *value;
+                ++i;
+            }
         } else if (arg == "--snapshot") {
             if (auto value = take_value(args, i, "--snapshot", parsed.errors)) {
                 parsed.snapshot_dir = *value;  // M36 Phase 3: snapshot output root
+                ++i;
+            }
+        } else if (arg == "--swap-disk-frame") {
+            // DEC-0072: scripted disk hot-swap at frame N (replay a recorded owner
+            // script's "# SWAP_DISK frame=<N>" on hidden-window SDL3).
+            if (auto value = take_value(args, i, "--swap-disk-frame", parsed.errors)) {
+                parsed.swap_disk_frame = static_cast<std::uint32_t>(std::strtoul(value->c_str(), nullptr, 10));
+                ++i;
+            }
+        } else if (arg == "--fingerprint") {
+            if (auto value = take_value(args, i, "--fingerprint", parsed.errors)) {
+                parsed.fingerprint_path = *value;  // DEC-0072 per-frame CPU fingerprint CSV
                 ++i;
             }
         } else if (arg == "--speed") {

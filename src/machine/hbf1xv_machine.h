@@ -547,6 +547,26 @@ public:
     void set_stream_capture_enabled(bool enabled, const std::string& stream_id = std::string{},
                                     bool light = false);
     [[nodiscard]] bool stream_capture_active() const;
+
+    // --- DEC-0072 PHYSICAL-DRAM memory-write WATCHPOINT (M47 kill-step
+    //     diagnostic; additive, default-off, byte-identical when disabled). Traps
+    //     every CPU write whose FOLDED PHYSICAL DRAM address lands in
+    //     [phys_lo, phys_hi) (physical, not CPU-logical: the save-build buffer
+    //     lives at a fixed physical DRAM offset the game reaches through whichever
+    //     mapper segment currently pages it) and, within the optional frame
+    //     window [from, to], appends one deterministic CSV row capturing the
+    //     writing instruction's PC + the live A/BC/DE/HL/IX/IY/SP + the CPU cycle,
+    //     so the wrong scalar can be traced to the instruction that defined it.
+    //     Reuses the existing ram_mapper_ write-observer seam (self-guarded), so
+    //     enabling it does NOT perturb emulation and disabling restores the
+    //     pre-DEC-0072 default. Cap kMemWatchMaxRows bounds memory (records past
+    //     the cap are dropped and a note is emitted). ---
+    void set_mem_watch(std::size_t phys_lo, std::size_t phys_hi, std::uint32_t frame_from,
+                       std::uint32_t frame_to);
+    void clear_mem_watch();
+    [[nodiscard]] const std::string& mem_watch_log() const { return mem_watch_log_; }
+    [[nodiscard]] std::uint64_t mem_watch_dropped() const { return mem_watch_dropped_; }
+    static constexpr std::uint64_t kMemWatchMaxRows = 20'000'000;
     // Whether the currently-armed capture is in the lightweight mode (false when
     // disarmed or armed heavy). For tests/diagnostics.
     [[nodiscard]] bool stream_capture_light() const;
@@ -600,6 +620,14 @@ private:
     // scheduler/CPU effect. `address` is the CPU-visible write address.
     void log_stream_mem_write(std::uint16_t address, std::uint8_t value);
     void log_stream_vdp_register(std::uint8_t reg, std::uint8_t value);
+    // DEC-0072 physical-DRAM watchpoint recorder (self-guarded on
+    // mem_watch_active_). Computes the folded physical address for the
+    // CPU-visible `logical` write via the live mapper segment and, when it lands
+    // in the watched window + frame range, appends one CSV row. Non-perturbing.
+    void mem_watch_record(core::BusAddress logical, core::BusData value);
+    // Install/remove the single ram_mapper_ write observer based on whether ANY
+    // consumer (stream-light watchlog OR the DEC-0072 phys watchpoint) wants it.
+    void refresh_ram_write_observer();
     // Build a PRE-execution trace record from the live CPU state, REUSING the M27
     // Z80aTraceRecord convention. Const w.r.t. the machine (read-only getters).
     [[nodiscard]] devices::cpu::Z80aTraceRecord capture_stream_pre_record(
@@ -1096,6 +1124,14 @@ private:
     // ticks), so the watchlog reports this instruction's PC and the cycle count
     // at instruction START -- both deterministic.
     std::uint16_t stream_pc_ = 0;
+    // DEC-0072 physical-DRAM watchpoint state (default-off; see set_mem_watch).
+    bool mem_watch_active_ = false;
+    std::size_t mem_watch_lo_ = 0;
+    std::size_t mem_watch_hi_ = 0;
+    std::uint32_t mem_watch_from_ = 0;
+    std::uint32_t mem_watch_to_ = 0xFFFFFFFFu;
+    std::uint64_t mem_watch_dropped_ = 0;
+    std::string mem_watch_log_;
     std::string stream_id_;
     std::uint64_t stream_seq_ = 0;              // absolute instruction index since arm
     std::vector<StreamTraceEntry> stream_ring_;  // grows to kStreamTraceRingCapacity, then wraps

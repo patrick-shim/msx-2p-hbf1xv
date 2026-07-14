@@ -74,6 +74,13 @@ std::vector<InputScriptEvent> parse_input_script(const std::string& text) {
         if (line.empty()) {
             continue;
         }
+        // Comment lines (leading '#') are skipped, NOT parsed -- e.g. the input
+        // RECORDER's "# SWAP_DISK frame=<N>" markers (InputScriptRecorder), so a
+        // recorded file stays directly --input-script-loadable. serialize_input_
+        // script() never emits comments, so this never perturbs an event round-trip.
+        if (line[0] == '#') {
+            continue;
+        }
         if (line == "[END]") {
             break;
         }
@@ -158,24 +165,75 @@ std::vector<InputScriptEvent> parse_input_script(const std::string& text) {
     return events;
 }
 
+std::string serialize_input_script_line(const InputScriptEvent& event) {
+    const std::string state = event.pressed ? "DOWN" : "UP";
+    if (event.kind == InputEventKind::Joy) {
+        return "T=" + debug_format::to_dec(event.at_tstate) + " JOY=" +
+               debug_format::to_dec(static_cast<std::uint64_t>(event.joy_port)) + " " +
+               joy_control_to_token(event.joy_control) + " " + state;
+    }
+    // KEY= line -- byte-identical to the pre-M41 serializer output.
+    return "T=" + debug_format::to_dec(event.at_tstate) + " KEY=" + event.key_name + " " + state;
+}
+
 std::string serialize_input_script(const std::vector<InputScriptEvent>& events) {
     std::string out;
     out += kInputScriptFormatTag;
     out.push_back('\n');
     for (const InputScriptEvent& event : events) {
-        const std::string state = event.pressed ? "DOWN" : "UP";
-        if (event.kind == InputEventKind::Joy) {
-            out += "T=" + debug_format::to_dec(event.at_tstate) + " JOY=" +
-                   debug_format::to_dec(static_cast<std::uint64_t>(event.joy_port)) + " " +
-                   joy_control_to_token(event.joy_control) + " " + state + "\n";
-        } else {
-            // KEY= line -- byte-identical to the pre-M41 serializer output.
-            out += "T=" + debug_format::to_dec(event.at_tstate) + " KEY=" + event.key_name + " " +
-                   state + "\n";
-        }
+        out += serialize_input_script_line(event);
+        out.push_back('\n');
     }
     out += "[END]\n";
     return out;
+}
+
+bool InputScriptRecorder::open(const std::string& path) {
+    close();  // idempotent: a re-open flushes/closes any prior file first.
+    out_.open(path, std::ios::binary | std::ios::trunc);
+    if (!out_.is_open()) {
+        return false;
+    }
+    // '\n' (not std::endl) to keep the byte format identical to
+    // serialize_input_script() regardless of the host platform.
+    out_ << kInputScriptFormatTag << '\n';
+    out_.flush();
+    key_event_count_ = 0;
+    disk_swap_count_ = 0;
+    return true;
+}
+
+void InputScriptRecorder::record_key(const std::uint64_t tstate, const std::string& key_name,
+                                     const bool pressed) {
+    if (!out_.is_open()) {
+        return;
+    }
+    InputScriptEvent event;
+    event.kind = InputEventKind::Key;
+    event.at_tstate = tstate;
+    event.key_name = key_name;
+    event.pressed = pressed;
+    out_ << serialize_input_script_line(event) << '\n';
+    out_.flush();  // per-event flush: an abrupt exit still leaves a usable prefix.
+    ++key_event_count_;
+}
+
+void InputScriptRecorder::record_disk_swap(const std::uint64_t frame) {
+    if (!out_.is_open()) {
+        return;
+    }
+    out_ << "# SWAP_DISK frame=" << debug_format::to_dec(frame) << '\n';
+    out_.flush();
+    ++disk_swap_count_;
+}
+
+void InputScriptRecorder::close() {
+    if (!out_.is_open()) {
+        return;
+    }
+    out_ << "[END]\n";
+    out_.flush();
+    out_.close();
 }
 
 InputScriptPlayer::InputScriptPlayer(std::vector<InputScriptEvent> events) : events_(std::move(events)) {}

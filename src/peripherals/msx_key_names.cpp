@@ -25,16 +25,15 @@ struct KeyNameBinding {
     int column;
 };
 
-}  // namespace
-
-std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view name) {
-    // Re-expression of src/frontend/sdl3_input_mapper.cpp's `kMap` array
-    // literal (72 entries, rows 0-8), re-keyed by the SDL_Scancode
-    // enumerator's suffix string instead of the SDL_Scancode value. Every
-    // (row, column) pair below was copied verbatim, in the same
-    // order/grouping, from that file (never independently re-derived) --
-    // see the header doc comment / R-M27-4. A dedicated SDL3-gated
-    // cross-consistency test proves the two tables agree.
+// Single-source 72-entry key-name table, shared by BOTH key_name_to_row_col()
+// and its inverse row_col_to_key_name() (never duplicated between the two
+// directions). Re-expression of src/frontend/sdl3_input_mapper.cpp's `kMap`
+// array literal (rows 0-8), re-keyed by the SDL_Scancode enumerator's suffix
+// string instead of the SDL_Scancode value. Every (row, column) pair below was
+// copied verbatim, in the same order/grouping, from that file (never
+// independently re-derived) -- see the header doc comment / R-M27-4. A dedicated
+// SDL3-gated cross-consistency test proves the two tables agree.
+const std::array<KeyNameBinding, 72>& key_name_table() {
     static const std::array<KeyNameBinding, 72> kMap{{
         // Row 0: digits 0-7
         {"0", 0, 0},
@@ -119,10 +118,24 @@ std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view na
         {"DOWN", 8, 6},
         {"RIGHT", 8, 7},
     }};
+    return kMap;
+}
 
-    for (const KeyNameBinding& binding : kMap) {
+}  // namespace
+
+std::optional<std::pair<int, int>> key_name_to_row_col(const std::string_view name) {
+    for (const KeyNameBinding& binding : key_name_table()) {
         if (binding.name == name) {
             return std::make_pair(binding.row, binding.column);
+        }
+    }
+    return std::nullopt;
+}
+
+std::optional<std::string_view> row_col_to_key_name(const int row, const int column) {
+    for (const KeyNameBinding& binding : key_name_table()) {
+        if (binding.row == row && binding.column == column) {
+            return binding.name;
         }
     }
     return std::nullopt;

@@ -16,6 +16,7 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <fstream>
 #include <string>
 #include <vector>
 
@@ -94,6 +95,63 @@ struct InputScriptEvent {
 // function does not itself re-validate that invariant -- callers that built
 // the vector via parse_input_script() already satisfy it).
 [[nodiscard]] std::string serialize_input_script(const std::vector<InputScriptEvent>& events);
+
+// Serializes ONE event to its single script line WITHOUT a trailing newline
+// (the "T=<t> KEY=<name> DOWN|UP" / "T=<t> JOY=<port> <control> DOWN|UP" body).
+// The SINGLE source of truth for a script line's exact byte format, consumed by
+// both serialize_input_script() above and the streaming InputScriptRecorder
+// below -- so a live-recorded KEY/JOY line is byte-identical to what a
+// serialize_input_script() of the same event would emit (the record->replay
+// byte-for-byte round-trip guarantee).
+[[nodiscard]] std::string serialize_input_script_line(const InputScriptEvent& event);
+
+// Deterministic STREAMING recorder -- the write-side counterpart to
+// parse_input_script()/InputScriptPlayer. Streams a live keyboard + disk-swap
+// session into an HBF1XV-INPUT-SCRIPT v1 file AS IT HAPPENS (each line flushed,
+// so an abrupt exit still leaves a usable prefix), producing a file that:
+//   * replays deterministically via --input-script (KEY lines are byte-identical
+//     to serialize_input_script_line(), and re-parse cleanly), and
+//   * carries the F11 disk hot-swaps as "# SWAP_DISK frame=<N>" comment lines --
+//     a marker the parser SKIPS (parse_input_script() ignores '#'-comment
+//     lines), so the file stays directly --input-script-loadable while the
+//     replay side passes --swap-disk-frame <N> (the existing headless swap flag,
+//     src/main.cpp) to reproduce the swap at the same frame.
+// SDL3-independent (operates purely on cycle-stamp + key-name + frame), so it
+// lives in the headless core and is unit-testable without SDL3.
+class InputScriptRecorder {
+public:
+    InputScriptRecorder() = default;
+    ~InputScriptRecorder() { close(); }
+
+    InputScriptRecorder(const InputScriptRecorder&) = delete;
+    InputScriptRecorder& operator=(const InputScriptRecorder&) = delete;
+
+    // Opens `path` (truncating) and writes the format-tag line. Returns false
+    // (leaving is_open() false) if the file cannot be opened for writing.
+    [[nodiscard]] bool open(const std::string& path);
+    [[nodiscard]] bool is_open() const { return out_.is_open(); }
+
+    // Appends "T=<tstate> KEY=<name> DOWN|UP" (via serialize_input_script_line,
+    // so byte-identical to serialize_input_script) and flushes. No-op if not
+    // open. `pressed` == true -> DOWN.
+    void record_key(std::uint64_t tstate, const std::string& key_name, bool pressed);
+
+    // Appends the informational "# SWAP_DISK frame=<N>" comment line and flushes
+    // (the replay side reproduces it via --swap-disk-frame <N>). No-op if not open.
+    void record_disk_swap(std::uint64_t frame);
+
+    // Writes the trailing "[END]" line and closes the file. Safe to call
+    // repeatedly / on a never-opened recorder (a no-op). The destructor calls it.
+    void close();
+
+    [[nodiscard]] std::size_t key_event_count() const { return key_event_count_; }
+    [[nodiscard]] std::size_t disk_swap_count() const { return disk_swap_count_; }
+
+private:
+    std::ofstream out_;
+    std::size_t key_event_count_ = 0;
+    std::size_t disk_swap_count_ = 0;
+};
 
 // A monotonic-cursor player (M27-S6/S7, mirrors this project's established
 // event-driven, monotonic-cursor architectural precedent -- the M16 FDC

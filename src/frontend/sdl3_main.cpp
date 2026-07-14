@@ -131,6 +131,9 @@ OPTIONS
     --trace-cpu <name>      Write a CPU instruction trace.
     --event-log <name>      Write a deterministic event log.
     --input-script <path>   Replay a scripted keyboard/joystick sequence.
+    --record-input <path>   Record your live keystrokes + F11 disk swaps into a
+                            replayable input-script (replay via --input-script;
+                            each F11 swap prints a --swap-disk-frame <N> value).
     --max-frames <N>        Auto-quit after N frames (for non-interactive runs).
     --hidden-window         Run without showing a window (testing/automation).
     -h, --help              Show this help and exit.
@@ -326,7 +329,10 @@ int main(int argc, char** argv) {
     config.trace_cpu_filename = parsed.trace_cpu_filename;
     config.event_log_filename = parsed.event_log_filename;
     config.input_script_path = parsed.input_script_path;
+    config.record_input_path = parsed.record_input_path;  // DEC-0072 input recorder
     config.snapshot_dir = parsed.snapshot_dir;  // M36 Phase 3: --snapshot <dir>
+    config.swap_disk_frame = parsed.swap_disk_frame;  // DEC-0072 scripted disk swap
+    config.fingerprint_path = parsed.fingerprint_path;  // DEC-0072 per-frame CPU fingerprint
     config.stream_light = parsed.stream_light;  // DEC-0052: F10 arms lightweight mode
     // M37 Slice D (DEC-0056): --speed <0..7> launch-time initial Speed
     // Controller level (std::nullopt -> untouched, level 0/full speed).

@@ -112,6 +112,15 @@ struct Sdl3AppConfig {
     // run_one_frame()'s existing CPU sub-loop (item 3, §2.4).
     std::optional<std::string> input_script_path;
 
+    // Input RECORDER (DEC-0072 diagnostic tooling): when set (--record-input
+    // <path>), init() opens an InputScriptRecorder that streams every MSX matrix
+    // key edge (via the SDL3 scancode->matrix mapping) and every F11 disk swap
+    // into an HBF1XV-INPUT-SCRIPT v1 file, so a live playthrough replays
+    // deterministically via --input-script (+ --swap-disk-frame <N>). std::nullopt
+    // (default) = no recording: is_open() stays false and every record call is a
+    // no-op, so a non-recording session is byte-for-byte identical to before.
+    std::optional<std::string> record_input_path;
+
     // M36 Phase 3 (DEC-0051): comprehensive debug snapshot. F12 in-session
     // ALWAYS triggers a capture (read-only + harmless); --snapshot <dir>
     // overrides the output root to <dir>/snapshot/<id>/. std::nullopt default =
@@ -192,6 +201,17 @@ struct Sdl3AppConfig {
     // save under roms/. The derived SRAM path is <this>.sram unless
     // fmpac_sram_path/fmpac_sram_disabled override it.
     std::string fmpac_autoload_rom_path = "roms/fmpac.rom";
+
+    // DEC-0072 replay-fidelity diagnostic (M47-followup): reproduce the headless
+    // `--swap-disk-frame <N>` scripted disk hot-swap on the SDL3 path so a
+    // RECORDED owner script (its "# SWAP_DISK frame=<N>" marker) can be replayed
+    // on a hidden-window SDL3 build cycle-for-cycle -- the determinism cross-check
+    // vs the headless driver. std::nullopt (default) = no scripted swap (F11 is
+    // the only swap path, byte-for-byte unchanged).
+    std::optional<std::uint32_t> swap_disk_frame;
+    // DEC-0072 per-frame CPU-state fingerprint CSV path (same columns as the
+    // headless --fingerprint). std::nullopt (default) = no dump.
+    std::optional<std::string> fingerprint_path;
 };
 
 // The SDL3 real-time application (M26, backlog C9). Owns a real
@@ -343,6 +363,14 @@ private:
     // config_.input_script_path is unset.
     machine::InputScriptPlayer input_script_player_;
 
+    // Input RECORDER (DEC-0072): the write-side counterpart to
+    // input_script_player_. Default-constructed = closed = every record_*()
+    // call is a no-op, so a session without --record-input is byte-for-byte
+    // unchanged. Opened in init() when config_.record_input_path is set;
+    // record calls happen in poll_and_dispatch_events(); closed (writing the
+    // trailing "[END]") in shutdown().
+    machine::InputScriptRecorder input_recorder_;
+
     // M35-S2/S4: multi-disk hot-swap state. disk_images_ caches all
     // pre-loaded disk bytes in memory (deterministic, no runtime I/O).
     // current_disk_index_ tracks which disk is mounted. Empty list is
@@ -361,6 +389,10 @@ private:
     std::uint64_t audio_prev_boundary_ = 0;
     std::uint64_t audio_next_boundary_ = 0;  // set in init() from the sample rate
     std::vector<std::int16_t> audio_frame_pcm_;  // reused per-frame scratch buffer
+
+    // DEC-0072 diagnostic accumulator for the per-frame CPU fingerprint CSV
+    // (config_.fingerprint_path). Flushed in flush_debug_session_outputs().
+    std::string fingerprint_csv_;
 };
 
 }  // namespace sony_msx::frontend
