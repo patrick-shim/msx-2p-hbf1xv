@@ -104,8 +104,10 @@ void V9958Vdp::reset() {
 
     // M44 Phase 2a: no command busy window survives a reset (both the engine's
     // pure duration -- cleared in cmd_engine_.reset() above -- and this VDP-side
-    // expiry timestamp reset to 0 == already-expired).
+    // expiry timestamp reset to 0 == already-expired). Same for the S#2 TR
+    // per-unit drop-then-rearm window (VDP command-timing parity).
     cmd_busy_until_cycles_ = 0;
+    tr_busy_until_cycles_ = 0;
 
     // Color-burst registers default 00/3B/05 (fact-sheet §4 line 77; VDP.cc
     // reset). Stored only (no visual consequence in M14).
@@ -163,7 +165,27 @@ void V9958Vdp::arm_command_busy_window() {
             duration = (duration * pct + 99u) / 100u;
         }
     }
-    cmd_busy_until_cycles_ = clock_source_->cpu_total_cycles() + duration;
+    // DEC-0072 diagnostic bias (default 0). Clamp the biased duration at 0 so a
+    // large negative bias cannot underflow the unsigned expiry.
+    std::int64_t biased = static_cast<std::int64_t>(duration) + cmd_busy_bias_tstates_;
+    if (biased < 0) {
+        biased = 0;
+    }
+    cmd_busy_until_cycles_ = clock_source_->cpu_total_cycles() + static_cast<std::uint64_t>(biased);
+}
+
+void V9958Vdp::arm_transfer_ready_window() {
+    // Caller guarantees clock_source_ != nullptr && !command_timing_suspended_ and
+    // that the command engine JUST serviced a transfer unit. VDP command-timing
+    // parity: the S#2 TR (transfer-ready, bit7) bit drops while the VDP consumes
+    // the VRAM access slot(s) for that unit, then re-raises -- modelled as an
+    // absolute expiry timestamp exactly like the CE window. A 0 per-unit cost
+    // (kind None, i.e. the transfer just completed) yields tr_busy_until == now
+    // (inert), leaving TR raised as real HW does after the final byte. The
+    // --vdp-cmd-bias diagnostic (a CE-window knob) is deliberately NOT applied
+    // here; this window is a small, separate per-unit VRAM-slot cost.
+    tr_busy_until_cycles_ =
+        clock_source_->cpu_total_cycles() + cmd_engine_.transfer_unit_cost_tstates();
 }
 
 // --- core::IoDevice ---------------------------------------------------------
@@ -292,7 +314,15 @@ std::uint8_t V9958Vdp::read_status(const int reg) {
     // peek value is unaffected by their own read-side effect, so the
     // existing peek-then-mutate order is kept for them.
     if (reg == 7) {
+        const std::uint64_t transfer_units_before = cmd_engine_.transfer_units_consumed();
         cmd_engine_.on_color_register_read();
+        // VDP command-timing parity: an S#7 read that advanced an LMCM transfer
+        // drop-then-rearms TR for the per-unit VRAM-read-slot cost (same model as
+        // the COL-write path in change_register).
+        if (clock_source_ != nullptr && !command_timing_suspended_ &&
+            cmd_engine_.transfer_units_consumed() != transfer_units_before) {
+            arm_transfer_ready_window();
+        }
     }
     if (reg == 0) {
         // Line-granular collision re-latch (boot-logo fix): before the value
@@ -384,6 +414,7 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         // identically via the #99 two-write latch or the #9B indirect path
         // -- both already route through this function.
         if (reg < 47) {
+            const std::uint64_t transfer_units_before = cmd_engine_.transfer_units_consumed();
             cmd_engine_.write_register(static_cast<int>(reg) - 32, value);
             // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): an R#46 (CMD) write just
             // ran the burst and recomputed the engine's pure duration; arm the
@@ -393,6 +424,14 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
             // commands report duration 0 -> cmd_busy_until == now -> inert.
             if (reg == 46 && clock_source_ != nullptr && !command_timing_suspended_) {
                 arm_command_busy_window();
+            }
+            // VDP command-timing parity: if that write serviced an event-driven
+            // transfer unit -- a COL/R#44 write feeding an active LMMC/HMMC, or the
+            // pre-armed first unit consumed at an R#46 LMMC/HMMC issue -- drop-then-
+            // rearm the S#2 TR bit for the per-unit VRAM-slot cost.
+            if (clock_source_ != nullptr && !command_timing_suspended_ &&
+                cmd_engine_.transfer_units_consumed() != transfer_units_before) {
+                arm_transfer_ready_window();
             }
         }
         return;
@@ -718,7 +757,17 @@ std::uint8_t V9958Vdp::peek_status_register(const int reg) const {
                 s2 = static_cast<std::uint8_t>(s2 | 0x20);  // HR
             }
         }
-        if (cmd_engine_.tr()) s2 = static_cast<std::uint8_t>(s2 | 0x80);
+        // VDP command-timing parity: TR (bit7) reads 1 only when the engine holds
+        // it AND the per-unit drop-then-rearm window has expired -- a poll during
+        // the window sees TR=0, exactly as real HW while the VDP consumes that
+        // unit's VRAM slot. Same pull-style absolute-u64 clock compare as CE/VR/HR;
+        // inert without a clock (pre-parity behavior). This gates only what a
+        // STATUS read returns; a COL write is always serviced regardless, so it can
+        // never drop transfer data.
+        const bool tr = cmd_engine_.tr() &&
+                        !(clock_source_ != nullptr &&
+                          tr_busy_until_cycles_ > clock_source_->cpu_total_cycles());
+        if (tr) s2 = static_cast<std::uint8_t>(s2 | 0x80);
         if (cmd_engine_.bd()) s2 = static_cast<std::uint8_t>(s2 | 0x10);
         // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): CE (bit0) = the UNION of the
         // engine-level status bit (unchanged: event-driven transfers hold it

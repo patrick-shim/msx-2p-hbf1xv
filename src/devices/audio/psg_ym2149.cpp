@@ -127,9 +127,12 @@ void PsgYm2149::Tone::reset() {
 
 void PsgYm2149::Tone::set_period(int value) {
     period = std::max(1, value);
-    if (count >= period) {
-        count = 0;
-    }
+    // Preserve the live up-counter phase on a period-shrinking write: clamp to
+    // period-1 rather than resetting to 0. The chip counts up from 0 until
+    // count >= period; a smaller new period must not lose phase (matters for
+    // rapid downward pitch modulation). Matches openMSX AY8910 Generator::setPeriod
+    // (count = min(count, period-1)) and our own Envelope::set_period.
+    count = std::min(count, period - 1);
 }
 
 void PsgYm2149::Tone::advance(int generator_steps) {
@@ -153,9 +156,8 @@ void PsgYm2149::Noise::reset() {
 void PsgYm2149::Noise::set_period(int value) {
     // Noise runs at half tone frequency (AY8910.cc:628): 2 * max(1, value).
     period = 2 * std::max(1, value);
-    if (count >= period) {
-        count = 0;
-    }
+    // Preserve counter phase on a period-shrinking write (see Tone::set_period).
+    count = std::min(count, period - 1);
 }
 
 void PsgYm2149::Noise::advance(int generator_steps) {

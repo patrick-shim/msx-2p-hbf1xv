@@ -228,15 +228,27 @@ std::uint16_t Z80aCpu::pop16() {
     return static_cast<std::uint16_t>(lo | (static_cast<std::uint16_t>(hi) << 8));
 }
 
-void Z80aCpu::increment_refresh_register() {
-    // Every call marks one M1 cycle: this is invoked from fetch_opcode() for each
-    // opcode/prefix byte and once from service_maskable_interrupt() for the
-    // acknowledge M1 — exactly the cycles that assert /M1 and take the S1985 wait.
-    ++m1_cycle_count_;
-
+void Z80aCpu::tick_refresh_only() {
+    // Advance the 7-bit memory-refresh register for one M1 machine cycle: the low
+    // 7 bits increment and bit 7 is frozen (only LD R,A changes it). This does NOT
+    // count an S1985 +1-per-M1 wait cycle. It is the choke-point for the
+    // interrupt/NMI-acknowledge special M1 (/M1 + /IORQ), which the S1985's
+    // opcode-fetch-gated (/M1 + /MREQ) wait generator does not stretch, and is
+    // reused by increment_refresh_register() for the ordinary opcode-fetch M1.
     const std::uint8_t preserved_msb = static_cast<std::uint8_t>(state_.regs().r & 0x80);
     const std::uint8_t low7 = static_cast<std::uint8_t>((state_.regs().r + 1) & 0x7F);
     state_.regs().r = static_cast<std::uint8_t>(preserved_msb | low7);
+}
+
+void Z80aCpu::increment_refresh_register() {
+    // A normal opcode-fetch M1: tick R AND register one S1985 +1-per-M1 wait
+    // cycle. Invoked from fetch_opcode() for each opcode/prefix byte and from the
+    // halted-idle phantom-M1 refetch (step()) — exactly the cycles that assert
+    // /M1 + /MREQ and take the S1985 wait. The interrupt/NMI-acknowledge M1 does
+    // NOT come through here; it calls tick_refresh_only() so R still ticks but the
+    // S1985 wait is not billed (openMSX IM1=13/IM2=19/NMI=11; live A/B: 13T IM1).
+    tick_refresh_only();
+    ++m1_cycle_count_;
 }
 
 std::uint32_t Z80aCpu::m1_cycles_last_step() const {
@@ -1780,6 +1792,13 @@ std::uint32_t Z80aCpu::execute_indexed_cb(const bool use_iy) {
 std::uint32_t Z80aCpu::service_nmi() {
     state_.clear_nmi();
     state_.set_halted(false);
+    // The NMI-acknowledge special M1 (5T bare) ticks the refresh register like any
+    // M1 — openMSX nmi() calls incR(1) (references/openmsx-21.0/src/cpu/CPUCore.cc:
+    // 769) — but takes NO S1985 +1-per-M1 wait (openMSX CC_NMI = 5+3+3 = 11,
+    // Z80.hh; the M1 wait is not folded into the ack constants). Using
+    // tick_refresh_only() ticks R without billing a wait cycle, so NMI stays 11T.
+    // (Historically service_nmi() ticked R not at all — a separate real bug.)
+    tick_refresh_only();
     push16(state_.regs().pc);
     state_.set_iff1(false);
     state_.regs().pc = kNmiVector;
@@ -1794,8 +1813,17 @@ std::uint32_t Z80aCpu::service_maskable_interrupt() {
     state_.set_halted(false);
     state_.set_iff1(false);
     state_.set_iff2(false);
-    // The interrupt-acknowledge cycle is an M1 that ticks the refresh register.
-    increment_refresh_register();
+    // The interrupt-acknowledge cycle is a SPECIAL M1: it asserts /M1 + /IORQ (not
+    // the opcode-fetch /M1 + /MREQ) and already carries the Z80's own 2 automatic
+    // ack wait-states. It ticks the refresh register like any M1 (openMSX irqN()
+    // calls incR(1)) but takes NO S1985 +1-per-M1 wait — the S1985 gates that wait
+    // on the opcode-fetch M1, not the ack. So it uses tick_refresh_only() (R ticks,
+    // m1_cycle_count_ unchanged): IM0/IM1 accept = 13T, IM2 = 19T at the machine
+    // level, matching openMSX (Z80.hh CC_IRQ0/CC_IRQ1 = 7+3+3, CC_IRQ2 = 7+3+3+3+3)
+    // and a live openMSX A/B (11T JP + 13T accept = 24T). Was
+    // increment_refresh_register() (billed 14T/20T) — a defect; the fact-sheet §5
+    // 14T figure was an explicit guess pending this openMSX verification.
+    tick_refresh_only();
 
     switch (state_.interrupt_mode()) {
     case InterruptMode::Im0: {

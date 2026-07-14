@@ -22,48 +22,90 @@ namespace sony_msx::devices::video {
 
 namespace {
 
-// M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): per-command VDP-cycle cost per work
-// unit, re-derived as sums of the named VdpAccessDelta values ALREADY present +
-// license-blessed in vdp_access_timing.h:72-88 (the header re-derived those as
-// "hardware fact, not copied code", :65-71). This is a COMPOSITION of existing
-// deltas -- NOT a transcription of openMSX's ~340-entry VDPAccessSlots.cc slot-
-// position table (that is the deferred Phase-2b cycle-exact model + the
-// license-sensitive-scope ban). Grounded in openMSX VDPCmdEngine.cc's
-// per-command ticksPerPixel (behavior reference only, never copied):
-//   HMMV 48 (:1365); YMMM 24+40=64 (:1606); HMMM 24+64=88 (:1470);
-//   LMMV 72+24=96 (:980); LMMM 64+32+24=120 (:1105); LINE ~D88/px (:878/882);
-//   SRCH ~D88/searched-px (:827/862).
+// Per-command VDP-cycle cost, re-derived as sums/differences of the named
+// VdpAccessDelta values ALREADY present + license-blessed in
+// vdp_access_timing.h:72-88 (the header re-derived those as "hardware fact, not
+// copied code", :65-71). A COMPOSITION of existing deltas -- NOT a transcription
+// of openMSX's ~340-entry VDPAccessSlots.cc slot-position table (that is the
+// deferred Phase-2b cycle-exact model + the license-sensitive-scope ban).
+//
+// TWO cost components per command (VDP command-timing hardware-parity
+// correction):
+//   (a) PER-UNIT (per pixel or byte) -- charged for every drawn unit; and
+//   (b) PER-LINE end-of-line overhead -- charged once per completed row.
+// Both are grounded in TIER-1 references/fact-sheets/Yamaha V9958 VDP.md §8 (the
+// openMSX 2013 logic-analyzer table, "per pixel" and "per line" columns) and
+// corroborated by openMSX VDPCmdEngine.cc's own Delta usage (behavior reference
+// only, never copied), where the per-line overhead is exactly the end-of-line
+// Delta minus the per-unit Delta:
+//   HMMV  48/byte  (D48 write)               + 56/line  (D104-D48)   :1389/1391
+//   YMMM  64/byte  (D24 read + D40 write)    +  0/line  ("does not
+//                                               take extra time")    :1636/1654
+//   HMMM  88/byte  (D24 read + D64 write)    + 64/line  (D128-D64)   :1499/1510
+//   LMMV  96/pixel (D24 read + D72 write)    + 64/line  (D136-D72)   :1005/1016
+//   LMMM 120/pixel (D32+D24 read + D64 wr)   + 64/line  (D128-D64)   :1133/1151
+//   LINE 112/pixel (D24 read + D88 write)    + 32/minor-Bresenham
+//                                               step     (D120-D88)  :900/909/924
+//   SRCH  88/searched-px (D88 read)          (no per-line term)      :862
+// NOTE (the correction): the pre-correction constants used LINE=88/px (dropping
+// the D24 destination read) and omitted EVERY per-line term -- i.e. they matched
+// only openMSX's deliberate calcFinishTime UNDER-estimate (:741-743 "assumes ...
+// there's no overhead per line"), NOT the real per-Delta execution, so tall/thin
+// blits reported ~2x too fast. Both are fixed here.
 using vdp_access_timing::VdpAccessDelta;
 constexpr int kD(const VdpAccessDelta delta) { return static_cast<int>(delta); }
 
-constexpr int kTicksHmmv = kD(VdpAccessDelta::D48);                                    // 48  / byte
-constexpr int kTicksYmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D40);          // 64  / byte
-constexpr int kTicksHmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D64);          // 88  / byte
-constexpr int kTicksLmmv = kD(VdpAccessDelta::D72) + kD(VdpAccessDelta::D24);          // 96  / pixel
+// (a) per-unit costs
+constexpr int kTicksHmmv = kD(VdpAccessDelta::D48);                           // 48  / byte
+constexpr int kTicksYmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D40); // 64  / byte
+constexpr int kTicksHmmm = kD(VdpAccessDelta::D24) + kD(VdpAccessDelta::D64); // 88  / byte
+constexpr int kTicksLmmv = kD(VdpAccessDelta::D72) + kD(VdpAccessDelta::D24); // 96  / pixel
 constexpr int kTicksLmmm =
-    kD(VdpAccessDelta::D64) + kD(VdpAccessDelta::D32) + kD(VdpAccessDelta::D24);       // 120 / pixel
-constexpr int kTicksLine = kD(VdpAccessDelta::D88);                                    // 88  / pixel
-constexpr int kTicksSrch = kD(VdpAccessDelta::D88);                                    // 88  / searched px
+    kD(VdpAccessDelta::D64) + kD(VdpAccessDelta::D32) + kD(VdpAccessDelta::D24); // 120 / pixel
+constexpr int kTicksLine = kD(VdpAccessDelta::D88) + kD(VdpAccessDelta::D24); // 112 / pixel
+constexpr int kTicksSrch = kD(VdpAccessDelta::D88);                           // 88  / searched px
 
-// ceil(ticks_per_unit * work_units / 6): VDP cycles -> CPU T-states, the /6
-// being the project's fact-sheet-grounded kCpuTstatesPerVdpCycleRatio
-// (vdp_access_timing.h:93-95). Clock-free / pure.
-std::uint64_t duration_tstates(const int ticks_per_unit, const std::uint64_t work_units) {
-    const std::uint64_t vdp_cycles = static_cast<std::uint64_t>(ticks_per_unit) * work_units;
+// (b) per-line end-of-line overhead. Charged (tmp_ny - 1) times: openMSX applies
+// the end-of-line Delta at every row boundary EXCEPT the last (commandDone breaks
+// before that delta; VDPCmdEngine.cc:1394/1513/1019/1154).
+constexpr int kPerLineHmmv = kD(VdpAccessDelta::D104) - kD(VdpAccessDelta::D48);  // 56
+constexpr int kPerLineYmmm = 0;                                                  //  0
+constexpr int kPerLineHmmm = kD(VdpAccessDelta::D128) - kD(VdpAccessDelta::D64);  // 64
+constexpr int kPerLineLmmv = kD(VdpAccessDelta::D136) - kD(VdpAccessDelta::D72);  // 64
+constexpr int kPerLineLmmm = kD(VdpAccessDelta::D128) - kD(VdpAccessDelta::D64);  // 64
+
+// LINE charges +32 per MINOR Bresenham step (the minor-axis advance), NOT per
+// line (fact sheet §8 LINE "per line" column note; openMSX D120-D88, :924/947).
+constexpr int kTicksLineMinorStep = kD(VdpAccessDelta::D120) - kD(VdpAccessDelta::D88);  // 32
+
+// ceil(vdp_cycles / 6): VDP cycles -> CPU T-states, the /6 being the project's
+// fact-sheet-grounded kCpuTstatesPerVdpCycleRatio (vdp_access_timing.h:93-95).
+constexpr std::uint64_t tstates_from_vdp_cycles(const std::uint64_t vdp_cycles) {
     const auto ratio = static_cast<std::uint64_t>(vdp_access_timing::kCpuTstatesPerVdpCycleRatio);
     return (vdp_cycles + ratio - 1) / ratio;
 }
 
-// Rectangle/fill commands: openMSX's calcFinishTime uses nx*(ny-1)+(ANX-1),
-// which at command issue (ANX==tmp_nx) reduces exactly to tmp_nx*tmp_ny - 1
-// (VDPCmdEngine.cc:745). Degenerate (either count 0) => 0 (no busy window).
-std::uint64_t rect_duration_tstates(const int ticks_per_unit, const unsigned tmp_nx,
-                                    const unsigned tmp_ny) {
-    const std::uint64_t units = static_cast<std::uint64_t>(tmp_nx) * static_cast<std::uint64_t>(tmp_ny);
+// Per-pixel-only work count (SRCH's searched pixels; also LINE's base term).
+std::uint64_t duration_tstates(const int ticks_per_unit, const std::uint64_t work_units) {
+    return tstates_from_vdp_cycles(static_cast<std::uint64_t>(ticks_per_unit) * work_units);
+}
+
+// Rectangle/fill commands. The per-unit term reduces (at ANX==tmp_nx) to
+// openMSX's calcFinishTime work count tmp_nx*tmp_ny - 1 (VDPCmdEngine.cc:745);
+// the PER-LINE term (missing pre-correction) adds the end-of-line overhead
+// (tmp_ny - 1) times. Both accumulate as VDP cycles and convert ONCE (single
+// ceil). Degenerate (either count 0) => 0 (no busy window).
+std::uint64_t rect_duration_tstates(const int ticks_per_unit, const int per_line_ticks,
+                                    const unsigned tmp_nx, const unsigned tmp_ny) {
+    const std::uint64_t units =
+        static_cast<std::uint64_t>(tmp_nx) * static_cast<std::uint64_t>(tmp_ny);
     if (units == 0) {
         return 0;
     }
-    return duration_tstates(ticks_per_unit, units - 1);
+    const std::uint64_t vdp_cycles =
+        static_cast<std::uint64_t>(ticks_per_unit) * (units - 1) +
+        static_cast<std::uint64_t>(per_line_ticks) * static_cast<std::uint64_t>(tmp_ny - 1);
+    return tstates_from_vdp_cycles(vdp_cycles);
 }
 
 // Per-scrMode addressing/packing traits (VDPCmdEngine.cc:155-410's
@@ -246,9 +288,11 @@ void VdpCommandEngine::reset() {
 // --- status side effects -------------------------------------------------
 
 void VdpCommandEngine::on_color_register_read() {
+    ++color_read_count_;  // DEC-0072 diagnostic: count every S#7 color-register read
     if (transfer_kind_ != TransferKind::Lmcm || !ce()) {
         return;
     }
+    ++transfer_units_consumed_;  // one LMCM read unit serviced (VDP TR-pacing hook)
     col_ = point_pixel(scr_mode_, asx_, transfer_dy_, vram_);
     asx_ = wrap_step(asx_, transfer_tx_);
     if (--transfer_anx_ == 0) {
@@ -413,7 +457,7 @@ void VdpCommandEngine::run_hmmv() {
         command_done();
         return;
     }
-    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmv, tmp_nx, tmp_ny);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmv, kPerLineHmmv, tmp_nx, tmp_ny);
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, col_);
@@ -445,7 +489,7 @@ void VdpCommandEngine::run_hmmm() {
         command_done();
         return;
     }
-    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmm, kPerLineHmmm, tmp_nx, tmp_ny);
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(asx, sy) & 0x1FFFFu);
@@ -482,7 +526,7 @@ void VdpCommandEngine::run_ymmm() {
         command_done();
         return;
     }
-    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksYmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksYmmm, kPerLineYmmm, tmp_nx, tmp_ny);
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(adx, sy) & 0x1FFFFu);
@@ -532,6 +576,7 @@ void VdpCommandEngine::run_line() {
     bool row_notified = false;
     unsigned last_notified_dy = 0;
     std::uint64_t line_pixels = 0;  // M44 Phase 2a: drawn major-axis pixel count
+    std::uint64_t minor_steps = 0;  // minor-axis (Bresenham) advances (+32 VDP cycles each)
 
     for (int guard = 0; guard < 1'000'000; ++guard) {
         if (!row_notified || dy != last_notified_dy) {
@@ -553,6 +598,7 @@ void VdpCommandEngine::run_line() {
                 if (asx < ny_limit) {
                     asx += nx_;
                     dy = wrap_step(dy, ty);
+                    ++minor_steps;
                     if (ty < 0 && static_cast<std::int32_t>(dy) < 0) done = true;
                 }
                 asx = (asx - ny_limit) & 1023u;
@@ -565,6 +611,7 @@ void VdpCommandEngine::run_line() {
                 if (asx < ny_limit) {
                     asx += nx_;
                     adx = wrap_step(adx, tx);
+                    ++minor_steps;
                 }
                 asx = (asx - ny_limit) & 1023u;
                 const bool anx_hit = (anx == nx_);
@@ -574,7 +621,13 @@ void VdpCommandEngine::run_line() {
         }
         if (done) break;
     }
-    last_cmd_duration_tstates_ = duration_tstates(kTicksLine, line_pixels);  // M44 Phase 2a
+    // VDP command-timing parity: 112/px base (D24 dst-read + D88 write) plus +32
+    // per minor Bresenham step (D120-D88). Same "final unit's own slot uncounted"
+    // convention as rect_duration_tstates (per-unit * (line_pixels - 1)).
+    const std::uint64_t line_vdp_cycles =
+        static_cast<std::uint64_t>(kTicksLine) * (line_pixels != 0 ? line_pixels - 1 : 0) +
+        static_cast<std::uint64_t>(kTicksLineMinorStep) * minor_steps;
+    last_cmd_duration_tstates_ = tstates_from_vdp_cycles(line_vdp_cycles);
     command_done();
 }
 
@@ -594,7 +647,7 @@ void VdpCommandEngine::run_lmmv() {
         command_done();
         return;
     }
-    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmv, tmp_nx, tmp_ny);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmv, kPerLineLmmv, tmp_nx, tmp_ny);
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
@@ -626,7 +679,7 @@ void VdpCommandEngine::run_lmmm() {
         command_done();
         return;
     }
-    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmm, tmp_nx, tmp_ny);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmm, kPerLineLmmm, tmp_nx, tmp_ny);
     notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t src = point_pixel(scr_mode_, asx, sy, vram_);
@@ -650,6 +703,7 @@ void VdpCommandEngine::run_lmmm() {
 // --- event-driven transfer commands: LMCM/LMMC/HMMC -----------------------
 
 void VdpCommandEngine::start_lmcm() {
+    ++lmcm_start_count_;  // DEC-0072 diagnostic: count every LMCM command issue
     const ModeTraits& t = traits_for(scr_mode_);
     ny_ &= 1023u;
     const bool dix = (arg_ & kDix) != 0;
@@ -740,6 +794,7 @@ void VdpCommandEngine::perform_transfer_step() {
     } else {
         return;
     }
+    ++transfer_units_consumed_;  // one LMMC/HMMC write unit serviced (VDP TR-pacing hook)
     transfer_adx_ = wrap_step(transfer_adx_, transfer_tx_);
     if (--transfer_anx_ == 0) {
         transfer_dy_ = wrap_step(transfer_dy_, transfer_ty_);
@@ -750,6 +805,28 @@ void VdpCommandEngine::perform_transfer_step() {
             command_done();
             transfer_kind_ = TransferKind::None;
         }
+    }
+}
+
+std::uint64_t VdpCommandEngine::transfer_unit_cost_tstates() const {
+    // VDP command-timing parity: the per-unit VRAM-slot "consume" cost that the
+    // S#2 TR (transfer-ready, bit7) bit drops for after each serviced transfer
+    // unit, then re-raises. openMSX PUNTS on transfer per-unit timing
+    // (nextAccessSlot(limit), "timing is inaccurate", VDPCmdEngine.cc:1288/1349/
+    // 1770) and TIER-1 gives no transfer figure, so this reuses the closest
+    // grounded per-unit constant of the byte/dot analog (the audit's "consistent
+    // with the command's per-unit tick cost"):
+    //   HMMC byte write ~ HMMV 48/byte;  LMMC RMW pixel ~ LMMV 96/px;
+    //   LMCM pixel read ~ SRCH 88/read-px.
+    // 0 when no transfer is active (kind None), e.g. immediately after the final
+    // unit completes -- leaving TR raised as real HW does after the last byte
+    // (fact-sheet §8: "the transfer can end ... even though TR was 1 after the
+    // last byte").
+    switch (transfer_kind_) {
+    case TransferKind::Hmmc: return tstates_from_vdp_cycles(kTicksHmmv);  // 8
+    case TransferKind::Lmmc: return tstates_from_vdp_cycles(kTicksLmmv);  // 16
+    case TransferKind::Lmcm: return tstates_from_vdp_cycles(kTicksSrch);  // 15
+    default: return 0;
     }
 }
 

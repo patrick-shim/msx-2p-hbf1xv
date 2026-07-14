@@ -52,10 +52,14 @@ public:
 
     // M1 opcode-fetch cycle count for the most recently completed step()
     // (M11-S1). One M1 cycle per opcode-fetch byte (each ED/CB/DD/FD prefix is
-    // its own M1) plus the interrupt-acknowledge M1. The count is a pure CPU
-    // signal: datasheet T-state returns are UNCHANGED. The S1985 layer maps this
-    // to the MSX +1-per-M1 wait, applied by the machine to the scheduler
-    // (S1985 fact-sheet §8; A-4). Reset at each step() entry.
+    // its own M1). It EXCLUDES the interrupt/NMI-acknowledge M1: that special M1
+    // asserts /M1 + /IORQ (not the opcode-fetch /M1 + /MREQ the S1985 gates its
+    // +1 wait on) and already carries the Z80's own 2 automatic ack wait-states,
+    // so it ticks R but registers NO S1985 wait cycle (openMSX bills IM1=13 /
+    // IM2=19 / NMI=11 bare; live openMSX A/B confirmed a 13T IM1 accept). The
+    // count is a pure CPU signal: datasheet T-state returns are UNCHANGED. The
+    // S1985 layer maps this to the MSX +1-per-M1 wait, applied by the machine to
+    // the scheduler (S1985 fact-sheet §8; A-4). Reset at each step() entry.
     [[nodiscard]] std::uint32_t m1_cycles_last_step() const;
 
 private:
@@ -70,6 +74,13 @@ private:
     std::uint16_t read_imm16();
     void push16(std::uint16_t value);
     std::uint16_t pop16();
+    // Tick the 7-bit R refresh register (low 7 bits +1, bit 7 frozen) for one M1
+    // machine cycle, WITHOUT counting an S1985 M1-wait cycle. Used for the
+    // interrupt/NMI-acknowledge special M1 (/M1 + /IORQ), which the S1985's
+    // opcode-fetch-gated (/M1 + /MREQ) wait generator does not stretch.
+    void tick_refresh_only();
+    // Normal opcode-fetch M1: tick R AND register one S1985 +1-per-M1 wait cycle
+    // (== tick_refresh_only() + ++m1_cycle_count_).
     void increment_refresh_register();
 
     // Indexed register-file access (Z80 r[] table order: B,C,D,E,H,L,(HL),A).
@@ -153,9 +164,10 @@ private:
     std::uint64_t trace_sequence_ = 0;
 
     // M1 opcode-fetch cycle counter (M11-S1). Reset at step() entry and
-    // incremented once per M1 cycle inside increment_refresh_register() — the
-    // single choke-point through which every opcode fetch AND the interrupt-ack
-    // M1 pass. See m1_cycles_last_step().
+    // incremented once per opcode-fetch M1 inside increment_refresh_register()
+    // (fetch_opcode() per opcode/prefix byte, plus the halted-idle phantom-M1
+    // refetch). The interrupt/NMI-acknowledge M1 ticks R via tick_refresh_only()
+    // but deliberately does NOT increment this counter (see m1_cycles_last_step()).
     std::uint32_t m1_cycle_count_ = 0;
 
     // Q latch snapshot (M12-S4, gap #20/#21). Captured at the top of each step()

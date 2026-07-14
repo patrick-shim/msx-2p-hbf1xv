@@ -162,6 +162,14 @@ public:
     // stay byte-identical (only real CPU-driven OUT writes pace CE). Default false.
     void set_command_timing_suspended(bool suspended);
 
+    // DEC-0072 diagnostic knob (M47-followup, NOT committed): add a signed
+    // T-state bias to the CE busy-window duration computed in
+    // arm_command_busy_window(). Lets a diagnostic sweep probe whether the YS II
+    // save-build corruption is causally gated by the command-engine CE/finish
+    // timing (the named #1 suspect vs openMSX calcFinishTime). Default 0 =
+    // byte-for-byte unchanged.
+    void set_cmd_busy_bias(std::int64_t bias_tstates) { cmd_busy_bias_tstates_ = bias_tstates; }
+
     // --- core::IoDevice (dispatch on port & 0x03; the S1985 mirror #9C-#9F
     //     collapses to the same 0..3, A-2). ---
     core::BusData io_read(core::BusAddress port) override;
@@ -274,6 +282,14 @@ private:
     // clears; a 0 base duration yields cmd_busy_until == now (inert).
     void arm_command_busy_window();
 
+    // VDP command-timing parity: arm the S#2 TR (transfer-ready, bit7) drop-then-
+    // rearm window after the command engine services one event-driven transfer
+    // unit. Called (clock attached, timing not suspended) from the COL-write /
+    // R#46-issue path and the S#7-read path when transfer_units_consumed()
+    // advanced. Sets tr_busy_until_cycles_ to the absolute cycle at which TR
+    // re-raises; a 0 per-unit cost yields tr_busy_until == now (inert).
+    void arm_transfer_ready_window();
+
     // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
     // destination-row render-sync. Applies the strict-superset gates and, when
     // they pass, forwards a commit-to-display-line request to render_sync_:
@@ -338,6 +354,14 @@ private:
     // 0 (== an already-expired window) at reset and whenever no window is armed.
     // Only ever read when clock_source_ != nullptr.
     std::uint64_t cmd_busy_until_cycles_ = 0;
+    // VDP command-timing parity: the ABSOLUTE CPU cycle at which the S#2 TR
+    // (transfer-ready, bit7) bit re-raises after the last serviced event-driven
+    // transfer unit. TR reads 0 while tr_busy_until_cycles_ > cpu_total_cycles().
+    // 0 (already-expired) at reset and whenever no unit is in-flight. Only ever
+    // read when clock_source_ != nullptr.
+    std::uint64_t tr_busy_until_cycles_ = 0;
+    // DEC-0072 diagnostic bias (see set_cmd_busy_bias); default 0 = no change.
+    std::int64_t cmd_busy_bias_tstates_ = 0;
     // When true, an R#46 command write does NOT arm the busy window above
     // (debug_io_write exclusion; see set_command_timing_suspended). Default false;
     // toggled by the machine around its non-perturbing debug seam. Not a piece of

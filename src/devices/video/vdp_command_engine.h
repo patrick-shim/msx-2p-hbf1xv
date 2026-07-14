@@ -115,6 +115,14 @@ public:
     [[nodiscard]] std::uint8_t color() const { return col_; }
     void on_color_register_read();
 
+    // DEC-0072 diagnostic counters (M47 kill-step): how many times software read
+    // the S#7 color register (every on_color_register_read call) and how many
+    // LMCM commands were issued. Pure introspection; not part of emulated state
+    // (reset() leaves them alone). Used to test whether the save-corruption path
+    // ever exercises the LMCM/color-register read at all.
+    [[nodiscard]] std::uint64_t color_read_count() const { return color_read_count_; }
+    [[nodiscard]] std::uint64_t lmcm_start_count() const { return lmcm_start_count_; }
+
     // S#8/S#9: ASX (border-X working register), high byte masked by the
     // caller with | 0xFE (matches the existing M14 stub mask). S#9 read
     // additionally clears BD (mirrors resetBD()).
@@ -140,6 +148,20 @@ public:
     [[nodiscard]] std::uint64_t last_cmd_duration_tstates() const {
         return last_cmd_duration_tstates_;
     }
+
+    // VDP command-timing parity (S#2 TR pacing): monotonic count of event-driven
+    // transfer UNITS (LMMC/HMMC written pixels+bytes, LMCM read pixels) actually
+    // serviced. The owning VDP snapshots this across a COL (R#44) write or an S#7
+    // read; if it advanced, a unit was consumed and the VDP drop-then-rearms the
+    // S#2 TR (transfer-ready) bit for transfer_unit_cost_tstates() T-states,
+    // modelling the VRAM access slot the VDP consumes per unit. Pure pacing
+    // introspection -- NOT emulated device state, so reset() deliberately leaves
+    // it (only the delta across a single call pair is ever used).
+    [[nodiscard]] std::uint64_t transfer_units_consumed() const { return transfer_units_consumed_; }
+    // Per-unit T-state cost the TR bit drops for after each serviced transfer
+    // unit (0 when no transfer active). Grounded in the byte/dot analog per-unit
+    // tick cost; see the .cpp for the citation.
+    [[nodiscard]] std::uint64_t transfer_unit_cost_tstates() const;
 
     // --- M36 Phase 3 debug snapshot: additive, read-only introspection of
     //     the register file + transfer FSM (docs/m36-phase3-planner-package.md
@@ -234,9 +256,17 @@ private:
     std::uint8_t status_ = 0;
     int scr_mode_ = -1;
 
+    // DEC-0072 diagnostic counters (see color_read_count()/lmcm_start_count()).
+    std::uint64_t color_read_count_ = 0;
+    std::uint64_t lmcm_start_count_ = 0;
+
     // M44 Phase 2a: estimated T-state duration of the last-issued command
     // (see last_cmd_duration_tstates()); recomputed on every execute_command().
     std::uint64_t last_cmd_duration_tstates_ = 0;
+
+    // VDP command-timing parity: count of event-driven transfer units serviced
+    // (see transfer_units_consumed()); a pure pacing hook, not reset() state.
+    std::uint64_t transfer_units_consumed_ = 0;
 
     // Event-driven transfer state (LMCM/LMMC/HMMC only).
     // transfer_pending_ mirrors the reference's `transfer` flag
