@@ -21,13 +21,24 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# MSVC otherwise reads sources in the system code page (cp949 on the author's
-# machine) and warns C4819 on files carrying UTF-8 comments (em-dashes, etc.).
-# /utf-8 makes MSVC treat sources as UTF-8. Placed before any target so the core
-# library, both executables, and the tests/ subdirectory all inherit it; no-op
-# on GCC/Clang.
+# Platform warning/encoding matrix (M54/DEC-0081). ONE codebase, two toolchains,
+# auto-selected by the target system -- no fork, no per-platform build file.
+# Placed before any target so the core library, every executable, and the tests/
+# subdirectory all inherit the flags.
+#
+# MSVC: reads sources in the system code page (cp949 on the author's machine) and
+# warns C4819 on files carrying UTF-8 comments (em-dashes, etc.). /utf-8 makes
+# MSVC treat sources as UTF-8. Clang/GCC are UTF-8 native and need no equivalent.
+#
+# AppleClang/Clang/GCC: -Wall -Wextra mirrors the MSVC intent (diagnostics on)
+# without changing what builds. -Werror is deliberately NOT set: MSVC carries no
+# /WX counterpart, so adding it would make the toolchains asymmetric and let a
+# benign warning block the build. else() rather than if(APPLE) so a future
+# Linux/GCC host inherits the same regime.
 if(MSVC)
     add_compile_options(/utf-8)
+else()
+    add_compile_options(-Wall -Wextra)
 endif()
 
 enable_testing()

@@ -57,38 +57,38 @@ void print_usage(const char* argv0) {
         "USAGE\n"
         "  " << argv0 << " [options]\n"
         << R"HELP(
-  Tip: run it from the project root folder so that bios\, roms\ and disks\ are
+  Tip: run it from the project root folder so that bios/, roms/ and disks/ are
   found (or pass full paths). With NO options it boots to MSX-BASIC (the "Ok"
   prompt) as a READY-TO-GAME config: 512 KB RAM, fast-disk on, and an FM-PAC
-  auto-loaded into slot 2 (for SRAM saves) if roms\fmpac.rom is present. Want the
+  auto-loaded into slot 2 (for SRAM saves) if roms/fmpac.rom is present. Want the
   authentic bare 1988 machine instead? add --stock. -- try booting first.
 
 GETTING STARTED  (copy a line, then change the paths to your files)
 
   Just boot to BASIC (convenience defaults):
-    sony_msx_sdl3.exe
+    sony_msx_sdl3
 
   The authentic bare HB-F1XV (64 KB, accurate disk timing, no FM-PAC):
-    sony_msx_sdl3.exe --stock
+    sony_msx_sdl3 --stock
 
   Play a cartridge game (the cartridge type is detected automatically):
-    sony_msx_sdl3.exe --slot1 roms\aleste.rom
+    sony_msx_sdl3 --slot1 games/roms/game.rom
 
   Boot a floppy (MSX-DOS, or a disk game):
-    sony_msx_sdl3.exe --disk disks\msxdos22.dsk
+    sony_msx_sdl3 --disk disks/msxdos23.dsk
 
   A multi-disk game -- press F11 in the window to swap to the next disk:
-    sony_msx_sdl3.exe --disk disks\game1.dsk --disk disks\game2.dsk
+    sony_msx_sdl3 --disk games/disks/game-d1.dsk --disk games/disks/game-d2.dsk
 
   Save your progress TO DISK (writes are stored back into the .dsk on exit):
-    sony_msx_sdl3.exe --disk disks\rpg.dsk --disk-writable
+    sony_msx_sdl3 --disk games/disks/rpg.dsk --disk-writable
 
   A game that saves TO SRAM -- the FM-PAC auto-loads into slot 2 by default, so
   a slot-1 game and the FM-PAC coexist (its save auto-persists):
-    sony_msx_sdl3.exe --disk disks\ys2.dsk
+    sony_msx_sdl3 --disk games/disks/ys2/ys2-d1.dsk
 
   Bigger + sharper window (RAM is already 512 KB by default):
-    sony_msx_sdl3.exe --slot1 roms\big.rom --scale 4 --filter nearest
+    sony_msx_sdl3 --slot1 games/roms/game.rom --scale 4 --filter nearest
 
 OPTIONS
 
@@ -114,7 +114,7 @@ OPTIONS
                             or --stock = the real HB-F1XV. 512 KB is the machine's
                             built-in ceiling (more would need a RAM cartridge).
     --no-fmpac              Do NOT auto-load the FM-PAC into slot 2 (SRAM saves
-                            then need an explicit --slot1/--slot2 roms\fmpac.rom).
+                            then need an explicit --slot1/--slot2 roms/fmpac.rom).
 
   Screen
     --scale <1..8>          Window size = 320N x 240N (default 3 = 960x720). The
@@ -156,7 +156,7 @@ OPTIONS
     --no-fast-disk          Use 100% accurate (slower) FDC timing instead (also
                             what --stock selects). Alt+F still toggles live.
     --fmpac-sram <path>     Where the FM-PAC's battery save is stored (default:
-                            roms\fmpac.rom.sram for the auto-loaded FM-PAC, or
+                            roms/fmpac.rom.sram for the auto-loaded FM-PAC, or
                             <cart>.rom.sram for an explicit one; auto-written).
     --no-fmpac-sram         Keep FM-PAC SRAM in memory only (no save file).
 
@@ -196,12 +196,12 @@ IN-WINDOW HOTKEYS
 
 GOOD TO KNOW
     - Paths are relative to the folder you run from -- launch from the project
-      root, or use full paths (e.g. --bios-dir C:\msx\bios).
+      root, or use full paths (e.g. --bios-dir <full path to your bios folder>).
     - Game saves: to SRAM -> add the FM-PAC cartridge; to disk -> ON by default
       now (a real MSX writes its floppies); pass --no-disk-writable for read-only.
-    - A save disk must be a FORMATTED .dsk. Create one with
-      tools\format-blank-disk.ps1 -- an all-zero blank has no filesystem and a
-      game cannot write to it.
+    - A save disk must be a FORMATTED .dsk. Create one with the bundled disk
+      tool (msx-disk --create yourdisk.dsk), or tools/format-blank-disk.ps1 --
+      an all-zero blank has no filesystem and a game cannot write to it.
     - Quit by closing the window normally (do not force-kill / Ctrl+C) so disk
       and SRAM saves are flushed to their files.
 

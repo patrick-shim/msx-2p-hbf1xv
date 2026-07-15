@@ -244,9 +244,11 @@ bool Sdl3App::init() {
         return false;
     }
 
-    // Give the live window (and thus the Windows taskbar button) an explicit
-    // icon. The .exe's Explorer icon comes from the linked app_icon.rc resource;
-    // this covers the running window/taskbar. The pixels are embedded
+    // Give the live window (and thus its taskbar/Dock button) an explicit icon.
+    // On Windows the executable's Explorer icon comes from the linked app_icon.rc
+    // resource (an if(WIN32) CMake branch -- not compiled on macOS, where a .icns
+    // bundle would be the equivalent and is deferred); this call covers the
+    // RUNNING window on every platform. The pixels are embedded
     // (app_icon_data.h, 64x64 RGBA) so this is fully self-contained -- no icon
     // file to locate and no SDL_image dependency. Every step is non-fatal: a
     // failure here just leaves the default icon, never aborts startup.

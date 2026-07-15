@@ -66,7 +66,15 @@ the sections below and the source are the authoritative spec.)
 
 ## Build and test
 
-There is one build tree, `build/`. Bootstrap it:
+One codebase, two toolchains — **Windows (MSVC) and macOS (AppleClang)** build from the same
+`CMakeLists.txt`, selected automatically at configure time. There is no fork and no
+per-platform build file. There is also one build tree, `build/`, on both.
+
+The one difference that matters: Visual Studio is a **multi-config** generator (pick the config
+at build/test time with `--config` / `-C`), while Ninja is **single-config** (pick it at
+*configure* time with `CMAKE_BUILD_TYPE`, then pass no `--config` / `-C` at all).
+
+### Windows
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/bootstrap-build.ps1 -RunTests
@@ -84,20 +92,55 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
-- Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
-  `-DSONY_MSX_ENABLE_SDL3=OFF`.
+- Executables land in `build/Debug/`: `sony_msx_headless.exe`, `sony_msx_sdl3.exe`.
 - Fast subset: `ctest --test-dir build -C Debug -LE m24_slow_full_sweep` excludes the
   ~30-minute ZEXALL / ZEXDOC sweep.
-- Executables land in `build/Debug/`: `sony_msx_headless.exe`, `sony_msx_sdl3.exe`.
 
 Requirements: CMake, a C++20-capable MSVC toolchain (Visual Studio 2022+ with the "Desktop
 development with C++" workload), and PowerShell. No separate SDL3 install is needed — it is
 built from the bundled source.
 
+### macOS
+
+```bash
+tools/bootstrap-build.sh --run-tests
+```
+
+Manual equivalent — note **no `--config` / `-C Debug`** (Ninja is single-config):
+
+```bash
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSONY_MSX_ENABLE_SDL3=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+- Executables land in **`build/`, not `build/Debug/`**, with no `.exe` suffix:
+  `sony_msx_headless`, `sony_msx_sdl3`, `msx-disk`. This is the most common trip hazard.
+- Fast subset: `ctest --test-dir build -LE m24_slow_full_sweep`.
+
+Requirements: the Xcode Command Line Tools (`xcode-select --install`) for AppleClang, plus
+`brew install ninja cmake sdl3`. Unlike the Windows path, macOS links **Homebrew's** SDL3 —
+`find_package(SDL3 CONFIG REQUIRED)` locates it with no `CMAKE_PREFIX_PATH` argument — this is
+the tested macOS route. To build SDL3 from the vendored source instead (on a machine with no
+Homebrew SDL3), `tools/bootstrap-build.sh --vendored-sdl3` mirrors what the Windows bootstrap
+does, though that fallback branch has not yet been exercised on macOS. `brew install powershell`
+is optional and only needed to run the `tools/*.ps1` asset gates; the test suite itself is pure
+C++ and needs no PowerShell.
+
+### Both platforms
+
+- Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
+  `-DSONY_MSX_ENABLE_SDL3=OFF`. This **changes the test count** — 16 tests are SDL3-gated, so
+  the fast subset reports **237** instead of **253**. That is the fallback configuration, not a
+  regression.
+- Some tests report `SKIP` and still pass when an optional game asset is absent; the count stays
+  green.
+
 ## Disk utility: msx-disk
 
 The build also produces a standalone host-side disk tool, post-build-copied to
-`diskutils\msx-disk.exe` (source in `src/diskutils/`, fully build-isolated from the emulator —
+`diskutils\msx-disk.exe` (`diskutils/msx-disk`, no suffix, on macOS; source in `src/diskutils/`,
+fully build-isolated from the emulator —
 neither links the other). It creates, inspects, and formats 720 KB 3.5" DD MSX-DOS FAT12
 `.dsk` images (80 tracks x 2 sides x 9 sectors x 512 bytes) byte-exact to the layout the
 HB-F1XV's WD2793 / Sony Disk ROM expects:
@@ -107,6 +150,10 @@ diskutils\msx-disk.exe --create mydisk.dsk           # new fully-formatted blank
 diskutils\msx-disk.exe --read mydisk.dsk --sector 0  # hex dump (whole disk, --sector <N>, or --range <A-B> in hex)
 diskutils\msx-disk.exe --format mydisk.dsk           # re-format in place
 ```
+
+On macOS, the same three commands as `./diskutils/msx-disk --create mydisk.dsk` (etc.). The tool
+is deterministic across platforms: `--create` produces a byte-identical image on Windows and
+macOS (same SHA256).
 
 Safety and determinism: `--create` refuses to overwrite an existing file and `--format`
 refuses a file that is not exactly 737,280 bytes — both return exit code 3 unless `--force`
@@ -124,11 +171,23 @@ resolved relative to the current directory).
 **SDL3 frontend** (real window, throttled real-time loop, live audio/input):
 
 ```powershell
-build\Debug\sony_msx_sdl3.exe                                  # plain BIOS boot to BASIC
-build\Debug\sony_msx_sdl3.exe --slot1 games\roms\aleste2.rom   # cartridge in slot 1 (FM-PAC auto-loads into slot 2)
-build\Debug\sony_msx_sdl3.exe --disk disks\msxdos23.dsk        # MSX-DOS boot floppy
-build\Debug\sony_msx_sdl3.exe --disk games\disks\ys2\d1.dsk --disk games\disks\ys2\d2.dsk --disk-writable   # multi-disk game (F11 swaps; saves persist)
+build\Debug\sony_msx_sdl3.exe                                       # plain BIOS boot to BASIC
+build\Debug\sony_msx_sdl3.exe --slot1 "games\roms\Aleste 2\aleste2.rom"   # cartridge in slot 1 (FM-PAC auto-loads into slot 2)
+build\Debug\sony_msx_sdl3.exe --disk disks\msxdos23.dsk             # MSX-DOS boot floppy
+build\Debug\sony_msx_sdl3.exe --disk games\disks\ys2\ys2-d1.dsk --disk games\disks\ys2\ys2-d2.dsk --disk-writable   # multi-disk game (F11 swaps; saves persist)
 ```
+
+The same lines on **macOS** — the binary sits in `build/` with no `.exe`, and paths use `/`:
+
+```bash
+./build/sony_msx_sdl3                                          # plain BIOS boot to BASIC
+./build/sony_msx_sdl3 --slot1 "games/roms/Aleste 2/aleste2.rom" # cartridge in slot 1
+./build/sony_msx_sdl3 --disk disks/msxdos23.dsk                 # MSX-DOS boot floppy
+./build/sony_msx_sdl3 --disk games/disks/ys2/ys2-d1.dsk --disk games/disks/ys2/ys2-d2.dsk --disk-writable
+```
+
+(The game library is organized one folder per title, and several titles contain spaces — quote
+those paths.)
 
 Flags:
 `--bios-dir <path>` (default `bios`), `--disk <path>` (repeatable — an ordered list, the
@@ -229,6 +288,13 @@ is hosted publicly with `bios/` included as the owner's informed, accepted-risk 
 
 ```powershell
 ./tools/validate-assets.ps1
+```
+
+On macOS (PowerShell 7 via `brew install powershell`; drop the Windows-only
+`-ExecutionPolicy Bypass`):
+
+```bash
+pwsh -File tools/validate-assets.ps1
 ```
 
 ## License
