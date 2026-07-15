@@ -145,7 +145,12 @@ create per-agent or per-purpose trees (`build-qa-*`, `build-<milestone>-*`, ...)
 from the same `build/` after a clean rebuild, not from a parallel tree. `.gitignore` swallows
 any `build*` path, but creating one is itself a policy violation.
 
-The standard configuration is SDL3=ON — it is the superset (both executables + all tests):
+**ONE codebase, TWO toolchains, auto-detected by the target system (M54, DEC-0081):** Windows/MSVC
+and macOS/AppleClang build the SAME tree from the SAME `CMakeLists.txt`. There is no fork, no
+per-platform build file, and no platform branching in `src/` — only CMake `if(MSVC)`/`if(WIN32)`
+guards. The standard configuration on both is SDL3=ON — the superset (both executables + all tests).
+
+**Windows (Visual Studio — MULTI-config: `--config`/`-C` REQUIRED):**
 
 ```powershell
 cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=ON
@@ -153,12 +158,28 @@ cmake --build build --config Debug
 ctest --test-dir build -C Debug --output-on-failure
 ```
 
+**macOS (Ninja — SINGLE-config: `CMAKE_BUILD_TYPE` at configure, NO `--config`/`-C`):**
+
+```bash
+brew install ninja            # + cmake sdl3 powershell as needed
+cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSONY_MSX_ENABLE_SDL3=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
+
+Homebrew's SDL3 is found by `find_package(SDL3 CONFIG REQUIRED)` with **no** `CMAKE_PREFIX_PATH`.
+`tools/bootstrap-build.sh` wraps this flow (the macOS twin of `tools/bootstrap-build.ps1`).
+
 Headless-only fallback (only for an environment without `SDL3Config.cmake` on the prefix
 path) reconfigures the SAME tree: `cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=OFF`.
+**It changes the test denominator** — 16 tests are SDL3-gated, so OFF yields **237**, not 253.
+A 237 count is the wrong configuration, not a regression.
 
-- Multi-config generators (VS): use `-C Debug`/`-C Release` at test time.
-- Single-config generators: set `-DCMAKE_BUILD_TYPE=Debug` at configure time.
-- Executables land in `build/Debug/` (`sony_msx_headless.exe`, `sony_msx_sdl3.exe`).
+- Multi-config generators (VS, Xcode): use `-C Debug`/`-C Release` at test time; executables land
+  in `build/Debug/` (`sony_msx_headless.exe`, `sony_msx_sdl3.exe` on Windows).
+- Single-config generators (Ninja, Unix Makefiles): set `-DCMAKE_BUILD_TYPE=Debug` at configure
+  time; executables land in **`build/`, NOT `build/Debug/`** (`sony_msx_headless`, `sony_msx_sdl3`,
+  `msx-disk` — no `.exe` suffix). This is the most common Mac-side trip hazard.
 
 ## Evidence gates (run and capture; never fabricate)
 
@@ -167,6 +188,13 @@ path) reconfigures the SAME tree: `cmake -S . -B build -DSONY_MSX_ENABLE_SDL3=OF
 - `cmake --build build --config Debug` — build succeeds.
 - `ctest --test-dir build -C Debug --output-on-failure` — deterministic suite passes.
 - Behavior-affecting only: `tools/openmsx-ab-smoke.ps1` → `docs/openmsx-ab-smoke.md`.
+
+On **macOS** the same gates run verbatim under `pwsh -File tools/<script>.ps1` (PowerShell 7 via
+`brew install powershell`; the Windows-only `-ExecutionPolicy Bypass` is simply omitted), and the
+build/ctest gates drop `--config`/`-C Debug` under the single-config Ninja generator. The `tools/`
+scripts are **dev-only** — ctest itself invokes no PowerShell, so the suite is toolchain-agnostic.
+openMSX A/B on macOS would need a harness path override (`tools/openmsx-*.ps1` assume the WSL
+`/usr/bin/openmsx`; Homebrew installs to `/opt/homebrew/bin/openmsx`) — not yet implemented.
 
 ## Multi-agent orchestration (Claude Code native)
 
@@ -239,11 +267,25 @@ subagents — sequencing is owned by the coordinator (or the workflow below).
   - `roms/` now holds ONLY the FM-PAC peripheral cartridge: `fmpac.rom` + its battery-SRAM
     `fmpac.rom.sram` (the "NOT TO BE ALTERED" pair — see `roms/README.md`).
   - `disks/` holds MSX-DOS SYSTEM floppy images (e.g. `msxdos23.dsk`) used for FDC/boot testing.
-  - `games/` is the game library (owner-provisioned, gitignored): `games/disks/<title>/*.dsk`
-    game floppy sets (e.g. `games/disks/ys2/d1.dsk`+`d2.dsk`, the two-disk YS II set; laydock2,
-    f1, Gradius3, runworth, undeadline, …) for live/regression playtesting of the disk-boot and
-    multi-disk paths, and `games/roms/*.rom` game cartridge images (aleste2, metalgear,
-    metalgear2_scc, kings_valley2).
+  - `games/` is the game library (owner-provisioned, gitignored). **Layout is nested-per-title, and
+    several title folders contain spaces** — quote paths. Verified on disk 2026-07-15 (M54/S4):
+    - `games/disks/<title>/…` floppy sets for disk-boot / multi-disk playtesting:
+      `ys2/ys2-d1.dsk` + `ys2-d2.dsk` + `ys2-save.dsk` (the two-disk YS II set **plus** its save
+      disk), `F1/f1-d1.dsk`…`f1-d3.dsk`, `runworth/rw-d1.dsk`…`rw-d4.dsk`,
+      `laydock_2/laydock2-1.dsk` + `laydock2-2.dsk`, `gradius_3/G3.DSK` (**note the UPPERCASE
+      `.DSK`**), `undeadline/undeadline.dsk`, `Load Runner/load_runner.dsk`,
+      `Psycho World/psycho_world.dsk`.
+    - `games/roms/<title>/<file>.rom` cartridge images: `Aleste 2/aleste2.rom`,
+      `Metal Gear/metal_gear.rom`, `Metal Gear 2/metal_gear2.rom`,
+      `King's Valley 2/kings_valley2.rom`, `Space Manbow/space_manbow.rom`,
+      `firebird/firebird.rom`.
+    - **No `metalgear2_scc.rom` exists** anywhere in the tree (an earlier revision of this file
+      claimed one). Filenames here are **not** the flat `games/roms/<title>.rom` shape older docs
+      and several tests still assume — see the note below.
+    - ⚠ Known drift (NOT a defect of this file): the `games/`-gated tests still look for the old
+      **flat** paths (`games/roms/aleste2.rom`, `games/roms/metal_gear.rom`), so they **SKIP** on
+      **both** Windows and macOS — pre-existing since the asset reorg, platform-symmetric, and
+      out of scope to fix without its own decision entry.
 - `references/` — read-only grounding sources, ranked by the **Reference precedence** above:
   `fact-sheets/` + web-researched primary hardware docs (real-hardware spec, **tier 1**), openMSX
   21.0 source (mature behavior reference + A/B-parity basis, **tier 2**), fMSX 6.0 source
