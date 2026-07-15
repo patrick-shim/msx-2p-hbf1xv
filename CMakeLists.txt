@@ -117,6 +117,32 @@ target_include_directories(sony_msx_core PUBLIC src)
 add_executable(sony_msx_headless src/main.cpp)
 target_link_libraries(sony_msx_headless PRIVATE sony_msx_core)
 
+# --- M53 (DEC-0080): standalone host-side MSX disk utility --------------------
+# Build-ISOLATED: msx_diskutil links NOTHING from sony_msx_core and sony_msx_core
+# never links it (one-way isolation). Additive only; zero effect on the emulator
+# targets or the deterministic suite. Placed OUTSIDE the SDL3 guard so it always
+# builds in the standard flow.
+add_library(msx_diskutil STATIC
+    src/diskutils/msx_disk_format.cpp
+    src/diskutils/hex_dump.cpp
+    src/diskutils/cli.cpp
+)
+target_include_directories(msx_diskutil PUBLIC src)
+
+add_executable(msx_disk src/diskutils/main.cpp)
+target_link_libraries(msx_disk PRIVATE msx_diskutil)
+set_target_properties(msx_disk PROPERTIES OUTPUT_NAME msx-disk)
+
+# Post-build: copy the ONE build-tree binary into the owner-created root
+# diskutils/ (DEC-0041: no second build tree). make_directory guards a fresh
+# clone / lean checkout where the folder is absent (R7). $<TARGET_FILE:msx_disk>
+# resolves the platform suffix (msx-disk.exe on Windows, msx-disk elsewhere).
+add_custom_command(TARGET msx_disk POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_SOURCE_DIR}/diskutils"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "$<TARGET_FILE:msx_disk>" "${CMAKE_SOURCE_DIR}/diskutils/"
+    VERBATIM)
+
 if(SONY_MSX_ENABLE_SDL3)
     find_package(SDL3 CONFIG REQUIRED)
 

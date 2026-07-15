@@ -60,6 +60,9 @@ the sections below and the source are the authoritative spec.)
 - An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
   a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
+- A standalone **`msx-disk` disk utility** (`diskutils\msx-disk.exe`): create / hex-read / format
+  720 KB MSX-DOS FAT12 `.dsk` images byte-exact to the machine's own layout (see
+  [Disk utility](#disk-utility-msx-disk) below).
 
 ## Build and test
 
@@ -90,6 +93,28 @@ ctest --test-dir build -C Debug --output-on-failure
 Requirements: CMake, a C++20-capable MSVC toolchain (Visual Studio 2022+ with the "Desktop
 development with C++" workload), and PowerShell. No separate SDL3 install is needed — it is
 built from the bundled source.
+
+## Disk utility: msx-disk
+
+The build also produces a standalone host-side disk tool, post-build-copied to
+`diskutils\msx-disk.exe` (source in `src/diskutils/`, fully build-isolated from the emulator —
+neither links the other). It creates, inspects, and formats 720 KB 3.5" DD MSX-DOS FAT12
+`.dsk` images (80 tracks x 2 sides x 9 sectors x 512 bytes) byte-exact to the layout the
+HB-F1XV's WD2793 / Sony Disk ROM expects:
+
+```powershell
+diskutils\msx-disk.exe --create mydisk.dsk           # new fully-formatted blank 720 KB image
+diskutils\msx-disk.exe --read mydisk.dsk --sector 0  # hex dump (whole disk, --sector <N>, or --range <A-B> in hex)
+diskutils\msx-disk.exe --format mydisk.dsk           # re-format in place
+```
+
+Safety and determinism: `--create` refuses to overwrite an existing file and `--format`
+refuses a file that is not exactly 737,280 bytes — both return exit code 3 unless `--force`
+is given (exit codes: 0 success, 1 usage, 2 I/O, 3 safety refusal). Output contains no
+timestamps or volume serial, so identical invocations produce byte-identical images. Created
+disks are empty data/files media — mounted and recognized by Disk BASIC / MSX-DOS, but not
+bootable (no proprietary DOS system files are written; copy `MSXDOS.SYS`/`COMMAND.COM` from
+your own MSX-DOS disk to make one bootable).
 
 ## Run
 
