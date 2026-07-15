@@ -1,0 +1,21 @@
+﻿Asset checksum report
+Generated at: 2026-07-15T15:50:56.6251428+09:00
+Algorithm: SHA256
+
+[bios]
+Directory: D:\Projects\sony-msx-hbf1xv\bios
+Exists:    True
+Files:     7
+- f1xvbios.rom | 32768 bytes | 75adcdb462137c61fa570a2773a8d27ce3eeaf18873b3ac500492b594a1a1b93
+- f1xvdisk.rom | 16384 bytes | b9e0f8db66c06069eae881096245666b798dcdc0461afb415a45a95476be8f9b
+- f1xvext.rom | 16384 bytes | 36000685128f95ff515a128973f8d439116c1a1a8e38c1777293a428894434a2
+- f1xvfirm.rom | 1048576 bytes | c78c13996a406ee69c2a6b988c53a68b649affabef6e4599e6ea507d5387f044
+- f1xvkdr.rom | 32768 bytes | 9fb7ef5003fcb953f46ffe5bab399832d8175f53cccb763d8c454a91bc2429fd
+- f1xvkfn.rom | 262144 bytes | 3c9f60fda25b42978612cff1b979de8a0f8deeaf9957db957f0e5c7c10263d8e
+- f1xvmus.rom | 16384 bytes | 29325437196ec7fc7b39b25a87f6981805bd8cb302acf4708f504fb1fb89108b
+
+[roms]
+Directory: D:\Projects\sony-msx-hbf1xv\roms
+Exists:    True
+Files:     1
+- fmpac.rom | 65536 bytes | 3cfe44646b69a622656b96305f1b975f48ca018839f7946895f7a1352d9720aa

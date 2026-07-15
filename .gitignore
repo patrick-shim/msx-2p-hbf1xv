@@ -205,20 +205,18 @@ Desktop.ini
 # /debug/**/* ignores above still apply (regenerable runtime captures stay untracked;
 # committed evidence keeps its explicit `!` exceptions).
 
-# --- Local-only development apparatus (owner request, 2026-07-10) ---
-# These directories stay fully present and usable on the LOCAL filesystem but are
-# untracked so they no longer publish to the public remote. They leave the remote
-# tip on the next push (prior history still contains them). NOTE: the build
-# references tests/ (CMakeLists add_subdirectory(tests)), so a fresh clone lacking
-# these will not configure -- the local working tree is unaffected.
-/.claude/
-/agent-protocol/
+# --- Development apparatus: coordination trees TRACKED (DEC-0082 as amended, 2026-07-16) ---
+# Owner-corrected scope: with the dual-machine (Windows + macOS) workflow, git
+# carries the CROSS-MACHINE COORDINATION set — docs/ (planner packages, reports,
+# QA sign-offs), agent-protocol/ (the protocol ledger), .claude/ (agent
+# definitions minus the per-machine settings.local.json), and the CLAUDE.md
+# project-memory files. references/, tests/, and tools/ REMAIN local-only
+# (both machines hold copies from the owner's full-tree transfer; edits there
+# are hand-carried — a recorded limitation). debug/ stays untracked (regenerable
+# runtime captures; its pattern ignores + committed-evidence `!` exceptions
+# above still apply).
 /debug/
-/docs/
 /references/
 /tests/
 /tools/
-
-# AI assistant memory files — local-only, hidden from the remote (owner request)
-/CLAUDE.md
-/src/CLAUDE.md
+/.claude/settings.local.json

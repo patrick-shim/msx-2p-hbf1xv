@@ -1,0 +1,690 @@
+version: 1
+schema: msx-agent-dod
+applies_to: all_milestones
+enforcement: required
+
+checklist:
+  planning:
+    spec_defined: false
+    scope_in_scope_only: false
+    dependencies_mapped: false
+    acceptance_criteria_defined: false
+    risks_logged: false
+    evidence:
+      required_files:
+        - agent-protocol/state/milestones.md
+        - agent-protocol/channels/requests.md
+        - agent-protocol/channels/responses.md
+  implementation:
+    code_changes_scoped_to_milestone: false
+    unit_tests_added_or_updated: false
+    integration_tests_added_or_updated: false
+    build_flow_referenced: false
+    evidence:
+      required_artifacts:
+        - changed_source_files
+        - unit_test_report
+        - integration_test_report
+  regression_qa:
+    regression_matrix_updated: false
+    impacted_areas_covered: false
+    blocker_risks_resolved_or_accepted: false
+    signoff_decision_recorded: false
+    evidence:
+      required_files:
+        - agent-protocol/channels/responses.md
+        - agent-protocol/channels/decisions.md
+
+phase_transition_rules:
+  planning_to_implementation:
+    requires:
+      - checklist.planning.spec_defined
+      - checklist.planning.acceptance_criteria_defined
+      - checklist.planning.risks_logged
+  implementation_to_regression_qa:
+    requires:
+      - checklist.implementation.unit_tests_added_or_updated
+      - checklist.implementation.integration_tests_added_or_updated
+  regression_qa_to_release_decision:
+    requires:
+      - checklist.regression_qa.regression_matrix_updated
+      - checklist.regression_qa.signoff_decision_recorded
+
+milestone_records:
+  M0:
+    planning:
+      spec_defined: false
+      scope_in_scope_only: false
+      dependencies_mapped: false
+      acceptance_criteria_defined: false
+      risks_logged: false
+    implementation:
+      code_changes_scoped_to_milestone: false
+      unit_tests_added_or_updated: false
+      integration_tests_added_or_updated: false
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: false
+      impacted_areas_covered: false
+      blocker_risks_resolved_or_accepted: false
+      signoff_decision_recorded: false
+    overall_done: false
+  M9:
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      # R5 (openMSX opcode-trace parity) accepted as a deferred risk to M10 per DEC-0001.
+      blocker_risks_resolved_or_accepted: true
+      impacted_areas_covered: true
+      signoff_decision_recorded: true   # QA CONDITIONAL PASS (REQ-M9-010) + DEC-0001 deferral
+    # Closed by human release decision (REQ-M9-011, 2026-07-06) on the DEC-0001 deferral basis.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M9-011). ctest 21/21 green (QA-executed). Opcode families + interrupt architecture complete/verified. R5 parity deferred to M10 per DEC-0001."
+  M10:
+    status: in_progress
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true   # QA PASS (REQ-M10-008), QA-executed ctest 28/28, R5 diff re-run
+    # Closed by human release decision (REQ-M10-009, 2026-07-06) on QA PASS.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M10-009). Slices S1..S5 complete; ctest 28/28 (QA-executed). R5 DISCHARGED: QA re-ran tools/openmsx-trace-parity.ps1, reproduced empty architectural diff over 48 instr vs openMSX 19.1, adversarially validated the comparator. QA verdict PASS (docs/m10-qa-signoff.md). Residuals (non-blocking, future milestones): R5 bounded to a 48-instr RAM-only program not a full zexall sweep; cycle parity ungated (DP-4); SRAM 8KB assumption (DP-3); VDP/slot/BIOS/IO (DP-1/2/5)."
+  M11:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # R-1/A-2 tracked to M12; A-5/R-6 accepted out-of-scope
+      signoff_decision_recorded: true   # QA PASS (REQ-M11-004), QA-executed ctest 38/38, A/B reproduced
+    # Closed by human release decision (REQ-M11-005, 2026-07-06) on QA PASS; git tag v1.0.11.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M11-005), git tag v1.0.11. QA PASS (REQ-M11-004, docs/m11-qa-signoff.md). Slices S1..S6 complete; ctest 38/38 (QA-executed, +10 new). Real A/B trace-diff EMPTY vs openMSX 19.1 Sony_HB-F1XV with genuine <S1985>, QA-reproduced (both sides driven, 15/15). No regression. Forward obligation: M12 planner flips reset slot default #A8=0xFF -> #A8=0 (slot-0 BIOS) once ROMs populate slot 0 (R-1). A-5/R-6 backup-RAM .sram persistence accepted out-of-scope."
+  M12:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # ZEXALL degrade + HALT-R defer ruled non-blocking by QA
+      signoff_decision_recorded: true   # QA PASS (REQ-M12-004), QA-executed ctest 45/45, A/B reproduced
+    # Closed by coordinator under DEC-0003 standing auto-close grant (REQ-M12-005, 2026-07-06); git tag v1.0.12.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (REQ-M12-005, coordinator auto-close per DEC-0003 grant), git tag v1.0.12. Z80A CPU parity hardening. QA PASS (docs/m12-qa-signoff.md): QA-executed ctest 45/45 (+7 suites), zero regression M1-M12 (8 M11 timing oracles unchanged; no T-state/refresh site altered; IM1 ack=14 no double-count). Gaps closed: #3/#35 WZ, #4/#5 BIT-from-WZ, #20/#21 SCF/CCF Q-latch, #30 RETI IFF, #31 NMOS LD A,I/R bug. #34 HALT-R deferred (DEC-0004). A/B empty diff 48/48 vs openMSX 19.1 QA-reproduced + adversarial corruption test. Residuals non-blocking: ZEXALL offline-degraded (acceptance made it 'if feasible'); HALT-R defer. Forward follow-ups: DEC-0004 HALT-R; stand up ZEX if a legal binary appears."
+  M13:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # R-6/D-3/D-4/D-5 accepted-tracked to future milestones
+      signoff_decision_recorded: true   # QA PASS (REQ-M13-004), QA-executed ctest 50/50, boot A/B reproduced
+    # Closed by human release decision (DEC-0006 / REQ-M13-005, 2026-07-06); git tag v1.0.13.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (DEC-0006 / REQ-M13-005), git tag v1.0.13. QA PASS (REQ-M13-004, docs/m13-qa-signoff.md). RAM/ROM devices + slot population per Sony_HB-F1XV.xml (slot 0-0 BIOS, 3-0 RAM mapper, 3-1 SUB+Kanji, 3-2 DISK, 3-3 FM-MUSIC; slots 0 & 3 expanded). Machine now BOOTS real BIOS (#A8=0, bus[0]=0xF3 DI, PC advances through BIOS). ctest 50/50 (QA-executed, +5), zero regression (updated tests authentic not weakened; single #FC-FF owner; ram_slot_backing retired). BIOS SHA1s match openMSX 'confirmed by Meits'; both A/B subjects empty diff, QA-reproduced with comparator failure-mode checks. Deferred out-of-scope (tracked): FM-PAC internals+SRAM, Kanji-font I/O #D8-DB, Halnote/MSX-JE firmware, cartridge loading, FDC drive mechanics, VRAM/VDP (M14). Awaiting human release decision + tag v1.0.13."
+  M14:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # D1-D7 rendering/timing depth deferred + backlog-recorded
+      signoff_decision_recorded: true   # QA PASS (REQ-M14-004), QA-executed ctest 56/56, A/B reproduced
+    # Closed by human release decision (DEC-0007 / REQ-M14-005, 2026-07-06); git tag v1.0.14.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (DEC-0007 / REQ-M14-005), git tag v1.0.14. Closes backlog B9. QA PASS (REQ-M14-004, docs/m14-qa-signoff.md). V9958 VDP register/VRAM/status/interrupt CONTRACT. 128KB VRAM migrated out of the machine into the VDP (no CPU-addressable VRAM remains). ctest 56/56 (QA-executed, +6), zero regression (memory_regions repointed authentically; debug-dump golden unchanged), interrupt seam verified (one accept, /INT cleared on S#0 read), openMSX A/B empty diff QA-reproduced with VRAM read-back compared. D1-D7 rendering/sprite/command/timing/YJK/effects/planar depth DEFERRED + recorded in deferred-backlog.md; closes B9. Awaiting human release decision + tag v1.0.14. Two QA-found ledger drifts corrected same-cycle (M14 status; z80a_cpu.cpp citation 1762->1769)."
+  M15:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # 2 assumptions (#F5 reset-enabled; 1988 epoch) deterministic + tested
+      signoff_decision_recorded: true   # QA PASS (REQ-M15-004), QA-executed ctest 64/64, A/B + boot reproduced
+    # Closed by human release decision (DEC-0010 / REQ-M15-005, 2026-07-06); git tag v1.0.15.
+    overall_done: true
+    notes: "CLOSED 2026-07-06 (DEC-0010 / REQ-M15-005), git tag v1.0.15. QA PASS (REQ-M15-004, docs/m15-qa-signoff.md). Device integration + S1985 chipset fully wired: PSG/YM2149 (numeric), RTC/RP5C01 (in-memory deterministic epoch), full i8255 PPI + keyboard + joystick, S1985 backup-RAM .sram persistence, boot-checkpoint advance. ctest 64/64 (QA-executed, +8), zero regression (X4 CPU timing untouched, M9/M12 oracles green unchanged; X1 #A8 preserved byte-for-byte). openMSX A/B empty diff 15/15 QA-reproduced (substantive PSG R0/R7). Boot advanced ~0x043C -> PC 0x454/max 0x488 (deterministic). Backlog B1/B2/C4/C6 -> DONE (M15); C5 IN-PROGRESS (full boot needs FDC/M16). Awaiting human release decision + tag v1.0.15. Stale-status drift (QA-found) corrected same-cycle."
+  M16:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 72/72 (56 M0-M14 + 8 M15 + 8 M16 new), zero regression
+      impacted_areas_covered: true      # FDC unit/integration + real A/B (register-sequence + boot-window)
+      blocker_risks_resolved_or_accepted: true   # R-M16-1/2/4/5/6/7 resolved; R-M16-3 (boot-advance depth) accepted as a documented, honestly-reported residual per the planner's own contingency language
+      signoff_decision_recorded: true   # QA PASS (RESP-M16-004, docs/m16-qa-signoff.md), QA-executed ctest 72/72 fresh reproduction, A/B independently re-verified
+    overall_done: true
+    # Closed by human release decision (DEC-0011 / REQ-M16-005, 2026-07-07); git tag v1.0.16.
+    notes: "CLOSED 2026-07-07 (DEC-0011 / REQ-M16-005), git tag v1.0.16. Closes backlog B8. Implementation (REQ-M16-003) complete per docs/m16-implementation-report.md. WD2793 core (Type I/II/III/IV, context-sensitive status/INTRQ/DRQ, HLD) under src/devices/fdc/, Sony connection-style decode wrapping the M13 DISK ROM at slot 3-2, deterministic 720KB image, ~4s motor-off, DSKCHG. A genuine HEAD_LOADED divergence vs openMSX was found via A/B probing and fixed (grounded in WD2793.cc:420-433/522-533/820-834/1062-1073). ctest 72/72 green, zero regression M1-M15 (M9/M12 timing oracles untouched). Real openMSX 19.1 A/B: architectural parity over a 3000-instruction real-boot window, and a dedicated FDC register/command probe (identical disk image) matching functionally down to the transferred 512 bytes (docs/m16-parity-trace-diff.md). Backlog B8 -> DONE (M16); C5 advanced (real-boot max PC 0x7D6F, was 0x488) but HONESTLY still IN-PROGRESS -- the automatic disk-boot handshake is not reached within an unattended cold boot (residual, not fabricated, judged non-blocking by QA and pre-authorized as a fallback in the planner package, carried forward as a condition for whichever future milestone claims C5 fully closed). QA PASS (RESP-M16-004, docs/m16-qa-signoff.md): QA independently reproduced the 72/72 ctest run, verified both bug-fix citations directly against WD2793.cc, confirmed no test was weakened, and independently diffed the raw openMSX trace files. Awaiting human directive to kick off M17."
+  M17:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 75/75 (72 M1-M16 + 3 M17 new), zero regression, QA-reproduced
+      impacted_areas_covered: true      # YM2413 device unit/integration + real A/B (both subjects)
+      blocker_risks_resolved_or_accepted: true   # all residuals Low, pre-disclosed, none blocking (ROM patch provenance caveat, BatteryBackedSram unwired-by-design, E1 DSP depth deferred)
+      signoff_decision_recorded: true   # QA PASS (RESP-M17-003, docs/m17-qa-signoff.md), QA-executed ctest 75/75 fresh reproduction, A/B independently re-verified against real WSL openMSX
+    overall_done: true
+    # Closed by human release decision (DEC-0013 / REQ-M17-003, 2026-07-07); git tag v1.0.17 (committed separately from M18).
+    notes: "CLOSED 2026-07-07 (DEC-0013 / REQ-M17-003), git tag v1.0.17. Closes backlog B3. FM-PAC (YM2413 OPLL register-accurate device, MSXMusic-style) implemented per docs/m17-implementation-report.md. QA independently verified device identity (no MSXFmPac-style bank-register/SRAM/ID-string logic), register/latch semantics against YM2413Okazaki.cc, fmmusic_rom_ regression guard (byte-for-byte unchanged slot 3-3 attach), BatteryBackedSram confirmed NOT wired (per DEC-0012), and independently reproduced the full openMSX A/B harness end-to-end against real WSL openMSX 19.1 (Subject 1: 145/145 instructions empty diff; Subject 2: 36/36 register addresses empty diff, plus an extra spot-check beyond the developer's own). Full deferred-backlog review re-confirmed (all rows). ctest 75/75 QA-reproduced, zero regression, CPU-timing oracles untouched. B4 stays OPEN/re-owned to B6 (DEC-0012, not force-closed); E1/E2 remain OPEN."
+  M18:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 79/79 (75 M1-M17 + 4 M18 new), zero regression, QA-reproduced
+      impacted_areas_covered: true      # Kanji/printer/cassette unit+integration + real A/B (3 subjects)
+      blocker_risks_resolved_or_accepted: true   # all residuals Low, pre-disclosed, none blocking (printer status default, F1/F2 depth deferred, pre-existing M15 RTC #B6/#B7 gap noted as unrelated)
+      signoff_decision_recorded: true   # QA PASS (RESP-M18-003, docs/m18-qa-signoff.md), QA-executed ctest 79/79 fresh reproduction, A/B independently re-verified incl. live WSL openMSX Kanji read
+    overall_done: true
+    # Closed by human release decision (DEC-0014 / REQ-M18-003, 2026-07-07); git tag v1.0.18 (committed separately from M17).
+    notes: "CLOSED 2026-07-07 (DEC-0014 / REQ-M18-003), git tag v1.0.18. Closes backlog B5 and C7. Peripheral I/O -- KanjiFontRom (#D8-#DB, MSXKanji-style, confirmed NOT MSXKanji12), PrinterPort (#90-#97, falling-edge capture), CassetteInterface (no CPU-visible port, derives from existing Ppi8255/JoystickPorts, zero edits to ppi_8255.*) -- implemented per docs/m18-implementation-report.md. QA independently verified device identity against MSXKanji.cc/MSXPrinterPort.cc/Printer.cc, confirmed zero edits to ppi_8255.{h,cpp} and to step_cpu_instruction/run_cycles/run_frame, confirmed the JoystickPorts regression guard is genuine and additive, and independently reproduced the Kanji content-parity claim THREE ways (own SHA1 check, direct file byte spot-check, and a live WSL openMSX 19.1 Tcl probe reproducing an identical Kanji read) -- going beyond the developer's own verification. Full deferred-backlog review re-confirmed (all rows); new Section E (F1/F2) correctly added. ctest 79/79 QA-reproduced, zero regression, CPU-timing oracles untouched."
+  M19:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 92/92 (81 M1-M18 + 10 M19 core + 1 metalgear follow-up), zero regression, QA-reproduced
+      impacted_areas_covered: true      # 6 cartridge mapper types + CartridgeSlot + CLI unit/integration + real A/B + 2 real-file smoke fixtures
+      blocker_risks_resolved_or_accepted: true   # one non-blocking doc-comment staleness found by QA and fixed by the coordinator; no behavior/test impact
+      signoff_decision_recorded: true   # QA PASS (RESP-M19-004, docs/m19-qa-signoff.md), QA-executed ctest 92/92 fresh reproduction, A/B + both real-file fixtures independently re-verified incl. live WSL openMSX
+    overall_done: true
+    # Closed by human release decision (DEC-0015 / REQ-M19-003, 2026-07-07); git tag v1.0.19.
+    notes: "CLOSED 2026-07-07 (DEC-0015 / REQ-M19-003), git tag v1.0.19. Closes backlog B7. Cartridge loading (external primary slots 1 & 2): six MVP mapper types (Mirrored, Generic8kB, Generic16kB, Ascii8kB, Ascii16kB, Konami no-SCC) sharing a CartridgeRomWindow primitive grounded byte-exact in RomBlocks::setRom; CartridgeSlot wrapper (empty-slot open-bus regression guard); CLI via --cartN/--cartN-type. QA independently verified the bank-resolution mask fallback-only semantics and the Konami mirror-quirk (slots 0/2 permanently fixed, 1/3-4/6-5/7 live mirror pairs) against RomBlocks.cc/RomKonami.cc directly. roms/aleste.rom used as a non-identity-claiming Generic8kB mechanical smoke fixture; roms/metalgear.rom (added later, per human note) identified as a genuine Konami-mapper 'Metal Gear' (1987) dump via an exact SHA1 match to references/openmsx-21.0/share/softwaredb.xml, independently reproduced by both the coordinator and QA, plus live WSL openMSX corroboration. One non-blocking doc-comment staleness (cartridge_konami_rom.h) found by QA and fixed by the coordinator post-QA (comment-only, zero behavior/test impact, ctest re-confirmed 92/92 after the fix). Real openMSX 19.1 A/B: content-bearing empty diff with empirically-verified slot-lettering (R-M19-6). Full deferred-backlog review re-confirmed (all rows); B7 -> DONE; new Section F (G1-G4) added, OPEN. Zero regression, CPU-timing oracles untouched (no cartridge device is a clock consumer)."
+  M20:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by human release decision (DEC-0017 / REQ-M20-004, 2026-07-07); git tag v1.0.20.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0017 / REQ-M20-004), git tag v1.0.20. Closes backlog B4 AND B6 together. Halnote/MSX-JE firmware mapping at slot 0-3: HalnoteRom byte-exact per RomHalnote.{hh,cc}, reusing CartridgeRomWindow (M19) and BatteryBackedSram (M17) verbatim; wired at primary slot 0/secondary slot 3/all 4 pages, reading the real bios/f1xvfirm.rom; the real BatteryBackedSram wired as the mapper's actual 16KB SRAM with deterministic load/save persistence. ctest 95/95 (92 prior + 3 new), zero regression, independently reproduced by coordinator and QA. Real openMSX A/B: 11/14 PARITY, 3/14 disclosed non-blocking DIVERGENCE (sub-mapper-shadow read on the installed openMSX 19.1 runtime only -- QA independently traced this to reference-runtime behavior via raw byte-level analysis, not a defect in this project's code). QA PASS (docs/m20-qa-signoff.md). A genuine test bug found and fixed in the already-closed M17 suite along the way (DEC-0016, test-file-only, zero production risk)."
+  M21:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by human release decision (DEC-0018 / REQ-M21-004, 2026-07-07); git tag v1.0.21.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0018 / REQ-M21-004), git tag v1.0.21. Closes backlog D1/D5/D6 (DONE); D7 advances to IN-PROGRESS (M21 partial), command-engine piece carried to M22. First pixel-rendering output path: VdpFrameRenderer/FrameBuffer, deterministic pull-model RGB555 renderer over the existing M14 V9958Vdp contract, no SDL3 dependency. Every Target-Spec mode byte-exact (GRAPHIC7 GGGRRRBB layout, YJK truncating-division B-channel, MULTICOLOR's real 256-wide canvas); G6/G7 planar interleave (17-bit rotate-right-by-1) CPU-port + display-path pieces closed; scroll/blink/interlace/border-mask effects; superimpose correctly scoped N/A. ctest 106/106 (95 prior + 11 new), zero regression, independently reproduced by coordinator and QA, including confirming the M14 pointer-carry guard genuinely unmodified. Real openMSX A/B: 4/4 probes raw VRAM/palette/register ARCHITECTURAL PARITY incl. direct D7 planar-transform bank1 confirmation; computed-pixel-color sub-claim honestly BLOCKED (no introspection point exists in openMSX). QA PASS (docs/m21-qa-signoff.md), including independent hand-verification of the YJK rounding math and the interlace-bug fix."
+  M22:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by coordinator release decision (DEC-0019 / REQ-M22-004, 2026-07-07); git tag v1.0.22.
+    overall_done: true
+    notes: "CLOSED 2026-07-07 (DEC-0019 / REQ-M22-004), git tag v1.0.22. Closes backlog D2/D3 (DONE); D7 closes IN FULL (no longer partial). SpriteEngine (D2) and VdpCommandEngine (D3) owned inside V9958Vdp; sprite compositing folds into VdpFrameRenderer::render_frame() (no new output type); command engine uses a hybrid execution model (10 atomic commands, 3 event-driven transfer commands mirroring the M16 FDC DRQ/INTRQ precedent); D7 closes via 5 new coordinate-address functions, confirmed byte-exact against the reference and confirmed NOT to reference R#2 (a genuinely new finding). effective_address() confirmed genuinely unchanged. ctest 117/117 (106 prior + 11 new), zero regression, independently reproduced by coordinator and QA. A self-caught sprite-enable-gate regression was found and fixed during implementation. QA PASS (docs/m22-qa-signoff.md) via genuinely independent, adversarial scrutiny of the A/B evidence -- QA hand-verified the raw divergence numbers itself, corrected the developer's causal narrative to a more defensible one, and confirmed via algorithm comparison + full test suite that the divergences are a harness artifact, not a code defect. Two non-blocking documentation-precision findings surfaced independently by QA."
+  M23:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true
+    # Closed by coordinator release decision (DEC-0020 / REQ-M23-004, 2026-07-08); git tag v1.0.23.
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0020 / REQ-M23-004), git tag v1.0.23. Third and final milestone of the pre-authorized M21-M23 run. Closes backlog C2 (Z80 HALT-R) in full; C1/D4 advance to IN-PROGRESS (M23 partial) with a real, tested, non-gating VDP access-timing foundation and a precisely-named 5-item remainder carried forward as ONE tracked row each -- a deliberate, conservative scope decision grounded in a demonstrated risk (the M21/M22 back-to-back-OUT(#98),A system-test fixtures), not a shortfall. Z80aCpu's halted branch now calls the existing increment_refresh_register(), keeping the CPU core's own returned T-states the bare, unchanged 4; the already-existing machine-level formula automatically bills the correct 5T. Exactly one golden test deliberately updated with cited grounding; an exhaustive .halted() audit confirmed zero other sites needed changing. New, additive, non-gating vdp_access_timing.h foundation for C1/D4; git diff v1.0.22 confirms step_cpu_instruction()/run_cycles()/run_until_cycle() and all of M21/M22's VdpFrameRenderer/VdpCommandEngine/SpriteEngine byte-for-byte unchanged, independently confirmed by both the coordinator and QA. ctest 121/121 (117 prior + 4 new), zero regression. Real openMSX A/B for C2: an honest DIVERGENCE reported (not fabricated PASS) -- QA independently re-ran the harness AND designed its own exploratory probes, refining the developer's causal hypothesis to a more precise one, confirming it's a live-session scheduling artifact, not a code defect. A disclosed, additive main.cpp CLI extension was needed for the A/B evidence, formally ratified in DEC-0020. QA PASS (docs/m23-qa-signoff.md) via exceptional independent scrutiny."
+  M24:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 124/124 (121 prior + 3 new), zero regression
+      impacted_areas_covered: true      # CpmBdosHarness unit+integration + REAL zexall.com/zexdoc.com system test
+      blocker_risks_resolved_or_accepted: true   # 134/134 group verdicts PASS; adversarial self-check passed; no genuine CPU defect found
+      signoff_decision_recorded: true   # QA Conditional Pass (docs/m24-qa-signoff.md) -> Required Fix #1 applied + independently reconfirmed -> clean PASS
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0022/REQ-M24-005), tagged v1.0.24. ZEXDOC/ZEXALL full parity sweep (C3) using references/zexall/ (present, uncommitted since M19; now COMMITTED as part of this milestone's closure). Per the human's 'zero license-sensitive future work' directive: running the suite's pre-built .com binary as a black-box test fixture is acceptable (same as bios/roms assets); nothing from its assembly source was copied into src/ (confirmed by developer, coordinator, AND QA independently). New, generic CpmBdosHarness (src/machine/cpm_bdos_harness.{h,cpp}, zero zexall-specific knowledge) proven first against a hand-written synthetic fixture, THEN run against the REAL references/zexall/zexall.com and zexdoc.com to genuine CP/M warm-boot completion (in-process system test) -- 134/134 group verdicts PASS (67 groups x 2 suites), 5,764,169,474 real instructions/suite -- independently reproduced FOUR separate times from clean rebuilds (developer, coordinator, QA, post-fix confirmation run), byte-for-byte identical every time. Mandatory adversarial self-check PASSED (in-memory-only corruption of a real-file copy correctly produced a genuine FAIL; the real committed file confirmed byte-identical before/after via SHA-256, independently recomputed three times). Real openMSX A/B: bounded 11-instruction-prefix PARITY for both suites, independently re-run end-to-end by both the developer and QA; full-suite live-Tcl A/B and MSX-DOS-disk-boot A/B both explicitly BLOCKED with checked (not assumed) reasoning -- QA formally ratified the disk-boot-A/B BLOCKED disposition per DEC-0021 (redoing it would require solving backlog C5's own unsolved auto-boot-trigger problem, out of scope). ctest 124/124, zero regression; git diff v1.0.23 confirms zero changes to src/devices/, src/peripherals/, src/core/. QA (docs/m24-qa-signoff.md) returned a CONDITIONAL PASS -- the project's own standing 'STOP and consult the human if QA does not reach a clean PASS' directive fired for the first time this run. Human chose 'Fix, re-confirm, then tag': the one gating item (tests/system/hbf1xv_m24_zexall_system_test.cpp needed a hard error_markers==0 assertion for both suites, not just a marker-count check) was applied and independently reconfirmed via a full slow-sweep re-run, converting this milestone's regression asset into a proper zero-tolerance gate. Closes backlog C3 in full."
+
+  M25:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # ctest 130/130 (124 prior + 6 new), zero regression, independently reproduced by developer/coordinator/QA
+      impacted_areas_covered: true      # Mb670836PauseController + RenshaTurbo unit/integration + dedicated system test
+      blocker_risks_resolved_or_accepted: true   # PAUSE freeze/bypass-proof, Speed-Controller duty-cycle oracle, R-M25-6 negative control all proven; PAUSE/Speed-Controller A/B honestly BLOCKED (does not gate closure, Acceptance Criterion 9)
+      signoff_decision_recorded: true   # QA clean, unconditional PASS (docs/m25-qa-signoff.md) -- Conditional-Pass stop condition did NOT fire this milestone
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0023/REQ-M25-004), tagged v1.0.25. Sony speed-controller (MB670836) + hardware PAUSE + Ren-Sha Turbo autofire (backlog C8), the second and final milestone of the M24-M25 continuation -- now fully complete. New Mb670836PauseController (src/devices/chipset/mb670836_pause.{h,cpp}) -- a machine-level CPU-execution gate consulted at the very top of step_cpu_instruction(), before any opcode decode (PC/R/every register stay completely frozen while engaged -- architecturally distinct from the Z80's own CPU-internal HALT, which keeps incrementing R); the manual PAUSE button (toggle semantics) and the Speed Controller's VBlank-synced duty cycle (kPeriodFrames=8) OR into one combined cpu_should_pause() gate, grounded in S1985 fact-sheet section 9 ('physically halts the CPU and cannot be bypassed in software') and Zilog Z80A fact-sheet section 6 item 3 ('autofire on the PAUSE button synced to BLANK'). New RenshaTurbo (src/peripherals/rensha_turbo.{h,cpp}) -- a simpler, peripheral-level autofire signal generator grounded in real openMSX behavior (RenShaTurbo.{hh,cc}/Autofire.{hh,cc}, the MSXPPI.cc:90-93/sound/MSXPSG.cc:90-93 OR-combine wiring) and the real per-machine Sony_HB-F1XV.xml:16-19 calibration (min_ints=47/max_ints=221), wired into KeyboardMatrix/JoystickPorts via additive, default-nullptr OR-mask attach points (byte-for-byte pre-M25 regression guard when unattached). 6 new dedicated unit/integration/system tests prove hardware PAUSE genuinely freezes PC/every register/R/memory across multiple paused steps (elapsed_cycles() still advancing 1 T-state/call) and cannot be bypassed via any CPU-visible API (independently confirmed by QA via static grep inspection too); the Speed Controller's duty cycle is deterministic/hand-computable; Ren-Sha Turbo never forces a spurious press (R-M25-6, exhaustively checked). Real openMSX A/B evidence (docs/m25-parity-trace-diff.md): Ren-Sha Turbo achieved genuine live PARITY against the real Sony_HB-F1XV openMSX machine (not-held invariant + held keyboard-row-8 alternation both confirmed live, independently reproduced end-to-end by both the developer and QA); Hardware PAUSE/Speed Controller honestly BLOCKED (openMSX genuinely does not model this Sony-specific hardware anywhere -- exhaustive cited search independently confirmed three times, by developer/coordinator/QA; does not gate C8 closure per Acceptance Criterion 9, mirrors the M21/C3-M24 BLOCKED-sub-claim precedent). git diff v1.0.24 confirms zero changes to src/devices/cpu/, src/devices/video/, src/devices/audio/, src/devices/rtc/, src/devices/fdc/, src/devices/cartridge/, src/devices/memory/, src/devices/halnote/, src/devices/kanji/, src/core/, and all 12 named zero-tolerance CPU-timing-oracle test files (byte-for-byte unchanged, independently reproduced three times). Full regression 130/130, zero regression, including THREE separate from-scratch re-runs of the slow hbf1xv_m24_zexall_system_test (developer, coordinator, QA). QA (docs/m25-qa-signoff.md) returned a CLEAN, UNCONDITIONAL PASS -- the Conditional-Pass stop condition that fired once for M24 did NOT fire here. QA's sole finding (Low, non-blocking): a 'five' vs 'six' Sony-machine-XML citation undercount in the BLOCKED disposition's prose (a sixth machine, Sony_HB-F1XDmk2.xml, was missed by every prior search but independently confirmed to reinforce, not undermine, the substantive conclusion) -- fixed directly by the coordinator across all four affected artifacts per QA's own recommendation, rather than routing back to the developer. This closes the full M24-M25 continuation the human requested 2026-07-08."
+
+  M26:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless 134/134 (130 prior + 4 new); SDL3-ON 139-140/140 (134 shared + 6 new); independently reproduced by developer, coordinator, AND QA (three separate from-scratch rebuilds)
+      impacted_areas_covered: true      # Sdl3App/VideoPresenter/AudioPresenter/InputMapper/cli unit+integration+system, all SDL3-gated tests under dummy drivers
+      blocker_risks_resolved_or_accepted: true   # SDL3 environment risk resolved (built vendored source locally, independently reproduced a THIRD time by QA to a brand-new install dir); YM2413 silence honestly disclosed, not faked (R-M26-5); A/B mostly BLOCKED/N-A, does not gate closure (Acceptance Criterion 10)
+      signoff_decision_recorded: true   # QA clean, unconditional PASS with ZERO findings of any severity (docs/m26-qa-signoff.md) -- the cleanest QA cycle of this session
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0024/REQ-M26-004), tagged v1.0.26. First frontend/presentation-layer milestone (backlog C9). Hbf1xvMachine::on_vsync_boundary() -- a pure, mechanical extraction of run_frame()'s pre-M26 body -- is the ONLY behavior-affecting change to src/machine/ (git diff --stat src/devices src/peripherals src/core confirmed EMPTY); a real-time SDL3 loop drives the CPU via step_cpu_instruction() and calls on_vsync_boundary() directly, never run_frame() in the same session (A-M26-5). New src/frontend/: Sdl3App (window/renderer/audio-stream lifecycle, deterministic run_one_frame() vs. real-time run_interactive()), Sdl3VideoPresenter (zero-conversion SDL_PIXELFORMAT_XRGB1555 blit, independently pixel-readback-proven bit-for-bit), Sdl3AudioPresenter + the SDL3-independent PsgAudioPump (real PSG/YM2149 synthesis wired from the frontend layer for the FIRST time -- advance_cycles() had zero call sites in this project before M26), Sdl3InputMapper (a new, disclosed, first-principles 71-entry SDL-scancode-to-11x8-matrix table, cross-checked against RenshaTurbo's own already-established row8/bit0=SPACE fact; joystick + PAUSE/Speed-Controller/Ren-Sha-Turbo bindings), sdl3_cli (--bios-dir/--disk/--cart1/--cart1-type/--cart2/--cart2-type/--max-frames, reusing the existing M19 cartridge_cli parser verbatim). YM2413/FM-PAC honestly, deliberately left SILENT -- backlog E1 stays OPEN, zero waveform/DSP-shaped code added anywhere (R-M26-5, independently grep-verified: zero diff to ym2413_opll.*, no new parallel audio file). The ONE new debug/testing capability authorized -- decoded-FrameBuffer-to-real-color-PNG capture (src/machine/frame_dump.* + tools/frame-to-png.py, NOT raw VRAM bytes) -- ships with a real, committed example (debug/frames/m26-example-boot.png, a 256x192 16-color-bar GRAPHIC4 test scene, produced via a new sony_msx_headless --frame-dump-demo mode driving the VDP directly through the existing debug_io_write() seam, zero CPU driver program needed). A real, empirically-confirmed environment finding: SDL3 was NOT pre-installed in this execution environment (a bare find_package(SDL3 CONFIG REQUIRED) genuinely failed first) -- resolved by building the vendored references/sdl3/ tree (zlib-licensed, 3.5.0) locally to build/_sdl3_install/ (gitignored, reproducible, zero SDL3 source copied into src/); the 'dummy' video/audio driver mechanism was then independently, empirically confirmed to work end to end via a real sony_msx_sdl3.exe --hidden-window --max-frames 5 session (exit code 0). Headless suite 134/134 (130 prior + 4 new: machine_hbf1xv_m26_vsync_boundary_integration_test, machine_frame_dump_unit_test, frontend_psg_audio_pump_unit_test, frontend_sdl3_cli_unit_test). SDL3-ON suite (a second, dedicated build directory) 140/140 (134 shared + 6 new SDL3-gated: frontend_sdl3_app_headless_integration_test, frontend_sdl3_video_presenter_pixel_integration_test, frontend_sdl3_audio_presenter_integration_test, frontend_sdl3_input_mapper_integration_test (71/71 mapped keys exhaustively SDL_PushEvent-injection tested), frontend_sdl3_cli_session_integration_test, hbf1xv_m26_sdl3_system_test), all entirely under SDL_VIDEO_DRIVER=dummy/SDL_AUDIO_DRIVER=dummy, zero SDL_Delay anywhere in the ctest execution path. Full regression (both configurations, including the slow M24 zexall re-run) documented in docs/m26-implementation-report.md. A/B evidence (docs/m26-frontend-evidence.md): honestly mostly BLOCKED/N-A (no openMSX introspection point for presented-window pixels or audio-device output exists) -- the one genuinely comparable sub-claim (input-mapping table correctness) is fully covered without a new A/B technique by the existing M15 contract tests plus M26's own exhaustive SDL_PushEvent-injection tests; does not gate closure per Acceptance Criterion 10. Full 34-row deferred-backlog review completed -- C9 -> DONE (M26); E1 re-affirmed OPEN with an honest cross-reference note. QA (docs/m26-qa-signoff.md) independently reproduced everything from two clean rebuilds PLUS a third, fully independent SDL3-source rebuild to a brand-new install directory, and returned a CLEAN, UNCONDITIONAL PASS WITH ZERO FINDINGS OF ANY SEVERITY -- the cleanest QA cycle of this session. Closes backlog C9 in full. Names a future M27 'Production Hardening + Debug/Test Tooling' milestone for everything else from the human's original debug/-tooling request."
+
+  M27:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless fast-subset 140/140 (133 prior + 7 new); SDL3-ON fast-subset 149/149 (139 prior + 10 new); slow hbf1xv_m24_zexall_system_test not run this cycle per feedback_slow_test_cadence.md, git-diff-confirmed genuinely unnecessary at 3 separate gates (developer, coordinator, QA)
+      impacted_areas_covered: true      # msx_key_names/input_script/psg_audio_dump unit tests; debug-session/input-script/replay-determinism/debug-tooling headless integration+system tests; SDL3-side debug-session/cross-consistency/input-script SDL3-gated integration tests
+      blocker_risks_resolved_or_accepted: true   # QA PASS -- zero blocker/high/medium findings; two Low, non-blocking notes, neither requiring a fix
+      signoff_decision_recorded: true   # QA clean, unconditional PASS (RESP-M27-003, docs/m27-qa-signoff.md)
+    # Closed by coordinator release decision (DEC-0025 / REQ-M27-004, 2026-07-08); git tag v1.0.27.
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0025/REQ-M27-004), tagged v1.0.27. Production Hardening + Debug/Test Tooling: four named items, all implemented per the accepted planner package (docs/m27-planner-package.md, RESP-M27-001) 8-slice build order. (1) New headless --debug-session mode in src/main.cpp (wholly additive new if branch; pre-existing default run path byte-for-byte unchanged) wiring the already-existing write_state_dump()/write_cpu_trace()/write_event_log() (M10-S3) via --dump-state/--trace-cpu/--event-log, plus a new --disk flag (A-M27-3, mirrors A-M26-6) and --input-script; additive Sdl3AppConfig/sdl3_cli fields mirror this on the SDL3 side -- zero new Hbf1xvMachine method needed. (2) New src/frontend/psg_audio_dump.{h,cpp} genuinely reusing M26's PsgAudioPump/PsgYm2149 (never a parallel synthesis), a documented linear psg_raw_sum_to_pcm16() scale grounded in the real [0,62] PsgYm2149::sample() range, new tools/audio-dump-to-wav.py (sibling of frame-to-png.py; tools/mem-to-audio.py genuinely untouched), a real committed non-silent example WAV (debug/sounds/m27-example-tone.wav, 44100 stereo 16-bit samples, 13,953 toggles between -32768/-1, independently decoded via raw PCM read by the developer, coordinator, AND QA). (3) New src/peripherals/msx_key_names.{h,cpp} (71-entry table, every entry copied verbatim from Sdl3InputMapper::scancode_map()'s own array literal, R-M27-4) + src/machine/input_script.{h,cpp} (deterministic HBF1XV-INPUT-SCRIPT v1 format + monotonic-cursor InputScriptPlayer), --input-script wired into both executables via the SAME CPU sub-loop each already runs; a hard SDL3-gated cross-consistency test independently proves the two tables agree exactly on all 71 entries. (4) A dedicated tests/system/hbf1xv_m27_replay_determinism_system_test.cpp: two independent Hbf1xvMachine instances produce byte-for-byte identical event logs; a third, deliberately-diverged machine produces a genuinely different one -- the adversarial negative control mirrors the M24 ZEXALL corruption-self-check discipline, driven through a small, hand-verifiable flat-RAM keyboard-probe driver program since the real BIOS never reads the keyboard matrix within a bounded step_cpu_instruction()-only window (a genuine, self-caught design correction). A genuine, honestly-disclosed self-caught finding: PsgYm2149::write_register() is actually private (the planner's illustrative citation was wrong); the demo mode correctly uses the public write_address()/write_data() ports instead. Headless fast-subset ctest 140/140 (133 prior + 7 new); SDL3-ON fast-subset ctest 149/149 (139 prior + 10 new); every pre-existing M26 SDL3 test remains green unmodified. git diff v1.0.26 verified at THREE separate gates (developer, coordinator, QA): zero tracked-file modification under src/devices/, src/peripherals/, src/core/ (only two genuinely NEW, additive files, src/peripherals/msx_key_names.{h,cpp}); src/devices/cpu/ and src/core/ show zero changes of any kind. The slow hbf1xv_m24_zexall_system_test was not run this cycle, per the standing feedback_slow_test_cadence.md directive -- confirmed genuinely unnecessary at every gate via the git-diff evidence above. This milestone closes ZERO backlog rows (infrastructure/tooling scope); C5's row (agent-protocol/state/deferred-backlog.md) gained a factual, non-status-changing cross-reference note only (its status remains IN-PROGRESS (M16 partial)); backlog E1 (YM2413 DSP/synthesis depth) remains OPEN, untouched. QA (docs/m27-qa-signoff.md) independently rebuilt both configurations from clean, reproduced both fast-subset counts exactly, independently launched the real sony_msx_headless.exe --debug-session binary itself twice (byte-identical event logs/SHA-256), independently decoded the committed WAV, independently confirmed the 71/71 key-name cross-consistency table's completeness, and independently judged the flat-RAM-driver negative-control design correction genuinely sound -- returning a CLEAN, UNCONDITIONAL PASS with zero blocker/high/medium findings (two Low, non-blocking notes, neither requiring a fix). Full 34-row deferred-backlog review confirmed with zero status changes. Full evidence in docs/m27-implementation-report.md / docs/m27-qa-signoff.md."
+
+  M28:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # 146/146 full unfiltered ctest, independently reproduced three times (developer/coordinator, coordinator post-DEC-0026, QA from a clean build-qa); ZEXALL/ZEXDOC error_markers=0 all three times
+      impacted_areas_covered: true      # devices_audio_ym2413_write_timing_unit_test, machine_hbf1xv_m28_ym2413_write_timing_integration_test, hbf1xv_m28_c5_disk_boot_investigation_system_test, devices_vdp_vr_hr_raster_status_unit_test, machine_hbf1xv_vdp_vr_hr_raster_integration_test
+      blocker_risks_resolved_or_accepted: true   # R-M28-1/R-M28-2/R-M28-7 all honored; DEC-0026's own regression (M24 CP/M-isolation test) found and correctly fixed same-cycle
+      signoff_decision_recorded: true   # QA Conditional Pass (RESP-M28-003, docs/m28-qa-signoff.md) -> two doc/ledger-only fixes applied -> closed (DEC-0027)
+    # Closed by coordinator release decision (DEC-0027 / REQ-M28-004, 2026-07-08); git tag v1.0.28. Folds in DEC-0026.
+    overall_done: true
+    notes: "CLOSED 2026-07-08 (DEC-0027/REQ-M28-004), tagged v1.0.28, folding in DEC-0026 (VDP S#2 VR/HR boot-hang fix, docs/vdp-vr-hr-boot-hang-fix-report.md -- outside M28's own approved scope, discovered via direct human interactive use, landed in the same closure commit/tag per QA's recommendation). Release Candidate -- Backlog Closure Sweep + Full-Project Health Audit. E2 (YM2413 register-write timing constraint) shipped in src/devices/audio/ym2413_opll.{h,cpp}: a Ym2413ClockSource X-pattern gate (mirrors RtcClockSource/FdcClockSource/CassetteClockSource/RenshaTurboClockSource) consulted READ-ONLY against the cited 12/84-master-cycle constants (YM2413 fact-sheet Section 8); the mandatory R-M28-1 regression pre-check found the existing M17 tests issue back-to-back/zero-cycle-spacing writes, so the gate DEFAULTS OFF (matching openMSX's own disabled-by-default stance) -- every existing M17 test file left byte-for-byte unmodified. New tests: devices_audio_ym2413_write_timing_unit_test (FakeClock-driven 12/11 and 84/83-cycle boundaries, drop-does-not-reset-reference, determinism) and machine_hbf1xv_m28_ym2413_write_timing_integration_test (real CPU OUT (#7C)/(#7D) sequences over the M11 bus at varying NOP-padded spacing, empirically confirming drop/land behaviour under real Z80 timing). C5 (full-boot/auto-disk-boot-trigger investigation) reached outcome (b) per the dual-outcome acceptance criterion: a new hbf1xv_m28_c5_disk_boot_investigation_system_test cold-boots with a REAL bootable disks/msxdos22.dsk mounted (with/without a scripted keypress) and finds the disk-ROM window is NEVER paged into page 1 within 20,000,000 instructions -- extending M16's own honest residual to a real disk asset and a stronger, earlier-in-the-pipeline signal; a new tools/openmsx-m28-c5-boot-parity.ps1 A/B harness independently confirms ARCHITECTURAL PARITY (empty diff) against real openMSX 19.1 with the SAME real disk mounted over 3000- and 100,000-instruction windows (docs/m28-parity-trace-diff.md) -- C5 stays IN-PROGRESS (M28 partial), not force-closed. Health audit (docs/m28-release-candidate-audit.md, four parts) found zero untracked TODO/gap markers, zero new Target-Spec gaps, resolved the seeded placeholder-file finding (src/devices/device_placeholder.h / src/peripherals/peripheral_placeholder.h removed after the R-M28-7 pre-check confirmed zero consumers and zero CMake glob dependency), and found+fixed one stale backlog citation (CassettePort.hh/.cc missing its cassette/ subdirectory segment). DEFERRED with named follow-ons, each carrying its M28-verified scoping caveat verbatim in deferred-backlog.md: G1->M29 (SCC fact-sheet needed first), E1->M30 (formulaically-derivable subset only, attack-curve EG data named as a carried-forward remainder), C10->M31 (sequenced after C5), F1->M32 (independent MSX-kernel baud-rate source needed, not openMSX's own tuned BAUDRATE=3744), F2->M33 (blocked on dot-matrix font-asset provenance); G2/G3/G4 re-affirmed indefinite, rows left unchanged. C1/D4 UNBUILDABLE-WITHOUT-FABRICATION ruling carried verbatim into deferred-backlog.md, unchanged disposition. feedback_slow_test_cadence.md's mechanical gate fired TWICE this cycle (git diff v1.0.27 confirmed touches to src/devices/audio/ym2413_opll.{h,cpp} then, after DEC-0026 landed, src/devices/video/v9958_vdp.{h,cpp}) -- the full, unfiltered ctest ran to completion twice (144/144 then 146/146), independently reproduced a third time by QA from a clean build; SDL3-ON fast-subset also reproduced green (152/152). DEC-0026: a real, human-reported permanent black screen on SDL3 boot was root-caused to V9958Vdp status register S#2 bits VR/HR being hardcoded to 0 (the real BIOS's own VDP-init wait-for-toggle poll never resolved) and fixed via a new, optional VdpClockSource (X-pattern of the existing clock adapters), computing VR/HR live from real elapsed raster time -- zero license-sensitive data, C1/D4's actual remainder untouched. A genuine regression (hbf1xv_m24_cpm_run_integration_test's device-isolation snapshot) was found and correctly fixed same-cycle (VR/HR masked out of that one test only, narrowly scoped). A second, deeper finding (an exact memory-mapper segment-content divergence at instruction #145,503, found via a real openMSX A/B trace) was intentionally left OPEN per the human's explicit direction. QA (docs/m28-qa-signoff.md) independently, directly reproduced DEC-0026's headline claim via a controlled before/after diagnostic against a real git-worktree checkout of the pre-fix v1.0.27 tree, and returned a Conditional Pass on two documentation/ledger-only findings (stale C5 trace figures; ledger state files not yet referencing DEC-0026) -- both fixed directly by the coordinator per the human's 'fix, re-confirm, then tag' choice, the second time this session's stop-and-consult rule fired (after M24). Full evidence in docs/m28-implementation-report.md, docs/m28-qa-signoff.md, and docs/vdp-vr-hr-boot-hang-fix-report.md."
+
+  M29:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless fast-subset 159/159; SDL3-ON fast-subset 168/168 (both independently reproduced by QA from fresh builds); ZEXALL correctly NOT run (DEC-0035: M31 RC gate only; zero cpu/core touch git-diff-proven)
+      impacted_areas_covered: true      # scc_wavetable + cartridge_konami_scc_rom unit tests; machine_audio_mixer zero-SCC byte-identity oracle; real-CPU SCC integration tests; Aleste-2-under-KonamiSCC real-ROM smoke
+      blocker_risks_resolved_or_accepted: true   # QA Conditional Pass, ONE Low condition (F1, two missing KonamiSCC rows in the M19 CLI unit test enumeration) fixed by coordinator, fast subset re-confirmed 159/159
+      signoff_decision_recorded: true   # QA Conditional Pass (docs/m29-qa-signoff.md), resolved via fix-re-confirm-then-proceed (DEC-0035 autonomous pattern)
+    # Closed by coordinator release decision (DEC-0036, 2026-07-09); git tag v1.0.30.
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0036), tagged v1.0.30. Backlog G1: KonamiSCC mapper (banks 5000/7000/9000/B000 in 0x800 windows, (v&0x3F)==0x3F enable, SCC window 9800-9FFF via addr&0xFF) + Konami SCC 5-channel wavetable chip (De Schrijder AmpOut=640+sum truncate-before-sum law; (period+1) divisors with period<9 stop; NYYRIKKI latching/restart; Pazos deformation semantics; enen power-on state) grounded in the NEW references/fact-sheets/Konami SCC.md (independent community measurements; SEVEN openMSX-vs-fMSX disagreements recorded and arbitrated per DEC-0030). NEW SDL3-independent frontend::MachineAudioMixer with AudioPacer/PsgAudioPump byte-for-byte untouched (git-diff-proven) and the zero-SCC byte-identity hard regression oracle. openMSX A/B EMPTY DIFF over 140 instructions with source-verified -romtype KonamiSCC forcing, re-run independently by QA. Real-ROM cross-validation: roms/aleste.rom boots under KonamiSCC. Ledger: G1 -> DONE (M29); NEW row G5 (SCC-I/SCC+ Sound Cartridge, named remainder). Full evidence: docs/m29-implementation-report.md, docs/m29-qa-signoff.md."
+
+  M30:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless fast-subset 163/163; SDL3-ON fast-subset 172/172 (QA-reproduced from fresh builds); ZEXALL correctly withheld (M31 RC gate)
+      impacted_areas_covered: true      # clean-room SHA-1 published-vector suite; software_db synthetic-fixture parser tests; cartridge_identifier precedence/tie-break tests; CLI --softwaredb/auto rows; byte-for-byte explicit-path preservation vs a real v1.0.30 tag-worktree binary
+      blocker_risks_resolved_or_accepted: true   # license posture independently affirmed twice (developer + QA): GPL softwaredb.xml parsed at runtime from references/, nothing copied into src or tests
+      signoff_decision_recorded: true   # QA clean, unconditional PASS (docs/m30-qa-signoff.md)
+    # Closed by coordinator release decision (DEC-0037, 2026-07-09); git tag v1.0.31.
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0037), tagged v1.0.31. Backlog G2: universal cartridge mapper auto-identification -- the Aleste-2 usability defect resolved as a UNIVERSAL mechanism (nothing game-keyed): clean-room FIPS 180-4/RFC 3174 SHA-1 (src/machine/sha1.*, fMSX SHA1.c never opened by anyone), tolerant runtime softwaredb.xml parser (src/machine/software_db.*, RomDatabase.cc-grounded, fully-synthetic fixtures), precedence engine explicit-flag > SHA1-DB > re-derived guessRomType heuristic with RomFactory tie-break/handicap semantics verified line-by-line by developer AND QA (src/machine/cartridge_identifier.*), one shared resolver in BOTH executables, additive --softwaredb and --cartN-type auto. A/B AGREEMENT: openMSX own no-forcing auto-resolution picks the identical type for the identical file. aleste.rom -> Aleste 2 (KonamiSCC) via DB with heuristic corroboration (6-6 tie, correct tie-break); metalgear.rom -> Metal Gear (Konami). Ledger: G2 -> DONE (M30); E1 renumbered M30->M31 per DEC-0035. Full evidence: docs/m30-implementation-report.md, docs/m30-qa-signoff.md."
+
+  M31:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # RC GATE -- full unfiltered ZEXALL/ZEXDOC sweep 67/67 + 67/67, error_markers=0, durable log COMMITTED (docs/m31-rc-zexall-log.txt), first sweep since v1.0.28 per the RC-only cadence; headless fast 171/171; SDL3-ON fast 180/180 (QA-reproduced from fresh builds)
+      impacted_areas_covered: true      # ym2413_synth tables/operator/envelope/rhythm-LFO unit suites (in-test recomputation oracles; QA mutation-tested, a rate/4->rate/3 mutation kills 9 envelope oracles); machine_audio_mixer FM zero-YM2413 byte-identity hard oracle; real-CPU OUT-driven FM system test; 6-item real-software smoke matrix
+      blocker_risks_resolved_or_accepted: true   # governance headline -- source-form review PASSED, YM2413NukeYktTables.ii never opened by developer OR QA; the attack approximation prominently disclosed (9-item block); remainder split to NEW row E3 (sourcing-blocked)
+      signoff_decision_recorded: true   # QA clean, unconditional PASS with explicit RELEASE-CANDIDATE verdict, fit for the v1.0.32 production-candidate tag (docs/m31-qa-signoff.md); F2 cosmetic comment fix applied at commit; F1 (.claude/settings.json) consciously excluded per precedent
+    # Closed by coordinator release decision (DEC-0038, 2026-07-09); git tag v1.0.32 = PRODUCTION CANDIDATE. Completes the DEC-0035 autonomous run (M29 v1.0.30, M30 v1.0.31, M31 v1.0.32).
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0038), tagged v1.0.32 -- THE PRODUCTION CANDIDATE, completing the DEC-0035 three-milestone autonomous run. Backlog E1 (formulaically-derivable subset): NEW src/devices/audio/ym2413_synth.{h,cpp} -- 9-channel 2-operator FM grounded EXCLUSIVELY in references/fact-sheets/Yamaha YM2413 FM Chip.md formulas: closed-form logsin/exp tables (in-test recomputation oracles), 19-bit phase generation (pitch oracle f=F-Num*2^BLOCK*MUL*49716/2^19), EXACT decay/release EG (QA independently recomputed the data book printed Table III-7 durations), DISCLOSED exponential attack approximation, feedback doubling-law, KSR/Rks, rhythm mode (BD/TOM full; SD/HH/T-CY disclosed approximations; x2 law exact), AM/VIB LFOs; additive Ym2413Opll::advance_cycles/fm_sample (72-cycle native tick = exact 49716 Hz, ZOH, exact 9:8 decimation); additive MachineAudioMixer FM source with the zero-YM2413 byte-identity hard oracle (mutation-tested). Smoke matrix: boot logo -> BASIC; Metal Gear gameplay; Aleste 2 auto-ID + boot; metalgear2_scc.rom auto-ID + REAL-TITLE SCC (closes the M29 A-M29-4 residual); MSX-DOS -> genuine Disk BASIC prompt; REAL-TITLE FM (Aleste 2 keys the chip -- fmON/fmOFF identical-run captures diverge at first key-on). Ledger: E1 -> DONE (M31); NEW row E3 (cycle-exactness remainder, sourcing-blocked). Full evidence: docs/m31-implementation-report.md, docs/m31-qa-signoff.md, docs/m31-rc-zexall-log.txt."
+
+  M32:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless fast-subset 177/177 (171+6); SDL3-ON fast-subset 186/186 (180+6) -- developer AND QA independently from fresh builds; ZEXALL correctly NOT run (zero src/devices/cpu and src/core edits, git-diff-proven at three gates)
+      impacted_areas_covered: true      # vdp_scanline_accumulator static-frame-equivalence hard oracle (15-mode matrix); render-sync seam contract; L+1 latch integration; line-interrupt integration (fire window, once-per-crossing, IE1-off byte-identical CPU trajectories); synthetic split-screen system oracle + adversarial IE1-off arm; FM saturation both rails; loudness-ratio oracle
+      blocker_risks_resolved_or_accepted: true   # AC-6 arbitration FINAL -- all four committed-evidence divergences CONFIRMED raster-truth (QA pixel-proof: mg2-f1700 28/28 divergent pixels = baseline previous frame); QA mutations 3/3 killed with hash-verified restoration
+      signoff_decision_recorded: true   # QA CONDITIONAL PASS (docs/m32-qa-signoff.md), three closure-hygiene conditions ALL discharged (settings.json excluded per precedent; music_in_basic.md provenance recorded in CLAUDE.md; evidence regenerated with recorded recipes)
+    # Closed by coordinator release decision (DEC-0040, 2026-07-09); git tag v1.0.33. The production-candidate line advances v1.0.32 -> v1.0.33.
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0040), tagged v1.0.33. The DEC-0039 RC-playtest defect pair, both from the human first-hand v1.0.32 Aleste 2 session, both fixed UNIVERSALLY. (A) Raster-accurate per-line rendering + line-interrupt delivery: the coordinator-verified headline gap -- V9958Vdp::on_line_match() had ZERO production call sites (line interrupts NEVER fired in real execution; no game split handler could run) -- closed via an O(1) fingerprint-cached poll in step_cpu_instruction() at display line (R#19 - R#23) & 0xFF (openMSX VDP.cc:518-576 + fMSX MSX.c:2091-2104 agree); NEW src/devices/video/vdp_scanline_accumulator.{h,cpp} + nullable VdpRenderSyncListener sync-before-change seam on io_write() #98-#9B with the L+1 latch contract; render_frame(field) signature preserved; finalize-AFTER-on_vsync ordering deviation QA-judged SOUND and required. Synthetic split-screen oracle green incl. adversarial IE1-off arm; openMSX A/B PARITY split boundary 82==82 delta 0 (QA re-ran live); Aleste 2 reaches NON-GARBAGE scrolling gameplay past weapon select (the human repro resolved; the game uses mid-frame IE1 with R#19=220). (B) FM mix calibration: kFmAmplitudeScale 5 -> 21 via the D-2-ratified per-channel derivation round(400*31*(3/7)/256) from the openMSX Sony_HB-F1XV.xml 21000:9000 balance (QA re-derived; NukeYKT 1/256 corroboration); measured loudness ratio 0.4335 (+1.16% vs 3/7); the previously ~29 dB-buried (but always-playing) YM2413 now audible; fmON/fmOFF re-captured (FM peak 3,780 = exactly 900*21/5); zero-YM2413 byte-identity oracle green with host file unmodified. Committed evidence regenerated in place with supersession notes (docs/m32-implementation-report.md section 9; originals at tag v1.0.32) and a PERMANENT recorded Metal Gear recipe (tools/capture-metalgear-evidence.ps1 + tools/metalgear-evidence-input.script, two-run byte-identity self-asserting). Post-QA additive --debug-session --frames/--dump-frame enabler coordinator-reviewed (flag-gated, absent-flags byte-identical), fast suite re-confirmed 177/177. Ledger: NEW rows D8 (sub-line accuracy), D9 (sprite frame-snapshot remainder, MEASURED 8-17 band rows), D10 (mid-frame geometry adaptation), G6 (typed-BASIC harness, human proposal via references/music_in_basic.md); era shifts C10->M33-era, F1->M34-era, F2->M35-era. R-M32-7 (k=21 perceptual acceptance) remains with the human ear. Full evidence: docs/m32-implementation-report.md, docs/m32-qa-signoff.md, docs/m32-parity-trace-diff.md."
+
+  M33:
+    status: done
+    planning:
+      spec_defined: true                # the human's DEC-0041 charter verbatim (housekeeping; no device scope)
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true   # build-infra only: CMake SDL3.dll staging, bootstrap-build.ps1, stale-text fixes (sdl3_main.cpp usage string, ppi_slot_select.h comment); ZERO device-behavior change
+      unit_tests_added_or_updated: false       # none needed -- no behavior surface; existing suite is the gate
+      integration_tests_added_or_updated: false
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # fresh canonical build/ via tools/bootstrap-build.ps1 -RunTests: fast-subset ctest 186/186 (42.02 s), zero loader dialogs; ZEXALL correctly NOT run (no cpu/core change; the one unfiltered invocation stopped mid-sweep per cadence)
+      impacted_areas_covered: true      # the 8 previously-dialog-blocked SDL3 tests all green with CMake-staged SDL3.dll
+      blocker_risks_resolved_or_accepted: true
+      signoff_decision_recorded: true   # coordinator-executed housekeeping per the DEC-0041 charter; planner/QA cycle not convened (no device behavior); docs slice delegated + arbitrated (REQ/RESP-M33-001)
+    # Closed by coordinator release decision (DEC-0042, 2026-07-09); git tag v1.0.34.
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0042), tagged v1.0.34. Repository housekeeping per the human's DEC-0041 charter. (1) Git stream VERIFIED already single (main only, one worktree, zero stashes, linear v1.0.11..v1.0.33). (2) Build consolidation: 13 build trees (>12 GB), root QA logs, and 69 untracked debug strays deleted; ONE canonical build/; NEW tools/bootstrap-build.ps1 as THE single build/test entry point (SDL3 built once from references/sdl3 into build/_sdl3_install when missing, M26 recipe; fast-subset ctest default, explicit -Slow for the ZEXALL RC gate); CLAUDE.md build flow rewritten; .gitignore hardened (/build*/, /build-*.log, /debug/**/*.frame, __pycache__/). (3) UNIVERSAL build fix (human-reported live mid-milestone): SDL3-linked test exes died 0xc0000135 with MODAL Windows loader dialogs blocking unattended runs -- SDL3.dll staging moved INTO CMake (sony_msx_stage_sdl3_dll POST_BUILD helper applied to the frontend exe + all nine SDL3 test targets), making every build path self-sufficient; script-side copy removed (single mechanism). (4) Protected-state integrity: definition-of-done.yaml records for M29-M32 were MISSING (autonomous-run gap) -- restored in the established format, yaml.safe_load validated, M0-M32 complete. (5) Docs truth sweep (REQ/RESP-M33-001, msx-developer slice + coordinator arbitrations): root README rewritten (v1.0.33 snapshot, single-way build, all CLI flags verified against source); tools/README rewritten (42 scripts indexed); docs/README rewritten (frozen-triad taxonomy + never-edit-retroactively rule); debug/README NEW; bios/README fact-checked three ways; src/peripherals/README (M0-era junk stub) rewritten; src/devices/chipset/README file map completed; agent-protocol/README gains deferred-backlog.md row; tests/CLAUDE.md gains tests/parity/ note; stale M17-era 'YM2413 intentionally SILENT' usage text in sdl3_main.cpp replaced; tracked Python bytecode removed. Historical milestone docs untouched (frozen). Evidence: bootstrap -RunTests from the fresh tree = 186/186 (42.02 s), zero dialogs; git diff confirms zero src/devices/cpu/ / src/core/ changes."
+
+  M34:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless fast-subset 183/183; SDL3-ON fast-subset 192/192 -- developer AND QA independently from fresh builds; ZEXALL correctly NOT run (zero src/devices/cpu and src/core edits, git-diff-proven at three gates)
+      impacted_areas_covered: true      # dwell_rounding fixed-point unit; ultrasonic-silence (p=0..4 bounds + pre-fix discrimination) + midband-fidelity oracles; Aleste ultrasonic regression system test (pre/post burst metric); BL pure-backdrop unit (5 modes+sprites); BL L+1 latch integration; accumulator BL=0 equivalence; the 16-surface audio byte-oracle re-baseline
+      blocker_risks_resolved_or_accepted: true   # QA mutations 3/3 killed w/ hash-verified restoration; both committed-evidence escalations independently CONFIRMED (rows 14-15 = Aleste real BL=0 blank; f3000 rows 99-117 = M34-independent recipe residue via gate-removed discriminator)
+      signoff_decision_recorded: true   # QA CONDITIONAL PASS (docs/m34-qa-signoff.md), three closure-hygiene conditions ALL discharged (aleste PNGs regenerated w/ committed recipe; settings.json excluded; git add -f applied)
+    # Closed by coordinator release decision (DEC-0045, 2026-07-09); git tag v1.0.35.
+    overall_done: true
+    notes: "CLOSED 2026-07-09 (DEC-0045), tagged v1.0.35. The DEC-0043 playtest defect pair, both from the human first-hand v1.0.33/v1.0.34 sessions, both fixed UNIVERSALLY. (A) PSG/SCC band-limited box-average integration: NEW src/devices/audio/dwell_rounding.h + additive PsgYm2149/SccWavetable take_integrated_sample(window) walking level-times-dwell accumulators at true chip-step boundaries (PSG 16-cycle step incl. cycle_residual_ phase; SCC per-channel (period+1) steps); point sample()/amp_out() byte-kept. PsgAudioPump + MachineAudioMixer SCC term switched (FM branch byte-identical). Kills the ultrasonic point-sampling alias that made Aleste 2's period-0 silence idiom (~112 kHz real) audible as the transition beep -- QA reproduced zero burst blocks post-fix (17 pre-fix), residual ~500 RMS at 20.7 kHz sub-threshold. openMSX audio A/B silence-property PARITY. The 16-surface audio byte-oracle re-baseline executed under the anti-tautology discipline (hand oracles precede code; zero-source oracles survive in meaning contributing exactly 0; motion-is-a-bug fixed-point rows byte-frozen and passing) -- QA row-by-row audited. (B) R#1 BL display-enable render gate: one gate atop VdpFrameRenderer::render_line() (BL=0 => border_color() fill, content+sprites+MSK skipped), closing the pre-M34 asymmetry (sprite_engine honored BL, background did not). Fixes Metal Gear room-transition slow-fill of half-rewritten VRAM; both references AGREE at line granularity (openMSX PixelRenderer.cc:608-611; fMSX Common.h ClearLine-on-!ScreenON). S4 proved the diagnosis (MG drives R#1 bit6 low f4173->f4191; openMSX ref f4175->f4201 -- OUTCOME (a)). L+1 latch free via the M32 seam; M32 static-frame equivalence holds by construction. Both committed-evidence escalations independently CONFIRMED by QA; the four m32-aleste-play gameplay PNGs regenerated in place from a NOW-COMMITTED recipe (tools/capture-aleste-play-evidence.ps1 + tools/aleste-play-evidence-input.script, two-run byte-identical, f2600 byte-stable; originals at tag v1.0.34). Audio evidence regenerated (m27-example-tone WAV/dump; m32-fm-aleste fmON/fmOFF FM peak 3,780). NEW backlog row E4 (true band-limited resampling depth; cascaded second box pre-authorized only on a human audible-residual report). Full evidence: docs/m34-implementation-report.md, docs/m34-qa-signoff.md, docs/m34-audio-ab.md."
+
+  M35:
+    status: done
+    planning:
+      spec_defined: true
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true   # frontend-only: repeatable --disk ordered list + F11 runtime drive-A hot-swap; ZERO src/devices/cpu or src/core edits
+      unit_tests_added_or_updated: true         # disk_swap unit test + multi_disk integration test (2 new SDL3-gated exes)
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # headless 183/183; SDL3-ON 194/194; media-change via existing set_disk_changed(true)
+      impacted_areas_covered: true
+      blocker_risks_resolved_or_accepted: true   # adversarial: mutation A killed disk_swap unit test; mutation B did NOT kill multi_disk integration test -> residual R-M35-1 carried forward
+      signoff_decision_recorded: true   # docs/m35-qa-signoff.md; a QA-process incident (QA agent git-checkout clobbered uncommitted work -> false FAIL) diagnosed/restored/completed by the coordinator (checkpoint e360a5b); msx-qa given a non-destructive-mutation rule
+    # Closed by coordinator release decision (DEC-0049, 2026-07-10); git tag v1.0.36.
+    overall_done: true
+    notes: "CLOSED 2026-07-10 (DEC-0049), tagged v1.0.36. Multi-disk hot-swap -- LIVE human-validated: booted YS II from disk1, hit the real INSERT-DATADISK-IN-DRIVE-A prompt, pressed F11 (title -> disk2.dsk, stderr logged the swap), pressed RET, game read disk 2 and continued into gameplay. Repeatable --disk (ordered list, first inserted at boot) + an F11 host hotkey cycling drive A through the list at runtime, re-attaching the DiskImage. Frontend-only; zero cpu/core edits. Residual R-M35-1: strengthen the multi_disk integration test to assert the disk index advances (mutation B did not kill it) -- carried into M36. Follow-on M36 (playtest agent + the two live-playtest bugs)."
+
+  M36:
+    status: done
+    planning:
+      spec_defined: true                 # docs/m36-planner-package.md (Phase 1+2) + docs/m36-phase2-planner-package.md (Phase 2 addendum, DEC-0050-aligned, supersedes the machine-level-SRAM framing)
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true   # Phase 1 harness + Phase 2 device work + Phase 3 debug tooling + Bug B VDP fix + SDL3 FM-PAC SRAM persistence; ZERO src/devices/cpu / src/core edits at every gate
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # clean-rebuild 207/207 (Bug B) then 208/208 (with FM-PAC persistence); ZEXALL correctly withheld (zero cpu/core edits)
+      impacted_areas_covered: true      # Bug B unit test (non-vacuous) + interrupt-seam regressions (interrupt_ack, v9958_status_irq, m26_vsync, m32_line_interrupt, m34_bl_latch); FM-PAC round-trip; disk-save; DSKCHG; snapshot + stream determinism
+      blocker_risks_resolved_or_accepted: true   # Bug B FIXED (VDP IE0/IE1 /INT re-eval, openMSX-grounded + runtime A/B + LIVE human validation); R3 A/B waiver recorded (DEC-0054); residuals R-A..R-E non-blocking
+      signoff_decision_recorded: true   # QA PASS (docs/m36-qa-signoff-final.md), covers Phase-1 tooling too
+    # Closed by coordinator release decision (DEC-0054, 2026-07-10); git tag v1.0.37.
+    overall_done: true
+    notes: "CLOSED 2026-07-10 (DEC-0054), tagged v1.0.37. YS II FULLY PLAYABLE like real hardware -- building interiors LOAD (Bug B FIXED) and saves PERSIST (FM-PAC SRAM auto-save + disk write-back), LIVE human-validated on the real SDL3 build. Bug B was a real V9958 interrupt-accuracy bug: change_register did not re-evaluate /INT on an IE1/IE0 register write, so YS II's building-load ISR clearing IE0 left our /INT asserted -> the ISR's EI re-fired into a nested-VBLANK stack overflow. Fixed per openMSX VDP.cc:1177-1198 (SUPERSEDES DEC-0053's 'VDP correct' conclusion); pinned by the F10 lightweight-watch-mode capture. SDL3 FM-PAC SRAM persistence added (auto-save <cart>.sram). QA PASS (docs/m36-qa-signoff-final.md): 207/207 then 208/208, zero cpu/core, source parity line-for-line, non-vacuous mutation, independent openMSX VDP-IRQ runtime A/B (0->1->0->1 on the genuine Sony_HB-F1XV). R3 A/B waiver recorded. Residual non-blocking: R-A WD2793 read rotational latency (accuracy backlog), R-B commit a tools/ VDP-IRQ probe, R-C/D/E FM-PAC minor. Original plan retained below. Phase 1 (reusable msx-playtest observe-act-replay harness) DONE + committed as CHECKPOINT d522804 (no tag): .claude/agents/msx-playtest.md, .claude/commands/msx-playtest.md, tools/playtest-capture.ps1; coordinator-verified boot->MSX Disk BASIC (1000f) + YS II title (800f); two Phase-1 defects found (wrapper NativeCommandError fixed). DEC-0050 REFRAMED Phase 2A: the HB-F1XV built-in FM is MSX-MUSIC (OPLL + BIOS, no SRAM) so NO-S-RAM-AVAILABLE on a bare machine is CORRECT hardware; the FM-PAC 8KB battery SRAM is a PERIPHERAL cartridge. Phase 2 (docs/m36-phase2-planner-package.md, RESP-M36-003): S-a agent-frontmatter enabler; S-b Bug B (building-entry black screen) repro->fix [MANDATORY completion item]; S-c disk-save persistence + formatted-blank-disk tool; S-d FM-PAC peripheral cartridge (CartridgeMapperType::FmPac; roms/fmpac.rom provided by the human, a signature-valid non-canonical FM-PAC variant); S-e reconcile/remove the speculative internal sram_; S-f strengthen the R-M35-1 multi_disk test. Device-level + additive-CLI only -> ZERO cpu/core edits -> ZEXALL withheld. Gate PASSED (msx-orchestration). Tag target v1.0.37, gated on Bug B fixed + at least one save path persisting + QA sign-off (must cover Phase-1 tooling)."
+
+  M37:
+    status: done
+    planning:
+      spec_defined: true                 # DEC-0055 (slices A/B/C) + DEC-0056 (slices D/E); post-M36 hardening cycle
+      scope_in_scope_only: true
+      dependencies_mapped: true
+      acceptance_criteria_defined: true
+      risks_logged: true
+    implementation:
+      code_changes_scoped_to_milestone: true   # frontend + src/devices/fdc + tools/docs; ZERO src/devices/cpu / src/core edits across all 5 slices (git diff --stat e845b1e..HEAD -- src/devices/cpu src/core EMPTY, QA-verified)
+      unit_tests_added_or_updated: true
+      integration_tests_added_or_updated: true
+      build_flow_referenced: true
+    regression_qa:
+      regression_matrix_updated: true   # QA clean-rebuild (bootstrap-build.ps1, SDL3=ON): 210/210 passed, 0 failed; ZEXALL #128 correctly withheld (zero cpu/core edits, git-diff-proven)
+      impacted_areas_covered: true      # B zero-FM-PAC byte-identity (non-vacuous) + audio-oracle sweep; C oracle live-under-mutation (5 targeted fails then byte-identical restore) + boot/disk-save/disk-read/multi-disk green; D/E additive-field discipline (parse_sdl3_cli cases 1-9 unchanged)
+      blocker_risks_resolved_or_accepted: true   # DISCHARGED by DEC-0057 live-verify (YS II perfect + SRAM + screen good) + Slice F verified; QA FINAL PASS (docs/m37-qa-signoff.md)
+      signoff_decision_recorded: true   # QA FINAL PASS (docs/m37-qa-signoff.md, Slice-F delta appended)
+    # Closed by coordinator release decision (DEC-0058, 2026-07-10); git tag v1.0.38.
+    overall_done: true
+    notes: "CLOSED 2026-07-10 (DEC-0058), tagged v1.0.38. QA FINAL PASS (docs/m37-qa-signoff.md) + LIVE human validation (DEC-0057: YS II loads and plays perfectly, SRAM works perfectly, screen looks good). Added Slice F (DEC-0057, commit 83a0888): --capture <on|off> (default off) gating the F10 stream-capture hotkey so a mis-struck F10 is inert during gameplay (F11/F12/Alt+Enter unchanged), + default --scale 3/--filter linear (out-of-box 960x720 smooth; explicit value overrides; the E default 2=640x480 was re-derived to 3=960x720, oracle strengthened not weakened). Post-M36 hardening, 5 slices, all committed, ZERO cpu/core edits. A (commit 861eec1, DEC-0055/R-B): openMSX VDP-IRQ A/B probe as reusable tools/openmsx-vdp-irq-parity.ps1 + docs artifact (PASS 0->1->0->1). B (85b48aa, DEC-0055/R-D): inserted external FM-PAC OPLL mixed into machine audio (per-bay FmSources[2], additive, reuses built-in OPLL amplitude/cadence; byte-identical when no FM-PAC inserted; new frontend_machine_audio_mixer_fmpac_unit_test). C (85827e5, DEC-0055/R-A/DEC-0053): WD2793 Read-Sector rotational first-DRQ latency -- index-pulse-relative variable delay replaces the fixed 228-cycle (the flat zero-variance R-A defect); cycles_until_sector_id(k,now)=((k*P)/9+P-(now%P))%P, P=715909, +kReadSectorHeaderCycles=5358; openMSX A/B corroborates the ~1-rotation sawtooth (docs/openmsx-fdc-read-timing-ab.md, WSL openmsx 19.1); documented sector-vs-track APPROXIMATION (our CHS model is evenly-spaced+sequential, not byte-identical per-phase); NO oracle weakened (wd2793_type2 missed-DRQ strengthened, rotational oracle added, adversarial mutation = 5 targeted fails then byte-identical restore); write/read-address/read-track keep the fixed latency (future backlog item). D (cd459a3, DEC-0056): --speed <0..7> CLI (headless+SDL3) sets initial Mb670836 Speed Controller level (CPU-slowdown duty cycle, NOT turbo; 0=full speed default byte-identical, 7=max slow-motion; applied after cold_boot; F6/F7 stepping unchanged). E (cd459a3, DEC-0056): SDL3 window scaling -- resizable + SDL_SetRenderLogicalPresentation(320,240,LETTERBOX) aspect-correct + --filter nearest|linear (default linear/smooth) + --scale N (default 2=640x480 non-regressive) + --fullscreen + Alt+Enter runtime toggle (intercepted before input mapper like F10/F11/F12 so RETURN never leaks to the MSX matrix). Human live-verify gates: (1) YS II two-disk boot+interior-load+save with the new read-timing (no automated YS-II regression exists); (2) SDL3 --scale/--filter visual + Alt+Enter fullscreen both directions. On both passing, Conditional Pass -> full PASS -> tag v1.0.38."
