@@ -5,11 +5,16 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.2.1** — a critical **V9958 sprite-visibility fix**: rows redrawn by the VDP
-command engine (blits) are now sprite-paced before they are sealed into the frame, so sprites no
-longer vanish or flicker on games that rebuild their scrolling terrain with command blits (Aleste 2's
-plane, Firebird's player and flying enemies, Laydock 2 — a v1.1.6 per-line-sprite-rendering
-regression, root-caused by bisect and verified frame-for-frame against openMSX at a 0-flicker match).
+Current release: **v1.2.2** — SDL3 quality-of-life: a **master volume** control (`--volume <0..100>`,
+a `<volume>` knob in the XML config, and live Alt+D / Alt+U steps — applied strictly after the
+machine mix, byte-identical at full volume), **disk-save write-back ON by default** (a real MSX
+writes its floppies; `--no-disk-writable` or the new Alt+S live toggle keep disks read-only), and
+the fast-disk hotkey moved to **Alt+F**. On top of v1.2.1's critical **V9958 sprite-visibility
+fix**: rows redrawn by the VDP command engine (blits) are now sprite-paced before they are sealed
+into the frame, so sprites no longer vanish or flicker on games that rebuild their scrolling
+terrain with command blits (Aleste 2's plane, Firebird's player and flying enemies, Laydock 2 — a
+v1.1.6 per-line-sprite-rendering regression, root-caused by bisect and verified frame-for-frame
+against openMSX at a 0-flicker match).
 On top of v1.2.0's optional **strict-XML external configuration** (`sony_msx_hbf1xv.xml`: every launch
 knob in an annotated file at the repo root, resolved **CLI > XML > built-in default**, hardware-timing
 constants deliberately not configurable), v1.1.8's **MSX-logo Windows app icon**, v1.1.7's optional
@@ -34,8 +39,9 @@ the sections below and the source are the authoritative spec.)
 - Convenience-first launch defaults (v1.1.2): **512 KB RAM, fast-disk ON, and the FM-PAC
   peripheral auto-loaded into slot 2** so its battery SRAM saves are always available (a game
   cartridge in slot 1 coexists) — with `--stock` to restore the authentic bare HB-F1XV in one flag.
-- MSX-DOS / Disk BASIC boot from `.dsk` images, multi-disk hot-swap (F11), and `--disk-writable`
-  game saves persisted back to the host `.dsk`.
+- MSX-DOS / Disk BASIC boot from `.dsk` images, multi-disk hot-swap (F11), and disk-save
+  persistence back to the host `.dsk` — **ON by default** as of v1.2.2 (a real MSX writes its
+  floppies); `--no-disk-writable` keeps disks read-only, and Alt+S toggles it live.
 - Cartridge loading with automatic mapper identification (software-database SHA-1 match, then a
   bank-write heuristic), plus an FM-PAC peripheral cartridge: its OPLL mixed into the audio, the
   `CALL FMPAC` backup-manager screen, and 8 KB battery SRAM saved in the openMSX-compatible
@@ -43,7 +49,9 @@ the sections below and the source are the authoritative spec.)
 - All V9958 screen and graphic modes (text, GRAPHIC 1–7, YJK/YAE), sprites, and the command
   engine with per-line raster rendering and hardware-timed command duration (the `CE` busy-wait
   window paces software that polls it, so command-driven cut-scenes run at the correct speed).
-- Live audio: PSG (YM2149), Konami SCC, and built-in MSX-MUSIC (YM2413) FM.
+- Live audio: PSG (YM2149), Konami SCC, and built-in MSX-MUSIC (YM2413) FM, with a
+  **master volume** control (`--volume <0..100>`, default 100; Alt+D / Alt+U step it -/+10% live)
+  applied strictly after the machine mix — SDL3-presentation only, byte-identical at full volume.
 - WD2793 FDC with index-pulse-relative rotational latency on read and write, and a cycle-accurate
   write byte-stream: the sector data-position is decoupled from CPU write timing (a missed slot
   substitutes `0x00`+Lost-Data and advances, never drops), so in-game disk saves are byte-exact
@@ -105,8 +113,11 @@ the old `--cart1`/`--cart2`[`-type`] names remain accepted as silent aliases), `
 `--max-frames <N>`, `--hidden-window`, `--border` / `--no-border` (the framed openMSX-matching
 canvas vs the default bare edge-to-edge Sony-original presentation), `--fast-disk` / `--no-fast-disk`
 (FDC turbo for near-instant disk loads — **ON by default as of v1.1.2**; `--no-fast-disk` restores
-accurate rotational timing; Alt+D toggles it live), `--disk-writable` (persist disk writes
-back to the host `.dsk`), `--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
+accurate rotational timing; **Alt+F** toggles it live), `--disk-writable` / `--no-disk-writable`
+(persist disk writes back to the host `.dsk` — **ON by default as of v1.2.2**; `--no-disk-writable`
+keeps disks read-only; Alt+S toggles it live), `--volume <0..100>` (master volume percent, default
+`100` = full; attenuation only; Alt+D / Alt+U step it -/+10% live; SDL3 presentation only),
+`--dump-state <name>`, `--trace-cpu <name>`, `--event-log <name>`,
 `--input-script <path>`, `--snapshot <dir>`, `--fmpac-sram <path>` / `--no-fmpac-sram`
 (override / opt out of the FM-PAC battery-SRAM auto-persistence, which otherwise saves to
 `<cart-rom-path>.sram`), `--speed <0..7>` (initial Speed Controller level — a CPU slow-down
@@ -154,9 +165,9 @@ identification path) keep their own stock defaults and each print their own usag
 Every default and knob can be externalized to a strict XML config file, so the machine is
 configurable without recompiling. The annotated reference [`sony_msx_hbf1xv.xml`](sony_msx_hbf1xv.xml)
 at the repository root lists **every** externalized field (RAM/VRAM, fast-disk, FM-PAC auto-load,
-video scale/filter, persistence, border, disk-writable, speed, fullscreen, capture, BIOS
-directory + the seven ROM filenames, FM-PAC ROM/SRAM paths, and the software-database path) set to
-its exact built-in default, each commented with its type and allowed range/enum.
+video scale/filter, persistence, border, disk-writable, master volume, speed, fullscreen, capture,
+BIOS directory + the seven ROM filenames, FM-PAC ROM/SRAM paths, and the software-database path) set
+to its exact built-in default, each commented with its type and allowed range/enum.
 
 - **Optional.** The emulator always runs standalone with zero config; if no config file is found it
   prints one warning line and continues on the built-in defaults.
