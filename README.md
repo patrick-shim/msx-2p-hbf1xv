@@ -5,17 +5,18 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.2.0** — an optional **strict-XML external configuration** (`sony_msx_hbf1xv.xml`):
-every launch knob and default lives in an annotated, publishable file at the repo root, resolved
-**CLI > XML > built-in default**; the file is optional (a missing/malformed one warns and continues on
-built-in defaults, and hardware-timing constants are deliberately not configurable), and a round-trip
-guard fails the build if the shipped file ever drifts from the compiled defaults. On top of v1.1.8's
-**MSX-logo Windows app icon** (shown on the `.exe`/Explorer and the running window/taskbar), v1.1.7's
-optional **phosphor-persistence** flicker-softener (`--persistence`, `--persistence-mode avg|peak`,
-Alt+B/Alt+M, default off), v1.1.6 **per-line-live V9958 sprite rendering** (split-screen HUD titles like
-Space Manbow / Laydock 2 no longer cull their top-region sprites — backlog D9), the v1.1.5 command-engine
-access-slot contention model, and the v1.1.4 Z80A/V9958/PSG Sony-hardware timing parity; the FM-PAC
-peripheral firmware (`roms/fmpac.rom`) is bundled.
+Current release: **v1.2.1** — a critical **V9958 sprite-visibility fix**: rows redrawn by the VDP
+command engine (blits) are now sprite-paced before they are sealed into the frame, so sprites no
+longer vanish or flicker on games that rebuild their scrolling terrain with command blits (Aleste 2's
+plane, Firebird's player and flying enemies, Laydock 2 — a v1.1.6 per-line-sprite-rendering
+regression, root-caused by bisect and verified frame-for-frame against openMSX at a 0-flicker match).
+On top of v1.2.0's optional **strict-XML external configuration** (`sony_msx_hbf1xv.xml`: every launch
+knob in an annotated file at the repo root, resolved **CLI > XML > built-in default**, hardware-timing
+constants deliberately not configurable), v1.1.8's **MSX-logo Windows app icon**, v1.1.7's optional
+**phosphor-persistence** flicker-softener (`--persistence`, Alt+B/Alt+M, default off), v1.1.6
+**per-line-live V9958 sprite rendering** (split-screen HUD titles like Space Manbow / Laydock 2 —
+backlog D9), the v1.1.5 command-engine access-slot contention model, and the v1.1.4 Z80A/V9958/PSG
+Sony-hardware timing parity; the FM-PAC peripheral firmware (`roms/fmpac.rom`) is bundled.
 
 ## Architecture
 
