@@ -15,3 +15,9 @@ Usage notes:
   category as `bios/` (proprietary peripheral firmware; no redistribution rights asserted). Any
   other `roms/` content stays untracked (provision locally). ROM binaries committed before
   `b5efd29` also remain in git history.
+- Per **AMENDMENT-C** (2026-07-15, owner request) `fmpac.rom.sram` is **frozen** on the remote at
+  its last-pushed state (`d0eb7f9`): it stays tracked/published there, but local save-state churn
+  is no longer committed or pushed (enforced locally via
+  `git update-index --skip-worktree roms/fmpac.rom.sram` — a per-clone flag; re-apply after a
+  fresh clone). To deliberately publish a new save state: `--no-skip-worktree`, commit, push,
+  re-apply the flag.

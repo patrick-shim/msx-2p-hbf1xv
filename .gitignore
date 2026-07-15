@@ -147,11 +147,18 @@ CMakeUserPresets.json
 # system/peripheral firmware; NO redistribution rights asserted, no provenance claim).
 # disks/ content, and any OTHER roms/ content, stay untracked (provisioned locally).
 # roms/README.md (folder documentation, human-authored) stays tracked explicitly.
+# AMENDMENT-C (2026-07-15, owner request): fmpac.rom.sram is FROZEN on the remote at
+# its last-pushed state (d0eb7f9) -- it stays tracked/published there, but local
+# save-state churn is no longer committed/pushed. Enforced via
+#   git update-index --skip-worktree roms/fmpac.rom.sram
+# (a per-clone flag; re-apply after a fresh clone). The `!` exception for it is gone
+# from the block below, so the file is also ignore-covered if it ever becomes
+# untracked. To deliberately publish a new save state: --no-skip-worktree, commit,
+# push, then re-apply the flag.
 /roms/*
 !/roms/.gitkeep
 !/roms/README.md
 !/roms/fmpac.rom
-!/roms/fmpac.rom.sram
 /disks/*
 !/disks/.gitkeep
 
@@ -175,7 +182,9 @@ Desktop.ini
 # Per DEC-0047 the repository OWNER has made an informed decision to host the full
 # repo -- bios/ included -- on a PUBLIC remote (github.com/patrick-shim/msx-2p-hbf1xv).
 # bios/ AND roms/'s FM-PAC firmware (fmpac.rom + fmpac.rom.sram) are tracked and
-# published per the owner's instruction (DEC-0047 + AMENDMENT-B). disks/ CONTENT and
+# published per the owner's instruction (DEC-0047 + AMENDMENT-B); per AMENDMENT-C
+# (2026-07-15) the .sram is frozen at its last-pushed state -- skip-worktree'd, its
+# save-state churn no longer committed or pushed. disks/ CONTENT and
 # any other roms/ content stay untracked (provisioned locally, not from git); only the
 # directory scaffolding (.gitkeep) + roms/README.md + the FM-PAC pair are tracked --
 # see the roms//disks/ block above. Those roms/disks binaries nonetheless remain in
