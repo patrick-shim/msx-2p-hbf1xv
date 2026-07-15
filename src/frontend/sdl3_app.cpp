@@ -26,6 +26,7 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/app_icon_data.h"
 #include "frontend/audio_pacer.h"
+#include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
 #include "machine/cartridge_identifier.h"
 #include "machine/debug_format.h"
 #include "peripherals/msx_key_names.h"
@@ -279,6 +280,12 @@ bool Sdl3App::init() {
         shutdown();
         return false;
     }
+    // M52 (DEC-0079): apply the resolved master volume to the presenter once
+    // before playback, and cache it for the live Alt+D/Alt+U steppers. Default
+    // 100 (unity) is byte-identical to pre-M52 (the presenter short-circuits at
+    // 100). Presentation-only: never touches emulation/determinism.
+    master_volume_ = config_.master_volume;
+    audio_presenter_->set_master_volume(master_volume_);
 
     // M27-S4, R-M27-2 (easy-to-get-wrong sequencing constraint): event
     // logging MUST be enabled BEFORE cold_boot() to capture the Reset event
@@ -506,22 +513,51 @@ void Sdl3App::poll_and_dispatch_events() {
             SDL_SetWindowFullscreen(window_, fullscreen_);
             continue;
         }
-        // Alt+D toggles fast-disk (FDC turbo) live (fresh key-down only, not a
-        // repeat). Consumed HERE as a HOST hotkey; never dispatched to
-        // input_mapper_ -- 'D' is an MSX matrix key, so it must not leak into the
-        // emulated keyboard (mirrors the Alt+Enter / F10-F12 discipline). Alt+D
-        // is free: F1-F5 are the emulated MSX function keys and F6-F12 + Alt+Enter
-        // are already host-bound, so a modifier combo on a letter key is used
-        // (chosen to avoid any collision with an existing host hotkey). The
-        // standalone Alt keydown still reaches the matrix exactly as it does for
-        // Alt+Enter -- only the 'D' keydown is swallowed. Mod mask SDL_KMOD_ALT
-        // (either Alt) per references/sdl3/include/SDL3/SDL_keycode.h:344.
-        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_D &&
+        // Alt+F toggles fast-disk (FDC turbo) live (fresh key-down only, not a
+        // repeat -- it is a TOGGLE, so a held key must not thrash the state).
+        // M52 (DEC-0079): MOVED from Alt+D to Alt+F ("fast disk" mnemonic) to free
+        // Alt+D for volume-down. Consumed HERE as a HOST hotkey; never dispatched
+        // to input_mapper_ -- 'F' is an MSX matrix key, so it must not leak into
+        // the emulated keyboard (mirrors the Alt+Enter / F10-F12 discipline). The
+        // standalone Alt keydown still reaches the matrix -- only the 'F' keydown
+        // is swallowed. Mod mask SDL_KMOD_ALT (either Alt) per
+        // references/sdl3/include/SDL3/SDL_keycode.h:344.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F &&
             (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
             const bool on = !machine_.fast_disk();
             machine_.set_fast_disk(on);
             std::cerr << "sdl3: fast-disk (FDC turbo) " << (on ? "ENABLED" : "disabled")
-                      << " (Alt+D); default is accurate FDC timing\n";
+                      << " (Alt+F); default is accurate FDC timing\n";
+            continue;
+        }
+        // M52 (DEC-0079): Alt+D = volume DOWN, Alt+U = volume UP. Key-repeat is
+        // HONORED for these two (the guard is deliberately DROPPED, unlike every
+        // other host hotkey which is fresh-keydown-only): holding Alt+D/Alt+U to
+        // RAMP volume is the ergonomic expectation, and volume is a pure
+        // presentation knob that never touches emulation/determinism/any recorded
+        // input/any ctest fixture, so honoring OS auto-repeat is zero-risk (the
+        // clamp makes an over-held key harmless -- it saturates at 0/100). Consumed
+        // HERE as HOST hotkeys; only the 'D'/'U' keydown is swallowed (the repeated
+        // keydowns too, so they never leak to the matrix), the standalone Alt
+        // keydown still reaches the matrix. Mod mask SDL_KMOD_ALT (either Alt).
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_D &&
+            (event.key.mod & SDL_KMOD_ALT) != 0) {
+            on_volume_step_hotkey(-1);
+            continue;
+        }
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_U &&
+            (event.key.mod & SDL_KMOD_ALT) != 0) {
+            on_volume_step_hotkey(+1);
+            continue;
+        }
+        // M52 (DEC-0079): Alt+S toggles disk-writable at runtime (fresh key-down
+        // only, not a repeat -- it is a TOGGLE). Consumed HERE as a HOST hotkey;
+        // never dispatched to input_mapper_ -- 'S' is an MSX matrix key, so only
+        // the 'S' keydown is swallowed; the standalone Alt keydown still reaches
+        // the matrix (mirrors the Alt+F/Alt+D discipline). Mod mask SDL_KMOD_ALT.
+        if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_S &&
+            (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
+            on_disk_writable_toggle_hotkey();
             continue;
         }
         // Alt+B / Shift+Alt+B step the phosphor-persistence inter-frame blend
@@ -803,6 +839,49 @@ void Sdl3App::on_persistence_mode_hotkey() {
     std::cerr << "sdl3: phosphor mode " << (to_peak ? "PEAK (peak-hold; sprites stay full brightness)"
                                                     : "AVERAGE (weighted mean)")
               << " (Alt+M)\n";
+}
+
+void Sdl3App::on_volume_step_hotkey(const int dir) {
+    // M52 (DEC-0079): step the SDL3 master volume by kVolumeStep on the
+    // {0,10,...,100} grid, CLAMPING (never wrapping) at both ends -- turning
+    // volume down past 0 must NEVER jump to 100 (a dangerous loudness surprise).
+    // Derives the next step from the cached master_volume_, applies it to the
+    // audio presenter, and prints one stderr feedback line per accepted step
+    // (cheap; the owner wants feedback, and key-repeat is honored so a held key
+    // ramps). Presentation-only: never perturbs emulation/determinism.
+    master_volume_ = step_master_volume(master_volume_, dir, kVolumeStep);
+    if (audio_presenter_) {
+        audio_presenter_->set_master_volume(master_volume_);
+    }
+    std::cerr << "sdl3: master volume " << master_volume_ << "%"
+              << (master_volume_ == 0 ? " (muted)" : master_volume_ == 100 ? " (full)" : "")
+              << " (Alt+D -10 / Alt+U +10)\n";
+}
+
+void Sdl3App::on_disk_writable_toggle_hotkey() {
+    // M52 (DEC-0079): toggle disk-writable at runtime, keeping config_.disk_writable
+    // AND the current image's host-path binding in lockstep so the two flush gates
+    // (exit flush guarded by the binding; swap flush guarded by config_.disk_writable)
+    // always agree. ZERO src/devices/fdc edits -- ON binds via DiskImage::set_host_path,
+    // OFF unbinds with an empty path (flush() then no-ops).
+    const bool turning_on = !config_.disk_writable;
+    config_.disk_writable = turning_on;
+    if (turning_on) {
+        // Bind the CURRENT disk's host path. A late-ON (after in-memory writes
+        // accumulated while OFF) binds the path so the WHOLE in-memory image --
+        // including those earlier writes -- is flushed at the next swap/exit.
+        if (current_disk_index_ < config_.disk_paths.size()) {
+            machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+        }
+        std::cerr << "sdl3: disk-writable ENABLED (Alt+S) -- host .dsk saves persist on swap/exit\n";
+    } else {
+        // Unbind: future swap/exit flushes no-op for the current image. The
+        // in-memory writes are KEPT (never rolled back) but, being unbound, a
+        // dirty image toggled OFF is DISCARDED at exit (never written to host).
+        machine_.disk_image().set_host_path(std::filesystem::path{});
+        std::cerr << "sdl3: disk-writable disabled (Alt+S) -- writes stay in memory; "
+                     "current disk will NOT be saved\n";
+    }
 }
 
 bool Sdl3App::flush_current_disk() {

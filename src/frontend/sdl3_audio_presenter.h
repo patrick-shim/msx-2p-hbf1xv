@@ -148,6 +148,19 @@ public:
     void push_produced_paced(const std::vector<std::int16_t>& produced,
                              std::uint64_t total_elapsed_cycles);
 
+    // M52 (DEC-0079, docs/m52-planner-package.md §2.1): the POST-MIX master gain,
+    // a pure presentation scalar applied to the already-mixed interleaved-stereo
+    // int16 PCM immediately before SDL_PutAudioStreamData. It is SEPARATE from and
+    // AFTER the DEC-0039 MachineAudioMixer balance (which stays byte-identical at
+    // full volume) and is NOT a change to kAmplitudeScale. `volume_percent` in
+    // [0,100] (clamped); 100 = unity (the default, byte-identical to pre-M52). At
+    // 100 every push short-circuits to the ORIGINAL bytes (no copy, no scaling);
+    // below 100 the scaled samples are pushed instead (frontend/master_volume.h).
+    // SDL3-only: the headless build never instantiates this presenter, so the
+    // knob cannot reach a headless/ctest audio fixture (the determinism guard).
+    void set_master_volume(int volume_percent);
+    [[nodiscard]] int master_volume() const { return master_volume_; }
+
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
     // Kept accessor shape (M26): the pump is now owned by the mixer.
@@ -160,6 +173,13 @@ private:
     AudioPacer pacer_{kSampleRateHz, kSystemClockHz, kLowWaterSamples, kMaxQueuedSamples};
     SDL_AudioStream* stream_ = nullptr;
     std::string last_error_;
+    // M52 (DEC-0079): the post-mix master gain percent (100 = unity default,
+    // byte-identical to pre-M52). Set from config + Alt+D/Alt+U hotkeys.
+    int master_volume_ = 100;
+    // Reusable scratch for the sub-100 scaled push on the LIVE path
+    // (push_produced_paced), so the caller's produced buffer is never mutated
+    // (it is reused across frames) and no per-frame allocation is incurred.
+    std::vector<std::int16_t> scaled_buffer_;
 };
 
 }  // namespace sony_msx::frontend

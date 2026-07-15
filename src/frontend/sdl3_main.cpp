@@ -137,15 +137,24 @@ OPTIONS
                             toggles it live. Try: --persistence 50
                             --persistence-mode peak.
 
+  Sound
+    --volume <0..100>       Master volume percent. DEFAULT 100 (full); 0 = mute.
+                            Attenuation only (never amplifies). Alt+D / Alt+U step
+                            it -/+10% live. SDL3 presentation only -- it never
+                            affects emulation, determinism, or headless output.
+
   Saving & disks
     --disk-writable         Save in-game disk writes back to the .dsk file (on a
-                            clean exit, or an F11 swap). Without this, disks are
-                            READ-ONLY and any writes are discarded when you quit.
-    --fast-disk             Near-instant disk loads (Alt+D toggles it live). ON
+                            clean exit, or an F11 swap). This is now ON BY DEFAULT
+                            (a real MSX writes its floppies); Alt+S toggles it live.
+    --no-disk-writable      Make disks READ-ONLY: writes stay in memory and are
+                            discarded on exit (the escape hatch now that writable
+                            is the default). Alt+S still toggles live.
+    --fast-disk             Near-instant disk loads (Alt+F toggles it live). ON
                             by default (convenience); may affect rare
                             copy-protected disks.
     --no-fast-disk          Use 100% accurate (slower) FDC timing instead (also
-                            what --stock selects). Alt+D still toggles live.
+                            what --stock selects). Alt+F still toggles live.
     --fmpac-sram <path>     Where the FM-PAC's battery save is stored (default:
                             roms\fmpac.rom.sram for the auto-loaded FM-PAC, or
                             <cart>.rom.sram for an explicit one; auto-written).
@@ -179,7 +188,8 @@ OPTIONS
 IN-WINDOW HOTKEYS
     F11        swap to the next disk        F12    write a debug snapshot
     F6 / F7    Speed Controller slow -/+    F8/F9  Ren-Sha auto-fire slow -/+
-    Alt+Enter  toggle fullscreen            Alt+D  toggle fast-disk
+    Alt+Enter  toggle fullscreen            Alt+F  toggle fast-disk
+    Alt+D / Alt+U  master volume -/+10%     Alt+S  toggle disk-writable
     Alt+B / Shift+Alt+B  phosphor persistence +/-10%
     Alt+M      toggle phosphor mode avg/peak   PAUSE  hardware PAUSE button
     F10        live capture (needs --capture on)
@@ -187,7 +197,8 @@ IN-WINDOW HOTKEYS
 GOOD TO KNOW
     - Paths are relative to the folder you run from -- launch from the project
       root, or use full paths (e.g. --bios-dir C:\msx\bios).
-    - Game saves: to SRAM -> add the FM-PAC cartridge; to disk -> --disk-writable.
+    - Game saves: to SRAM -> add the FM-PAC cartridge; to disk -> ON by default
+      now (a real MSX writes its floppies); pass --no-disk-writable for read-only.
     - A save disk must be a FORMATTED .dsk. Create one with
       tools\format-blank-disk.ps1 -- an all-zero blank has no filesystem and a
       game cannot write to it.
@@ -309,12 +320,18 @@ void print_startup_summary(const sony_msx::frontend::Sdl3App& app,
         if (config.disk_paths.size() > 1) {
             std::cerr << "  (+" << (config.disk_paths.size() - 1) << " more; F11 cycles)";
         }
-        std::cerr << (config.disk_writable ? "  [writable -- saves persist]\n"
-                                           : "  [read-only -- add --disk-writable to save]\n");
+        // M52 (DEC-0079): disk-writable default is now ON; Alt+S toggles live.
+        std::cerr << (config.disk_writable
+                          ? "  [writable -- saves persist on swap/exit; Alt+S toggles]\n"
+                          : "  [read-only -- Alt+S or drop --no-disk-writable to save]\n");
     }
     std::cerr << "    Fast-disk  : "
-              << (config.fast_disk ? "ON (near-instant loads; Alt+D toggles)\n"
-                                   : "OFF (accurate timing; Alt+D toggles)\n");
+              << (config.fast_disk ? "ON (near-instant loads; Alt+F toggles)\n"
+                                   : "OFF (accurate timing; Alt+F toggles)\n");
+    // M52 (DEC-0079): SDL3 master volume (Alt+D down / Alt+U up; --volume 0..100).
+    std::cerr << "    Volume     : " << config.master_volume << "%"
+              << (config.master_volume == 100 ? " (full; Alt+D -10 / Alt+U +10)\n"
+                                              : " (Alt+D -10 / Alt+U +10)\n");
     std::cerr << "    Speed      : " << config.speed_level.value_or(0)
               << (config.speed_level.value_or(0) == 0 ? " (full speed)\n" : "\n");
     std::cerr << "    Video      : " << config.window_width << "x" << config.window_height
@@ -333,7 +350,8 @@ void print_startup_summary(const sony_msx::frontend::Sdl3App& app,
         "    F11  swap disk            F12  debug snapshot\n"
         "    F6 / F7   speed slow -/+  (Speed Controller: a slow-motion aid)\n"
         "    F8 / F9   Ren-Sha auto-fire -/+        PAUSE  hardware pause\n"
-        "    Alt+Enter  toggle fullscreen           Alt+D  toggle fast-disk\n"
+        "    Alt+Enter  toggle fullscreen           Alt+F  toggle fast-disk\n"
+        "    Alt+D / Alt+U  master volume -/+10%    Alt+S  toggle disk-writable\n"
         "    Alt+B / Shift+Alt+B  phosphor persistence +/-10% (smooths sprite flicker)\n"
         "    Alt+M  toggle phosphor mode avg<->peak (peak keeps sprites full-bright)\n";
     std::cerr << "    F10  live capture "
@@ -432,6 +450,10 @@ int main(int argc, char** argv) {
                                 : SDL_SCALEMODE_LINEAR;
     config.persistence = runtime.persistence;
     config.persistence_mode = runtime.persistence_mode;
+    // M52 (DEC-0079): resolved SDL3 master volume (CLI --volume > XML > default
+    // 100). runtime.master_volume == parsed.volume when no config was loaded;
+    // default 100 (unity) is byte-identical to pre-M52.
+    config.master_volume = runtime.master_volume;
     // M46/M50-S2: the flipped convenience-vs-stock session defaults, now with the
     // externalized config as the base default (CLI > XML > convenience). The
     // Sdl3AppConfig struct defaults stay stock (anti-drift, A-2); resolve_runtime_

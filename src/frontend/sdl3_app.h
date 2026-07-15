@@ -201,6 +201,15 @@ struct Sdl3AppConfig {
     // never affects emulation, determinism, or headless output.
     PhosphorMode persistence_mode = PhosphorMode::Average;
 
+    // M52 (DEC-0079): SDL3 master-volume percent [0,100] fed to the audio
+    // presenter (--volume; Alt+D down / Alt+U up step it live). DEFAULT 100 =
+    // unity (full) -- the struct default STAYS at unity 100 (anti-drift: the
+    // flipped-default pattern only ever applies to disk-writable, planner §2.2/§2.4),
+    // so a bare Sdl3AppConfig{} is byte-identical to pre-M52. A POST-MIX
+    // presentation scalar only: never affects emulation, determinism, or headless
+    // output (the headless build never constructs Sdl3AudioPresenter).
+    int master_volume = 100;
+
     // M42 (DEC-0061): main-RAM (DRAM) size in BYTES passed to the Hbf1xvMachine
     // constructor. Default = the strict stock 64 KB spec (byte-identical to
     // before). --ram 128/256/512 (opt-in, NON-STOCK) set 128/256/512 KB here;
@@ -391,6 +400,21 @@ private:
     // Alt+M hotkey handler -- toggles the phosphor blend mode (Average <-> Peak)
     // and prints it to stderr. Same HOST-hotkey discipline. Presentation-only.
     void on_persistence_mode_hotkey();
+    // M52 (DEC-0079): Alt+D (dir=-1) / Alt+U (dir=+1) step the audio presenter's
+    // master volume by kVolumeStep on a {0,10,...,100} grid, CLAMPING (never
+    // wrapping) at both ends, and print the new percent to stderr. Consumed as a
+    // HOST hotkey (only the letter keydown swallowed; standalone Alt reaches the
+    // matrix). Key-repeat is HONORED for these two (a pure presentation knob that
+    // never touches emulation/determinism -- planner §2.3). Presentation-only.
+    void on_volume_step_hotkey(int dir);
+    // M52 (DEC-0079): Alt+S toggles disk-writable at runtime, keeping
+    // config_.disk_writable AND the current image's host-path binding in sync so
+    // both flush gates agree. ON binds the current disk's host path (a late-ON
+    // flushes the whole in-memory image at the next swap/exit); OFF unbinds
+    // (set_host_path({}) -- future flushes no-op, in-memory writes kept but
+    // discarded at exit). Fresh-keydown-only (it is a toggle). HOST-hotkey
+    // discipline. ZERO src/devices/fdc edits (reuses DiskImage::set_host_path).
+    void on_disk_writable_toggle_hotkey();
     void update_window_title_for_current_disk();
     void log_disk_swap();
 
@@ -409,6 +433,15 @@ private:
     // M37 Slice E (DEC-0056): tracked fullscreen state for the Alt+Enter
     // runtime toggle. Seeded from config_.fullscreen in init().
     bool fullscreen_ = false;
+    // M52 (DEC-0079): cached master-volume percent for the live Alt+D/Alt+U
+    // steppers (the audio presenter holds the authoritative copy; this mirrors it
+    // so the hotkeys can step without querying SDL). Seeded from
+    // config_.master_volume in init(). Default 100 (unity).
+    int master_volume_ = 100;
+    // M52 (DEC-0079): the master-volume hotkey grid step (an 11-point
+    // {0,10,...,100} grid, mirroring the Alt+B persistence step's feel; reaches
+    // exact 0/100 -- planner §2.3).
+    static constexpr int kVolumeStep = 10;
 
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;

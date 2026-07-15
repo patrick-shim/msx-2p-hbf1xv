@@ -16,6 +16,8 @@
 #include <algorithm>
 #include <vector>
 
+#include "frontend/master_volume.h"
+
 namespace sony_msx::frontend {
 
 // Same amplitude-scale policy declared twice to keep the mixer SDL3-independent
@@ -61,8 +63,11 @@ void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std
 
     // Zero-SCC mix == the pre-M29 psg_raw * kAmplitudeScale arithmetic,
     // byte-for-byte (MachineAudioMixer's hard regression oracle, M29-S5).
-    const std::vector<std::int16_t> pcm =
+    std::vector<std::int16_t> pcm =
         mixer_.mix_interleaved_stereo(psg, MachineAudioMixer::SccSources{nullptr, nullptr}, sample_count);
+
+    // M52 (DEC-0079): post-mix master gain. No-op (byte-identical) at 100.
+    apply_master_gain(pcm, master_volume_);
 
     if (!SDL_PutAudioStreamData(stream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)))) {
         last_error_ = SDL_GetError();
@@ -130,8 +135,14 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
     // Always pump the full batch: every generator (PSG, SCCs, built-in FM, FM-PAC OPLLs)
     // stays in lockstep with the machine's elapsed cycles even when backpressure trims the
     // pushed output (M29-S5/M31-S5/M37-SliceB; DEC-0033 invariant).
-    const std::vector<std::int16_t> pcm = mixer_.mix_interleaved_stereo(
+    std::vector<std::int16_t> pcm = mixer_.mix_interleaved_stereo(
         psg, sccs, fm, fm_pacs, static_cast<std::size_t>(decision.samples_to_pump));
+
+    // M52 (DEC-0079): post-mix master gain on the mixed batch. No-op (byte-
+    // identical) at 100; the silence-prime buffer above is never scaled (0 is
+    // gain-invariant). This plumbing path is not the live path (that is
+    // push_produced_paced below) but honors the same gain law for parity.
+    apply_master_gain(pcm, master_volume_);
 
     if (decision.samples_to_push == 0) {
         return;
@@ -180,9 +191,30 @@ void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& pr
     const std::size_t push_pairs =
         std::min(static_cast<std::size_t>(decision.samples_to_push), available_pairs);
     const auto push_bytes = static_cast<int>(push_pairs * 2 * sizeof(std::int16_t));
-    if (!SDL_PutAudioStreamData(stream_, produced.data(), push_bytes)) {
+
+    // M52 (DEC-0079): post-mix master gain. At the DEFAULT 100 (unity) the
+    // ORIGINAL produced bytes are pushed unchanged (byte-identity short-circuit
+    // -- no copy, no scaling: the SDL3 PCM stream is byte-for-byte what it was
+    // pre-M52). Below 100 the pushed region is copied into a reusable member
+    // buffer, scaled, and pushed -- the caller's `produced` buffer (reused across
+    // frames) is NEVER mutated.
+    const std::int16_t* data_to_push = produced.data();
+    if (master_volume_ != 100) {
+        scaled_buffer_.assign(produced.begin(),
+                              produced.begin() + static_cast<std::ptrdiff_t>(push_pairs * 2));
+        apply_master_gain(scaled_buffer_, master_volume_);
+        data_to_push = scaled_buffer_.data();
+    }
+    if (!SDL_PutAudioStreamData(stream_, data_to_push, push_bytes)) {
         last_error_ = SDL_GetError();
     }
+}
+
+void Sdl3AudioPresenter::set_master_volume(const int volume_percent) {
+    // Clamp defensively to [0,100] (attenuation only; no amplification). The
+    // gain law itself (frontend/master_volume.h) re-clamps, so this is belt-and-
+    // suspenders; keeping master_volume_ in-range also keeps master() honest.
+    master_volume_ = clamp_master_volume(volume_percent);
 }
 
 }  // namespace sony_msx::frontend

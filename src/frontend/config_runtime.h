@@ -50,7 +50,14 @@ struct ResolvedRuntimeConfig {
 
     // --- Presentation (SDL3-only) knobs --------------------------------------
     bool border_enabled = false;
+    // M52 (DEC-0079): resolved via CLI > XML > built-in default; the built-in
+    // EmulatorConfig::disk_writable default is now TRUE, so a no-config SDL3 launch
+    // resolves ON (headless stays OFF -- it never loads config). `--no-disk-writable`
+    // forces OFF.
     bool disk_writable = false;
+    // M52 (DEC-0079): resolved master-volume percent [0,100]; default 100 (unity,
+    // byte-identical to pre-M52). SDL3 presentation only.
+    int master_volume = 100;
     int speed_level = 0;                          // 0..7 (0 == full speed)
     int scale = 3;                                // window scale (1..8); w/h = 320N x 240N
     TextureFilter filter = TextureFilter::Linear;

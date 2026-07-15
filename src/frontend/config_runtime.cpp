@@ -101,6 +101,9 @@ ResolvedRuntimeConfig resolve_runtime_config(const machine::EmulatorConfig& cfg,
     r.speed_level = parsed.speed_level.has_value() ? *parsed.speed_level : cfg.speed_level;
     r.scale = parsed.scale.has_value() ? *parsed.scale : cfg.video_scale;
     r.persistence = parsed.persistence.has_value() ? *parsed.persistence : cfg.persistence_percent;
+    // M52 (DEC-0079): master volume, CLI > XML > built-in default (the --persistence
+    // template). has_value() == CLI-specified; else the XML/base default 100.
+    r.master_volume = parsed.volume.has_value() ? *parsed.volume : cfg.master_volume;
 
     // enum knobs (explicit-tracking bool). The XML string maps to the enum.
     r.filter = parsed.filter_specified

@@ -73,9 +73,11 @@
          type: bool (true|false)   default: false   (CLI: border / no-border) -->
     <border enabled="false"/>
 
-    <!-- Persist disk writes back to the host .dsk (else in-memory only).
-         type: bool (true|false)   default: false   (CLI: disk-writable) -->
-    <disk-writable enabled="false"/>
+    <!-- Persist disk writes back to the host .dsk (else in-memory only). M52
+         (DEC-0079): default is now TRUE (a real MSX writes its floppies); Alt+S
+         toggles it live in the window.
+         type: bool (true|false)   default: true   (CLI: disk-writable / no-disk-writable) -->
+    <disk-writable enabled="true"/>
 
     <!-- Initial Speed Controller level (a CPU slow-down duty cycle, NOT a
          turbo). 0 = full speed.
@@ -94,6 +96,12 @@
          percent type: int  (0..100)   default: 0  (off)   (CLI: persistence)
          mode    type: enum (avg|peak)  default: avg        (CLI: persistence-mode) -->
     <persistence percent="0" mode="avg"/>
+
+    <!-- Master volume: a post-mix presentation gain applied AFTER the machine
+         audio balance (attenuation only, never amplifies). Alt+D / Alt+U step it
+         -/+10% live.
+         percent 0..100, default 100 (full); CLI: volume; SDL3 presentation only -->
+    <volume percent="100"/>
 
     <!-- Start in fullscreen (Alt+Enter toggles at runtime).
          type: bool (true|false)   default: false   (CLI: fullscreen) -->

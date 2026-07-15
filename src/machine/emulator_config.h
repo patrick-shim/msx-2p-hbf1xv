@@ -61,7 +61,18 @@ struct EmulatorConfig {
     bool fmpac_autoload = true;            // <defaults><fmpac autoload>     (convenience ON)
     int fmpac_slot = 2;                    // <defaults><fmpac slot>         1|2
     bool border_enabled = false;          // <defaults><border enabled>
-    bool disk_writable = false;           // <defaults><disk-writable enabled>
+    // M52 (DEC-0079): disk-writable default flipped false -> TRUE. This is the XML
+    // BASE default the S2 resolver falls back to, so an SDL3 launch with no
+    // explicit flag resolves disk-writable ON (owner-requested; a real MSX writes
+    // its floppies). `--no-disk-writable` is the escape hatch. The Sdl3AppConfig
+    // struct default stays false (anti-drift, planner §2.4); headless src/main.cpp
+    // default also stays OFF (determinism guard). The shipped sony_msx_hbf1xv.xml
+    // ships <disk-writable enabled="true"/> so the round-trip identity holds.
+    bool disk_writable = true;            // <defaults><disk-writable enabled>
+    // M52 (DEC-0079, docs/m52-planner-package.md §2.2): SDL3 master-volume percent
+    // [0,100], default 100 (unity/full -- byte-identical to every pre-M52 session).
+    // SDL3 presentation only (never affects emulation/determinism/headless output).
+    int master_volume = 100;              // <defaults><volume percent>     0..100
     int speed_level = 0;                  // <defaults><speed level>        0..7
     int video_scale = 3;                  // <defaults><video scale>        1..8 (960x720)
     std::string video_filter = "linear";  // <defaults><video filter>       nearest|linear

@@ -135,6 +135,13 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
         } else if (arg == "--disk-writable") {
             parsed.disk_writable = true;  // M36-S-c: opt-in disk-save persistence
             parsed.disk_writable_specified = true;  // M50-S2 precedence
+        } else if (arg == "--no-disk-writable") {
+            // M52 (DEC-0079): the explicit negative now that the resolved default
+            // is ON. Mirrors --no-fast-disk / --no-border. Last-wins on the linear
+            // scan; sets disk_writable_specified so the resolver honors it over the
+            // (now ON) XML/built-in default.
+            parsed.disk_writable = false;
+            parsed.disk_writable_specified = true;  // M52 precedence
         } else if (arg == "--fast-disk") {
             // M46 (DEC-0071): tri-state -- explicit ON overrides --stock/the
             // resolver default. Last-wins vs a later --no-fast-disk (linear scan).
@@ -243,6 +250,26 @@ ParsedSdl3Cli parse_sdl3_cli(const std::vector<std::string>& args) {
                                             *value + "'");
                 } else {
                     parsed.persistence = pct;
+                }
+            }
+        } else if (arg == "--volume") {
+            // M52 (DEC-0079): master gain percent [0,100] (SDL3 presentation only).
+            // Absent -> nullopt (resolver falls back to XML then default 100).
+            // Out-of-range / non-numeric -> loud error (mirrors --persistence).
+            if (auto value = take_value(args, i, "--volume", parsed.errors)) {
+                ++i;
+                int pct = 0;
+                const auto begin = value->data();
+                const auto end = value->data() + value->size();
+                const auto [ptr, ec] = std::from_chars(begin, end, pct);
+                if (ec != std::errc{} || ptr != end) {
+                    parsed.errors.push_back("sdl3_cli: --volume value is not a valid integer: '" +
+                                            *value + "'");
+                } else if (pct < 0 || pct > 100) {
+                    parsed.errors.push_back("sdl3_cli: --volume value out of range [0..100]: '" +
+                                            *value + "'");
+                } else {
+                    parsed.volume = pct;
                 }
             }
         } else if (arg == "--persistence-mode") {

@@ -62,8 +62,13 @@ struct ParsedSdl3Cli {
     // (a deliberate preference revert, NOT a weakening).
     bool border_enabled = false;
     // M36-S-c: --disk-writable opts into host-file disk-save persistence.
-    // Default OFF = in-memory-only (never clobbers a real .dsk); a dirty
-    // writable image flushes on shutdown and before a swap discards it.
+    // M52 (DEC-0079): the RESOLVED SDL3 default is now ON (via the M50 seam +
+    // shipped XML), so this parser field carries only raw CLI intent -- it stays
+    // false here (anti-drift: the flip lives in config resolution, never in this
+    // struct/ctor default). `--disk-writable` sets it true, `--no-disk-writable`
+    // sets it false; both set disk_writable_specified so the resolver honors the
+    // explicit CLI choice over the (now ON) XML/built-in default. Last-wins on the
+    // linear scan.
     bool disk_writable = false;
     // Fast-disk (FDC turbo) QoL mode. M46 (DEC-0071) makes this TRI-STATE so the
     // DEFAULT lives in resolve_session_defaults() (below), NOT this field: the
@@ -142,6 +147,14 @@ struct ParsedSdl3Cli {
     // frontend PRESENTATION knob only: it never affects emulation/determinism/
     // headless output.
     std::optional<int> persistence;
+    // M52 (DEC-0079, docs/m52-planner-package.md §2.2): --volume <0..100> master
+    // gain percent (SDL3 presentation only). Validated to [0,100]; a non-numeric /
+    // out-of-range value pushes into `.errors` (mirrors --persistence). std::nullopt
+    // (default) = unspecified -> the resolver falls back to XML then the built-in
+    // default 100 (unity, byte-identical to pre-M52). has_value() encodes
+    // "specified" (no shadow bool -- same as --persistence). Alt+D/Alt+U step it
+    // live. Attenuation only (max 100 = unity; never amplifies).
+    std::optional<int> volume;
     // Phosphor-persistence blend MODE (--persistence-mode <avg|peak>). DEFAULT
     // Average (byte-identical to the original blend behavior); Peak selects the
     // peak-hold-with-decay blend that keeps multiplexed sprites full-brightness

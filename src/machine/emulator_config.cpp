@@ -151,6 +151,18 @@ void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfi
         } else if (name == "disk-writable") {
             warn_unknown_attrs(warnings, tok, "defaults/disk-writable", {"enabled"});
             apply_bool(tok, "enabled", "defaults/disk-writable@enabled", cfg.disk_writable, warnings);
+        } else if (name == "volume") {
+            // M52 (DEC-0079): master gain percent [0,100]; out-of-range/bad keeps
+            // the default 100 + a per-key warning (mirrors defaults/persistence@percent).
+            warn_unknown_attrs(warnings, tok, "defaults/volume", {"percent"});
+            if (const std::string* v = tok.attribute("percent")) {
+                int pct = 0;
+                if (parse_int_strict(*v, pct) && pct >= 0 && pct <= 100) {
+                    cfg.master_volume = pct;
+                } else {
+                    warn_value(warnings, "defaults/volume@percent", *v, "expected 0..100", "100");
+                }
+            }
         } else if (name == "speed") {
             warn_unknown_attrs(warnings, tok, "defaults/speed", {"level"});
             if (const std::string* v = tok.attribute("level")) {
