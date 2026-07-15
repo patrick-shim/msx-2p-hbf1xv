@@ -205,18 +205,23 @@ Desktop.ini
 # /debug/**/* ignores above still apply (regenerable runtime captures stay untracked;
 # committed evidence keeps its explicit `!` exceptions).
 
-# --- Development apparatus: coordination trees TRACKED (DEC-0082 as amended, 2026-07-16) ---
-# Owner-corrected scope: with the dual-machine (Windows + macOS) workflow, git
-# carries the CROSS-MACHINE COORDINATION set — docs/ (planner packages, reports,
-# QA sign-offs), agent-protocol/ (the protocol ledger), .claude/ (agent
-# definitions minus the per-machine settings.local.json), and the CLAUDE.md
-# project-memory files. references/, tests/, and tools/ REMAIN local-only
-# (both machines hold copies from the owner's full-tree transfer; edits there
-# are hand-carried — a recorded limitation). debug/ stays untracked (regenerable
-# runtime captures; its pattern ignores + committed-evidence `!` exceptions
-# above still apply).
+# --- Local-only development apparatus (DEC-0082-AMENDMENT-B, 2026-07-16) ---
+# The brief DEC-0082 publication of the coordination set (docs/, agent-protocol/,
+# .claude/, CLAUDE.md files; pushed as 17fe2f3/ea5894a) was REVERSED by owner
+# direction: removed from the remote TIP via `git rm -r --cached` (history
+# retention accepted — the trees remain in prior commits, same posture as
+# DEC-0047 and the original 2026-07-10 carve-out; full history purge declined).
+# All of these stay fully present and usable on the LOCAL filesystem of both
+# machines; cross-machine sync is by manual copy (recorded limitation).
+# debug/'s pattern ignores + committed-evidence `!` exceptions above still apply.
+/.claude/
+/agent-protocol/
 /debug/
+/docs/
 /references/
 /tests/
 /tools/
-/.claude/settings.local.json
+
+# AI assistant memory files — local-only, hidden from the remote (owner request)
+/CLAUDE.md
+/src/CLAUDE.md
