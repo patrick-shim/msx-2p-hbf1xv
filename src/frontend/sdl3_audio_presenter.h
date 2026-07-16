@@ -161,6 +161,29 @@ public:
     void set_master_volume(int volume_percent);
     [[nodiscard]] int master_volume() const { return master_volume_; }
 
+    // M57 (DEC-0085, REQ-M57-002 H7): rewind the surviving pacer's CUMULATIVE
+    // accounting to a fresh baseline after a runtime machine power-cycle
+    // (Sdl3App::reset_machine). The presenter + SDL stream + device DELIBERATELY
+    // survive the reset, but AudioPacer::samples_produced_ is keyed to the
+    // machine's elapsed cycles -- which reset_machine restarts at 0. Without this
+    // rewind, plan()'s monotonic guard trims EVERY post-reset batch to 0 real
+    // samples => permanent audio silence from the first menu-driven reset/insert
+    // onward (DEF-1 root cause). Presentation-only; it does NOT clear the
+    // real_sample_bytes_pushed_ probe (that stays session-cumulative across resets).
+    void reset_pacing() { pacer_.reset(); }
+
+    // M57 (DEC-0085, REQ-M57-002): the DEF-1 audio-emission probe + the permanent
+    // audio oracle's instrument. A monotonic count of REAL-sample PCM bytes handed
+    // to SDL_PutAudioStreamData -- incremented ONLY at the three real-sample push
+    // sites (pump_and_push / pump_and_push_paced / push_produced_paced) on a
+    // SUCCESSFUL put, and DELIBERATELY NOT at the underrun silence-prime puts (those
+    // fire even when the machine produces nothing, which would make the oracle
+    // tautological). Zero on a silent/undriven produce path; grows ~735*4 bytes per
+    // frame when the drive path is fed real samples. Reset to 0 by init()/shutdown()
+    // so a re-init starts clean. Read-only; never affects any pushed byte or the
+    // deterministic suite (this presenter is SDL3-only -- headless never builds it).
+    [[nodiscard]] std::uint64_t real_sample_bytes_pushed() const { return real_sample_bytes_pushed_; }
+
     [[nodiscard]] SDL_AudioStream* stream() const { return stream_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
     // Kept accessor shape (M26): the pump is now owned by the mixer.
@@ -180,6 +203,9 @@ private:
     // (push_produced_paced), so the caller's produced buffer is never mutated
     // (it is reused across frames) and no per-frame allocation is incurred.
     std::vector<std::int16_t> scaled_buffer_;
+    // M57 (DEC-0085): the real-sample push-byte probe counter (see the public
+    // getter above). REAL samples only -- silence-prime puts are never counted.
+    std::uint64_t real_sample_bytes_pushed_ = 0;
 };
 
 }  // namespace sony_msx::frontend

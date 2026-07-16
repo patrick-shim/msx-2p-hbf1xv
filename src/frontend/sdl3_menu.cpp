@@ -90,6 +90,15 @@ Sdl3Menu::Sdl3Menu(SDL_Window* window, SDL_Renderer* renderer) {
     io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
+    // M57 (DEC-0085, §4.1): prime one empty frame so ImGui builds its font atlas
+    // and sets io.FontGlobalScale/FontSize -> ImGui::GetFrameHeight() (bar_height())
+    // returns the true bar height immediately, letting Sdl3App::init() size the
+    // window (+strip height) and set the presenter inset BEFORE the first render.
+    // A NewFrame/EndFrame pair is a valid empty frame (no draw data submitted).
+    ImGui_ImplSDLRenderer3_NewFrame();
+    ImGui_ImplSDL3_NewFrame();
+    ImGui::NewFrame();
+    ImGui::EndFrame();
 }
 
 Sdl3Menu::~Sdl3Menu() {
@@ -110,6 +119,14 @@ bool Sdl3Menu::wants_keyboard() const {
 
 bool Sdl3Menu::wants_mouse() const {
     return ImGui::GetIO().WantCaptureMouse;
+}
+
+int Sdl3Menu::bar_height() const {
+    // ImGui::GetFrameHeight() = FontSize + 2*FramePadding.y (A5, imgui.cpp
+    // BeginMainMenuBar). Rounded UP so the reserved strip never leaves a 1px
+    // sliver of the picture under the bar. Valid from construction (primed frame).
+    const float h = ImGui::GetFrameHeight();
+    return h > 0.0f ? static_cast<int>(h + 0.999f) : 0;
 }
 
 void Sdl3Menu::begin_frame() {
@@ -208,6 +225,17 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
         case MenuAction::Pause: machine.pause_controller().press_pause_button(); break;
         case MenuAction::SetSpeed: machine.pause_controller().set_speed_level(param); break;
         case MenuAction::SetRensha: machine.rensha_turbo().set_speed(param); break;
+        // M57 (DEC-0085-AMENDMENT-A): Machine>RAM live power-cycle. param is the KB
+        // size; rebuild the machine at param*1024 ONLY when it differs from the live
+        // size (re-selecting the current size is inert -- the TogglePersistenceMode
+        // guard precedent). The orchestrator emits the stderr note.
+        case MenuAction::SetRam: {
+            const std::size_t want_bytes = static_cast<std::size_t>(param) * 1024u;
+            if (want_bytes != machine.dram_size()) {
+                app.request_power_cycle(want_bytes);
+            }
+            break;
+        }
         // Video
         case MenuAction::ToggleFullscreen: app.toggle_fullscreen(); break;
         case MenuAction::SetScale: app.set_scale(param); break;

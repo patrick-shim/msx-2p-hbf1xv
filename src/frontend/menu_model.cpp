@@ -85,11 +85,10 @@ std::string hotkey_label_for(const MenuAction action) {
 }
 
 const std::vector<MenuAction>& v1_grayed_star_actions() {
-    // M56 (DEC-0084, planner §5.1): the F1-F5 capabilities are now enabled per
-    // state; only these two remain unconditionally grayed -- SetRam (info-only,
-    // constructor-time RAM size) and ToggleBorder (no runtime setter exists).
+    // M56 (DEC-0084) + M57 (DEC-0085-AMENDMENT-A): SetRam is now LIVE (Machine>RAM
+    // triggers a power-cycle rebuild at the chosen size), so only ToggleBorder
+    // remains unconditionally grayed (no runtime border setter exists).
     static const std::vector<MenuAction> kAlwaysGrayed = {
-        MenuAction::SetRam,
         MenuAction::ToggleBorder,
     };
     return kAlwaysGrayed;
@@ -156,13 +155,15 @@ MenuModel build_menu_model(const MenuState& state) {
         machine.items.push_back(std::move(rensha));
 
         MenuItem ram;
-        ram.label = "RAM (restart to change)";
+        ram.label = "RAM (power cycle)";
         const int cur_kb = static_cast<int>(state.dram_kb);
         for (const int kb : {64, 128, 256, 512}) {
-            // Info-only radio: shows the CURRENT size, always grayed -- there is
-            // no runtime RAM-resize path (ram_bytes is constructor-time).
-            ram.children.push_back(
-                radio(MenuAction::SetRam, kb, std::to_string(kb) + " KB", cur_kb, /*enabled=*/false));
+            // M57 (DEC-0085-AMENDMENT-A): LIVE radio -- the bullet shows the CURRENT
+            // size (state.dram_kb) and selecting a different size power-cycles the
+            // machine to it (rebuilds at the new RAM size, media surviving). The
+            // dispatch guards on size-change so re-selecting the current size is
+            // inert.
+            ram.children.push_back(radio(MenuAction::SetRam, kb, std::to_string(kb) + " KB", cur_kb));
         }
         machine.items.push_back(std::move(ram));
         model.menus.push_back(std::move(machine));

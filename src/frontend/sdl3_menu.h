@@ -60,6 +60,13 @@ public:
     [[nodiscard]] bool wants_keyboard() const;
     [[nodiscard]] bool wants_mouse() const;
 
+    // M57 (DEC-0085, §4.1): the live main-menu-bar height in pixels
+    // (ImGui::GetFrameHeight() = font size + 2*FramePadding.y, DPI/font-scaled).
+    // Sdl3App reserves this many pixels at the window top so the emulated picture
+    // is inset BELOW the strip (DEF-2). The constructor primes one empty ImGui
+    // frame so this is valid immediately at init() (before the first render).
+    [[nodiscard]] int bar_height() const;
+
     // Per-frame, called between Sdl3VideoPresenter::blit_frame() and present():
     //   begin_frame() -> the three NewFrame calls,
     //   build()       -> read Sdl3App state, build the model, draw the menu bar +

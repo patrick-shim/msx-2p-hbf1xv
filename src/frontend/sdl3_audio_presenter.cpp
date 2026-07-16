@@ -46,6 +46,8 @@ bool Sdl3AudioPresenter::init() {
         last_error_ = SDL_GetError();
         return false;
     }
+    // M57 (DEC-0085): start the real-sample probe at 0 so a re-init counts cleanly.
+    real_sample_bytes_pushed_ = 0;
     return true;
 }
 
@@ -54,6 +56,7 @@ void Sdl3AudioPresenter::shutdown() {
         SDL_DestroyAudioStream(stream_);  // Also closes the bound device (SDL_audio.h:2033-2034).
         stream_ = nullptr;
     }
+    real_sample_bytes_pushed_ = 0;  // M57 (DEC-0085): clear the probe on teardown.
 }
 
 void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std::size_t sample_count) {
@@ -69,8 +72,11 @@ void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std
     // M52 (DEC-0079): post-mix master gain. No-op (byte-identical) at 100.
     apply_master_gain(pcm, master_volume_);
 
-    if (!SDL_PutAudioStreamData(stream_, pcm.data(), static_cast<int>(pcm.size() * sizeof(std::int16_t)))) {
+    const auto push_bytes = static_cast<int>(pcm.size() * sizeof(std::int16_t));
+    if (!SDL_PutAudioStreamData(stream_, pcm.data(), push_bytes)) {
         last_error_ = SDL_GetError();
+    } else {
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
     }
 }
 
@@ -154,6 +160,8 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
                                              sizeof(std::int16_t));
     if (!SDL_PutAudioStreamData(stream_, pcm.data(), push_bytes)) {
         last_error_ = SDL_GetError();
+    } else {
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
     }
 }
 
@@ -207,6 +215,8 @@ void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& pr
     }
     if (!SDL_PutAudioStreamData(stream_, data_to_push, push_bytes)) {
         last_error_ = SDL_GetError();
+    } else {
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
     }
 }
 

@@ -117,7 +117,9 @@ OPTIONS
                             then need an explicit --slot1/--slot2 roms/fmpac.rom).
 
   Screen
-    --scale <1..8>          Window size = 320N x 240N (default 3 = 960x720). The
+    --scale <1..8>          Picture size = 320N x 240N (default 3 = 960x720); the
+                            window is that plus the menu-bar strip on top, so the
+                            MSX picture stays fully visible below the menu. The
                             window is resizable and stays 4:3 at any size.
     --filter nearest|linear linear = smooth (default); nearest = sharp pixels.
     --fullscreen            Start in fullscreen (Alt+Enter toggles it live).

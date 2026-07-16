@@ -49,7 +49,13 @@ constexpr std::uint64_t kFrameCycles = 228 * 262;
 // (with the moved-in value) when machine_ reads it. Default ram_bytes == stock
 // 64 KB, so a default config yields a byte-identical machine.
 Sdl3App::Sdl3App(Sdl3AppConfig config)
-    : config_(std::move(config)), machine_(config_.ram_bytes) {}
+    // M57 (DEC-0085-AMENDMENT-A): machine_ is a std::optional so a live RAM-size
+    // change can rebuild it in place (emplace) -- the machine is non-movable
+    // (reference-wired members), so reconstruction-through-the-ctor is the ONLY
+    // correct way to resize dram_. std::in_place constructs it engaged at
+    // config_.ram_bytes here; it is re-emplaced on power_cycle and NEVER
+    // disengaged (the "always engaged after construction" invariant).
+    : config_(std::move(config)), machine_(std::in_place, config_.ram_bytes) {}
 
 Sdl3App::~Sdl3App() {
     shutdown();
@@ -107,13 +113,16 @@ bool Sdl3App::load_configured_assets() {
                 config_.fmpac_sram_path.has_value()
                     ? std::filesystem::path(*config_.fmpac_sram_path)
                     : std::filesystem::path(*path + ".sram");
-            machine_.set_fmpac_sram_path(sram_path);
+            machine_->set_fmpac_sram_path(sram_path);
         }
-        const CartridgeLoadResult result = machine_.load_cartridge(slot_number, resolution.type, image);
+        const CartridgeLoadResult result = machine_->load_cartridge(slot_number, resolution.type, image);
         if (result != CartridgeLoadResult::Ok) {
             last_error_ = "failed to load --cart" + std::to_string(slot_number) + " (" + *path + ")";
             return false;
         }
+        // M57 (DEC-0085-AMENDMENT-A): record the startup cart source so a power-
+        // cycle can re-read this bay.
+        cart_path_[slot_number - 1] = *path;
         return true;
     };
 
@@ -143,7 +152,7 @@ bool Sdl3App::load_configured_assets() {
         if (slot_cart_path.has_value()) {
             // An explicit --slotN/--cartN cart owns the auto-load slot -- user wins.
             fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedSlot2InUse;
-        } else if (machine_.fmpac(1) != nullptr || machine_.fmpac(2) != nullptr) {
+        } else if (machine_->fmpac(1) != nullptr || machine_->fmpac(2) != nullptr) {
             // Avoid a double FM-PAC (the human's slot-1 habit): the already-
             // present FM-PAC keeps its own per-cart .sram binding from load_cart.
             fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedAlreadyPresent;
@@ -165,9 +174,9 @@ bool Sdl3App::load_configured_assets() {
                         config_.fmpac_sram_path.has_value()
                             ? std::filesystem::path(*config_.fmpac_sram_path)
                             : std::filesystem::path(config_.fmpac_autoload_rom_path + ".sram");
-                    machine_.set_fmpac_sram_path(sram_path);
+                    machine_->set_fmpac_sram_path(sram_path);
                 }
-                const CartridgeLoadResult result = machine_.load_cartridge(
+                const CartridgeLoadResult result = machine_->load_cartridge(
                     autoload_slot, devices::cartridge::CartridgeMapperType::FmPac, std::move(image));
                 if (result != CartridgeLoadResult::Ok) {
                     fmpac_autoload_outcome_ = FmPacAutoloadOutcome::SkippedInvalid;
@@ -175,6 +184,9 @@ bool Sdl3App::load_configured_assets() {
                               << " invalid (not a 1..4 x 16 KB FM-PAC image)\n";
                 } else {
                     fmpac_autoload_outcome_ = FmPacAutoloadOutcome::LoadedSlot2;
+                    // M57 (DEC-0085-AMENDMENT-A): record the autoloaded FM-PAC
+                    // source so a power-cycle re-reads + re-binds its SRAM.
+                    cart_path_[autoload_slot - 1] = config_.fmpac_autoload_rom_path;
                 }
             }
         }
@@ -200,18 +212,18 @@ bool Sdl3App::load_configured_assets() {
 
     // Attach the first disk (if any) at boot, exactly as pre-M35 behavior.
     if (!disk_images_.empty()) {
-        machine_.disk_image() = devices::fdc::DiskImage(disk_images_[0]);
+        machine_->disk_image() = devices::fdc::DiskImage(disk_images_[0]);
         // M36-S-c: opt-in host-file write-back. Default false leaves this
         // byte-for-byte unchanged (no host path -> flush() is a no-op).
         if (config_.disk_writable && current_disk_index_ < config_.disk_paths.size()) {
-            machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+            machine_->disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
         }
-        machine_.disk_drive().attach_image(&machine_.disk_image());
+        machine_->disk_drive().attach_image(&machine_->disk_image());
         update_window_title_for_current_disk();
         log_disk_swap();
     } else {
         // M35-S2: explicitly detach when no disk in list (safety/clarity)
-        machine_.disk_drive().attach_image(nullptr);
+        machine_->disk_drive().attach_image(nullptr);
     }
 
     return true;
@@ -297,22 +309,22 @@ bool Sdl3App::init() {
     // (hbf1xv_machine.h:306-309's documented ordering requirement) -- mirrors
     // the headless --debug-session mode's identical ordering.
     if (config_.event_log_filename.has_value()) {
-        machine_.set_event_logging_enabled(true);
+        machine_->set_event_logging_enabled(true);
     }
 
     // M36 Phase 3: route snapshot output to <dir>/snapshot/<id>/ when
     // --snapshot <dir> is given (default: the machine's "debug" root). Set
     // before cold_boot so any F12 capture lands in the configured place.
     if (config_.snapshot_dir.has_value()) {
-        machine_.set_debug_root(*config_.snapshot_dir);
+        machine_->set_debug_root(*config_.snapshot_dir);
     }
 
     // M50-S3 (DEC-0077): apply the config-resolved BIOS dir + role-keyed BIOS
     // filenames BEFORE cold_boot (which drives load_rom_assets). A bare config
     // keeps the strict spec dir/filenames, byte-identical to before.
-    machine_.set_bios_filenames(config_.bios_roms);
-    machine_.set_asset_root(config_.bios_dir);
-    machine_.cold_boot();
+    machine_->set_bios_filenames(config_.bios_roms);
+    machine_->set_asset_root(config_.bios_dir);
+    machine_->cold_boot();
 
     // M39-A: enable the two additive-voice seams for real-time playback --
     // (Fix B, CONFIRMED) the PSG sync-before-change path that makes software-PCM
@@ -320,9 +332,9 @@ bool Sdl3App::init() {
     // DAC capture (keyclicks). Both are inert until driven; enabled here AFTER
     // cold_boot (which resets the sync cursor / click latch). The interleaved
     // audio production below (run_one_frame) drives the PSG sync.
-    machine_.psg().set_audio_sync_enabled(true);
-    machine_.psg().reset_audio_sync(machine_.elapsed_cycles());
-    machine_.click_dac().set_capture_enabled(true);
+    machine_->psg().set_audio_sync_enabled(true);
+    machine_->psg().reset_audio_sync(machine_->elapsed_cycles());
+    machine_->click_dac().set_capture_enabled(true);
     audio_next_boundary_ = Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
 
     // M37 Slice D (DEC-0056): apply the launch-time initial Sony Speed
@@ -332,7 +344,7 @@ bool Sdl3App::init() {
     // The F6/F7 runtime stepping (sdl3_input_mapper.cpp) is unchanged; this
     // only sets the initial value.
     if (config_.speed_level.has_value()) {
-        machine_.pause_controller().set_speed_level(*config_.speed_level);
+        machine_->pause_controller().set_speed_level(*config_.speed_level);
     }
 
     // Fast-disk (FDC turbo) launch state. Applied AFTER cold_boot(); the FDC/
@@ -340,7 +352,7 @@ bool Sdl3App::init() {
     // it here (mirroring the speed-level ordering) so a re-cold_boot mid-session
     // is robust. Default false => byte-identical accurate FDC timing. Alt+D
     // flips it live below.
-    machine_.set_fast_disk(config_.fast_disk);
+    machine_->set_fast_disk(config_.fast_disk);
 
     if (!load_configured_assets()) {
         shutdown();
@@ -348,7 +360,7 @@ bool Sdl3App::init() {
     }
 
     if (config_.trace_cpu_filename.has_value()) {
-        machine_.set_cpu_trace_enabled(true);
+        machine_->set_cpu_trace_enabled(true);
     }
 
     // M27-S7 (item 3, §2.4): load the scripted-input mechanism, if
@@ -400,6 +412,22 @@ bool Sdl3App::init() {
         // never creates it, so the whole M56 dialog path is inert on the
         // deterministic path (open_*_dialog() early-returns on a null mutex).
         dialog_.mutex = SDL_CreateMutex();
+        // M57 (DEC-0085, §4.4): DEF-2. Reserve the menu-strip height so the
+        // emulated picture is inset BELOW the bar (never hidden behind it). GROW
+        // the window by the strip height so --scale N still yields an unclipped
+        // N-tall picture (window becomes 320N x (240N + h)); tell the presenter to
+        // letterbox into the band below the strip. hidden-window (menu_ == null)
+        // never runs this -> presenter inset stays 0 -> the legacy full-window
+        // LETTERBOX path is byte-identical. In fullscreen the SetWindowSize is a
+        // no-op (SDL keeps the fullscreen surface) and the band math insets within
+        // the fixed surface instead -- both correct.
+        const int bar_h = menu_->bar_height();
+        if (bar_h > 0) {
+            SDL_SetWindowSize(window_, config_.window_width, config_.window_height + bar_h);
+            if (video_presenter_) {
+                video_presenter_->set_top_inset(bar_h);
+            }
+        }
     }
 
     initialized_ = true;
@@ -412,13 +440,13 @@ void Sdl3App::flush_debug_session_outputs() {
     // existing Hbf1xvMachine APIs (M10-S3) -- zero new machine-level method
     // needed.
     if (config_.dump_state_filename.has_value()) {
-        machine_.write_state_dump(*config_.dump_state_filename);
+        machine_->write_state_dump(*config_.dump_state_filename);
     }
     if (config_.trace_cpu_filename.has_value()) {
-        machine_.write_cpu_trace(*config_.trace_cpu_filename);
+        machine_->write_cpu_trace(*config_.trace_cpu_filename);
     }
     if (config_.event_log_filename.has_value()) {
-        machine_.write_event_log(*config_.event_log_filename);
+        machine_->write_event_log(*config_.event_log_filename);
     }
     // DEC-0072 per-frame CPU fingerprint CSV (diagnostic).
     if (config_.fingerprint_path.has_value()) {
@@ -443,7 +471,7 @@ void Sdl3App::shutdown() {
     // M36-S-c: persist any pending writable-disk writes before tearing down.
     // No-op unless disk-writable bound a host path (default behavior unchanged).
     if (initialized_ && !disk_images_.empty()) {
-        machine_.disk_image().flush();
+        machine_->disk_image().flush();
     }
     // M36 FM-PAC SRAM persistence: save the inserted FM-PAC's 8 KB battery SRAM
     // to its bound .sram host file (mirrors the --disk-writable flush above and
@@ -451,8 +479,8 @@ void Sdl3App::shutdown() {
     // when no FM-PAC is inserted or no path was bound -- flush_fmpac_sram()
     // returns false. Guarded on initialized_ so a failed-init teardown never
     // writes (matches the disk flush).
-    if (initialized_ && machine_.flush_fmpac_sram()) {
-        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_.fmpac_sram_path().string()
+    if (initialized_ && machine_->flush_fmpac_sram()) {
+        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_->fmpac_sram_path().string()
                   << "\"\n";
     }
     audio_presenter_.reset();
@@ -580,8 +608,8 @@ void Sdl3App::poll_and_dispatch_events() {
         // references/sdl3/include/SDL3/SDL_keycode.h:344.
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_F &&
             (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
-            const bool on = !machine_.fast_disk();
-            machine_.set_fast_disk(on);
+            const bool on = !machine_->fast_disk();
+            machine_->set_fast_disk(on);
             std::cerr << "sdl3: fast-disk (FDC turbo) " << (on ? "ENABLED" : "disabled")
                       << " (Alt+F); default is accurate FDC timing\n";
             continue;
@@ -649,7 +677,7 @@ void Sdl3App::poll_and_dispatch_events() {
         // Sdl3InputMapper::map_scancode() returns a coordinate ONLY for the 72
         // real matrix keys (F6-F9/PAUSE are not in the table), the SAME single
         // source of truth the mapper uses to drive KeyboardMatrix::set_key(). The
-        // cycle stamp is machine_.elapsed_cycles() at this poll (the frame-start
+        // cycle stamp is machine_->elapsed_cycles() at this poll (the frame-start
         // cycle), so replay via --input-script fires the key on the same frame.
         // OS auto-repeat DOWNs are skipped: the matrix is level-based, so a repeat
         // is an idempotent no-op -- recording edges only keeps the script clean
@@ -662,13 +690,13 @@ void Sdl3App::poll_and_dispatch_events() {
                 if (coord.has_value()) {
                     const auto name = peripherals::row_col_to_key_name(coord->first, coord->second);
                     if (name.has_value()) {
-                        input_recorder_.record_key(machine_.elapsed_cycles(), std::string(*name), pressed);
+                        input_recorder_.record_key(machine_->elapsed_cycles(), std::string(*name), pressed);
                     }
                 }
             }
         }
-        input_mapper_.dispatch_event(event, machine_.keyboard(), machine_.joystick(), machine_.pause_controller(),
-                                     machine_.rensha_turbo());
+        input_mapper_.dispatch_event(event, machine_->keyboard(), machine_->joystick(), machine_->pause_controller(),
+                                     machine_->rensha_turbo());
     }
 }
 
@@ -696,8 +724,8 @@ void Sdl3App::run_one_frame() {
     // step_cpu_instruction() until the next frame boundary, then call
     // on_vsync_boundary() directly -- never run_frame() (A-M26-5's
     // double-count hazard).
-    const std::uint64_t frame_start_cycle = machine_.elapsed_cycles();
-    const std::uint64_t target = machine_.frame_cycles_per_frame();
+    const std::uint64_t frame_start_cycle = machine_->elapsed_cycles();
+    const std::uint64_t target = machine_->frame_cycles_per_frame();
     // M39-A Fix B: produce audio samples INTERLEAVED with CPU stepping (over
     // absolute machine-cycle boundaries) so the PSG sync-before-change writes
     // land at their true sub-frame position -- the digitized-voice fix. Samples
@@ -708,15 +736,15 @@ void Sdl3App::run_one_frame() {
         return cart != nullptr ? &cart->opll() : nullptr;
     };
     const auto emit_due_audio = [&]() {
-        const std::uint64_t now = machine_.elapsed_cycles();
+        const std::uint64_t now = machine_->elapsed_cycles();
         while (audio_next_boundary_ <= now) {
             const std::uint64_t window = audio_next_boundary_ - audio_prev_boundary_;
             const std::array<std::int16_t, 2> smp = audio_presenter_->mixer().produce_synced_sample(
-                machine_.psg(),
-                MachineAudioMixer::SccSources{machine_.scc_chip(1), machine_.scc_chip(2)},
-                &machine_.ym2413(),
-                MachineAudioMixer::FmSources{fmpac_opll(machine_.fmpac(1)), fmpac_opll(machine_.fmpac(2))},
-                &machine_.click_dac(), audio_next_boundary_, window);
+                machine_->psg(),
+                MachineAudioMixer::SccSources{machine_->scc_chip(1), machine_->scc_chip(2)},
+                &machine_->ym2413(),
+                MachineAudioMixer::FmSources{fmpac_opll(machine_->fmpac(1)), fmpac_opll(machine_->fmpac(2))},
+                &machine_->click_dac(), audio_next_boundary_, window);
             audio_frame_pcm_.push_back(smp[0]);
             audio_frame_pcm_.push_back(smp[1]);
             audio_prev_boundary_ = audio_next_boundary_;
@@ -725,25 +753,25 @@ void Sdl3App::run_one_frame() {
                 audio_sample_index_ * Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
         }
     };
-    while (machine_.elapsed_cycles() - frame_start_cycle < target) {
-        machine_.step_cpu_instruction();
+    while (machine_->elapsed_cycles() - frame_start_cycle < target) {
+        machine_->step_cpu_instruction();
         // M27-S7 (item 3, §2.4): driven through the EXACT same CPU sub-loop
         // the headless --debug-session mode's own loop uses. A genuine
         // no-op when input_script_player_ is empty (the default).
-        input_script_player_.apply_due(machine_.elapsed_cycles(), machine_.keyboard());
+        input_script_player_.apply_due(machine_->elapsed_cycles(), machine_->keyboard());
         if (produce_audio) {
             emit_due_audio();
         }
     }
-    machine_.on_vsync_boundary();
+    machine_->on_vsync_boundary();
 
     // DEC-0072 per-frame CPU-state fingerprint (post-boundary), byte-format
     // identical to the headless --fingerprint CSV, so the two drivers can be
     // diffed frame-for-frame to find the first divergence.
     if (config_.fingerprint_path.has_value()) {
-        const auto& r = machine_.cpu().state().regs();
+        const auto& r = machine_->cpu().state().regs();
         fingerprint_csv_ += std::to_string(frames_run_) + "," +
-                            std::to_string(machine_.elapsed_cycles()) + "," +
+                            std::to_string(machine_->elapsed_cycles()) + "," +
                             machine::debug_format::to_hex(r.pc, 4) + "," +
                             machine::debug_format::to_hex(r.sp, 4) + "," +
                             machine::debug_format::to_hex(r.af, 4) + "," +
@@ -765,11 +793,11 @@ void Sdl3App::run_one_frame() {
             "disk_index=" + std::to_string(current_disk_index_),
             "disk_count=" + std::to_string(disk_images_.size()),
         };
-        machine_.write_snapshot(machine_.snapshot_id(), notes);
+        machine_->write_snapshot(machine_->snapshot_id(), notes);
     }
 
     if (video_presenter_) {
-        const auto frame = machine_.render_frame();  // Always Field::Progressive (§1.2).
+        const auto frame = machine_->render_frame();  // Always Field::Progressive (§1.2).
         if (video_presenter_->blit_frame(frame)) {
             // M55 (DEC-0083, §4.2): draw the ImGui menu AFTER the MSX frame is
             // composited (letterbox + phosphor already applied) and BEFORE
@@ -781,6 +809,12 @@ void Sdl3App::run_one_frame() {
                 menu_->begin_frame();
                 menu_->build(*this);
                 menu_->render(renderer_);
+                // M57 (DEC-0085, §4.4): track the LIVE bar height (it can change
+                // with DPI/font) so the NEXT frame's blit_frame insets the picture
+                // correctly. init() set the initial value so frame 0 is already
+                // correct; this keeps it robust. Presentation-only; menu_ == null
+                // (--hidden-window) never runs it, so the inset stays 0.
+                video_presenter_->set_top_inset(menu_->bar_height());
             }
             video_presenter_->present();
         } else {
@@ -818,7 +852,7 @@ void Sdl3App::run_one_frame() {
         // AudioPacer backpressure/silence-prime policy the batch path used --
         // the interleaved production count matches the pacer's exact-accounting
         // count by construction (both floor(elapsed*44100/3579545)).
-        audio_presenter_->push_produced_paced(audio_frame_pcm_, machine_.elapsed_cycles());
+        audio_presenter_->push_produced_paced(audio_frame_pcm_, machine_->elapsed_cycles());
     }
 
     ++frames_run_;
@@ -836,19 +870,19 @@ void Sdl3App::on_disk_swap_hotkey() {
     // writes so a swap-back sees them. Guarded on disk_writable so the
     // default path stays byte-for-byte pre-M36.
     if (config_.disk_writable) {
-        machine_.disk_image().flush();  // no-op if no host path / not dirty
+        machine_->disk_image().flush();  // no-op if no host path / not dirty
         if (current_disk_index_ < disk_images_.size()) {
-            disk_images_[current_disk_index_] = machine_.disk_image().data();
+            disk_images_[current_disk_index_] = machine_->disk_image().data();
         }
     }
 
     current_disk_index_ = (current_disk_index_ + 1) % disk_images_.size();
-    machine_.disk_image() = devices::fdc::DiskImage(disk_images_[current_disk_index_]);
+    machine_->disk_image() = devices::fdc::DiskImage(disk_images_[current_disk_index_]);
     if (config_.disk_writable && current_disk_index_ < config_.disk_paths.size()) {
-        machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+        machine_->disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
     }
-    machine_.disk_drive().attach_image(&machine_.disk_image());
-    machine_.disk_drive().set_disk_changed(true);
+    machine_->disk_drive().attach_image(&machine_->disk_image());
+    machine_->disk_drive().set_disk_changed(true);
     update_window_title_for_current_disk();
     log_disk_swap();
 }
@@ -867,8 +901,8 @@ void Sdl3App::on_stream_toggle_hotkey() {
     // side-effect-free at this instant (per-frame bundles + the trace ring only
     // begin accumulating on the following frames/instructions); finalizing dumps
     // the trace ring + a final snapshot. Both are non-perturbing to emulation.
-    if (machine_.stream_capture_active()) {
-        machine_.set_stream_capture_enabled(false);  // manual OFF -> finalize
+    if (machine_->stream_capture_active()) {
+        machine_->set_stream_capture_enabled(false);  // manual OFF -> finalize
         std::cerr << "Stream capture OFF (finalized).\n";
     } else {
         // Stamp the stream id from the current deterministic frame/cycle id so
@@ -876,8 +910,8 @@ void Sdl3App::on_stream_toggle_hotkey() {
         // paths. DEC-0052 stream-light: arm the lightweight mode when
         // --stream-light was given, so a long armed session (e.g. YS-II game
         // start -> building entry) isn't bogged down by heavy per-frame I/O.
-        const std::string stream_id = machine_.snapshot_id();
-        machine_.set_stream_capture_enabled(true, stream_id, config_.stream_light);
+        const std::string stream_id = machine_->snapshot_id();
+        machine_->set_stream_capture_enabled(true, stream_id, config_.stream_light);
         std::cerr << "Stream capture ON: stream_" << stream_id
                   << (config_.stream_light ? " (light)" : " (heavy)") << "\n";
     }
@@ -945,14 +979,14 @@ void Sdl3App::on_disk_writable_toggle_hotkey() {
         // accumulated while OFF) binds the path so the WHOLE in-memory image --
         // including those earlier writes -- is flushed at the next swap/exit.
         if (current_disk_index_ < config_.disk_paths.size()) {
-            machine_.disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
+            machine_->disk_image().set_host_path(config_.disk_paths[current_disk_index_]);
         }
         std::cerr << "sdl3: disk-writable ENABLED (Alt+S) -- host .dsk saves persist on swap/exit\n";
     } else {
         // Unbind: future swap/exit flushes no-op for the current image. The
         // in-memory writes are KEPT (never rolled back) but, being unbound, a
         // dirty image toggled OFF is DISCARDED at exit (never written to host).
-        machine_.disk_image().set_host_path(std::filesystem::path{});
+        machine_->disk_image().set_host_path(std::filesystem::path{});
         std::cerr << "sdl3: disk-writable disabled (Alt+S) -- writes stay in memory; "
                      "current disk will NOT be saved\n";
     }
@@ -964,7 +998,7 @@ bool Sdl3App::flush_current_disk() {
     if (!initialized_ || disk_images_.empty()) {
         return false;
     }
-    return machine_.disk_image().flush();
+    return machine_->disk_image().flush();
 }
 
 void Sdl3App::reset_machine() {
@@ -977,31 +1011,31 @@ void Sdl3App::reset_machine() {
     // (a) Snapshot the LIVE mounted disk (bytes + host_path + dirty) so the
     //     physical floppy -- and its in-session in-memory writes -- survive the
     //     reset. A reset button does not change the disk in the drive.
-    devices::fdc::DiskImage live = std::move(machine_.disk_image());
+    devices::fdc::DiskImage live = std::move(machine_->disk_image());
     const bool had_disk = !disk_images_.empty();
 
-    machine_.cold_boot();  // carts persist; disk re-synthesized; scheduler -> cycle 0
+    machine_->cold_boot();  // carts persist; disk re-synthesized; scheduler -> cycle 0
 
     // (b) Re-attach the surviving disk (or leave the drive empty if none mounted),
     //     mirroring load_configured_assets()'s attach/else-detach shape.
     if (had_disk) {
-        machine_.disk_image() = std::move(live);
-        machine_.disk_drive().attach_image(&machine_.disk_image());
-        machine_.disk_drive().set_disk_changed(true);  // media re-present after the power cycle
+        machine_->disk_image() = std::move(live);
+        machine_->disk_drive().attach_image(&machine_->disk_image());
+        machine_->disk_drive().set_disk_changed(true);  // media re-present after the power cycle
     } else {
-        machine_.disk_drive().attach_image(nullptr);
+        machine_->disk_drive().attach_image(nullptr);
     }
 
     // (c) Re-run the init() post-cold_boot device-enable block VERBATIM
     //     (init() :322-325,333-335,342) so a runtime reset lands in the same
     //     state a fresh init() would.
-    machine_.psg().set_audio_sync_enabled(true);
-    machine_.psg().reset_audio_sync(machine_.elapsed_cycles());  // elapsed==0 now
-    machine_.click_dac().set_capture_enabled(true);
+    machine_->psg().set_audio_sync_enabled(true);
+    machine_->psg().reset_audio_sync(machine_->elapsed_cycles());  // elapsed==0 now
+    machine_->click_dac().set_capture_enabled(true);
     if (config_.speed_level.has_value()) {
-        machine_.pause_controller().set_speed_level(*config_.speed_level);
+        machine_->pause_controller().set_speed_level(*config_.speed_level);
     }
-    machine_.set_fast_disk(config_.fast_disk);
+    machine_->set_fast_disk(config_.fast_disk);
 
     // (d) Reset the frontend audio-production cursors to their init() values
     //     (sdl3_app.h:537-539 + init() :325). cold_boot restarted the scheduler at
@@ -1011,6 +1045,154 @@ void Sdl3App::reset_machine() {
     audio_sample_index_ = 1;
     audio_prev_boundary_ = 0;
     audio_next_boundary_ = Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
+    // M57 (DEC-0085, REQ-M57-002 H7): the (d) cursor reset above fixed the FRONTEND
+    // cursors, but the Sdl3AudioPresenter (and its AudioPacer) DELIBERATELY survives
+    // the reset -- and the pacer's cumulative samples_produced_ is keyed to the
+    // machine's elapsed cycles, which cold_boot() just restarted at 0. Left as-is,
+    // plan()'s monotonic guard (total_due > samples_produced_) stays false until the
+    // machine re-accumulates past the pre-reset count => minutes of permanent
+    // post-reset silence (the DEF-1 root cause: audio dies after the first
+    // menu-driven reset / cartridge-or-disk insert). Rewind the pacer baseline too.
+    // Presentation-only; never touches emulated device state or the state dump.
+    if (audio_presenter_) {
+        audio_presenter_->reset_pacing();
+    }
+}
+
+void Sdl3App::power_cycle(const std::size_t ram_bytes) {
+    // M57 (DEC-0085-AMENDMENT-A, addendum §2.4/§3): rebuild the machine at a new
+    // RAM size and boot fresh, media surviving. The machine is non-movable, so the
+    // ONLY correct resize is reconstruction through its M42 size ctor -- ZERO
+    // src/machine edit. Transactional: any failure in the PRE-READ phase aborts
+    // with the OLD machine fully intact.
+
+    // (1) TRANSACTIONAL PRE-READ (before touching the live machine): read + resolve
+    //     EVERY occupied cartridge bay from its tracked path. Any missing/unreadable/
+    //     unresolvable file ABORTS the whole power-cycle (apply_open_disks
+    //     discipline) -- the old machine keeps running unchanged.
+    struct PreReadCart {
+        int slot = 0;
+        std::string path;
+        std::vector<std::uint8_t> image;
+        devices::cartridge::CartridgeMapperType type =
+            devices::cartridge::CartridgeMapperType::Mirrored;
+    };
+    std::vector<PreReadCart> carts;
+    machine::CartridgeIdentificationSession ident_session(config_.softwaredb_path);
+    for (int slot = 1; slot <= 2; ++slot) {
+        const std::optional<std::string>& path = cart_path_[slot - 1];
+        if (!path.has_value()) {
+            continue;  // empty bay
+        }
+        std::ifstream in(*path, std::ios::binary);
+        if (!in) {
+            std::cerr << "sdl3: cannot re-read cartridge " << *path
+                      << "; power-cycle aborted, machine unchanged\n";
+            return;  // OLD machine intact, no mutation yet
+        }
+        std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
+                                        std::istreambuf_iterator<char>());
+        machine::ParsedCartridgeSlotCli spec;
+        spec.path = *path;
+        spec.type = devices::cartridge::CartridgeMapperType::Mirrored;
+        spec.type_was_explicit = false;
+        const auto resolution = ident_session.resolve(slot, spec, image);
+        if (!resolution.ok) {
+            std::cerr << "sdl3: cannot re-resolve cartridge " << *path
+                      << "; power-cycle aborted, machine unchanged\n";
+            return;  // OLD machine intact
+        }
+        carts.push_back(PreReadCart{slot, *path, std::move(image), resolution.type});
+    }
+
+    // (2) Flush each occupied FM-PAC's battery SRAM to its host file BEFORE the old
+    //     machine is destroyed (the eject_cartridge pattern) so game saves survive
+    //     the cycle -- the re-insert below reloads it via the re-bound path.
+    if ((machine_->fmpac(1) != nullptr || machine_->fmpac(2) != nullptr) &&
+        machine_->flush_fmpac_sram()) {
+        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_->fmpac_sram_path().string()
+                  << "\" (power cycle)\n";
+    }
+
+    // (3) Snapshot the LIVE disk (bytes + host_path + dirty). Physical-medium
+    //     semantics: a power cycle does not erase the floppy (reset_machine (a)).
+    devices::fdc::DiskImage live = std::move(machine_->disk_image());
+    const bool had_disk = !disk_images_.empty();
+
+    // (4) REBUILD at the new RAM size. optional::emplace destroys the old instance
+    //     and constructs a fresh one through the EXACT M42 size ctor -- so the new
+    //     machine IS a freshly-constructed + cold-booted machine of size ram_bytes
+    //     (the fresh-boot-equivalence oracle holds by construction).
+    machine_.emplace(ram_bytes);
+
+    // (5) Re-run init()'s post-construction sequence against the fresh instance
+    //     (addendum §2.4 steps 1-6,8). SDL/window/presenter/menu persist.
+    if (config_.event_log_filename.has_value()) {
+        machine_->set_event_logging_enabled(true);
+    }
+    if (config_.snapshot_dir.has_value()) {
+        machine_->set_debug_root(*config_.snapshot_dir);
+    }
+    machine_->set_bios_filenames(config_.bios_roms);
+    machine_->set_asset_root(config_.bios_dir);
+    machine_->cold_boot();
+    machine_->psg().set_audio_sync_enabled(true);
+    machine_->psg().reset_audio_sync(machine_->elapsed_cycles());  // elapsed==0 now
+    machine_->click_dac().set_capture_enabled(true);
+    if (config_.speed_level.has_value()) {
+        machine_->pause_controller().set_speed_level(*config_.speed_level);
+    }
+    machine_->set_fast_disk(config_.fast_disk);
+    if (config_.trace_cpu_filename.has_value()) {
+        machine_->set_cpu_trace_enabled(true);
+    }
+
+    // (6) Re-attach the surviving disk (reset_machine (b) pattern).
+    if (had_disk) {
+        machine_->disk_image() = std::move(live);
+        machine_->disk_drive().attach_image(&machine_->disk_image());
+        machine_->disk_drive().set_disk_changed(true);  // media re-present after the power cycle
+    } else {
+        machine_->disk_drive().attach_image(nullptr);
+    }
+
+    // (7) Re-insert each pre-read cartridge (FM-PAC SRAM re-bind BEFORE load, the
+    //     apply_open_cartridge order), reloading the just-flushed battery SRAM.
+    for (const PreReadCart& c : carts) {
+        if (c.type == devices::cartridge::CartridgeMapperType::FmPac &&
+            !config_.fmpac_sram_disabled) {
+            const std::filesystem::path sram_path =
+                config_.fmpac_sram_path.has_value()
+                    ? std::filesystem::path(*config_.fmpac_sram_path)
+                    : std::filesystem::path(c.path + ".sram");
+            machine_->set_fmpac_sram_path(sram_path);
+        }
+        // The image was validated in the PRE-READ resolve, so this re-insert into
+        // the fresh machine is expected to succeed; note (do not abort) on the rare
+        // failure -- the machine is already rebuilt, so a stderr note is the honest
+        // outcome (the bay is simply empty).
+        const devices::cartridge::CartridgeLoadResult result =
+            machine_->load_cartridge(c.slot, c.type, c.image);
+        if (result != devices::cartridge::CartridgeLoadResult::Ok) {
+            std::cerr << "sdl3: warning: re-insert of " << c.path << " into slot " << c.slot
+                      << " failed after power-cycle (bay left empty)\n";
+            cart_path_[c.slot - 1] = std::nullopt;
+        }
+    }
+
+    // (8) Reset the frontend audio cursors + rewind the surviving pacer -- the H7
+    //     fix applies identically (reset_machine (d) verbatim), so post-cycle audio
+    //     is healthy from cycle 0.
+    audio_sample_index_ = 1;
+    audio_prev_boundary_ = 0;
+    audio_next_boundary_ = Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
+    if (audio_presenter_) {
+        audio_presenter_->reset_pacing();
+    }
+
+    // (9) Keep config consistent for any later reset/cycle, and note it.
+    config_.ram_bytes = ram_bytes;
+    std::cerr << "sdl3: power-cycled: RAM " << (ram_bytes / 1024u) << " KB\n";
 }
 
 // --- M56 (DEC-0084): async file-dialog mailbox + F1-F5 media seams -----------
@@ -1178,8 +1360,8 @@ void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
     //    :814-819) -- the SAME DiskImage::flush() primitive the WD2793 write suite
     //    depends on (no src/devices/fdc edit).
     if (config_.disk_writable) {
-        machine_.disk_image().flush();  // no-op if no host path / not dirty
-    } else if (machine_.disk_image().dirty()) {
+        machine_->disk_image().flush();  // no-op if no host path / not dirty
+    } else if (machine_->disk_image().dirty()) {
         std::cerr << "sdl3: discarding unsaved writes to the current disk "
                      "(disk-writable OFF; enable Alt+S to persist)\n";
     }
@@ -1188,12 +1370,12 @@ void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
     disk_images_ = std::move(temp);
     config_.disk_paths = new_paths;  // keep the parallel list in lockstep (index binding)
     current_disk_index_ = 0;
-    machine_.disk_image() = devices::fdc::DiskImage(disk_images_[0]);
+    machine_->disk_image() = devices::fdc::DiskImage(disk_images_[0]);
     if (config_.disk_writable) {
-        machine_.disk_image().set_host_path(config_.disk_paths[0]);
+        machine_->disk_image().set_host_path(config_.disk_paths[0]);
     }
-    machine_.disk_drive().attach_image(&machine_.disk_image());
-    machine_.disk_drive().set_disk_changed(true);  // media-change signal (like a swap)
+    machine_->disk_drive().attach_image(&machine_->disk_image());
+    machine_->disk_drive().set_disk_changed(true);  // media-change signal (like a swap)
     update_window_title_for_current_disk();
     log_disk_swap();
 }
@@ -1236,15 +1418,18 @@ void Sdl3App::apply_open_cartridge(const int slot, const std::string& rom_path) 
             config_.fmpac_sram_path.has_value()
                 ? std::filesystem::path(*config_.fmpac_sram_path)
                 : std::filesystem::path(rom_path + ".sram");
-        machine_.set_fmpac_sram_path(sram_path);
+        machine_->set_fmpac_sram_path(sram_path);
     }
 
     const CartridgeLoadResult result =
-        machine_.load_cartridge(slot, resolution.type, std::move(image));
+        machine_->load_cartridge(slot, resolution.type, std::move(image));
     if (result != CartridgeLoadResult::Ok) {
         std::cerr << "sdl3: failed to load cartridge " << rom_path << " into slot " << slot << "\n";
         return;
     }
+    // M57 (DEC-0085-AMENDMENT-A): record this bay's source so a power-cycle can
+    // re-read it. Set BEFORE reset_machine() (which does not touch cart_path_).
+    cart_path_[slot - 1] = rom_path;
     reset_machine();  // insert implies power-on-with-cart-inserted (cart persists cold_boot)
     std::cerr << "sdl3: inserted " << rom_path << " into slot " << slot << " ("
               << devices::cartridge::to_string(resolution.type) << "); machine reset\n";
@@ -1271,12 +1456,12 @@ void Sdl3App::eject_disk() {
     // the host path is still bound; NO machine reset (ejecting a floppy does not
     // reset an MSX).
     if (config_.disk_writable) {
-        machine_.disk_image().flush();  // no-op if no host path / not dirty
-    } else if (machine_.disk_image().dirty()) {
+        machine_->disk_image().flush();  // no-op if no host path / not dirty
+    } else if (machine_->disk_image().dirty()) {
         std::cerr << "sdl3: discarding unsaved writes to the ejected disk "
                      "(disk-writable OFF; enable Alt+S to persist)\n";
     }
-    machine_.disk_drive().attach_image(nullptr);
+    machine_->disk_drive().attach_image(nullptr);
     disk_images_.clear();
     config_.disk_paths.clear();
     current_disk_index_ = 0;
@@ -1289,11 +1474,12 @@ void Sdl3App::eject_cartridge(const int slot) {
     // frees the FM-PAC), then unload, then reset (cart removal implies a power
     // cycle -- R8). flush_fmpac_sram() is a no-op for a non-FM-PAC slot, but
     // gating on fmpac(slot) keeps the stderr note accurate.
-    if (machine_.fmpac(slot) != nullptr && machine_.flush_fmpac_sram()) {
-        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_.fmpac_sram_path().string()
+    if (machine_->fmpac(slot) != nullptr && machine_->flush_fmpac_sram()) {
+        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_->fmpac_sram_path().string()
                   << "\"\n";
     }
-    machine_.unload_cartridge(slot);
+    machine_->unload_cartridge(slot);
+    cart_path_[slot - 1] = std::nullopt;  // M57: the bay is now empty for a power-cycle re-read.
     reset_machine();
     std::cerr << "sdl3: ejected cartridge from slot " << slot << "; machine reset\n";
 }
@@ -1314,13 +1500,16 @@ void Sdl3App::toggle_fullscreen() {
 }
 
 void Sdl3App::set_scale(const int scale) {
-    // Menu Video > Scale N: 320N x 240N window; the 320x240 LETTERBOX logical
-    // presentation (set once in init()) auto-fits at any window size. Clamp to
-    // [1,8] to match the CLI --scale range. No effect in fullscreen (SDL keeps
-    // the fullscreen size) or under a null window. Presentation-only.
+    // Menu Video > Scale N: 320N x (240N + menu-strip) window. Clamp to [1,8] to
+    // match the CLI --scale range. No effect in fullscreen (SDL keeps the
+    // fullscreen size) or under a null window. Presentation-only.
+    // M57 (DEC-0085, §4.4): grow the window height by the menu-strip inset so the
+    // PICTURE band stays a full 240N tall (unclipped N-scale) with the strip above
+    // it. The inset is 0 when no menu exists -> 320N x 240N, the legacy size.
     const int n = std::clamp(scale, 1, 8);
     if (window_ != nullptr) {
-        SDL_SetWindowSize(window_, 320 * n, 240 * n);
+        const int inset = video_presenter_ ? video_presenter_->top_inset() : 0;
+        SDL_SetWindowSize(window_, 320 * n, 240 * n + inset);
     }
 }
 
@@ -1437,7 +1626,7 @@ int Sdl3App::run_interactive() {
         if (config_.fingerprint_path.has_value()) {
             continue;
         }
-        paced_cycles += machine_.frame_cycles_per_frame();
+        paced_cycles += machine_->frame_cycles_per_frame();
         const Uint64 deadline_ns =
             base_ns + AudioPacer::scale_cycles(paced_cycles, 1'000'000'000ull, kSystemClockHz);
         const Uint64 now_ns = SDL_GetTicksNS();
@@ -1446,6 +1635,24 @@ int Sdl3App::run_interactive() {
         } else if (now_ns - deadline_ns > kMaxBacklogNs) {
             base_ns += now_ns - deadline_ns;  // Forgive the backlog; never fast-forward through it.
         }
+    }
+
+    // M57 (DEC-0085): env-gated audio-emission diagnostic for OWNER-MACHINE
+    // attribution of DEF-1 (the released-build audio silence that does NOT
+    // reproduce on the dev machine, where the produce/push path + device drain are
+    // demonstrably healthy). INERT unless SONY_MSX_AUDIO_PROBE is set in the
+    // environment -> the default run is byte-identical. Prints the REAL-sample
+    // push counter (0 => produce/push path not driven on this machine), the live
+    // host-queue depth (grows unbounded => device not draining), and the device
+    // resume state, so the owner can attribute silence to the exact layer.
+    if (audio_presenter_ != nullptr && SDL_getenv("SONY_MSX_AUDIO_PROBE") != nullptr) {
+        SDL_AudioStream* const s = audio_presenter_->stream();
+        const int queued = s != nullptr ? SDL_GetAudioStreamQueued(s) : -1;
+        const SDL_AudioDeviceID dev = s != nullptr ? SDL_GetAudioStreamDevice(s) : 0;
+        std::cerr << "sdl3: [audio-probe] real_sample_bytes_pushed="
+                  << audio_presenter_->real_sample_bytes_pushed() << " queued_bytes=" << queued
+                  << " device=" << (dev != 0 ? (SDL_AudioDevicePaused(dev) ? "PAUSED" : "playing") : "none")
+                  << " volume=" << master_volume_ << "%\n";
     }
 
     // M27-S4 (docs/m27-planner-package.md §2.2): the three write_* calls

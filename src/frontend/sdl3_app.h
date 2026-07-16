@@ -356,6 +356,15 @@ public:
     // UNCHANGED machine cold_boot() -- see reset_machine() in sdl3_app.cpp.
     void request_reset() { reset_machine(); }
 
+    // M57 (DEC-0085-AMENDMENT-A): the Machine>RAM power-cycle seam -- rebuild the
+    // machine at `ram_bytes` and boot fresh, with mounted disks re-attached and
+    // inserted cartridges re-inserted (media survive; RAM contents do not).
+    // Exposed publicly (mirrors request_reset()'s R-M35-1 precedent) so the
+    // power-cycle oracle can drive it under hidden_window=true without a menu. A
+    // no-op-safe transactional operation: if any occupied cartridge file cannot be
+    // re-read, it ABORTS with the current machine fully intact (see power_cycle()).
+    void request_power_cycle(std::size_t ram_bytes) { power_cycle(ram_bytes); }
+
     // M36 Phase 3: the F12 snapshot-request seam, exposed publicly so an
     // integration test can drive a capture without SDL event injection
     // (mirrors swap_to_next_disk()'s R-M35-1 precedent). Sets the deferred-
@@ -370,7 +379,7 @@ public:
     // stream capture: ON stamps a deterministic stream id (the current
     // snapshot_id()); OFF finalizes (dumps the trace ring + a final snapshot).
     void request_stream_toggle() { on_stream_toggle_hotkey(); }
-    [[nodiscard]] bool stream_capture_active() const { return machine_.stream_capture_active(); }
+    [[nodiscard]] bool stream_capture_active() const { return machine_->stream_capture_active(); }
 
     // Phosphor-persistence live-control seams, exposed publicly so an
     // integration test can drive them without SDL event injection (mirrors
@@ -463,8 +472,8 @@ public:
     // Current window scale N (window width / 320), clamped to [1,8] for the radio.
     [[nodiscard]] int window_scale() const;
 
-    [[nodiscard]] machine::Hbf1xvMachine& machine() { return machine_; }
-    [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return machine_; }
+    [[nodiscard]] machine::Hbf1xvMachine& machine() { return *machine_; }
+    [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return *machine_; }
     // M46 (DEC-0071): the outcome of the FM-PAC slot-2 auto-load attempt during
     // load_configured_assets(), for the startup banner + integration tests.
     [[nodiscard]] FmPacAutoloadOutcome fmpac_autoload_outcome() const { return fmpac_autoload_outcome_; }
@@ -488,6 +497,18 @@ private:
     // post-cold_boot device-enable block VERBATIM -> reset the frontend audio
     // cursors. Mounted disks and inserted carts survive the reset.
     void reset_machine();
+    // M57 (DEC-0085-AMENDMENT-A, addendum §2.4/§3): the Machine>RAM power-cycle
+    // orchestrator. Transactional: PRE-READ + resolve every occupied cartridge
+    // slot from its tracked path FIRST -- any missing/unreadable/unresolvable file
+    // ABORTS with the OLD machine fully intact (+ stderr note), the apply_open_disks
+    // discipline. On success: flush FM-PAC SRAM -> snapshot the live disk ->
+    // machine_.emplace(ram_bytes) (fresh instance at the new RAM size) -> re-run the
+    // init() post-construction sequence (BIOS, cold_boot, audio block +
+    // reset_pacing, media re-attach + cart re-insert with SRAM re-bind) ->
+    // config_.ram_bytes = ram_bytes. ZERO src/machine edits (the machine is rebuilt
+    // through its EXISTING M42 size ctor). A same-size cycle is a full fresh boot,
+    // media surviving (indistinguishable from Reset -- the caller guards on size).
+    void power_cycle(std::size_t ram_bytes);
     // M56 (DEC-0084, planner §3.1): the async file-dialog callback (static;
     // SDLCALL; may run off the main thread). Deep-copies the result INTO dialog_
     // under its mutex and sets pending -- NO machine mutation here.
@@ -535,7 +556,15 @@ private:
     void log_disk_swap();
 
     Sdl3AppConfig config_;
-    machine::Hbf1xvMachine machine_;
+    // M57 (DEC-0085-AMENDMENT-A): the machine is a std::optional so a live RAM
+    // change (Machine>RAM radio) can rebuild it at the new size via emplace() --
+    // the machine is non-movable (reference-wired members: MemoryMapperRam binds
+    // dram_ by reference, etc.), so `machine_ = Hbf1xvMachine(newSize)` is
+    // impossible and reconstruction through the size ctor is the only correct
+    // resize. Engaged at construction (std::in_place) and re-emplaced on
+    // power_cycle; NEVER disengaged, so every *machine_ / machine_-> access is
+    // valid (the "always engaged" invariant).
+    std::optional<machine::Hbf1xvMachine> machine_;
     std::string last_error_;
     // M46 (DEC-0071): recorded by load_configured_assets() (NotAttempted until
     // then). Read by the startup banner + FM-PAC auto-load integration test.
@@ -602,6 +631,15 @@ private:
     // safe (no-op swaps); single-disk is a regression guard (F11 no-op).
     std::vector<std::vector<std::uint8_t>> disk_images_;
     std::size_t current_disk_index_ = 0;
+
+    // M57 (DEC-0085-AMENDMENT-A, addendum §3.2): the CURRENT cartridge source path
+    // per slot (index 0 = slot 1, index 1 = slot 2), so a power-cycle can RE-READ
+    // the occupied bays from disk transactionally. Set by load_configured_assets
+    // (startup --cartN + FM-PAC autoload) and apply_open_cartridge (menu insert);
+    // cleared by eject_cartridge. std::nullopt == empty bay. Cart images are not
+    // otherwise retained in the frontend (apply_open_cartridge loads transiently),
+    // so this path is the sole re-insert source across a power-cycle.
+    std::optional<std::string> cart_path_[2];
 
     std::uint64_t frames_run_ = 0;
 

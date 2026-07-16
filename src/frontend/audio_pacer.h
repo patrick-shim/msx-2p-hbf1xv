@@ -103,6 +103,21 @@ public:
     // repeated calls with the same cycle count pump nothing.
     [[nodiscard]] AudioPacingDecision plan(std::uint64_t total_elapsed_cycles, std::uint64_t queued_samples);
 
+    // M57 (DEC-0085): rewind the CUMULATIVE production accounting to a fresh
+    // baseline (samples_produced_/dropped_/silence back to 0), keeping the fixed
+    // rate + water-mark config. plan()'s exact accounting is keyed to the machine's
+    // CUMULATIVE elapsed cycles via a monotonic guard (total_due > samples_produced_
+    // pumps nothing). When a runtime power-cycle (Sdl3App::reset_machine) restarts
+    // elapsed_cycles at 0, a surviving (huge) samples_produced_ makes that guard
+    // false for as long as it takes the machine to re-accumulate past it -> minutes
+    // of permanent post-reset silence (the M57 DEF-1 root cause). The presenter
+    // calls this so post-reset elapsed (0..) and the pacer baseline (0) realign.
+    void reset() {
+        samples_produced_ = 0;
+        samples_dropped_ = 0;
+        silence_samples_pushed_ = 0;
+    }
+
     [[nodiscard]] std::uint64_t samples_produced() const { return samples_produced_; }
     [[nodiscard]] std::uint64_t samples_dropped() const { return samples_dropped_; }
     [[nodiscard]] std::uint64_t silence_samples_pushed() const { return silence_samples_pushed_; }

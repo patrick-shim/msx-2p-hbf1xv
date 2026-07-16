@@ -225,8 +225,9 @@ keeps disks read-only; Alt+S toggles it live), `--volume <0..100>` (master volum
 (override / opt out of the FM-PAC battery-SRAM auto-persistence, which otherwise saves to
 `<cart-rom-path>.sram`), `--speed <0..7>` (initial Speed Controller level — a CPU slow-down
 duty cycle, not a turbo; 0 = full speed, the default; F6/F7 still step it at runtime),
-`--scale <1..8>` (initial window size `320N x 240N`, default `3` = 960×720; the window is
-resizable and the picture stays aspect-correct letterboxed at any size),
+`--scale <1..8>` (initial MSX picture size `320N x 240N`, default `3` = 960×720; the window
+is that plus the menu-bar strip on top so the picture stays fully visible below the menu; the
+window is resizable and the picture stays aspect-correct letterboxed at any size),
 `--filter <nearest|linear>` (texture scaling filter, default `linear`), `--fullscreen`
 (Alt+Enter toggles at runtime), `--capture <on|off>` (default `off`; gates the F10 live
 capture hotkey so a mis-struck F10 is inert during play — F11 disk-swap and F12 snapshot are

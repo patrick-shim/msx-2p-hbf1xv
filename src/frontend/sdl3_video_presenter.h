@@ -112,6 +112,17 @@ public:
     [[nodiscard]] PhosphorMode persistence_mode() const { return persistence_mode_; }
     void set_persistence_mode(PhosphorMode mode) { persistence_mode_ = mode; }
 
+    // M57 (DEC-0085, docs/m57-planner-package.md §4.2): the menu-strip TOP INSET
+    // in output pixels. DEFAULT 0 => the legacy full-window LETTERBOX path VERBATIM
+    // (blit_frame relies on the 320x240 logical presentation set in init(), draws
+    // SDL_RenderTexture(nullptr, nullptr)); the hidden-window / pixel-integration
+    // path passes 0 and stays byte-identical. > 0 (interactive, menu present) =>
+    // blit_frame explicitly letterboxes the picture into the band BELOW the strip
+    // (letterbox_geometry.h), so zero MSX pixels hide behind the menu. The app sets
+    // this from Sdl3Menu::bar_height() each frame; hidden-window never touches it.
+    void set_top_inset(int px) { top_inset_px_ = px < 0 ? 0 : px; }
+    [[nodiscard]] int top_inset() const { return top_inset_px_; }
+
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept separate from
     // blit_frame() (see class doc).
     bool present();
@@ -145,6 +156,8 @@ private:
     SDL_Texture* texture_ = nullptr;
     int texture_width_ = 0;
     int texture_height_ = 0;
+    // M57 (DEC-0085): menu-strip top inset in output pixels (0 = legacy path).
+    int top_inset_px_ = 0;
     std::string last_error_;
 };
 

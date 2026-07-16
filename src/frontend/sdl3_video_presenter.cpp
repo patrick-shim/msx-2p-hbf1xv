@@ -16,6 +16,7 @@
 #include <cstddef>
 
 #include "frontend/border_composer.h"
+#include "frontend/letterbox_geometry.h"
 #include "frontend/phosphor_blend.h"
 
 namespace sony_msx::frontend {
@@ -166,7 +167,43 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
         last_error_ = SDL_GetError();
         return false;
     }
-    if (!SDL_RenderTexture(renderer_, texture_, nullptr, nullptr)) {
+
+    // M57 (DEC-0085, §4.2): DEF-2 inset. top_inset_px_ == 0 (hidden-window / no
+    // menu / the pixel-integration test) keeps the LEGACY path VERBATIM -- the
+    // 320x240 LETTERBOX logical presentation (init sdl3_app.cpp) fills+letterboxes
+    // the whole output via a nullptr dst. This branch is byte-identical to the
+    // pre-M57 present.
+    if (top_inset_px_ <= 0) {
+        if (!SDL_RenderTexture(renderer_, texture_, nullptr, nullptr)) {
+            last_error_ = SDL_GetError();
+            return false;
+        }
+        return true;
+    }
+
+    // top_inset_px_ > 0 (interactive, menu present): draw the MSX picture with an
+    // EXPLICIT destination rect letterboxed into the band BELOW the strip, so no
+    // MSX pixel hides behind the menu. Explicit dst is in RAW OUTPUT PIXELS, so we
+    // temporarily disable the logical presentation (save + restore, self-contained
+    // -- the menu render bracket then behaves as before). SDL_GetRenderOutputSize
+    // is the pixel output size (A4, references/sdl3/include/SDL3/SDL_render.h).
+    int lw = 0;
+    int lh = 0;
+    SDL_RendererLogicalPresentation lmode = SDL_LOGICAL_PRESENTATION_DISABLED;
+    SDL_GetRenderLogicalPresentation(renderer_, &lw, &lh, &lmode);
+    SDL_SetRenderLogicalPresentation(renderer_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+    int out_w = 0;
+    int out_h = 0;
+    bool ok = SDL_GetRenderOutputSize(renderer_, &out_w, &out_h);
+    if (ok) {
+        const geometry::Rect band = geometry::letterbox_into_band(out_w, out_h, top_inset_px_);
+        const SDL_FRect dst{static_cast<float>(band.x), static_cast<float>(band.y),
+                            static_cast<float>(band.w), static_cast<float>(band.h)};
+        ok = SDL_RenderTexture(renderer_, texture_, nullptr, &dst);
+    }
+    // Restore the caller's logical presentation regardless of the draw outcome.
+    SDL_SetRenderLogicalPresentation(renderer_, lw, lh, lmode);
+    if (!ok) {
         last_error_ = SDL_GetError();
         return false;
     }
