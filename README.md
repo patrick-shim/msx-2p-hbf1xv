@@ -5,7 +5,15 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.3.0** — a full **in-window menu bar** (Dear ImGui over the SDL3 renderer,
+Current release: **v1.4.0** — **live RAM switching from the menu** (Machine ▸ RAM 64/128/256/512 KB
+power-cycles the machine into the new size — a true off/on with mounted disks and cartridges
+surviving, verified byte-identical to a fresh boot at every size), plus two critical v1.3.0
+fixes: **audio silence after any menu-driven reset** (the audio pacer's cumulative accounting
+survived the reset and muted everything from the first File ▸ Open onward — it now rewinds on
+every machine-lifecycle event, regression-tested at boot AND post-reset) and the **menu strip no
+longer covers the picture** (the display letterboxes into the band below the bar; the window
+grows by the strip height so `--scale N` stays unclipped; fullscreen insets correctly).
+On top of v1.3.0's full **in-window menu bar** (Dear ImGui over the SDL3 renderer,
 identical on Windows and macOS): open floppies at runtime with **multi-select** (the selection
 becomes the disk rotation — F11 keeps swapping through it), insert cartridges mid-session (auto
 mapper detection + the authentic implied reset), eject disks and cartridges, a true power-on
