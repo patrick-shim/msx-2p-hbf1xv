@@ -29,6 +29,18 @@ Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border
       persistence_(persistence < 0 ? 0 : (persistence > 100 ? 100 : persistence)),
       persistence_mode_(persistence_mode) {}
 
+void Sdl3VideoPresenter::set_scale_mode(const SDL_ScaleMode mode) {
+    // M55 (DEC-0083): live filter swap. Update the stored mode (so any later
+    // texture recreation honors it) and re-apply to the current texture now.
+    // A failure only records last_error_ -- the next blit still presents.
+    scale_mode_ = mode;
+    if (texture_ != nullptr) {
+        if (!SDL_SetTextureScaleMode(texture_, scale_mode_)) {
+            last_error_ = SDL_GetError();
+        }
+    }
+}
+
 void Sdl3VideoPresenter::set_persistence(const int persistence) {
     const int clamped = persistence < 0 ? 0 : (persistence > 100 ? 100 : persistence);
     if (clamped != persistence_) {

@@ -116,6 +116,7 @@ add_library(sony_msx_core STATIC
     src/frontend/sdl3_cli.cpp
     src/frontend/config_runtime.cpp
     src/frontend/session_summary.cpp
+    src/frontend/menu_model.cpp
     src/frontend/border_composer.cpp
     src/frontend/audio_pacer.cpp
     src/frontend/psg_audio_pump.cpp
@@ -157,6 +158,39 @@ add_custom_command(TARGET msx_disk POST_BUILD
 if(SONY_MSX_ENABLE_SDL3)
     find_package(SDL3 CONFIG REQUIRED)
 
+    # --- M55 (DEC-0083): Dear ImGui in-window menu-bar dependency --------------
+    # ImGui is MIT-licensed (references/imgui/LICENSE.txt) so, unlike the GPL
+    # openMSX / non-commercial fMSX reference trees, its vendored sources are
+    # COMPILED into our binary -- the owner-ratified "vendored like SDL3" model.
+    # Owner-vendored tree: 1.92.9 WIP (IMGUI_VERSION_NUM 19285).
+    #
+    # EXACTLY 6 translation units: the 4 core .cpp + the 2 official SDL3 backends
+    # (imgui_impl_sdl3 platform backend + imgui_impl_sdlrenderer3 renderer
+    # backend). imgui_demo.cpp is DELIBERATELY NOT compiled (DEC-0083 R5 "no
+    # extras"); no docking/freetype/other backend is a build input. This target
+    # is only ever evaluated when SONY_MSX_ENABLE_SDL3=ON and is linked ONLY into
+    # sony_msx_sdl3_frontend below -- the headless / msx_disk / core targets never
+    # see it, so the default (=OFF) headless configuration compiles ZERO ImGui TUs.
+    add_library(imgui STATIC
+        references/imgui/imgui.cpp
+        references/imgui/imgui_draw.cpp
+        references/imgui/imgui_tables.cpp
+        references/imgui/imgui_widgets.cpp
+        references/imgui/backends/imgui_impl_sdl3.cpp
+        references/imgui/backends/imgui_impl_sdlrenderer3.cpp)
+    target_include_directories(imgui PUBLIC
+        references/imgui
+        references/imgui/backends)
+    target_link_libraries(imgui PUBLIC SDL3::SDL3)
+    # A5: third-party sources are not held to the project's -Wall -Wextra intent;
+    # target-scoped warning suppression keeps ImGui's noise out of our build log
+    # (the repo sets no -Werror, so this is cosmetic hygiene, not a build gate).
+    if(MSVC)
+        target_compile_options(imgui PRIVATE /w)
+    else()
+        target_compile_options(imgui PRIVATE -w)
+    endif()
+
     # SDL3 is a SHARED library on Windows: every executable that links it
     # (directly or transitively via sony_msx_sdl3_frontend) needs SDL3.dll
     # beside it, or the Windows loader aborts with 0xc0000135 AND a MODAL
@@ -183,8 +217,12 @@ if(SONY_MSX_ENABLE_SDL3)
         src/frontend/sdl3_video_presenter.cpp
         src/frontend/sdl3_audio_presenter.cpp
         src/frontend/sdl3_input_mapper.cpp
+        src/frontend/sdl3_menu.cpp          # M55 (DEC-0083): ImGui menu view/controller
     )
-    target_link_libraries(sony_msx_sdl3_frontend PUBLIC sony_msx_core SDL3::SDL3)
+    # M55 (DEC-0083): + imgui. The menu-model TU (SDL/ImGui-free) is compiled into
+    # sony_msx_core (see the core source list) so its unit test registers OUTSIDE
+    # the SDL3 guard, the established SDL-free-frontend-logic pattern.
+    target_link_libraries(sony_msx_sdl3_frontend PUBLIC sony_msx_core SDL3::SDL3 imgui)
 
     add_executable(sony_msx_sdl3 src/frontend/sdl3_main.cpp)
     target_link_libraries(sony_msx_sdl3 PRIVATE sony_msx_sdl3_frontend)

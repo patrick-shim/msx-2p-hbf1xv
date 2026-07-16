@@ -59,6 +59,12 @@ the sections below and the source are the authoritative spec.)
 - Keyboard / joystick, Ren-Sha Turbo, the hardware PAUSE button, and the Speed Controller.
 - An SDL3 window that resizes and scales (`--scale`, `--filter`, `--fullscreen`, Alt+Enter),
   a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
+- An **in-window menu bar** (Dear ImGui) — File / Machine / Video / Audio / Disk / Help —
+  exposing the existing runtime controls (pause, speed, ren-sha, fullscreen, scale, filter,
+  persistence, volume, mute, fast-disk, disk-writable, swap disk, exit) with live checkmarks and
+  the hotkey labels; genuinely new-capability items (open cartridge/disk, eject, reset, new blank
+  disk) are shown grayed for now. The menu is mouse-operated and appears only in an interactive
+  window — never under `--hidden-window` / headless, so it never affects determinism or tests.
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
 - A standalone **`msx-disk` disk utility** (`diskutils\msx-disk.exe`): create / hex-read / format
   720 KB MSX-DOS FAT12 `.dsk` images byte-exact to the machine's own layout (see
@@ -227,6 +233,28 @@ peripheral auto-loaded into slot 2** (from `roms/fmpac.rom`, SRAM persisted to
 coexists with it. `--no-fmpac` skips the auto-load, an explicit `--slot2 <rom>` overrides it, a
 missing `roms/fmpac.rom` is skipped gracefully, and `--stock` reverts all three defaults to the
 authentic bare HB-F1XV.
+
+### In-window menu bar
+
+An interactive SDL3 launch shows a **Dear ImGui menu bar** across the top of the window
+(**mouse-operated**; the menu is chrome only and never appears under `--hidden-window` or in the
+headless build). Its layout:
+
+- **File** — Open Cartridge ▸ Slot 1 / Slot 2 *(grayed)*, Open Disk *(grayed)*, Swap Disk
+  (`F11`, enabled with more than one `--disk`), Eject *(grayed)*, Exit.
+- **Machine** — Pause (`PAUSE`), Reset *(grayed)*, Speed 0–7 (`F6`/`F7`), Ren-Sha Turbo 0–100%
+  (`F8`/`F9`), RAM (info only — restart to change).
+- **Video** — Fullscreen (`Alt+Enter`), Scale 1×–8×, Filter Linear/Nearest, Border *(startup only
+  — grayed)*, Persistence ±10% (`Alt+B` / `Shift+Alt+B`), Persistence Mode avg/peak (`Alt+M`).
+- **Audio** — Volume ±10% (`Alt+D` / `Alt+U`), Mute.
+- **Disk** — Fast Disk (`Alt+F`), Disk Writable (`Alt+S`), New Blank Disk *(grayed)*.
+- **Help** — Hotkeys (the full in-window hotkey list, single-sourced with the launch banner),
+  About.
+
+Checkmarks reflect live state and the hotkey labels are the exact in-window hotkeys. The grayed
+items are genuinely new capabilities being enabled incrementally; every wired item is identical to
+its keyboard hotkey. Keyboard navigation is deliberately off, so the `Alt+`letter host hotkeys keep
+working while the menu is visible. The menu bar is a **Windows/macOS interactive-only** feature.
 
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 

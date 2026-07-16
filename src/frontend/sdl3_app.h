@@ -252,6 +252,12 @@ struct Sdl3AppConfig {
     std::optional<std::string> fingerprint_path;
 };
 
+// M55 (DEC-0083): the ImGui in-window menu view/controller, owned by Sdl3App
+// only in an interactive launch. Forward-declared so sdl3_app.h stays ImGui-free
+// (the unique_ptr member works with the incomplete type because ~Sdl3App is
+// defined out-of-line in sdl3_app.cpp, which includes the full sdl3_menu.h).
+class Sdl3Menu;
+
 // The SDL3 real-time application (M26, backlog C9). Owns a real
 // Hbf1xvMachine session end to end: window/renderer/audio-device creation,
 // cold_boot() + asset loading, and the real-time frame loop.
@@ -362,6 +368,46 @@ public:
     // Called on shutdown; also directly callable after a bounded run.
     bool flush_current_disk();
 
+    // --- M55 (DEC-0083): narrow public seams for the ImGui menu view/controller.
+    // All are PRESENTATION-ONLY forwarders (never touch emulation state) or thin
+    // read-only accessors the menu builds its per-item state from. The menu is
+    // created only in an interactive launch (init() gates on !hidden_window), so
+    // these are inert to the deterministic ctest path.
+    //
+    // menu_active() lets a test assert no ImGui context exists under
+    // --hidden-window (menu_ stays null).
+    [[nodiscard]] bool menu_active() const;
+
+    // Request an orderly quit (menu File > Exit) -- identical effect to the
+    // SDL_EVENT_QUIT path (sets quit_requested_; run_interactive() exits at the
+    // next frame boundary and flushes disk/SRAM saves via shutdown()).
+    void request_quit() { quit_requested_ = true; }
+
+    // Extract of the inline Alt+Enter handler (both the hotkey and the menu call
+    // this): flip fullscreen_ and apply via SDL_SetWindowFullscreen.
+    void toggle_fullscreen();
+    // Menu Video > Scale N: resize the window to 320N x 240N (logical
+    // presentation letterboxes automatically; N clamped 1..8).
+    void set_scale(int scale);
+    // Menu Video > Filter: swap the presenter's texture scale mode live.
+    void set_filter(SDL_ScaleMode mode);
+    // Menu Audio > Volume Up/Down (dir +1/-1): the same {0..100} grid step the
+    // Alt+U/Alt+D hotkeys use.
+    void step_volume(int dir) { on_volume_step_hotkey(dir); }
+    // Menu Audio > Mute: store the pre-mute level and set volume 0, or restore
+    // it. Presentation-only (built on the existing volume seam).
+    void toggle_mute();
+    // Menu Disk > Disk Writable: the same runtime toggle as the Alt+S hotkey.
+    void toggle_disk_writable() { on_disk_writable_toggle_hotkey(); }
+
+    // Read-only accessors the menu builds its checkmarks / radio state from.
+    [[nodiscard]] std::size_t disk_count() const { return disk_images_.size(); }
+    [[nodiscard]] bool fullscreen() const { return fullscreen_; }
+    [[nodiscard]] int master_volume() const { return master_volume_; }
+    [[nodiscard]] bool disk_writable() const { return config_.disk_writable; }
+    // Current window scale N (window width / 320), clamped to [1,8] for the radio.
+    [[nodiscard]] int window_scale() const;
+
     [[nodiscard]] machine::Hbf1xvMachine& machine() { return machine_; }
     [[nodiscard]] const machine::Hbf1xvMachine& machine() const { return machine_; }
     // M46 (DEC-0071): the outcome of the FM-PAC slot-2 auto-load attempt during
@@ -443,11 +489,22 @@ private:
     // exact 0/100 -- planner §2.3).
     static constexpr int kVolumeStep = 10;
 
+    // M52 (DEC-0079): the master volume before Mute engaged, so the menu Mute
+    // toggle (and a future hotkey) can restore the prior level. Default 100.
+    int pre_mute_volume_ = 100;
+
     SDL_Window* window_ = nullptr;
     SDL_Renderer* renderer_ = nullptr;
     std::unique_ptr<Sdl3VideoPresenter> video_presenter_;
     std::unique_ptr<Sdl3AudioPresenter> audio_presenter_;
     Sdl3InputMapper input_mapper_;
+
+    // M55 (DEC-0083): the ImGui in-window menu. Created in init() ONLY when the
+    // launch is interactive (!config_.hidden_window); null under ctest /
+    // --hidden-window, so no ImGui context ever exists in the deterministic path
+    // and the whole SDL3 suite stays byte-identical. Destroyed in shutdown()
+    // BEFORE SDL_DestroyRenderer (R7).
+    std::unique_ptr<Sdl3Menu> menu_;
 
     // M27-S7 (item 3, §2.4): default-constructed = empty = a genuine no-op
     // (the cursor never advances because events_ is empty) -- zero effect on

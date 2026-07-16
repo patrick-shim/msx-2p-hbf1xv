@@ -91,6 +91,10 @@ public:
 
     // M37 Slice E (DEC-0056): the configured texture scale mode (--filter).
     [[nodiscard]] SDL_ScaleMode scale_mode() const { return scale_mode_; }
+    // M55 (DEC-0083): swap the texture filter live (menu Video > Filter). Applied
+    // immediately to the existing texture via SDL_SetTextureScaleMode, and also
+    // used for any future texture (re)creation. Presentation-only.
+    void set_scale_mode(SDL_ScaleMode mode);
 
     // Phosphor-persistence blend weight (--persistence / Alt+B). 0 = OFF (the
     // present path is byte-for-byte the current path). Setting a NEW value

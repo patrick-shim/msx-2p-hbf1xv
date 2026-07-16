@@ -13,6 +13,7 @@
 
 #include "frontend/sdl3_app.h"
 
+#include <algorithm>
 #include <array>
 #include <exception>
 #include <filesystem>
@@ -27,6 +28,7 @@
 #include "frontend/app_icon_data.h"
 #include "frontend/audio_pacer.h"
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
+#include "frontend/sdl3_menu.h"      // M55 (DEC-0083): interactive ImGui menu (complete type)
 #include "machine/cartridge_identifier.h"
 #include "machine/debug_format.h"
 #include "peripherals/msx_key_names.h"
@@ -385,6 +387,15 @@ bool Sdl3App::init() {
                   << "\" (replay with --input-script; F11 swaps -> --swap-disk-frame <N>)\n";
     }
 
+    // M55 (DEC-0083): create the ImGui in-window menu ONLY for a genuinely
+    // interactive launch. --hidden-window (every ctest, per A3) NEVER creates a
+    // context, so the deterministic suite is byte-identical and no ImGui code
+    // ever runs in the ctest path (the determinism guard, §5.1). Created last,
+    // after window_/renderer_ exist and every other init step succeeded.
+    if (!config_.hidden_window) {
+        menu_ = std::make_unique<Sdl3Menu>(window_, renderer_);
+    }
+
     initialized_ = true;
     return true;
 }
@@ -440,6 +451,10 @@ void Sdl3App::shutdown() {
     }
     audio_presenter_.reset();
     video_presenter_.reset();
+    // M55 (DEC-0083, R7): tear down ImGui (backends + context) BEFORE the
+    // renderer -- ImGui_ImplSDLRenderer3_Shutdown must run while the SDL_Renderer
+    // is still alive. No-op when no menu was created (--hidden-window).
+    menu_.reset();
     if (renderer_ != nullptr) {
         SDL_DestroyRenderer(renderer_);
         renderer_ = nullptr;
@@ -461,6 +476,29 @@ void Sdl3App::poll_and_dispatch_events() {
         if (event.type == SDL_EVENT_QUIT) {
             quit_requested_ = true;
             continue;
+        }
+        // M55 (DEC-0083, §4.1): the single input choke point. When the
+        // interactive menu exists, feed EVERY event to ImGui (so hover / click /
+        // scroll accumulate), then -- if the menu owns the keyboard or mouse --
+        // SWALLOW the event so it can never reach the host-hotkey block below,
+        // the DEC-0072 input recorder (~:603), OR the MSX keyboard matrix
+        // (input_mapper_.dispatch_event). menu_ is null under --hidden-window, so
+        // this whole block is inert on the deterministic ctest path. v1 keeps
+        // ImGui keyboard-nav OFF and has no text widgets, so wants_keyboard() is
+        // effectively always false -- Alt+letter host hotkeys stay unshadowed --
+        // but the gate is correct in advance for a future filename field.
+        if (menu_) {
+            menu_->process_event(event);
+            const bool is_key =
+                (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP);
+            const bool is_mouse =
+                (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN ||
+                 event.type == SDL_EVENT_MOUSE_BUTTON_UP || event.type == SDL_EVENT_MOUSE_MOTION ||
+                 event.type == SDL_EVENT_MOUSE_WHEEL);
+            if (menu_captures_event(is_key, is_mouse, menu_->wants_keyboard(),
+                                    menu_->wants_mouse())) {
+                continue;
+            }
         }
         // M35-S3/S4: F11 hotkey for disk-swap (fresh key-down only, not a
         // repeat). Consumed here; never dispatched to input_mapper_, which
@@ -511,8 +549,7 @@ void Sdl3App::poll_and_dispatch_events() {
         // per SDL_video.h:2435.
         if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_RETURN &&
             (event.key.mod & SDL_KMOD_ALT) != 0 && !event.key.repeat) {
-            fullscreen_ = !fullscreen_;
-            SDL_SetWindowFullscreen(window_, fullscreen_);
+            toggle_fullscreen();  // M55: extracted so the menu Video>Fullscreen shares it
             continue;
         }
         // Alt+F toggles fast-disk (FDC turbo) live (fresh key-down only, not a
@@ -710,6 +747,17 @@ void Sdl3App::run_one_frame() {
     if (video_presenter_) {
         const auto frame = machine_.render_frame();  // Always Field::Progressive (§1.2).
         if (video_presenter_->blit_frame(frame)) {
+            // M55 (DEC-0083, §4.2): draw the ImGui menu AFTER the MSX frame is
+            // composited (letterbox + phosphor already applied) and BEFORE
+            // present(). The menu is never fed into prev_pixels_, so phosphor
+            // blending is untouched; the logical-presentation save/restore
+            // bracket lives inside menu_->render() so blit_frame() stays
+            // byte-identical. menu_ is null under --hidden-window (no-op).
+            if (menu_) {
+                menu_->begin_frame();
+                menu_->build(*this);
+                menu_->render(renderer_);
+            }
             video_presenter_->present();
         } else {
             last_error_ = video_presenter_->last_error();
@@ -893,6 +941,74 @@ bool Sdl3App::flush_current_disk() {
         return false;
     }
     return machine_.disk_image().flush();
+}
+
+// --- M55 (DEC-0083): menu-shared presentation-only seams ---------------------
+
+bool Sdl3App::menu_active() const {
+    return menu_ != nullptr;
+}
+
+void Sdl3App::toggle_fullscreen() {
+    // Extracted from the inline Alt+Enter handler so both the hotkey and the
+    // menu Video > Fullscreen item share one implementation. Presentation-only.
+    fullscreen_ = !fullscreen_;
+    if (window_ != nullptr) {
+        SDL_SetWindowFullscreen(window_, fullscreen_);
+    }
+}
+
+void Sdl3App::set_scale(const int scale) {
+    // Menu Video > Scale N: 320N x 240N window; the 320x240 LETTERBOX logical
+    // presentation (set once in init()) auto-fits at any window size. Clamp to
+    // [1,8] to match the CLI --scale range. No effect in fullscreen (SDL keeps
+    // the fullscreen size) or under a null window. Presentation-only.
+    const int n = std::clamp(scale, 1, 8);
+    if (window_ != nullptr) {
+        SDL_SetWindowSize(window_, 320 * n, 240 * n);
+    }
+}
+
+void Sdl3App::set_filter(const SDL_ScaleMode mode) {
+    // Menu Video > Filter Linear/Nearest: swap the presenter's texture scale
+    // mode live (re-applied to the existing texture). Presentation-only.
+    if (video_presenter_) {
+        video_presenter_->set_scale_mode(mode);
+    }
+}
+
+void Sdl3App::toggle_mute() {
+    // Menu Audio > Mute: store the pre-mute level and drop volume to 0, or
+    // restore the prior level. Built on the existing master-volume seam so the
+    // presenter stays in sync; presentation-only (never touches emulation).
+    if (master_volume_ > 0) {
+        pre_mute_volume_ = master_volume_;
+        master_volume_ = 0;
+    } else {
+        master_volume_ = pre_mute_volume_ > 0 ? pre_mute_volume_ : 100;
+    }
+    if (audio_presenter_) {
+        audio_presenter_->set_master_volume(master_volume_);
+    }
+    std::cerr << "sdl3: master volume " << master_volume_ << "%"
+              << (master_volume_ == 0 ? " (muted)" : master_volume_ == 100 ? " (full)" : "")
+              << " (menu Mute)\n";
+}
+
+int Sdl3App::window_scale() const {
+    // Current window scale N = round(width / 320), clamped [1,8], for the menu
+    // Scale radio's checkmark. Falls back to the configured default when the
+    // window is unavailable.
+    if (window_ == nullptr) {
+        return std::clamp(config_.window_width / 320, 1, 8);
+    }
+    int w = 0;
+    int h = 0;
+    SDL_GetWindowSize(window_, &w, &h);
+    if (w <= 0) {
+        return std::clamp(config_.window_width / 320, 1, 8);
+    }
+    return std::clamp((w + 160) / 320, 1, 8);
 }
 
 void Sdl3App::update_window_title_for_current_disk() {
