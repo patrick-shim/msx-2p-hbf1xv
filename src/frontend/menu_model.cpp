@@ -85,11 +85,14 @@ std::string hotkey_label_for(const MenuAction action) {
 }
 
 const std::vector<MenuAction>& v1_grayed_star_actions() {
-    static const std::vector<MenuAction> kStar = {
-        MenuAction::OpenCartridgeSlot1, MenuAction::OpenCartridgeSlot2, MenuAction::OpenDisk,
-        MenuAction::Eject,              MenuAction::Reset,              MenuAction::NewBlankDisk,
+    // M56 (DEC-0084, planner §5.1): the F1-F5 capabilities are now enabled per
+    // state; only these two remain unconditionally grayed -- SetRam (info-only,
+    // constructor-time RAM size) and ToggleBorder (no runtime setter exists).
+    static const std::vector<MenuAction> kAlwaysGrayed = {
+        MenuAction::SetRam,
+        MenuAction::ToggleBorder,
     };
-    return kStar;
+    return kAlwaysGrayed;
 }
 
 MenuModel build_menu_model(const MenuState& state) {
@@ -99,15 +102,26 @@ MenuModel build_menu_model(const MenuState& state) {
     {
         Menu file;
         file.label = "File";
+        // M56 (F2): runtime cartridge insert (implies reset) -- always available.
         MenuItem open_cart;
         open_cart.label = "Open Cartridge";
-        open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot1, "Slot 1...", false));
-        open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot2, "Slot 2...", false));
+        open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot1, "Slot 1..."));
+        open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot2, "Slot 2..."));
         file.items.push_back(std::move(open_cart));
-        file.items.push_back(item(MenuAction::OpenDisk, "Open Disk...", false));
+        // M56 (F1): multi-select open (REPLACE the F11 cycle) -- always available.
+        file.items.push_back(item(MenuAction::OpenDisk, "Open Disk(s)..."));
         file.items.push_back(
             item(MenuAction::SwapDisk, "Swap Disk", /*enabled=*/state.disk_count > 1));
-        file.items.push_back(item(MenuAction::Eject, "Eject...", false));
+        // M56 (F3): Eject submenu with per-state enablement.
+        MenuItem eject;
+        eject.label = "Eject";
+        eject.children.push_back(
+            item(MenuAction::EjectDisk, "Disk", /*enabled=*/state.disk_count > 0));
+        eject.children.push_back(
+            item(MenuAction::EjectCartridgeSlot1, "Cartridge Slot 1", /*enabled=*/state.slot1_loaded));
+        eject.children.push_back(
+            item(MenuAction::EjectCartridgeSlot2, "Cartridge Slot 2", /*enabled=*/state.slot2_loaded));
+        file.items.push_back(std::move(eject));
         file.items.push_back(separator());
         file.items.push_back(item(MenuAction::Exit, "Exit"));
         model.menus.push_back(std::move(file));
@@ -118,7 +132,8 @@ MenuModel build_menu_model(const MenuState& state) {
         Menu machine;
         machine.label = "Machine";
         machine.items.push_back(item(MenuAction::Pause, "Pause", true, state.paused));
-        machine.items.push_back(item(MenuAction::Reset, "Reset", false));
+        // M56 (F4): reset (mounted disks + inserted carts persist) -- always available.
+        machine.items.push_back(item(MenuAction::Reset, "Reset"));
         machine.items.push_back(separator());
 
         MenuItem speed;
@@ -238,7 +253,8 @@ MenuModel build_menu_model(const MenuState& state) {
         disk.items.push_back(
             item(MenuAction::ToggleDiskWritable, "Disk Writable", true, state.disk_writable));
         disk.items.push_back(separator());
-        disk.items.push_back(item(MenuAction::NewBlankDisk, "New Blank Disk...", false));
+        // M56 (F5): write a fresh blank 720 KB MSX-DOS disk -- always available.
+        disk.items.push_back(item(MenuAction::NewBlankDisk, "New Blank Disk..."));
         model.menus.push_back(std::move(disk));
     }
 

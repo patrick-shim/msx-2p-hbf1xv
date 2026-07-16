@@ -26,6 +26,7 @@
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "devices/fdc/disk_image.h"
 #include "frontend/app_icon_data.h"
+#include "frontend/blank_disk_image.h"  // M56 (DEC-0084): F5 New Blank Disk writer
 #include "frontend/audio_pacer.h"
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
 #include "frontend/sdl3_menu.h"      // M55 (DEC-0083): interactive ImGui menu (complete type)
@@ -394,6 +395,11 @@ bool Sdl3App::init() {
     // after window_/renderer_ exist and every other init step succeeded.
     if (!config_.hidden_window) {
         menu_ = std::make_unique<Sdl3Menu>(window_, renderer_);
+        // M56 (DEC-0084, planner §3.1): allocate the async-dialog mailbox mutex
+        // ONLY here (interactive launch), next to menu_. --hidden-window / ctest
+        // never creates it, so the whole M56 dialog path is inert on the
+        // deterministic path (open_*_dialog() early-returns on a null mutex).
+        dialog_.mutex = SDL_CreateMutex();
     }
 
     initialized_ = true;
@@ -463,6 +469,17 @@ void Sdl3App::shutdown() {
         SDL_DestroyWindow(window_);
         window_ = nullptr;
     }
+    // M56 (DEC-0084, planner §3.1, R3): destroy the dialog mutex LAST (after the
+    // window/renderer), so an OS dialog dismissed by window teardown can still
+    // take the lock in its callback. No-op when no mutex was created
+    // (--hidden-window). Reset the transient flags so a re-init starts clean.
+    if (dialog_.mutex != nullptr) {
+        SDL_DestroyMutex(dialog_.mutex);
+        dialog_.mutex = nullptr;
+    }
+    dialog_.in_flight = false;
+    dialog_.pending = false;
+    dialog_.kind = DialogKind::None;
     if (sdl_initialized_) {
         SDL_Quit();
         sdl_initialized_ = false;
@@ -656,6 +673,13 @@ void Sdl3App::poll_and_dispatch_events() {
 }
 
 void Sdl3App::run_one_frame() {
+    // M56 (DEC-0084, planner §3.1): drain any pending async file-dialog result and
+    // apply it on the MAIN thread, before polling events. Gated on menu_ (== null
+    // under --hidden-window / ctest), so the whole M56 dialog path never runs on
+    // the deterministic path -- the baseline suite stays byte-identical.
+    if (menu_) {
+        drain_dialog_mailbox();
+    }
     poll_and_dispatch_events();
 
     // DEC-0072 replay-fidelity diagnostic: scripted disk hot-swap at a frame
@@ -941,6 +965,337 @@ bool Sdl3App::flush_current_disk() {
         return false;
     }
     return machine_.disk_image().flush();
+}
+
+void Sdl3App::reset_machine() {
+    // M56 (DEC-0084, planner §4.2): a FRONTEND reset orchestrator over the
+    // UNCHANGED machine cold_boot() -- no src/machine edit. cold_boot() keeps
+    // any inserted cartridges (hbf1xv_machine.cpp:496-500 "NEVER unloads") but
+    // RE-SYNTHESIZES the disk medium (:490-492), so a runtime reset must snapshot
+    // and re-attach the live floppy or the session silently loses it.
+
+    // (a) Snapshot the LIVE mounted disk (bytes + host_path + dirty) so the
+    //     physical floppy -- and its in-session in-memory writes -- survive the
+    //     reset. A reset button does not change the disk in the drive.
+    devices::fdc::DiskImage live = std::move(machine_.disk_image());
+    const bool had_disk = !disk_images_.empty();
+
+    machine_.cold_boot();  // carts persist; disk re-synthesized; scheduler -> cycle 0
+
+    // (b) Re-attach the surviving disk (or leave the drive empty if none mounted),
+    //     mirroring load_configured_assets()'s attach/else-detach shape.
+    if (had_disk) {
+        machine_.disk_image() = std::move(live);
+        machine_.disk_drive().attach_image(&machine_.disk_image());
+        machine_.disk_drive().set_disk_changed(true);  // media re-present after the power cycle
+    } else {
+        machine_.disk_drive().attach_image(nullptr);
+    }
+
+    // (c) Re-run the init() post-cold_boot device-enable block VERBATIM
+    //     (init() :322-325,333-335,342) so a runtime reset lands in the same
+    //     state a fresh init() would.
+    machine_.psg().set_audio_sync_enabled(true);
+    machine_.psg().reset_audio_sync(machine_.elapsed_cycles());  // elapsed==0 now
+    machine_.click_dac().set_capture_enabled(true);
+    if (config_.speed_level.has_value()) {
+        machine_.pause_controller().set_speed_level(*config_.speed_level);
+    }
+    machine_.set_fast_disk(config_.fast_disk);
+
+    // (d) Reset the frontend audio-production cursors to their init() values
+    //     (sdl3_app.h:537-539 + init() :325). cold_boot restarted the scheduler at
+    //     cycle 0, so leaving the cursors at pre-reset (large) values would make
+    //     emit_due_audio() compute against stale boundaries -> post-reset audio
+    //     glitch/silence (R7). Presentation-only; never affects the state dump.
+    audio_sample_index_ = 1;
+    audio_prev_boundary_ = 0;
+    audio_next_boundary_ = Sdl3AudioPresenter::kSystemClockHz / Sdl3AudioPresenter::kSampleRateHz;
+}
+
+// --- M56 (DEC-0084): async file-dialog mailbox + F1-F5 media seams -----------
+
+void SDLCALL Sdl3App::dialog_callback(void* userdata, const char* const* filelist,
+                                      int /*filter*/) {
+    // M56 (DEC-0084, planner §3.1): the callback may run OFF the main thread
+    // (SDL_dialog.h:113,125-126) and the filelist is freed on return
+    // (:90-91) -- so deep-copy every UTF-8 path INSIDE the mutex and record only
+    // data (NO machine mutation here). error (NULL) vs cancel ([0]==NULL) are
+    // classified by the SDL-free classify_dialog_filelist().
+    auto* self = static_cast<Sdl3App*>(userdata);
+    SDL_LockMutex(self->dialog_.mutex);
+    self->dialog_.paths.clear();
+    self->dialog_.cancelled = false;
+    self->dialog_.error = false;
+    self->dialog_.error_message.clear();
+    const DialogResultKind kind = classify_dialog_filelist(
+        filelist == nullptr, filelist != nullptr && filelist[0] == nullptr);
+    switch (kind) {
+        case DialogResultKind::Error:
+            self->dialog_.error = true;
+            self->dialog_.error_message = SDL_GetError();  // copy the string NOW
+            break;
+        case DialogResultKind::Cancel:
+            self->dialog_.cancelled = true;
+            break;
+        case DialogResultKind::Selection:
+            for (const char* const* p = filelist; *p != nullptr; ++p) {
+                self->dialog_.paths.emplace_back(*p);  // DEEP COPY each
+            }
+            break;
+    }
+    self->dialog_.pending = true;
+    self->dialog_.in_flight = false;
+    SDL_UnlockMutex(self->dialog_.mutex);
+}
+
+void Sdl3App::drain_dialog_mailbox() {
+    // M56 (DEC-0084, planner §3.1): main-loop drain. Pops a pending dialog result
+    // under the mutex, then applies it on the MAIN thread (all machine mutation
+    // lives here, never in the callback). Called ONLY when menu_ != null.
+    DialogKind kind = DialogKind::None;
+    bool cancelled = false;
+    bool error = false;
+    std::vector<std::string> paths;
+    std::string err;
+    SDL_LockMutex(dialog_.mutex);
+    if (!dialog_.pending) {
+        SDL_UnlockMutex(dialog_.mutex);
+        return;
+    }
+    kind = dialog_.kind;
+    cancelled = dialog_.cancelled;
+    error = dialog_.error;
+    paths = std::move(dialog_.paths);
+    err = std::move(dialog_.error_message);
+    dialog_.pending = false;
+    dialog_.kind = DialogKind::None;
+    SDL_UnlockMutex(dialog_.mutex);
+
+    if (error) {
+        std::cerr << "sdl3: file dialog error: " << err << "\n";
+        return;
+    }
+    if (cancelled || paths.empty()) {
+        return;  // cancel / empty selection = no-op
+    }
+    switch (kind) {
+        case DialogKind::OpenDisks: apply_open_disks(paths); break;
+        case DialogKind::OpenCartSlot1: apply_open_cartridge(1, paths[0]); break;
+        case DialogKind::OpenCartSlot2: apply_open_cartridge(2, paths[0]); break;
+        case DialogKind::SaveBlankDisk: apply_new_blank_disk(paths[0]); break;
+        case DialogKind::None: break;
+    }
+}
+
+void Sdl3App::open_disk_dialog() {
+    // Main thread only (menu dispatch runs inside run_one_frame()). Inert when no
+    // mailbox mutex exists (--hidden-window: never allocated).
+    if (dialog_.mutex == nullptr) {
+        return;
+    }
+    SDL_LockMutex(dialog_.mutex);
+    const bool busy = dialog_.in_flight || dialog_.pending;  // double-open / undrained guard
+    if (!busy) {
+        dialog_.in_flight = true;
+        dialog_.kind = DialogKind::OpenDisks;
+    }
+    SDL_UnlockMutex(dialog_.mutex);
+    if (busy) {
+        return;
+    }
+    // static: the filters must outlive the (possibly deferred) callback (SDL_dialog.h:145).
+    static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
+                                                        {"All files", "*"}};
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2, nullptr,
+                           /*allow_many=*/true);  // multi-select (owner UX contract)
+}
+
+void Sdl3App::open_cartridge_dialog(const int slot) {
+    if (dialog_.mutex == nullptr) {
+        return;
+    }
+    const DialogKind kind = (slot == 2) ? DialogKind::OpenCartSlot2 : DialogKind::OpenCartSlot1;
+    SDL_LockMutex(dialog_.mutex);
+    const bool busy = dialog_.in_flight || dialog_.pending;
+    if (!busy) {
+        dialog_.in_flight = true;
+        dialog_.kind = kind;
+    }
+    SDL_UnlockMutex(dialog_.mutex);
+    if (busy) {
+        return;
+    }
+    static const SDL_DialogFileFilter kCartFilters[] = {{"MSX cartridge ROM", "rom"},
+                                                        {"All files", "*"}};
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 2, nullptr,
+                           /*allow_many=*/false);
+}
+
+void Sdl3App::new_blank_disk_dialog() {
+    if (dialog_.mutex == nullptr) {
+        return;
+    }
+    SDL_LockMutex(dialog_.mutex);
+    const bool busy = dialog_.in_flight || dialog_.pending;
+    if (!busy) {
+        dialog_.in_flight = true;
+        dialog_.kind = DialogKind::SaveBlankDisk;
+    }
+    SDL_UnlockMutex(dialog_.mutex);
+    if (busy) {
+        return;
+    }
+    static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
+                                                        {"All files", "*"}};
+    SDL_ShowSaveFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2, nullptr);
+}
+
+void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
+    // M56 (DEC-0084, planner §3.3, R1): F1 apply. Ordering is load-bearing --
+    // read + validate the WHOLE new set BEFORE touching the current mount, so a
+    // bad selection never destroys the running disk. REPLACE semantics: the
+    // selection becomes the whole F11 cycle, index -> 0, first disk mounts.
+    if (new_paths.empty()) {
+        return;
+    }
+
+    // 1. TRANSACTIONAL PRE-READ (no state change yet).
+    std::vector<std::vector<std::uint8_t>> temp;
+    temp.reserve(new_paths.size());
+    for (const std::string& path : new_paths) {
+        std::ifstream in(path, std::ios::binary);
+        if (!in) {
+            std::cerr << "sdl3: cannot open " << path << "; keeping current disk\n";
+            return;  // no partial state, ever
+        }
+        std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)),
+                                        std::istreambuf_iterator<char>());
+        temp.push_back(std::move(bytes));
+    }
+
+    // 2. FLUSH-THEN-DISCARD the outgoing mounted disk (mirrors on_disk_swap_hotkey
+    //    :814-819) -- the SAME DiskImage::flush() primitive the WD2793 write suite
+    //    depends on (no src/devices/fdc edit).
+    if (config_.disk_writable) {
+        machine_.disk_image().flush();  // no-op if no host path / not dirty
+    } else if (machine_.disk_image().dirty()) {
+        std::cerr << "sdl3: discarding unsaved writes to the current disk "
+                     "(disk-writable OFF; enable Alt+S to persist)\n";
+    }
+
+    // 3. COMMIT the new set.
+    disk_images_ = std::move(temp);
+    config_.disk_paths = new_paths;  // keep the parallel list in lockstep (index binding)
+    current_disk_index_ = 0;
+    machine_.disk_image() = devices::fdc::DiskImage(disk_images_[0]);
+    if (config_.disk_writable) {
+        machine_.disk_image().set_host_path(config_.disk_paths[0]);
+    }
+    machine_.disk_drive().attach_image(&machine_.disk_image());
+    machine_.disk_drive().set_disk_changed(true);  // media-change signal (like a swap)
+    update_window_title_for_current_disk();
+    log_disk_swap();
+}
+
+void Sdl3App::apply_open_cartridge(const int slot, const std::string& rom_path) {
+    // M56 (DEC-0084, planner §4.3): F2 apply. Reuse the EXISTING resolver +
+    // startup-path FM-PAC SRAM bind-before-load; insert IMPLIES a machine reset
+    // (the cart persists cold_boot).
+    using devices::cartridge::CartridgeLoadResult;
+    using devices::cartridge::CartridgeMapperType;
+
+    std::ifstream in(rom_path, std::ios::binary);
+    if (!in) {
+        std::cerr << "sdl3: cannot open cartridge " << rom_path << "; slot " << slot
+                  << " unchanged\n";
+        return;
+    }
+    std::vector<std::uint8_t> image((std::istreambuf_iterator<char>(in)),
+                                    std::istreambuf_iterator<char>());
+
+    // Resolve the mapper via the ONE shared resolver, auto-identification ON.
+    machine::CartridgeIdentificationSession ident_session(config_.softwaredb_path);
+    machine::ParsedCartridgeSlotCli spec;
+    spec.path = rom_path;
+    spec.type = CartridgeMapperType::Mirrored;
+    spec.type_was_explicit = false;
+    const auto resolution = ident_session.resolve(slot, spec, image);
+    for (const std::string& message : resolution.messages) {
+        std::cerr << message << "\n";
+    }
+    if (!resolution.ok) {
+        std::cerr << "sdl3: cartridge not inserted (unsupported mapper); slot " << slot
+                  << " unchanged\n";
+        return;  // no insert, no reset
+    }
+
+    // FM-PAC SRAM bind BEFORE load (mirrors the startup order, :103-110).
+    if (resolution.type == CartridgeMapperType::FmPac && !config_.fmpac_sram_disabled) {
+        const std::filesystem::path sram_path =
+            config_.fmpac_sram_path.has_value()
+                ? std::filesystem::path(*config_.fmpac_sram_path)
+                : std::filesystem::path(rom_path + ".sram");
+        machine_.set_fmpac_sram_path(sram_path);
+    }
+
+    const CartridgeLoadResult result =
+        machine_.load_cartridge(slot, resolution.type, std::move(image));
+    if (result != CartridgeLoadResult::Ok) {
+        std::cerr << "sdl3: failed to load cartridge " << rom_path << " into slot " << slot << "\n";
+        return;
+    }
+    reset_machine();  // insert implies power-on-with-cart-inserted (cart persists cold_boot)
+    std::cerr << "sdl3: inserted " << rom_path << " into slot " << slot << " ("
+              << devices::cartridge::to_string(resolution.type) << "); machine reset\n";
+}
+
+void Sdl3App::apply_new_blank_disk(const std::string& path) {
+    // M56 (DEC-0084, planner §7.3/§7.4): F5 apply. Write the blank ONLY -- NO
+    // auto-mount (that would silently drop the running game's disk, a data-loss
+    // vector). The layout is the frontend-local re-expression (build_blank_disk_
+    // image), NEVER msx_diskutil (DEC-0080 boundary).
+    const std::vector<std::uint8_t> img = build_blank_disk_image();
+    std::ofstream out(path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        std::cerr << "sdl3: cannot create blank disk " << path << "\n";
+        return;
+    }
+    out.write(reinterpret_cast<const char*>(img.data()), static_cast<std::streamsize>(img.size()));
+    std::cerr << "sdl3: created blank 720 KB MSX-DOS disk " << path
+              << " (open it with File > Open Disk to use)\n";
+}
+
+void Sdl3App::eject_disk() {
+    // M56 (DEC-0084, planner §6): flush-then-unbind-then-detach. Flush FIRST while
+    // the host path is still bound; NO machine reset (ejecting a floppy does not
+    // reset an MSX).
+    if (config_.disk_writable) {
+        machine_.disk_image().flush();  // no-op if no host path / not dirty
+    } else if (machine_.disk_image().dirty()) {
+        std::cerr << "sdl3: discarding unsaved writes to the ejected disk "
+                     "(disk-writable OFF; enable Alt+S to persist)\n";
+    }
+    machine_.disk_drive().attach_image(nullptr);
+    disk_images_.clear();
+    config_.disk_paths.clear();
+    current_disk_index_ = 0;
+    update_window_title_for_current_disk();  // -> "(no disk)"
+    std::cerr << "sdl3: ejected disk\n";
+}
+
+void Sdl3App::eject_cartridge(const int slot) {
+    // M56 (DEC-0084, planner §6): flush FM-PAC battery SRAM FIRST (before unload
+    // frees the FM-PAC), then unload, then reset (cart removal implies a power
+    // cycle -- R8). flush_fmpac_sram() is a no-op for a non-FM-PAC slot, but
+    // gating on fmpac(slot) keeps the stderr note accurate.
+    if (machine_.fmpac(slot) != nullptr && machine_.flush_fmpac_sram()) {
+        std::cerr << "sdl3: flushed FM-PAC SRAM to \"" << machine_.fmpac_sram_path().string()
+                  << "\"\n";
+    }
+    machine_.unload_cartridge(slot);
+    reset_machine();
+    std::cerr << "sdl3: ejected cartridge from slot " << slot << "; machine reset\n";
 }
 
 // --- M55 (DEC-0083): menu-shared presentation-only seams ---------------------

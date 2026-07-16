@@ -20,8 +20,10 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "devices/cartridge/cartridge_mapper_type.h"
+#include "frontend/dialog_result.h"
 #include "frontend/sdl3_audio_presenter.h"
 #include "frontend/sdl3_input_mapper.h"
 #include "frontend/sdl3_video_presenter.h"
@@ -258,6 +260,27 @@ struct Sdl3AppConfig {
 // defined out-of-line in sdl3_app.cpp, which includes the full sdl3_menu.h).
 class Sdl3Menu;
 
+// M56 (DEC-0084): the kind of the single owned async file dialog in flight.
+enum class DialogKind { None, OpenDisks, OpenCartSlot1, OpenCartSlot2, SaveBlankDisk };
+
+// M56 (DEC-0084, planner §3.1): the mutex-mailbox that carries an async SDL file
+// dialog's result from the (possibly off-thread, SDL_dialog.h:113,125-126)
+// callback to the main-loop drain. The callback deep-copies every UTF-8 path
+// INSIDE the mutex (SDL frees the filelist on callback return, SDL_dialog.h:90-91)
+// and mutates NO machine state; all machine mutation happens on the main thread
+// in drain_dialog_mailbox(). Only ever allocated interactively (menu_ != null),
+// so the whole path is inert under --hidden-window / ctest.
+struct DialogMailbox {
+    SDL_Mutex* mutex = nullptr;  // created interactively (next to menu_); destroyed in shutdown()
+    bool in_flight = false;      // a dialog is currently open (double-open guard)
+    bool pending = false;        // a result is waiting to be drained on the main loop
+    DialogKind kind = DialogKind::None;
+    bool cancelled = false;      // filelist[0] == nullptr: user cancelled / chose nothing
+    bool error = false;          // filelist == nullptr: SDL error
+    std::string error_message;   // SDL_GetError() copied inside the callback
+    std::vector<std::string> paths;  // DEEP-COPIED UTF-8 paths (OpenDisks: many; others: 1)
+};
+
 // The SDL3 real-time application (M26, backlog C9). Owns a real
 // Hbf1xvMachine session end to end: window/renderer/audio-device creation,
 // cold_boot() + asset loading, and the real-time frame loop.
@@ -325,6 +348,13 @@ public:
     // outgoing dirty image first when disk-writable is enabled.
     void swap_to_next_disk() { on_disk_swap_hotkey(); }
     [[nodiscard]] std::size_t current_disk_index() const { return current_disk_index_; }
+
+    // M56 (DEC-0084): the F4 Reset (and F2/F3 cartridge-implied-reset) seam,
+    // exposed publicly so the reset-determinism integration test can drive it
+    // under hidden_window=true without a menu (mirrors swap_to_next_disk()'s
+    // R-M35-1 precedent). reset_machine() is a FRONTEND orchestrator over the
+    // UNCHANGED machine cold_boot() -- see reset_machine() in sdl3_app.cpp.
+    void request_reset() { reset_machine(); }
 
     // M36 Phase 3: the F12 snapshot-request seam, exposed publicly so an
     // integration test can drive a capture without SDL event injection
@@ -400,6 +430,31 @@ public:
     // Menu Disk > Disk Writable: the same runtime toggle as the Alt+S hotkey.
     void toggle_disk_writable() { on_disk_writable_toggle_hotkey(); }
 
+    // --- M56 (DEC-0084): the F1-F5 runtime media seams the menu dispatch calls.
+    // The dialog launchers run on the MAIN thread only (ImGui build/dispatch runs
+    // inside run_one_frame(), satisfying SDL_dialog.h:152,201); their results are
+    // applied at the next frame boundary via drain_dialog_mailbox(). The apply_* /
+    // eject_* seams are ALSO public so an integration test can drive them directly
+    // under hidden_window=true (the swap_to_next_disk() precedent) without opening
+    // a real OS dialog. All are inert under --hidden-window (menu_ == null, so no
+    // dialog is ever launched and the mailbox never becomes pending).
+    void open_disk_dialog();            // File > Open Disk(s)... (multi-select)
+    void open_cartridge_dialog(int slot);  // File > Open Cartridge > Slot 1/2...
+    void new_blank_disk_dialog();       // Disk > New Blank Disk...
+    // F1 apply: REPLACE the F11-cycle disk list with `new_paths` (index -> 0, first
+    // mounts). Flushes the outgoing dirty disk to host first when writable; a bad
+    // selection is transactional (the current mount is never destroyed).
+    void apply_open_disks(const std::vector<std::string>& new_paths);
+    // F2 apply: resolve the mapper via the existing resolver, bind FM-PAC SRAM
+    // before load, load into the slot, then reset_machine() (insert implies reset).
+    void apply_open_cartridge(int slot, const std::string& rom_path);
+    // F5 apply: write a fresh blank 720 KB MSX-DOS FAT12 image to `path` (no mount).
+    void apply_new_blank_disk(const std::string& path);
+    // F3 Eject: disk = flush-if-writable then detach + empty the drive (no reset);
+    // cartridge = flush FM-PAC SRAM if present -> unload_cartridge -> reset_machine().
+    void eject_disk();
+    void eject_cartridge(int slot);
+
     // Read-only accessors the menu builds its checkmarks / radio state from.
     [[nodiscard]] std::size_t disk_count() const { return disk_images_.size(); }
     [[nodiscard]] bool fullscreen() const { return fullscreen_; }
@@ -426,6 +481,21 @@ public:
 private:
     void poll_and_dispatch_events();
     bool load_configured_assets();
+    // M56 (DEC-0084, planner §4.2): the F4 Reset orchestrator. A FRONTEND
+    // sequence built entirely from existing public machine seams (ZERO
+    // src/machine edit): snapshot the live disk -> cold_boot() (carts persist,
+    // disk re-synthesized) -> re-attach the disk -> re-run the init()
+    // post-cold_boot device-enable block VERBATIM -> reset the frontend audio
+    // cursors. Mounted disks and inserted carts survive the reset.
+    void reset_machine();
+    // M56 (DEC-0084, planner §3.1): the async file-dialog callback (static;
+    // SDLCALL; may run off the main thread). Deep-copies the result INTO dialog_
+    // under its mutex and sets pending -- NO machine mutation here.
+    static void SDLCALL dialog_callback(void* userdata, const char* const* filelist, int filter);
+    // Main-loop drain (once per frame, gated on menu_): pops a pending dialog
+    // result under the mutex and applies it on the main thread (apply_*). Inert
+    // under --hidden-window (never called: menu_ == null).
+    void drain_dialog_mailbox();
     // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
     void on_disk_swap_hotkey();
     // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot
@@ -505,6 +575,12 @@ private:
     // and the whole SDL3 suite stays byte-identical. Destroyed in shutdown()
     // BEFORE SDL_DestroyRenderer (R7).
     std::unique_ptr<Sdl3Menu> menu_;
+
+    // M56 (DEC-0084): the single owned async-dialog mailbox. Its mutex is created
+    // ONLY in the interactive (!hidden_window) init() block next to menu_ and
+    // destroyed last in shutdown(), so --hidden-window / ctest never allocates it
+    // and the whole dialog path stays inert on the deterministic path.
+    DialogMailbox dialog_;
 
     // M27-S7 (item 3, §2.4): default-constructed = empty = a genuine no-op
     // (the cursor never advances because events_ is empty) -- zero effect on

@@ -117,6 +117,7 @@ add_library(sony_msx_core STATIC
     src/frontend/config_runtime.cpp
     src/frontend/session_summary.cpp
     src/frontend/menu_model.cpp
+    src/frontend/blank_disk_image.cpp
     src/frontend/border_composer.cpp
     src/frontend/audio_pacer.cpp
     src/frontend/psg_audio_pump.cpp

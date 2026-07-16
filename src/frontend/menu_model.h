@@ -29,11 +29,13 @@
 // is pure data it is unit-testable OUTSIDE the SONY_MSX_ENABLE_SDL3 guard,
 // mirroring `session_summary` / `config_runtime` / `master_volume`.
 //
-// The complete v1 tree matches the owner-approved DEC-0083 layout:
+// The complete tree matches the owner-approved DEC-0083 layout:
 //   File / Machine / Video / Audio / Disk / Help.
-// The five genuine new-capability items -- Open Cartridge (slot 1 / slot 2),
-// Open Disk, Eject, Reset, New Blank Disk (the "star" set) -- render GRAYED
-// (visible, honestly disabled) in v1.
+// M56 (DEC-0084) enabled the former "star" set -- Open Cartridge (slot 1 / slot
+// 2), Open Disk(s), Eject (Disk / Cartridge Slot 1 / Slot 2), Reset, New Blank
+// Disk -- with per-state enablement (Eject Disk iff a disk is mounted, Eject
+// Cartridge iff that slot is occupied, etc.). Only RAM (info-only, no runtime
+// resize) and Border (no runtime setter) stay grayed.
 
 namespace sony_msx::frontend {
 
@@ -43,16 +45,18 @@ enum class MenuAction {
     None = 0,
 
     // --- File ---
-    OpenCartridgeSlot1,   // star: grayed in v1 (follow-up F2)
-    OpenCartridgeSlot2,   // star: grayed in v1 (follow-up F2)
-    OpenDisk,             // star: grayed in v1 (follow-up F1)
+    OpenCartridgeSlot1,   // M56 (F2): runtime .rom insert into slot 1 (implies reset)
+    OpenCartridgeSlot2,   // M56 (F2): runtime .rom insert into slot 2 (implies reset)
+    OpenDisk,             // M56 (F1): multi-select .dsk open (REPLACE the F11 cycle)
     SwapDisk,             // F11 (enabled iff disk_count > 1)
-    Eject,                // star: grayed in v1 (follow-up F3)
+    EjectDisk,            // M56 (F3): flush-if-writable + empty the drive (enabled iff disk_count > 0)
+    EjectCartridgeSlot1,  // M56 (F3): unload slot 1 + reset (enabled iff slot1_loaded)
+    EjectCartridgeSlot2,  // M56 (F3): unload slot 2 + reset (enabled iff slot2_loaded)
     Exit,
 
     // --- Machine ---
     Pause,                // PAUSE (checkmark = paused)
-    Reset,                // star: grayed in v1 (follow-up F4)
+    Reset,                // M56 (F4): reset_machine() (disks + carts persist)
     SetSpeed,             // radio, param = 0..7 (F6/F7)
     SetRensha,            // radio, param = 0..100 step 10 (F8/F9)
     SetRam,               // info radio, param = KB; always grayed ("restart to change")
@@ -75,7 +79,7 @@ enum class MenuAction {
     // --- Disk ---
     ToggleFastDisk,       // Alt+F
     ToggleDiskWritable,   // Alt+S
-    NewBlankDisk,         // star: grayed in v1 (follow-up F5)
+    NewBlankDisk,         // M56 (F5): write a fresh blank 720 KB MSX-DOS .dsk
 
     // --- Help ---
     HelpHotkeys,
@@ -87,7 +91,9 @@ enum class MenuAction {
 // the model NEVER touches SDL/ImGui or emulation objects directly.
 struct MenuState {
     // File
-    std::size_t disk_count = 0;      // Swap Disk enabled iff > 1
+    std::size_t disk_count = 0;      // Swap Disk enabled iff > 1; Eject Disk iff > 0
+    bool slot1_loaded = false;       // M56: Eject Cartridge Slot 1 enabled iff true
+    bool slot2_loaded = false;       // M56: Eject Cartridge Slot 2 enabled iff true
     // Machine
     bool paused = false;
     int speed_level = 0;             // 0..7
@@ -164,9 +170,10 @@ constexpr bool menu_captures_event(bool is_key_event, bool is_mouse_event, bool 
     return (is_key_event && wants_keyboard) || (is_mouse_event && wants_mouse);
 }
 
-// The exact set of star (new-capability) actions that are ALWAYS grayed in v1,
-// regardless of state -- exposed so the model unit test can assert the invariant
-// without hand-listing it in two places.
+// The exact set of actions that are ALWAYS grayed regardless of state -- after
+// M56 (DEC-0084) only RAM (info-only, no runtime resize) and Border (no runtime
+// setter). Exposed so the model unit test can assert the invariant without
+// hand-listing it in two places. (Name kept for call-site stability.)
 const std::vector<MenuAction>& v1_grayed_star_actions();
 
 }  // namespace sony_msx::frontend

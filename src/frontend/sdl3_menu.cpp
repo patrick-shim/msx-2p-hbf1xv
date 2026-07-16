@@ -31,6 +31,8 @@ MenuState snapshot(const Sdl3App& app) {
     MenuState s;
     const machine::Hbf1xvMachine& machine = app.machine();
     s.disk_count = app.disk_count();
+    s.slot1_loaded = machine.cartridge_slot1().loaded();  // M56: Eject Cartridge enablement
+    s.slot2_loaded = machine.cartridge_slot2().loaded();
     s.paused = machine.pause_controller().button_engaged();
     s.speed_level = machine.pause_controller().speed_level();
     s.rensha_speed = machine.rensha_turbo().speed();
@@ -177,7 +179,10 @@ void Sdl3Menu::render_help_windows() {
         if (ImGui::Begin("About", &show_about_window_)) {
             ImGui::TextUnformatted("Sony HB-F1XV  -  MSX2+ emulator (1988)");
             ImGui::TextUnformatted("Z80A @ 3.58 MHz | Yamaha V9958 VDP (128 KB VRAM)");
-            ImGui::TextUnformatted("Audio: PSG (YM2149) + MSX-MUSIC FM (YM2413) + Konami SCC");
+            // LOW-2 (M56): SCC is a CARTRIDGE-side chip (present only with an SCC
+            // game cart), NOT built-in. Keep the built-in/cartridge boundary explicit.
+            ImGui::TextUnformatted("Built-in audio: PSG (YM2149) + MSX-MUSIC FM (YM2413)");
+            ImGui::TextUnformatted("Cartridge audio (when inserted): Konami SCC, external FM-PAC");
             ImGui::TextUnformatted("Storage: WD2793 FDC, 720 KB 3.5\" floppy");
             ImGui::Separator();
             ImGui::Text("Menu UI: Dear ImGui %s (MIT) over SDL3.", IMGUI_VERSION);
@@ -190,9 +195,16 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
     machine::Hbf1xvMachine& machine = app.machine();
     switch (action) {
         // File
+        case MenuAction::OpenDisk: app.open_disk_dialog(); break;
+        case MenuAction::OpenCartridgeSlot1: app.open_cartridge_dialog(1); break;
+        case MenuAction::OpenCartridgeSlot2: app.open_cartridge_dialog(2); break;
         case MenuAction::SwapDisk: app.swap_to_next_disk(); break;
+        case MenuAction::EjectDisk: app.eject_disk(); break;
+        case MenuAction::EjectCartridgeSlot1: app.eject_cartridge(1); break;
+        case MenuAction::EjectCartridgeSlot2: app.eject_cartridge(2); break;
         case MenuAction::Exit: app.request_quit(); break;
         // Machine
+        case MenuAction::Reset: app.request_reset(); break;
         case MenuAction::Pause: machine.pause_controller().press_pause_button(); break;
         case MenuAction::SetSpeed: machine.pause_controller().set_speed_level(param); break;
         case MenuAction::SetRensha: machine.rensha_turbo().set_speed(param); break;
@@ -220,11 +232,12 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
         // Disk
         case MenuAction::ToggleFastDisk: machine.set_fast_disk(!machine.fast_disk()); break;
         case MenuAction::ToggleDiskWritable: app.toggle_disk_writable(); break;
+        case MenuAction::NewBlankDisk: app.new_blank_disk_dialog(); break;
         // Help
         case MenuAction::HelpHotkeys: show_hotkeys_window_ = true; break;
         case MenuAction::HelpAbout: show_about_window_ = true; break;
-        // Grayed star / info items (Open*, Eject, Reset, New Blank Disk, RAM,
-        // Border, filter/radio parents) are drawn disabled and never dispatch.
+        // Info/grayed items (RAM, Border, filter/radio submenu parents) are drawn
+        // disabled and never dispatch.
         default: break;
     }
 }
