@@ -5,11 +5,22 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.2.2** — SDL3 quality-of-life: a **master volume** control (`--volume <0..100>`,
+Current release: **v1.3.0** — a full **in-window menu bar** (Dear ImGui over the SDL3 renderer,
+identical on Windows and macOS): open floppies at runtime with **multi-select** (the selection
+becomes the disk rotation — F11 keeps swapping through it), insert cartridges mid-session (auto
+mapper detection + the authentic implied reset), eject disks and cartridges, a true power-on
+**Machine ▸ Reset** (byte-identical to a fresh boot; mounted media survive), and **New Blank
+Disk** (720 KB MSX-DOS FAT12, byte-identical to `msx-disk --create`). Disk safety is
+transactional throughout: writable dirty disks flush to the host `.dsk` before any
+replace/eject; a bad selection aborts with the current disk untouched. All menu machinery is
+interactive-only — headless runs and the deterministic test suite are byte-identical to before.
+This release also marks **dual-platform support** (v1.2.2+M54): one codebase building on
+Windows/MSVC and macOS/AppleClang, auto-detected at configure time.
+On top of v1.2.2's **master volume** control (`--volume <0..100>`,
 a `<volume>` knob in the XML config, and live Alt+D / Alt+U steps — applied strictly after the
 machine mix, byte-identical at full volume), **disk-save write-back ON by default** (a real MSX
 writes its floppies; `--no-disk-writable` or the new Alt+S live toggle keep disks read-only), and
-the fast-disk hotkey moved to **Alt+F**. On top of v1.2.1's critical **V9958 sprite-visibility
+the fast-disk hotkey moved to **Alt+F**; and v1.2.1's critical **V9958 sprite-visibility
 fix**: rows redrawn by the VDP command engine (blits) are now sprite-paced before they are sealed
 into the frame, so sprites no longer vanish or flicker on games that rebuild their scrolling
 terrain with command blits (Aleste 2's plane, Firebird's player and flying enemies, Laydock 2 — a
@@ -61,9 +72,11 @@ the sections below and the source are the authoritative spec.)
   a `--capture`-gated F10 live capture hotkey, and opt-in `--ram` sizing (64/128/256/512 KB).
 - An **in-window menu bar** (Dear ImGui) — File / Machine / Video / Audio / Disk / Help —
   exposing the existing runtime controls (pause, speed, ren-sha, fullscreen, scale, filter,
-  persistence, volume, mute, fast-disk, disk-writable, swap disk, exit) with live checkmarks and
-  the hotkey labels; genuinely new-capability items (open cartridge/disk, eject, reset, new blank
-  disk) are shown grayed for now. The menu is mouse-operated and appears only in an interactive
+  persistence, volume, mute, fast-disk, disk-writable, swap disk, exit) **plus** runtime media
+  operations: Open Cartridge (slot 1/2, implies reset), Open Disk(s) with multi-select (REPLACEs the
+  `F11` cycle), Eject (disk / cartridge per slot), Reset (disks + carts persist), and New Blank Disk
+  (a fresh 720 KB MSX-DOS `.dsk`). Dirty-disk safety: an outgoing disk flushes to its host `.dsk`
+  first when disk-writable is on. The menu is mouse-operated and appears only in an interactive
   window — never under `--hidden-window` / headless, so it never affects determinism or tests.
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
 - A standalone **`msx-disk` disk utility** (`diskutils\msx-disk.exe`): create / hex-read / format
@@ -240,21 +253,29 @@ An interactive SDL3 launch shows a **Dear ImGui menu bar** across the top of the
 (**mouse-operated**; the menu is chrome only and never appears under `--hidden-window` or in the
 headless build). Its layout:
 
-- **File** — Open Cartridge ▸ Slot 1 / Slot 2 *(grayed)*, Open Disk *(grayed)*, Swap Disk
-  (`F11`, enabled with more than one `--disk`), Eject *(grayed)*, Exit.
-- **Machine** — Pause (`PAUSE`), Reset *(grayed)*, Speed 0–7 (`F6`/`F7`), Ren-Sha Turbo 0–100%
-  (`F8`/`F9`), RAM (info only — restart to change).
+- **File** — Open Cartridge ▸ Slot 1 / Slot 2… (runtime `.rom` insert; **implies a machine
+  reset**), Open Disk(s)… (multi-select — the selection **REPLACES** the `F11` cycle, mounts the
+  first, and `F11` then cycles the new set), Swap Disk (`F11`, enabled with more than one disk),
+  Eject ▸ Disk (enabled when a disk is mounted) / Cartridge Slot 1 / Slot 2 (each enabled when that
+  slot is occupied; **cartridge eject implies a reset**), Exit.
+- **Machine** — Pause (`PAUSE`), Reset (mounted disks and inserted cartridges **persist** across the
+  reset), Speed 0–7 (`F6`/`F7`), Ren-Sha Turbo 0–100% (`F8`/`F9`), RAM (info only — restart to change).
 - **Video** — Fullscreen (`Alt+Enter`), Scale 1×–8×, Filter Linear/Nearest, Border *(startup only
   — grayed)*, Persistence ±10% (`Alt+B` / `Shift+Alt+B`), Persistence Mode avg/peak (`Alt+M`).
 - **Audio** — Volume ±10% (`Alt+D` / `Alt+U`), Mute.
-- **Disk** — Fast Disk (`Alt+F`), Disk Writable (`Alt+S`), New Blank Disk *(grayed)*.
-- **Help** — Hotkeys (the full in-window hotkey list, single-sourced with the launch banner),
-  About.
+- **Disk** — Fast Disk (`Alt+F`), Disk Writable (`Alt+S`), New Blank Disk… (writes a fresh,
+  DOS-recognizable, deliberately non-bootable 720 KB MSX-DOS disk; open it with File ▸ Open Disk to
+  use).
+- **Help** — Hotkeys (the full in-window hotkey list, drawn from the same single source the menu
+  items use), About.
 
-Checkmarks reflect live state and the hotkey labels are the exact in-window hotkeys. The grayed
-items are genuinely new capabilities being enabled incrementally; every wired item is identical to
-its keyboard hotkey. Keyboard navigation is deliberately off, so the `Alt+`letter host hotkeys keep
-working while the menu is visible. The menu bar is a **Windows/macOS interactive-only** feature.
+Checkmarks reflect live state and the hotkey labels are the exact in-window hotkeys. Enabled-state
+logic is per-item (Eject Disk only when a disk is mounted, Eject Cartridge only when that slot is
+occupied, etc.); only RAM (constructor-time size) and Border (no runtime setter) stay grayed. Disk
+insert/eject/replace flush the outgoing disk to its host `.dsk` first **when disk-writable is on**,
+so no in-session save is lost; with disk-writable off, in-memory writes are discarded (stderr-noted).
+Keyboard navigation is deliberately off, so the `Alt+`letter host hotkeys keep working while the
+menu is visible. The menu bar is a **Windows/macOS interactive-only** feature.
 
 **Headless** (`sony_msx_headless.exe`) is mode-driven; the main mode is:
 
