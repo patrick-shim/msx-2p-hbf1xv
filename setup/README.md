@@ -56,6 +56,20 @@ cmake --build build                       # macOS / Linux / Raspberry Pi
 cmake --build build --config Debug        # Windows (multi-config)
 ```
 
+## Kiosk mode (optional)
+
+To have the emulator start **fullscreen automatically at login** — handy on a Raspberry Pi
+with an attached panel — see [`kiosk/`](kiosk/):
+
+```bash
+setup/kiosk/install-kiosk.sh              # enable
+setup/kiosk/install-kiosk.sh --status     # check
+setup/kiosk/install-kiosk.sh --uninstall  # revert
+```
+
+The desktop still boots normally (so SSH and a terminal stay available); no `sudo`, no
+boot-config or autologin changes.
+
 ## Notes
 
 - Wiping `build/` is always safe — a re-run of the bootstrap restores everything.
