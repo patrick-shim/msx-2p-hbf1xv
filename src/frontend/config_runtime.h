@@ -117,6 +117,12 @@ struct ResolvedMachineConfig {
     // the bay and the auto-load skips; here it is XML > built-in default).
     std::string fmpac_autoload_rom = "roms/fmpac.rom";
 
+    // M64: the in-window file-dialog default directories (no CLI flag -> XML >
+    // built-in "roms"/"disks"). SDL3 dialog UX only -- sdl3_main.cpp copies them
+    // onto Sdl3AppConfig; they never touch emulation or determinism.
+    std::string cartridge_dir = "roms";
+    std::string disk_dir = "disks";
+
     // FM-PAC SRAM host-file path and softwaredb path are OPTIONAL at the consumer
     // seam: std::nullopt means "use the consumer's own built-in behavior" (SRAM
     // auto-derive beside the cart; softwaredb = kDefaultSoftwareDbPath with a

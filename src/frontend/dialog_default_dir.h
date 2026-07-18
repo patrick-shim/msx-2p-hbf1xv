@@ -18,26 +18,28 @@
 namespace sony_msx::frontend {
 
 // ---------------------------------------------------------------------------
-// M63: the pure default-directory pick for the Machine > BIOS Folder... picker.
-// Filesystem-free (the caller injects the "exists && is_directory" verdict and
-// the already-absolute path strings), so the selection policy is ctest-provable
-// with no real directories -- the master_volume.h / dialog_result.h precedent.
+// M63 (generalized at M64): the pure default-directory pick shared by ALL the
+// in-window dialog launchers (Open Cartridge -> config cartridge_dir, Open
+// Disk(s)/New Blank Disk -> config disk_dir, Machine > BIOS Folder... ->
+// config bios_dir). Filesystem-free (the caller injects the "exists &&
+// is_directory" verdict and the already-absolute path strings), so the
+// selection policy is ctest-provable with no real directories -- the
+// master_volume.h / dialog_result.h precedent.
 //
-// Policy: prefer the CURRENT BIOS directory (config_.bios_dir) when it is a
-// real directory, so the picker opens where the ROMs already live; otherwise
-// fall back to the emulator's working directory; "" means "no preference"
-// (the caller passes SDL_ShowOpenFolderDialog a nullptr default_location,
-// today's behavior).
+// Policy: prefer the CONFIGURED directory when it is a real directory, so each
+// dialog opens where its media already live; otherwise fall back to the
+// emulator's working directory; "" means "no preference" (the caller passes
+// the SDL_Show*Dialog a nullptr default_location, the pre-M63 behavior).
 // ---------------------------------------------------------------------------
 
-// bios_dir: the absolute-resolved current BIOS directory ("" if unresolvable).
+// configured: the absolute-resolved configured directory ("" if unresolvable).
 // cwd: the absolute-resolved working directory ("" if unresolvable).
-// bios_dir_is_directory: the injected "exists && is_directory" verdict.
-[[nodiscard]] inline std::string choose_bios_dialog_dir(const std::string& bios_dir,
-                                                        const std::string& cwd,
-                                                        const bool bios_dir_is_directory) {
-    if (bios_dir_is_directory && !bios_dir.empty()) {
-        return bios_dir;
+// configured_is_directory: the injected "exists && is_directory" verdict.
+[[nodiscard]] inline std::string choose_dialog_dir(const std::string& configured,
+                                                   const std::string& cwd,
+                                                   const bool configured_is_directory) {
+    if (configured_is_directory && !configured.empty()) {
+        return configured;
     }
     return cwd;  // may be "" = no preference (caller passes nullptr to SDL)
 }

@@ -85,6 +85,12 @@ struct EmulatorConfig {
     int ram_kb = 512;   // <machine><ram kb>   64|128|256|512  (convenience 512)
     int vram_kb = 128;  // <machine><vram kb>  strict spec: 128 ONLY (validated-to-128)
     std::string bios_dir = "bios";                                                  // <machine><bios dir>
+    // M64: default directories the in-window SDL3 file dialogs open at. Pure
+    // dialog UX (never affects emulation/determinism/headless); each is resolved
+    // relative to the working directory at dialog-open time and falls back to
+    // the working directory when absent.
+    std::string cartridge_dir = "roms";   // <machine><cartridge dir>  Open Cartridge dialog default
+    std::string disk_dir = "disks";       // <machine><disk dir>       Open Disk(s) dialog default
     BiosRoms bios_roms{};                                                           // <machine><bios><rom>*
     std::string fmpac_rom = "roms/fmpac.rom";                                       // <machine><fmpac rom>
     std::string fmpac_sram = "roms/fmpac.rom.sram";                                 // <machine><fmpac sram>

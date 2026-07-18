@@ -134,6 +134,12 @@ ResolvedMachineConfig resolve_machine_config(const machine::EmulatorConfig& cfg,
     //     occupies the bay and the auto-load skips) -> XML > built-in. ---
     r.fmpac_autoload_rom = cfg.fmpac_rom;
 
+    // --- M64: file-dialog default directories: no CLI flag -> XML > built-in
+    //     ("roms"/"disks"). cfg carries either the XML values or the built-in
+    //     defaults, so the no-config path is byte-identical to the defaults. ---
+    r.cartridge_dir = cfg.cartridge_dir;
+    r.disk_dir = cfg.disk_dir;
+
     // --- FM-PAC SRAM path: CLI --fmpac-sram > XML > auto-derive. Surface an XML
     //     value ONLY when it differs from the built-in default, so the no-config
     //     path stays std::nullopt (auto-derive) byte-identically. ---

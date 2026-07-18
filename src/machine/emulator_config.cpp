@@ -258,6 +258,18 @@ void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfi
             if (const std::string* v = tok.attribute("sram")) {
                 cfg.fmpac_sram = *v;
             }
+        } else if (name == "cartridge") {
+            // M64: Open Cartridge (slot 1/2) dialog default directory.
+            warn_unknown_attrs(warnings, tok, "machine/cartridge", {"dir"});
+            if (const std::string* v = tok.attribute("dir")) {
+                cfg.cartridge_dir = *v;
+            }
+        } else if (name == "disk") {
+            // M64: Open Disk(s) dialog default directory.
+            warn_unknown_attrs(warnings, tok, "machine/disk", {"dir"});
+            if (const std::string* v = tok.attribute("dir")) {
+                cfg.disk_dir = *v;
+            }
         } else if (name == "softwaredb") {
             warn_unknown_attrs(warnings, tok, "machine/softwaredb", {"path"});
             if (const std::string* v = tok.attribute("path")) {

@@ -149,6 +149,17 @@
          sram type: path   default: roms/fmpac.rom.sram   (CLI: fmpac-sram) -->
     <fmpac rom="roms/fmpac.rom" sram="roms/fmpac.rom.sram"/>
 
+    <!-- Default directories the in-window file dialogs open at (M64). A pure UX
+         convenience: each is resolved relative to the working directory and falls
+         back to it when absent. Set an ABSOLUTE path to make a dialog always open
+         at a fixed location regardless of where the emulator is launched from.
+           cartridge dir: File > Open Cartridge (slot 1/2)          default: roms
+           disk dir:      File > Open Disk(s) / New Blank Disk      default: disks
+         (Machine > BIOS Folder... uses the <bios dir> above.)
+         dir type: path -->
+    <cartridge dir="roms"/>
+    <disk dir="disks"/>
+
     <!-- openMSX software-database used for cartridge mapper auto-identification.
          type: path   default: references/openmsx-21.0/share/softwaredb.xml   (CLI: softwaredb) -->
     <softwaredb path="references/openmsx-21.0/share/softwaredb.xml"/>

@@ -41,6 +41,15 @@ struct Sdl3AppConfig {
     // bare Sdl3AppConfig{} loads the same 7 files as before (byte-identical).
     // init() applies these via machine_.set_bios_filenames() before cold_boot.
     machine::EmulatorConfig::BiosRoms bios_roms{};
+    // M64: default directories the in-window Open Cartridge / Open Disk(s) +
+    // New Blank Disk file dialogs open at (XML <machine><cartridge dir> /
+    // <disk dir>; no CLI flag). Resolved at dialog-open time: when the path
+    // exists as a directory it is absolutized and passed as the SDL
+    // default_location, else the working directory, else nullptr. Pure SDL3
+    // dialog UX -- never affects emulation, determinism, or the hidden-window /
+    // ctest path (the dialog launchers are inert there: no mailbox mutex).
+    std::string cartridge_dir = "roms";
+    std::string disk_dir = "disks";
     std::optional<std::string> cart1_path;
     devices::cartridge::CartridgeMapperType cart1_type = devices::cartridge::CartridgeMapperType::Mirrored;
     std::optional<std::string> cart2_path;

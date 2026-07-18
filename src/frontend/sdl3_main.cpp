@@ -422,6 +422,10 @@ int main(int argc, char** argv) {
     // M50-S3: BIOS dir + the 7 role-keyed filenames (CLI --bios-dir > XML > "bios").
     config.bios_dir = machine_cfg.bios_dir;
     config.bios_roms = machine_cfg.bios_roms;
+    // M64: in-window file-dialog default directories (XML <machine><cartridge
+    // dir>/<disk dir> > built-in "roms"/"disks"; no CLI flag). Dialog UX only.
+    config.cartridge_dir = machine_cfg.cartridge_dir;
+    config.disk_dir = machine_cfg.disk_dir;
     config.disk_paths = parsed.disk_paths;  // M35-S1: repeatable --disk list
     config.max_frames = parsed.max_frames;
     config.hidden_window = parsed.hidden_window;

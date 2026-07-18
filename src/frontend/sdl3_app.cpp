@@ -28,7 +28,7 @@
 #include "frontend/app_icon_data.h"
 #include "frontend/blank_disk_image.h"  // M56 (DEC-0084): F5 New Blank Disk writer
 #include "frontend/audio_pacer.h"
-#include "frontend/dialog_default_dir.h"  // M63: pure BIOS-folder-picker default-dir pick
+#include "frontend/dialog_default_dir.h"  // M63/M64: pure dialog default-dir pick (all pickers)
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
 #include "frontend/sdl3_menu.h"      // M55 (DEC-0083): interactive ImGui menu (complete type)
 #include "frontend/window_fit.h"     // M61 (DEC-0090): pure display-fit for the interactive window
@@ -52,6 +52,25 @@ constexpr std::uint64_t kFrameCycles = 228 * 262;
 std::string current_dir_or_empty() {
     try {
         return std::filesystem::absolute(std::filesystem::current_path()).string();
+    } catch (const std::exception&) {
+        return {};
+    }
+}
+
+// M64: resolve a CONFIGURED dialog default directory (config cartridge_dir /
+// disk_dir / bios_dir) to the absolute default_location string for
+// SDL_Show*Dialog: absolute(configured) when it exists as a directory, else
+// the working directory, else "" (= nullptr, no preference). The policy is the
+// pure choose_dialog_dir() (frontend/dialog_default_dir.h, unit-tested); the
+// filesystem probing here must NEVER throw out of a dialog opener, so it
+// degrades to "" on any error. Shared by all the M56/M60 dialog launchers.
+std::string resolve_dialog_default_dir(const std::string& configured) {
+    try {
+        const std::filesystem::path p(configured);
+        const bool is_dir =
+            !configured.empty() && std::filesystem::exists(p) && std::filesystem::is_directory(p);
+        const std::string abs = is_dir ? std::filesystem::absolute(p).string() : std::string();
+        return choose_dialog_dir(abs, current_dir_or_empty(), is_dir);
     } catch (const std::exception&) {
         return {};
     }
@@ -1392,7 +1411,14 @@ void Sdl3App::open_disk_dialog() {
     // static: the filters must outlive the (possibly deferred) callback (SDL_dialog.h:145).
     static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
                                                         {"All files", "*"}};
-    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2, nullptr,
+    // M64: default the picker to the configured disk directory (XML
+    // <machine><disk dir>, default "disks") when it exists, else the working
+    // directory; "" degrades to nullptr = no preference. Stored in the MEMBER
+    // so the string outlives the async (possibly deferred) callback -- the same
+    // lifetime rule as the static filter arrays above (SDL_dialog.h:145).
+    dialog_default_dir_ = resolve_dialog_default_dir(config_.disk_dir);
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2,
+                           dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
                            /*allow_many=*/true);  // multi-select (owner UX contract)
 }
 
@@ -1413,12 +1439,13 @@ void Sdl3App::open_cartridge_dialog(const int slot) {
     }
     static const SDL_DialogFileFilter kCartFilters[] = {{"MSX cartridge ROM", "rom"},
                                                         {"All files", "*"}};
-    // M63: default the picker to the emulator's working directory (where the
-    // owner launches from, next to roms/ + games/). Stored in the MEMBER so the
-    // string outlives the async (possibly deferred) callback -- the same
-    // lifetime rule as the static filter arrays above (SDL_dialog.h:145);
-    // "" degrades to nullptr = no preference (today's behavior).
-    dialog_default_dir_ = current_dir_or_empty();
+    // M64 (was M63 cwd): default the picker to the configured cartridge
+    // directory (XML <machine><cartridge dir>, default "roms") when it exists,
+    // else the working directory. Stored in the MEMBER so the string outlives
+    // the async (possibly deferred) callback -- the same lifetime rule as the
+    // static filter arrays above (SDL_dialog.h:145); "" degrades to nullptr =
+    // no preference.
+    dialog_default_dir_ = resolve_dialog_default_dir(config_.cartridge_dir);
     SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 2,
                            dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
                            /*allow_many=*/false);
@@ -1440,7 +1467,12 @@ void Sdl3App::new_blank_disk_dialog() {
     }
     static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
                                                         {"All files", "*"}};
-    SDL_ShowSaveFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2, nullptr);
+    // M64: the save picker's default_location is its LAST parameter
+    // (src/external/sdl3/include/SDL3/SDL_dialog.h:213) -- same disk-dir default
+    // + member-lifetime rule as open_disk_dialog above (one dialog in flight).
+    dialog_default_dir_ = resolve_dialog_default_dir(config_.disk_dir);
+    SDL_ShowSaveFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2,
+                           dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str());
 }
 
 void Sdl3App::open_bios_folder_dialog() {
@@ -1461,20 +1493,14 @@ void Sdl3App::open_bios_folder_dialog() {
     if (busy) {
         return;
     }
-    // M63: default the picker to the CURRENT BIOS directory when it exists (the
-    // folder the ROMs already live in); otherwise the working directory; "" ->
-    // nullptr = no preference. The policy is the pure choose_bios_dialog_dir()
-    // (frontend/dialog_default_dir.h, unit-tested); the filesystem probing here
-    // must NEVER throw out of the dialog opener, so it degrades to "" on error.
-    dialog_default_dir_.clear();
-    try {
-        const std::filesystem::path bios(config_.bios_dir);
-        const bool is_dir = std::filesystem::exists(bios) && std::filesystem::is_directory(bios);
-        const std::string bios_abs = is_dir ? std::filesystem::absolute(bios).string() : std::string();
-        dialog_default_dir_ = choose_bios_dialog_dir(bios_abs, current_dir_or_empty(), is_dir);
-    } catch (const std::exception&) {
-        dialog_default_dir_.clear();  // no preference -- never throw out of the opener
-    }
+    // M63/M64: default the picker to the CURRENT BIOS directory when it exists
+    // (the folder the ROMs already live in); otherwise the working directory;
+    // "" -> nullptr = no preference. Routed through the ONE shared
+    // resolve_dialog_default_dir() helper (same effective behavior as M63);
+    // the policy core is the pure choose_dialog_dir()
+    // (frontend/dialog_default_dir.h, unit-tested) and the probing never
+    // throws out of the opener.
+    dialog_default_dir_ = resolve_dialog_default_dir(config_.bios_dir);
     // The folder picker (src/external/sdl3/include/SDL3/SDL_dialog.h:258) shares
     // the SDL_DialogFileCallback contract with the file dialogs -- filelist[0]
     // is the chosen folder path -- so the ONE dialog_callback handles it too.
