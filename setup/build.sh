@@ -20,7 +20,7 @@
 # Unlike the Windows/Visual-Studio path (multi-config: build/Debug/*.exe), a
 # single-config generator bakes the config in at CONFIGURE time (CMAKE_BUILD_TYPE)
 # and takes NO --config / -C at build/test time; the executables land directly in
-# build/ (sony_msx_headless, sony_msx_sdl3, msx-disk -- no .exe suffix).
+# build/ (sony_msx_headless, sony_msx_sdl3, msx-diskutil -- no .exe suffix).
 #
 # SDL3: by default this uses the SYSTEM SDL3 dev package, located by
 # find_package(SDL3 CONFIG REQUIRED) with NO CMAKE_PREFIX_PATH (Homebrew on macOS:
@@ -117,4 +117,4 @@ if [ "$RUN_TESTS" -eq 1 ]; then
     fi
 fi
 
-echo "[bootstrap] done. Executables: build/sony_msx_headless, build/sony_msx_sdl3, build/msx-disk"
+echo "[bootstrap] done. Executables: build/sony_msx_headless, build/sony_msx_sdl3, build/msx-diskutil"

@@ -17,7 +17,7 @@
 #include <ostream>
 #include <string>
 
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 // Exit codes (planner package §2.3). Small deterministic set.
 inline constexpr int kExitSuccess = 0;  // success (incl. --help)
@@ -57,4 +57,4 @@ struct Args {
 // The usage/help text (also the --help output).
 void print_usage(std::ostream& out);
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

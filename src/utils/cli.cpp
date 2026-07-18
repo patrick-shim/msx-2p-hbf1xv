@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-#include "diskutils/cli.h"
+#include "utils/cli.h"
 
 #include <charconv>
 #include <cstdint>
@@ -22,10 +22,10 @@
 #include <system_error>
 #include <vector>
 
-#include "diskutils/hex_dump.h"
-#include "diskutils/msx_disk_format.h"
+#include "utils/hex_dump.h"
+#include "utils/msx_disk_format.h"
 
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 namespace {
 
@@ -88,7 +88,7 @@ bool read_file(const std::filesystem::path& path, std::vector<std::uint8_t>& out
 }
 
 bool write_file(const std::filesystem::path& path, const std::vector<std::uint8_t>& data) {
-    // Ensure the parent directory exists so a "diskutils/out.dsk"-style path in
+    // Ensure the parent directory exists so a "utils/out.dsk"-style path in
     // a fresh checkout does not fail. A bare filename has no parent -> skip.
     std::error_code ec;
     const std::filesystem::path parent = path.parent_path();
@@ -180,13 +180,13 @@ int run_read(const Args& a, std::ostream& out, std::ostream& err) {
 }  // namespace
 
 void print_usage(std::ostream& out) {
-    out << "msx-disk -- standalone Sony HB-F1XV (MSX2+) 720 KB disk utility\n"
+    out << "msx-diskutil -- standalone Sony HB-F1XV (MSX2+) 720 KB disk utility\n"
            "\n"
            "USAGE:\n"
-           "  msx-disk --create <out.dsk> [--force]\n"
-           "  msx-disk --format <disk.dsk> [--force]\n"
-           "  msx-disk --read   <disk.dsk> [--sector <lba> | --range <startHex>-<endHex>]\n"
-           "  msx-disk --help | -h\n"
+           "  msx-diskutil --create <out.dsk> [--force]\n"
+           "  msx-diskutil --format <disk.dsk> [--force]\n"
+           "  msx-diskutil --read   <disk.dsk> [--sector <lba> | --range <startHex>-<endHex>]\n"
+           "  msx-diskutil --help | -h\n"
            "\n"
            "MODES (exactly one):\n"
            "  --create   Write a new, fully-formatted blank 720 KB MSX-DOS FAT12 image\n"
@@ -328,4 +328,4 @@ int run(const Args& args, std::ostream& out, std::ostream& err) {
     }
 }
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

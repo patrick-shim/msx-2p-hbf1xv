@@ -17,7 +17,7 @@
 #include <ostream>
 #include <span>
 
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 // Deterministic xxd/hexdump-C hybrid formatter (planner package §2.3). Emits one
 // 16-byte line per row:
@@ -31,4 +31,4 @@ namespace sony_msx::diskutils {
 void write_hex_dump(std::ostream& out, std::span<const std::uint8_t> bytes,
                     std::uint64_t base_offset);
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

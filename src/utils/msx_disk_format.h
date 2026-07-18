@@ -24,7 +24,7 @@
 // emulator. Sources of truth cross-checked: tools/format-blank-disk.ps1:82-133
 // (the A/B-validated M41 blank), src/devices/fdc/disk_image.cpp:43-85 (boot
 // sector/BPB/FAT seed, machine's OWN expectation).
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 // Geometry of the HB-F1XV built-in 3.5" 720 KB (2DD) medium: 80 cylinders x
 // 2 sides x 9 sectors x 512 bytes = 737,280 bytes, media descriptor 0xF9.
@@ -48,4 +48,4 @@ struct DiskFormat {
 // directory + data area are ALL ZERO (an empty filesystem => zero files).
 [[nodiscard]] std::vector<std::uint8_t> build_blank_image();
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

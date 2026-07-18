@@ -76,7 +76,7 @@ against openMSX. Around the core:
   runtime disk/cartridge management) and a **headless frontend** for scripting and testing;
 - one codebase, multiple platforms — **Windows (MSVC, incl. ARM64)**, **macOS (AppleClang)**,
   and **Linux / Raspberry Pi (GCC, incl. aarch64)**, auto-detected at configure time;
-- the standalone **`msx-disk`** utility for creating, inspecting, and formatting
+- the standalone **`msx-diskutil`** utility for creating, inspecting, and formatting
   machine-exact 720 KB MSX-DOS floppy images;
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
@@ -131,9 +131,9 @@ the sections below and the source are the authoritative spec.)
   first when disk-writable is on. The menu is mouse-operated and appears only in an interactive
   window — never under `--hidden-window` / headless, so it never affects determinism or tests.
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
-- A standalone **`msx-disk` disk utility** (`diskutils\msx-disk.exe`): create / hex-read / format
+- A standalone **`msx-diskutil` disk utility** (`utils\msx-diskutil.exe`): create / hex-read / format
   720 KB MSX-DOS FAT12 `.dsk` images byte-exact to the machine's own layout (see
-  [Disk utility](#disk-utility-msx-disk) below).
+  [Disk utility](#disk-utility-msx-diskutil) below).
 
 ## Build and test
 
@@ -192,7 +192,7 @@ ctest --test-dir build --output-on-failure
 ```
 
 - Executables land in **`build/`, not `build/Debug/`**, with no `.exe` suffix:
-  `sony_msx_headless`, `sony_msx_sdl3`, `msx-disk`. This is the most common trip hazard.
+  `sony_msx_headless`, `sony_msx_sdl3`, `msx-diskutil`. This is the most common trip hazard.
 - Fast subset: `ctest --test-dir build -LE m24_slow_full_sweep`.
 
 Requirements: the Xcode Command Line Tools (`xcode-select --install`) for AppleClang, plus
@@ -233,22 +233,22 @@ ctest --test-dir build --output-on-failure
 - Some tests report `SKIP` and still pass when an optional game asset is absent; the count stays
   green.
 
-## Disk utility: msx-disk
+## Disk utility: msx-diskutil
 
 The build also produces a standalone host-side disk tool, post-build-copied to
-`diskutils\msx-disk.exe` (`diskutils/msx-disk`, no suffix, on macOS; source in `src/diskutils/`,
+`utils\msx-diskutil.exe` (`utils/msx-diskutil`, no suffix, on macOS; source in `src/utils/`,
 fully build-isolated from the emulator —
 neither links the other). It creates, inspects, and formats 720 KB 3.5" DD MSX-DOS FAT12
 `.dsk` images (80 tracks x 2 sides x 9 sectors x 512 bytes) byte-exact to the layout the
 HB-F1XV's WD2793 / Sony Disk ROM expects:
 
 ```powershell
-diskutils\msx-disk.exe --create mydisk.dsk           # new fully-formatted blank 720 KB image
-diskutils\msx-disk.exe --read mydisk.dsk --sector 0  # hex dump (whole disk, --sector <N>, or --range <A-B> in hex)
-diskutils\msx-disk.exe --format mydisk.dsk           # re-format in place
+utils\msx-diskutil.exe --create mydisk.dsk           # new fully-formatted blank 720 KB image
+utils\msx-diskutil.exe --read mydisk.dsk --sector 0  # hex dump (whole disk, --sector <N>, or --range <A-B> in hex)
+utils\msx-diskutil.exe --format mydisk.dsk           # re-format in place
 ```
 
-On macOS, the same three commands as `./diskutils/msx-disk --create mydisk.dsk` (etc.). The tool
+On macOS, the same three commands as `./utils/msx-diskutil --create mydisk.dsk` (etc.). The tool
 is deterministic across platforms: `--create` produces a byte-identical image on Windows and
 macOS (same SHA256).
 
@@ -464,7 +464,7 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
   byte-identical with or without it.
 
 ### Between v1.2.2 and v1.3.0 (untagged)
-- The standalone **`msx-disk`** utility (create / hex-read / format, byte-exact 720 KB images).
+- The standalone **`msx-diskutil`** utility (create / hex-read / format, byte-exact 720 KB images).
 - **macOS support**: one codebase, two toolchains (MSVC + AppleClang), auto-detected at
   configure time — no fork, no per-platform build files.
 
@@ -501,7 +501,7 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 ## Repository layout
 
 - `src/` — emulator source (`core`, `devices`, `peripherals`, `machine`, `frontend`), plus the
-  standalone `msx-disk` tool source in `src/diskutils/` and vendored build inputs in
+  standalone `msx-diskutil` tool source in `src/utils/` and vendored build inputs in
   `src/external/` (ImGui / SDL3 / ZEXALL).
 - `setup/` — the published one-command build bootstrap (`build.ps1`, `build.sh`) — see
   [`setup/README.md`](setup/README.md).

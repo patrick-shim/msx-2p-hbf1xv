@@ -49,7 +49,7 @@ Or at runtime via the in-window menu: **File ▸ Open Cartridge…** / **File �
 ## Saves
 
 - **Disk saves** write back to the `.dsk` file by default (`--no-disk-writable` or Alt+S for
-  read-only). Create a fresh blank save disk with `diskutils\msx-disk.exe --create save.dsk`
+  read-only). Create a fresh blank save disk with `utils\msx-diskutil.exe --create save.dsk`
   or the menu's **Disk ▸ New Blank Disk…**.
 - **FM-PAC SRAM saves** persist automatically to `<cartridge>.sram`.
 

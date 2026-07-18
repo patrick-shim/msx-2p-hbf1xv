@@ -19,7 +19,7 @@
 // M56 (DEC-0084, planner §7): the frontend-local re-expression of the DEC-0080
 // 720 KB MSX-DOS FAT12 blank-disk layout used by File > New Blank Disk (F5).
 //
-// HARD BOUNDARY (DEC-0080, both ways): this TU NEVER #includes src/diskutils/*
+// HARD BOUNDARY (DEC-0080, both ways): this TU NEVER #includes src/utils/*
 // and NEVER links msx_diskutil. The layout facts are re-expressed from the
 // documented spec (tools/format-blank-disk.ps1:82-133 + the DEC-0080 golden
 // SHA256), not via a code dependency. Compiled into sony_msx_core (SDL-free) so

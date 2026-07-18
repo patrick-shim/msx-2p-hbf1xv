@@ -11,9 +11,9 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-#include "diskutils/msx_disk_format.h"
+#include "utils/msx_disk_format.h"
 
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 std::vector<std::uint8_t> build_blank_image() {
     // Zero-initialized image: an empty formatted filesystem. Everything not
@@ -76,4 +76,4 @@ std::vector<std::uint8_t> build_blank_image() {
     return image;
 }
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

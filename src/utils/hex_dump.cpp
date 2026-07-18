@@ -11,11 +11,11 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-#include "diskutils/hex_dump.h"
+#include "utils/hex_dump.h"
 
 #include <cstddef>
 
-namespace sony_msx::diskutils {
+namespace sony_msx::utils {
 
 namespace {
 
@@ -67,4 +67,4 @@ void write_hex_dump(std::ostream& out, std::span<const std::uint8_t> bytes,
     }
 }
 
-}  // namespace sony_msx::diskutils
+}  // namespace sony_msx::utils

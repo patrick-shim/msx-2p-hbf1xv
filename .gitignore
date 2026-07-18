@@ -19,12 +19,12 @@ build/
 # cross-reference asset, references/fmsx-60/ -- NOT a build output).
 !/references/fmsx-60/executables/fMSX.exe
 
-# M53 (DEC-0080): the msx-disk host tool is a build product, post-build-copied
+# M53 (DEC-0080): the msx-diskutil host tool is a build product, post-build-copied
 # from the ONE build/ tree; ignore the binary, keep the folder scaffolding.
 # (The global *.exe rule already covers the .exe; the no-extension line covers
 # the POSIX binary and is listed for discoverability.)
-/diskutils/msx-disk
-/diskutils/msx-disk.exe
+/utils/msx-diskutil
+/utils/msx-diskutil.exe
 
 # Python bytecode
 __pycache__/

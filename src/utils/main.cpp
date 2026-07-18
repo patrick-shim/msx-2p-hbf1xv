@@ -11,16 +11,16 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Thin entry point for the standalone host-side msx-disk utility (M53,
+// Thin entry point for the standalone host-side msx-diskutil utility (M53,
 // DEC-0080). Links ONLY msx_diskutil -- no sony_msx_core, no emulator header --
 // so the shipped binary is provably isolated from the emulator (one-way build
 // isolation). All logic lives in the unit-testable cli/run seam.
 
 #include <iostream>
 
-#include "diskutils/cli.h"
+#include "utils/cli.h"
 
 int main(int argc, char** argv) {
-    const sony_msx::diskutils::Args args = sony_msx::diskutils::parse_args(argc, argv);
-    return sony_msx::diskutils::run(args, std::cout, std::cerr);
+    const sony_msx::utils::Args args = sony_msx::utils::parse_args(argc, argv);
+    return sony_msx::utils::run(args, std::cout, std::cerr);
 }
