@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -640,6 +641,10 @@ private:
     int diag_last_px_h_ = -1;
     int diag_last_out_w_ = -1;
     int diag_last_out_h_ = -1;
+    // M65 diagnostic: scancodes already reported as "not mapped to the MSX
+    // keyboard matrix", so each unknown key warns exactly ONCE per session
+    // instead of once per press. Interactive-only (never touched headless).
+    std::set<int> warned_unmapped_scancodes_;
     // M52 (DEC-0079): cached master-volume percent for the live Alt+D/Alt+U
     // steppers (the audio presenter holds the authoritative copy; this mirrors it
     // so the hotkeys can step without querying SDL). Seeded from

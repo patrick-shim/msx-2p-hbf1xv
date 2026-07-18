@@ -813,6 +813,26 @@ void Sdl3App::poll_and_dispatch_events() {
                 }
             }
         }
+        // M65 diagnostic: a key that maps to NO matrix coordinate currently does
+        // nothing AND says nothing, which makes "my arrow keys don't work"
+        // impossible to diagnose from outside the process (it forces a hunt
+        // through the compositor, the joystick port and the keyboard itself).
+        // Warn ONCE per distinct scancode, on a fresh key-down only, naming the
+        // key so an unmapped/miscoded key identifies itself. Reached only by
+        // events the host hotkeys above did NOT consume (each of those
+        // `continue`s), so this never fires for Alt+Enter / F10-F12 & friends.
+        // Interactive-only: --hidden-window (every ctest) never runs this loop,
+        // and the guard keeps the deterministic path silent regardless.
+        if (!config_.hidden_window && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat &&
+            !Sdl3InputMapper::map_scancode(event.key.scancode).has_value()) {
+            if (warned_unmapped_scancodes_.insert(static_cast<int>(event.key.scancode)).second) {
+                const char* key_name = SDL_GetScancodeName(event.key.scancode);
+                std::cerr << "sdl3: key \""
+                          << ((key_name != nullptr && *key_name != '\0') ? key_name : "?")
+                          << "\" (scancode " << static_cast<int>(event.key.scancode)
+                          << ") is not mapped to the MSX keyboard matrix -- ignored\n";
+            }
+        }
         input_mapper_.dispatch_event(event, machine_->keyboard(), machine_->joystick(), machine_->pause_controller(),
                                      machine_->rensha_turbo());
     }
