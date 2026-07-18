@@ -1,9 +1,38 @@
-# bios/ — Sony HB-F1XV system ROMs
+## Legal and Intellectual Property Notice
 
-Local, legally-sourced Sony HB-F1XV BIOS assets used for development and validation.
-**Third-party IP (Sony); no redistribution rights asserted.** Per **DEC-0047** the repository owner
-has made an informed decision to host this repository publicly with these BIOS files included — an
-owner accepted-risk hosting decision, not a licensing grant. The files remain Sony's property.
+This project is an independent and unofficial emulator developed for
+educational, research, preservation, interoperability, and personal-use
+purposes. It is not affiliated with, authorized by, endorsed by, or
+sponsored by Sony Group Corporation, Microsoft Corporation, ASCII
+Corporation, or any other rights holder associated with the original
+hardware or the MSX platform.
+
+Sony, HitBit, HB-F1XV, MSX, MSX2+, and all other third-party names,
+product designations, trademarks, service marks, and logos referenced
+by this project remain the property of their respective owners, where
+applicable. Such references are used solely to identify and describe
+the hardware and software environment that this emulator is designed
+to reproduce.
+
+This repository and its release packages do not contain or distribute
+any proprietary Sony BIOS, firmware, ROM image, system software,
+encryption key, copyrighted documentation, artwork, logo, font, or
+other third-party asset.
+
+The emulator requires users to provide any necessary BIOS or firmware
+images separately. Users are solely responsible for obtaining,
+possessing, and using such materials lawfully and in accordance with
+applicable law and any licence terms imposed by their respective rights
+holders.
+
+No licence, ownership interest, endorsement, waiver, authorization, or
+other right from any third-party rights holder is granted, expressed,
+or implied by this project.
+
+The foregoing notice concerns third-party intellectual property only.
+Rights in the independently developed emulator source code are governed
+separately by the project's LICENSE file and applicable source-file
+copyright notices.
 
 ## Required files (all seven)
 
@@ -19,6 +48,8 @@ these filenames and sizes; `tools/validate-assets.ps1` gates on all seven being 
 | `f1xvmus.rom`  | 16 KB   | FM-MUSIC / MSX-MUSIC BIOS, "APRLOPLL" (slot 3-3, page 1) |
 | `f1xvkfn.rom`  | 256 KB  | Kanji font ROM (I/O ports #D8-#DB)                     |
 | `f1xvfirm.rom` | 1 MB    | Halnote / MSX-JE firmware (slot 0-3)                   |
+
+- `Primary reference URL: https://download.file-hunter.com/`
 
 ## Behavior notes
 

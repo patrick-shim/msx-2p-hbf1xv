@@ -1,7 +1,48 @@
-# sony-msx-hbf1xv
+## Project Description
 
-A production-oriented emulator of the **Sony HB-F1XV "HitBit"** — Sony's flagship
-**MSX2+** home computer, released in **Japan in 1988**.
+A production-oriented emulator designed to reproduce the behavior of the
+Sony HB-F1XV “HitBit,” an MSX2+ home computer released in Japan in 1988.
+
+## Legal and Intellectual Property Notice
+
+This project is an independently developed, unofficial emulator intended
+for educational, research, preservation, interoperability, and personal-use
+purposes. It is not affiliated with, authorized by, endorsed by, sponsored
+by, or otherwise associated with Sony Group Corporation, Microsoft
+Corporation, ASCII Corporation, or any other rights holder connected with
+the original hardware, software, or MSX platform.
+
+Sony, HitBit, HB-F1XV, MSX, MSX2+, and all other third-party names, product
+designations, trademarks, service marks, registered marks, and logos
+referenced by this project remain the property of their respective owners,
+where applicable. Such references are used solely to identify and describe
+the hardware and software environment that this emulator is designed to
+reproduce. No affiliation, endorsement, sponsorship, or authorization is
+expressed or implied.
+
+This repository and its release packages contain only independently
+developed emulator source code and project-created materials, except where
+third-party components are separately identified and distributed under
+their respective licences.
+
+This project does not include, distribute, sublicense, or grant rights to
+any proprietary BIOS, firmware, ROM image, system software, game software,
+encryption key, copyrighted documentation, artwork, logo, font, or other
+third-party material belonging to Sony or any other rights holder.
+
+The emulator may require users to provide compatible BIOS, firmware, system
+software, or other external materials separately. Users are solely
+responsible for obtaining, possessing, copying, configuring, and using such
+materials lawfully and in accordance with applicable law and any terms
+imposed by their respective rights holders.
+
+No licence, ownership interest, waiver, authorization, or other right in
+any third-party intellectual property is granted, expressed, or implied by
+this project or its documentation.
+
+Rights in the independently developed emulator source code are governed
+solely by the project’s LICENSE file and the applicable copyright notices
+contained in the source files.
 
 ## The machine
 
@@ -33,16 +74,16 @@ against openMSX. Around the core:
 
 - an **SDL3 desktop frontend** (real-time window, live audio, an in-window menu bar with
   runtime disk/cartridge management) and a **headless frontend** for scripting and testing;
-- one codebase, multiple platforms — **Windows (MSVC)** and **macOS (AppleClang)** today,
-  auto-detected at configure time, with ARM64 and Raspberry Pi support in progress;
+- one codebase, multiple platforms — **Windows (MSVC, incl. ARM64)**, **macOS (AppleClang)**,
+  and **Linux / Raspberry Pi (GCC, incl. aarch64)**, auto-detected at configure time;
 - the standalone **`msx-disk`** utility for creating, inspecting, and formatting
   machine-exact 720 KB MSX-DOS floppy images;
-- a deterministic test suite (268 tests) including the full ZEXALL/ZEXDOC Z80
+- a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.4.1](#build-history)** — fixes the FDC disk-change protocol so
-multi-disk games load correctly after mid-game swaps. See [Build History](#build-history)
-for the full release log.
+**Current release: [v1.5.0](#build-history)** — Raspberry Pi / Linux support and small-display
+polish, the F-1 Spirit 3D Special flicker fix, a runtime BIOS-folder selector, and a published
+one-command build bootstrap. See [Build History](#build-history) for the full release log.
 
 ## Architecture
 
@@ -366,7 +407,13 @@ to its exact built-in default, each commented with its type and allowed range/en
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
-### Since v1.4.1 (unreleased)
+### v1.5.0 — Raspberry Pi / Linux support, small-display polish, F-1 Spirit fix
+- **Raspberry Pi & Linux are now first-class build targets** (GCC, including aarch64) alongside
+  Windows (MSVC, incl. ARM64) and macOS (AppleClang) — one codebase, one `CMakeLists.txt`, one
+  `build/` tree, toolchain auto-detected, and the source audits clean for case-sensitivity and
+  ARM signedness. A published one-command bootstrap now lives in [`setup/`](setup/) —
+  `setup/build.ps1` (Windows) and `setup/build.sh` (macOS / Linux / Raspberry Pi) — so a fresh
+  clone builds out of the box.
 - **F-1 Spirit 3D Special flicker fixed** — the command-row sink no longer seals rows *ahead*
   of the render beam with frame-start scroll registers and a not-yet-written sprite table, so
   the racing view is stable (a permanent regression oracle guards it, and *Aleste 2* /
@@ -382,12 +429,6 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
   machine power-cycles into it (same RAM, mounted media survive). Transactional — the folder
   is validated to hold all seven BIOS ROMs before switching, else the selection is declined
   with the running machine untouched.
-- **Published one-command build bootstrap** in [`setup/`](setup/): `setup/build.ps1` (Windows)
-  and `setup/build.sh` (macOS / Linux / Raspberry Pi), so a fresh clone builds without hunting
-  for a script.
-- **Windows-ARM64 + Raspberry Pi (Linux/aarch64) bring-up** — the same tree builds with the
-  ARM64 MSVC and GCC-aarch64 toolchains (auto-detected); the first optimized (Release) build is
-  validated on x64 and the codebase audits clean for case-sensitivity and ARM signedness.
 
 ### v1.4.1 — FDC disk-change protocol fix
 - The Sony FDC's disk-change (DSKCHG) one-shot is now reported and consumed **only when the
@@ -470,13 +511,23 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
 ## Assets (BIOS / ROM / disk policy)
 
-`bios/` (the seven Sony HB-F1XV system ROMs), `roms/` (the FM-PAC peripheral ROM `fmpac.rom`
-plus its battery-SRAM `fmpac.rom.sram`), `disks/` (MSX-DOS system disks), and `games/` (the
-game library — `games/disks/<title>/` floppy sets and `games/roms/` cartridge images) are
-local, legally-sourced development assets. **They remain third-party intellectual property;
-this project asserts no redistribution rights and makes no provenance claim.** The repository
-is hosted publicly with `bios/` included as the owner's informed, accepted-risk decision
-(`roms/`, `disks/`, and `games/` binaries are untracked). Validate the required assets with:
+This project does **not** contain or distribute any proprietary BIOS, firmware, ROM image, or
+disk asset. **You supply your own**, placed into these local directories (all of which ship on
+the remote as an empty skeleton — README + `.gitkeep` only):
+
+- `bios/` — the seven Sony HB-F1XV system ROMs (see [`bios/README.md`](bios/README.md) for the
+  required filenames and the IP notice).
+- `roms/` — the Panasonic FM-PAC firmware `fmpac.rom` and its battery-SRAM `fmpac.rom.sram`
+  (see [`roms/README.md`](roms/README.md)).
+- `disks/` — MSX-DOS system disks; `games/` — your game library
+  (`games/disks/<title>/` floppy sets and `games/roms/<title>/` cartridge images).
+
+These remain third-party intellectual property; this project asserts no redistribution rights,
+makes no provenance claim, and grants no licence to them. You are solely responsible for
+obtaining and using such materials lawfully. (Per **DEC-0093** none of these proprietary
+binaries are tracked or published — reversing the earlier DEC-0047 decision to host `bios/` +
+the FM-PAC firmware; older binaries nonetheless remain in pre-DEC-0093 git history.) Once you
+have placed your assets, validate the required set with:
 
 ```powershell
 ./tools/validate-assets.ps1
