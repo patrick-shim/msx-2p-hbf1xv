@@ -543,10 +543,20 @@ private:
     // (SDL_GetDisplayForWindow -> SDL_GetPrimaryDisplay fallback ->
     // SDL_GetDisplayUsableBounds). Returns false -- and NEVER queries SDL -- under
     // --hidden-window or a null window, so the deterministic ctest path performs
-    // no display query at all (structural inertness). Both the init-time window
-    // fit and the runtime Video > Scale clamp feed the SAME pure
-    // geometry::fit_window_to_display (window_fit.h) from this.
-    bool query_display_usable_bounds(int& out_w, int& out_h);
+    // no display query at all (structural inertness). The init-time window fit,
+    // the runtime Video > Scale clamp AND the resize/maximize clamp
+    // (DEC-0090-AMENDMENT-A) all feed the SAME pure
+    // geometry::fit_window_to_display (window_fit.h) from this. The AMENDMENT-A
+    // position clamp also needs the usable rect's ORIGIN (the owner-Pi desktop
+    // panel shifts the usable top to y=36), hence the x/y outputs.
+    bool query_display_usable_bounds(int& out_x, int& out_y, int& out_w, int& out_h);
+    // M61 (DEC-0090-AMENDMENT-A): re-apply the display fit after a window
+    // geometry event (user maximize / WM resize). Acts ONLY when the window
+    // actually exceeds the usable bounds or its top edge sits above the usable
+    // top (the loop-safety predicate: the corrected geometry satisfies it, so
+    // the resize event our own corrective calls generate is a no-op here and
+    // the clamp settles in one step). Inert under --hidden-window / fullscreen.
+    void clamp_window_to_display();
     // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
     void on_disk_swap_hotkey();
     // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot

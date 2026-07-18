@@ -442,9 +442,11 @@ bool Sdl3App::init() {
             // within the fixed surface -- path unchanged.
             int win_w = config_.window_width;
             int win_h = config_.window_height + bar_h;
+            int usable_x = 0;
+            int usable_y = 0;
             int usable_w = 0;
             int usable_h = 0;
-            if (query_display_usable_bounds(usable_w, usable_h)) {
+            if (query_display_usable_bounds(usable_x, usable_y, usable_w, usable_h)) {
                 const geometry::WindowFit fit = geometry::fit_window_to_display(
                     config_.window_width, config_.window_height, bar_h, usable_w, usable_h);
                 win_w = fit.w;
@@ -554,6 +556,14 @@ void Sdl3App::shutdown() {
 
 void Sdl3App::poll_and_dispatch_events() {
     SDL_Event event;
+    // M61 (DEC-0090-AMENDMENT-A): at most ONE window-fit check per poll batch.
+    // A single WM maximize delivers a burst (SDL_EVENT_WINDOW_MAXIMIZED +
+    // _RESIZED + _PIXEL_SIZE_CHANGED); SDL's cached window geometry is already
+    // final when the first of them is delivered, so one check reads the same
+    // state the last would -- and this keeps the corrective SetWindowSize /
+    // SetWindowPosition from being issued three times for one gesture (part of
+    // the settle-in-one-step loop-safety story in clamp_window_to_display()).
+    bool window_fit_checked = false;
     while (SDL_PollEvent(&event)) {
         if (event.type == SDL_EVENT_QUIT) {
             quit_requested_ = true;
@@ -581,6 +591,25 @@ void Sdl3App::poll_and_dispatch_events() {
                                     menu_->wants_mouse())) {
                 continue;
             }
+        }
+        // M61 (DEC-0090-AMENDMENT-A): re-apply the window fit on window
+        // geometry events, INTERACTIVE path only (window_ non-null and not
+        // --hidden-window; a hidden window never receives user resize/maximize
+        // events, so the deterministic ctest path stays byte-identical --
+        // clamp_window_to_display() additionally guards itself). Event enums per
+        // src/external/sdl3/include/SDL3/SDL_events.h:143/144/147. Placed AFTER
+        // the menu block so ImGui still sees every window event
+        // (menu_captures_event never swallows them: not key, not mouse), and
+        // consumed here -- window events carry nothing for the recorder or the
+        // MSX keyboard matrix.
+        if (event.type == SDL_EVENT_WINDOW_RESIZED ||
+            event.type == SDL_EVENT_WINDOW_MAXIMIZED ||
+            event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED) {
+            if (!window_fit_checked && window_ != nullptr && !config_.hidden_window) {
+                window_fit_checked = true;
+                clamp_window_to_display();
+            }
+            continue;
         }
         // M35-S3/S4: F11 hotkey for disk-swap (fresh key-down only, not a
         // repeat). Consumed here; never dispatched to input_mapper_, which
@@ -1603,7 +1632,7 @@ void Sdl3App::toggle_fullscreen() {
     }
 }
 
-bool Sdl3App::query_display_usable_bounds(int& out_w, int& out_h) {
+bool Sdl3App::query_display_usable_bounds(int& out_x, int& out_y, int& out_w, int& out_h) {
     // M61 (DEC-0090): the usable bounds of the display the window lives on.
     // STRUCTURALLY inert on the deterministic path: --hidden-window (and a null
     // window) NEVER queries the display, so ctest runs are byte-identical.
@@ -1612,6 +1641,9 @@ bool Sdl3App::query_display_usable_bounds(int& out_w, int& out_h) {
     // primary display (SDL_video.h:679) if that fails, then
     // SDL_GetDisplayUsableBounds (SDL_video.h:783) -- the desktop area minus
     // system-reserved portions (taskbar/dock/menubar).
+    // DEC-0090-AMENDMENT-A: also outputs the usable rect's ORIGIN -- the
+    // resize/maximize position clamp must know where the usable TOP is (the
+    // owner-Pi desktop panel makes it y=36, not 0).
     if (config_.hidden_window || window_ == nullptr) {
         return false;
     }
@@ -1626,9 +1658,97 @@ bool Sdl3App::query_display_usable_bounds(int& out_w, int& out_h) {
     if (!SDL_GetDisplayUsableBounds(display, &usable) || usable.w <= 0 || usable.h <= 0) {
         return false;
     }
+    out_x = usable.x;
+    out_y = usable.y;
     out_w = usable.w;
     out_h = usable.h;
     return true;
+}
+
+void Sdl3App::clamp_window_to_display() {
+    // M61 (DEC-0090-AMENDMENT-A): re-apply the display fit after a window
+    // geometry event. Owner-Pi datapoint: display usable = 800x444 @ (0,36) (a
+    // ~36px desktop panel on the 800x480 7" screen); the M61 init fit made
+    // startup correct, but a user MAXIMIZE grew the window past 444 and pushed
+    // the window top -- and the top-anchored ImGui menu bar -- off-screen while
+    // the per-frame picture letterbox kept rendering ("rendered area fine, only
+    // menu bar truncated").
+    //
+    // LOOP SAFETY (the hard requirement): act ONLY when the window actually
+    // exceeds the usable bounds or its top edge sits above the usable top. The
+    // corrected geometry (w <= usable_w, h <= usable_h, y >= usable_y) SATISFIES
+    // that predicate, so the SDL_EVENT_WINDOW_RESIZED/MOVED our own corrective
+    // calls generate re-enters this function and immediately returns -- the
+    // clamp settles in ONE step. SDL additionally suppresses no-change
+    // RESIZED/MOVED events, and the caller runs at most one check per poll
+    // batch, so the maximize triple (MAXIMIZED + RESIZED + PIXEL_SIZE_CHANGED)
+    // issues at most one corrective request.
+    if (window_ == nullptr || config_.hidden_window) {
+        return;
+    }
+    // Fullscreen keeps its fixed surface: SetWindowSize/SetWindowPosition are
+    // documented no-ops for fullscreen windows (SDL_video.h:1893/:1827) and the
+    // M57 band math already insets within the surface. Check the LIVE flag so a
+    // WM-initiated fullscreen is covered too, not just the Alt+Enter toggle.
+    const SDL_WindowFlags flags = SDL_GetWindowFlags(window_);
+    if ((flags & SDL_WINDOW_FULLSCREEN) != 0) {
+        return;
+    }
+    int usable_x = 0;
+    int usable_y = 0;
+    int usable_w = 0;
+    int usable_h = 0;
+    if (!query_display_usable_bounds(usable_x, usable_y, usable_w, usable_h)) {
+        return;  // no display info -> keep today's behavior (matches the init-fit fallback)
+    }
+    int cur_w = 0;
+    int cur_h = 0;
+    int cur_x = 0;
+    int cur_y = 0;
+    SDL_GetWindowSize(window_, &cur_w, &cur_h);
+    SDL_GetWindowPosition(window_, &cur_x, &cur_y);
+    if (cur_w <= 0 || cur_h <= 0) {
+        return;  // failed/degenerate query must never drive a corrective resize
+    }
+    const bool oversized = cur_w > usable_w || cur_h > usable_h;
+    const bool top_off = cur_y < usable_y;
+    if (!oversized && !top_off) {
+        return;  // within bounds -- the loop-safety predicate (see above)
+    }
+    // A maximized window IGNORES SetWindowSize/SetWindowPosition requests
+    // (SDL_video.h:1893/:1827 -- "If the window is in a ... maximized state,
+    // this request has no effect"), so leave the maximized state first. The
+    // RESTORED/RESIZED events this generates land in a later poll batch, where
+    // the corrected geometry passes the predicate above.
+    if ((flags & SDL_WINDOW_MAXIMIZED) != 0) {
+        SDL_RestoreWindow(window_);
+    }
+    // Fitted size: the SAME pure fit function as the init path (window_fit.h,
+    // no second fit copy), called with the CURRENT window as its own canvas
+    // unit (cw=cur_w, ch=cur picture h), which reduces it to exactly "keep when
+    // it fits, else min(current, usable)". A user-driven resize/maximize is
+    // deliberately NOT snapped back to an integer 320Nx240N scale: the M57
+    // letterbox fills ANY band below the bar, and the owner goal on the 7"
+    // panel is the BIGGEST picture that keeps the menu bar visible (a clamped
+    // maximize = 800x444, picture ~567x425 -- not a snap-down to 320x259).
+    const int bar_h = menu_ ? menu_->bar_height() : 0;
+    const int pic_h = std::max(1, cur_h - bar_h);
+    const geometry::WindowFit fit =
+        geometry::fit_window_to_display(cur_w, pic_h, bar_h, usable_w, usable_h, cur_w, pic_h);
+    // Keep the menu bar's FULL height inside the usable area: the top edge must
+    // not sit above the usable top. x is left alone -- a horizontal off-screen
+    // drag is a user choice and never hides the top-anchored bar; the clamped
+    // height (<= usable_h) placed at y >= usable_y also keeps the bottom from
+    // exceeding the usable bottom in the maximize case (y == usable_y).
+    const int new_y = std::max(cur_y, usable_y);
+    SDL_SetWindowSize(window_, fit.w, fit.h);
+    SDL_SetWindowPosition(window_, cur_x, new_y);
+    // The AMENDMENT-A diagnostic: the owner is live on the Pi and needs to SEE
+    // the clamp fire (same stderr channel as the DEC-0090 init-fit line).
+    std::cerr << "sdl3: window clamped to fit display usable " << usable_w << "x" << usable_h
+              << "@(" << usable_x << "," << usable_y << "): " << cur_w << "x" << cur_h << "@("
+              << cur_x << "," << cur_y << ") -> " << fit.w << "x" << fit.h << "@(" << cur_x << ","
+              << new_y << ")\n";
 }
 
 void Sdl3App::set_scale(const int scale) {
@@ -1647,9 +1767,11 @@ void Sdl3App::set_scale(const int scale) {
         const int inset = video_presenter_ ? video_presenter_->top_inset() : 0;
         int win_w = 320 * n;
         int win_h = 240 * n + inset;
+        int usable_x = 0;
+        int usable_y = 0;
         int usable_w = 0;
         int usable_h = 0;
-        if (query_display_usable_bounds(usable_w, usable_h)) {
+        if (query_display_usable_bounds(usable_x, usable_y, usable_w, usable_h)) {
             const geometry::WindowFit fit =
                 geometry::fit_window_to_display(320 * n, 240 * n, inset, usable_w, usable_h);
             if (fit.w != win_w || fit.h != win_h) {
