@@ -271,7 +271,12 @@ headless build). Its layout:
   Eject ▸ Disk (enabled when a disk is mounted) / Cartridge Slot 1 / Slot 2 (each enabled when that
   slot is occupied; **cartridge eject implies a reset**), Exit.
 - **Machine** — Pause (`PAUSE`), Reset (mounted disks and inserted cartridges **persist** across the
-  reset), Speed 0–7 (`F6`/`F7`), Ren-Sha Turbo 0–100% (`F8`/`F9`), RAM (info only — restart to change).
+  reset), Speed 0–7 (`F6`/`F7`), Ren-Sha Turbo 0–100% (`F8`/`F9`), RAM 64–512 KB (live — selecting a
+  different size **power-cycles** the machine at that size, media surviving), BIOS Folder… (pick a
+  different BIOS directory at runtime — the selection is validated first: all 7 BIOS ROM files must
+  be present and readable, otherwise the current folder is kept untouched; a valid folder
+  **power-cycles** the machine into the new BIOS, same RAM, media surviving; the menu label shows
+  the current folder name).
 - **Video** — Fullscreen (`Alt+Enter`), Scale 1×–8×, Filter Linear/Nearest, Border *(startup only
   — grayed)*, Persistence ±10% (`Alt+B` / `Shift+Alt+B`), Persistence Mode avg/peak (`Alt+M`).
 - **Audio** — Volume ±10% (`Alt+D` / `Alt+U`), Mute.
@@ -283,7 +288,7 @@ headless build). Its layout:
 
 Checkmarks reflect live state and the hotkey labels are the exact in-window hotkeys. Enabled-state
 logic is per-item (Eject Disk only when a disk is mounted, Eject Cartridge only when that slot is
-occupied, etc.); only RAM (constructor-time size) and Border (no runtime setter) stay grayed. Disk
+occupied, etc.); only Border (no runtime setter) stays grayed. Disk
 insert/eject/replace flush the outgoing disk to its host `.dsk` first **when disk-writable is on**,
 so no in-session save is lost; with disk-writable off, in-memory writes are discarded (stderr-noted).
 Keyboard navigation is deliberately off, so the `Alt+`letter host hotkeys keep working while the

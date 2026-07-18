@@ -37,6 +37,7 @@ MenuState snapshot(const Sdl3App& app) {
     s.speed_level = machine.pause_controller().speed_level();
     s.rensha_speed = machine.rensha_turbo().speed();
     s.dram_kb = machine.dram_size() / 1024u;
+    s.bios_dir = app.bios_dir();  // M60 (DEC-0089): label shows the current dir basename
     s.fullscreen = app.fullscreen();
     s.scale = app.window_scale();
     if (app.video_presenter() != nullptr) {
@@ -236,6 +237,10 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
             }
             break;
         }
+        // M60 (DEC-0089): Machine > BIOS Folder... -- launch the async folder
+        // picker; the drained selection is transactionally validated + applied
+        // in Sdl3App::apply_bios_folder (power-cycle into the chosen dir).
+        case MenuAction::OpenBiosFolder: app.open_bios_folder_dialog(); break;
         // Video
         case MenuAction::ToggleFullscreen: app.toggle_fullscreen(); break;
         case MenuAction::SetScale: app.set_scale(param); break;

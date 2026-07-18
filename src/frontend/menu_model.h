@@ -34,8 +34,9 @@
 // M56 (DEC-0084) enabled the former "star" set -- Open Cartridge (slot 1 / slot
 // 2), Open Disk(s), Eject (Disk / Cartridge Slot 1 / Slot 2), Reset, New Blank
 // Disk -- with per-state enablement (Eject Disk iff a disk is mounted, Eject
-// Cartridge iff that slot is occupied, etc.). Only RAM (info-only, no runtime
-// resize) and Border (no runtime setter) stay grayed.
+// Cartridge iff that slot is occupied, etc.). M57 (DEC-0085-AMENDMENT-A) made
+// RAM a LIVE power-cycle radio and M60 (DEC-0089) added the Machine > BIOS
+// Folder... selector, so only Border (no runtime setter) stays grayed.
 
 namespace sony_msx::frontend {
 
@@ -59,7 +60,8 @@ enum class MenuAction {
     Reset,                // M56 (F4): reset_machine() (disks + carts persist)
     SetSpeed,             // radio, param = 0..7 (F6/F7)
     SetRensha,            // radio, param = 0..100 step 10 (F8/F9)
-    SetRam,               // info radio, param = KB; always grayed ("restart to change")
+    SetRam,               // radio, param = KB; LIVE since M57 (power-cycles to the new size)
+    OpenBiosFolder,       // M60 (DEC-0089): folder dialog; validated selection power-cycles
 
     // --- Video ---
     ToggleFullscreen,     // Alt+Enter
@@ -99,6 +101,10 @@ struct MenuState {
     int speed_level = 0;             // 0..7
     int rensha_speed = 0;            // 0..100 (grid of 10)
     std::size_t dram_kb = 64;        // 64/128/256/512
+    // M60 (DEC-0089): the CURRENT BIOS directory (Sdl3AppConfig::bios_dir); the
+    // "BIOS Folder..." item surfaces its basename so the active BIOS set is
+    // always visible in the menu. Default mirrors Sdl3AppConfig's "bios".
+    std::string bios_dir = "bios";
     // Video
     bool fullscreen = false;
     int scale = 3;                   // current window scale N (1..8)

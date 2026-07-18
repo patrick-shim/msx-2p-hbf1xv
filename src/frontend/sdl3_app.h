@@ -261,7 +261,9 @@ struct Sdl3AppConfig {
 class Sdl3Menu;
 
 // M56 (DEC-0084): the kind of the single owned async file dialog in flight.
-enum class DialogKind { None, OpenDisks, OpenCartSlot1, OpenCartSlot2, SaveBlankDisk };
+// M60 (DEC-0089) adds OpenBiosFolder (SDL_ShowOpenFolderDialog through the SAME
+// mailbox -- the folder picker shares the SDL_DialogFileCallback contract).
+enum class DialogKind { None, OpenDisks, OpenCartSlot1, OpenCartSlot2, SaveBlankDisk, OpenBiosFolder };
 
 // M56 (DEC-0084, planner §3.1): the mutex-mailbox that carries an async SDL file
 // dialog's result from the (possibly off-thread, SDL_dialog.h:113,125-126)
@@ -464,11 +466,31 @@ public:
     void eject_disk();
     void eject_cartridge(int slot);
 
+    // --- M60 (DEC-0089): Machine > BIOS Folder... runtime BIOS-directory selector.
+    // open_bios_folder_dialog() launches SDL_ShowOpenFolderDialog (allow_many=false)
+    // through the EXISTING mailbox (same double-open guard / deep-copy-in-callback /
+    // main-loop drain); inert under --hidden-window (mailbox mutex never allocated).
+    void open_bios_folder_dialog();
+    // The drained apply: TRANSACTIONALLY validate that `path` contains ALL 7
+    // configured BIOS ROM files (config_.bios_roms, each openable + readable)
+    // BEFORE mutating anything -- any missing/unreadable file aborts with a stderr
+    // note and config_.bios_dir + the live machine fully intact. On success:
+    // config_.bios_dir = path, then power_cycle(config_.ram_bytes) -- which
+    // re-applies set_asset_root(config_.bios_dir) + set_bios_filenames +
+    // cold_boot + the audio-cursor/reset_pacing block (LIFECYCLE-AUDIO
+    // INVARIANT), same RAM, mounted disks + inserted carts surviving. Public
+    // (the apply_open_disks precedent) so the hidden-window integration test
+    // can drive it directly without opening a real OS dialog.
+    void apply_bios_folder(const std::string& path);
+
     // Read-only accessors the menu builds its checkmarks / radio state from.
     [[nodiscard]] std::size_t disk_count() const { return disk_images_.size(); }
     [[nodiscard]] bool fullscreen() const { return fullscreen_; }
     [[nodiscard]] int master_volume() const { return master_volume_; }
     [[nodiscard]] bool disk_writable() const { return config_.disk_writable; }
+    // M60 (DEC-0089): the CURRENT BIOS directory -- feeds the menu snapshot
+    // (MenuState::bios_dir) and the BIOS-folder integration oracle.
+    [[nodiscard]] const std::string& bios_dir() const { return config_.bios_dir; }
     // Current window scale N (window width / 320), clamped to [1,8] for the radio.
     [[nodiscard]] int window_scale() const;
 

@@ -47,6 +47,18 @@ MenuItem radio(const MenuAction action, const int param, std::string label, cons
     return it;
 }
 
+// M60 (DEC-0089): the last path component of a directory string, tolerant of a
+// trailing separator ("C:/foo/bios/" -> "bios"). Plain string handling keeps the
+// model SDL-free AND <filesystem>-free (this TU compiles into sony_msx_core).
+std::string dir_basename(const std::string& dir) {
+    std::string s = dir;
+    while (!s.empty() && (s.back() == '/' || s.back() == '\\')) {
+        s.pop_back();
+    }
+    const std::size_t pos = s.find_last_of("/\\");
+    return pos == std::string::npos ? s : s.substr(pos + 1);
+}
+
 }  // namespace
 
 const std::vector<HotkeyEntry>& hotkey_table() {
@@ -166,6 +178,19 @@ MenuModel build_menu_model(const MenuState& state) {
             ram.children.push_back(radio(MenuAction::SetRam, kb, std::to_string(kb) + " KB", cur_kb));
         }
         machine.items.push_back(std::move(ram));
+
+        // M60 (DEC-0089): runtime BIOS-directory selector. Opens a folder
+        // dialog; a selection is TRANSACTIONALLY validated (all 7 configured
+        // BIOS ROM files readable) and then power-cycles the machine into the
+        // chosen directory (same RAM, media surviving). Always ENABLED (not
+        // part of the grayed set); the label surfaces the CURRENT directory
+        // basename so the active BIOS set is visible at a glance.
+        {
+            const std::string base = dir_basename(state.bios_dir);
+            const std::string label =
+                base.empty() ? "BIOS Folder..." : "BIOS Folder...  (" + base + ")";
+            machine.items.push_back(item(MenuAction::OpenBiosFolder, label));
+        }
         model.menus.push_back(std::move(machine));
     }
 

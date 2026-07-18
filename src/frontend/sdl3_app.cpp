@@ -1266,6 +1266,7 @@ void Sdl3App::drain_dialog_mailbox() {
         case DialogKind::OpenCartSlot1: apply_open_cartridge(1, paths[0]); break;
         case DialogKind::OpenCartSlot2: apply_open_cartridge(2, paths[0]); break;
         case DialogKind::SaveBlankDisk: apply_new_blank_disk(paths[0]); break;
+        case DialogKind::OpenBiosFolder: apply_bios_folder(paths[0]); break;  // M60 (DEC-0089)
         case DialogKind::None: break;
     }
 }
@@ -1331,6 +1332,72 @@ void Sdl3App::new_blank_disk_dialog() {
     static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
                                                         {"All files", "*"}};
     SDL_ShowSaveFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2, nullptr);
+}
+
+void Sdl3App::open_bios_folder_dialog() {
+    // M60 (DEC-0089): Machine > BIOS Folder... -- the SAME mailbox discipline as
+    // the M56 file dialogs (double-open/undrained guard; deep-copy in the
+    // callback; main-loop drain gated on menu_). Inert when no mailbox mutex
+    // exists (--hidden-window: never allocated).
+    if (dialog_.mutex == nullptr) {
+        return;
+    }
+    SDL_LockMutex(dialog_.mutex);
+    const bool busy = dialog_.in_flight || dialog_.pending;
+    if (!busy) {
+        dialog_.in_flight = true;
+        dialog_.kind = DialogKind::OpenBiosFolder;
+    }
+    SDL_UnlockMutex(dialog_.mutex);
+    if (busy) {
+        return;
+    }
+    // The folder picker (src/external/sdl3/include/SDL3/SDL_dialog.h:258) shares
+    // the SDL_DialogFileCallback contract with the file dialogs -- filelist[0]
+    // is the chosen folder path -- so the ONE dialog_callback handles it too.
+    SDL_ShowOpenFolderDialog(&Sdl3App::dialog_callback, this, window_,
+                             /*default_location=*/nullptr, /*allow_many=*/false);
+}
+
+void Sdl3App::apply_bios_folder(const std::string& path) {
+    // M60 (DEC-0089): TRANSACTIONAL pre-validate -- the chosen folder must
+    // contain ALL 7 configured BIOS ROM files (config_.bios_roms, the role-keyed
+    // set load_rom_assets() resolves under asset_root), each openable AND
+    // readable, BEFORE anything mutates. Never power-cycle into a folder that
+    // cannot boot (DEC-0089 requirement; the apply_open_disks discipline).
+    const machine::EmulatorConfig::BiosRoms& roms = config_.bios_roms;
+    const std::array<const std::string*, 7> required = {
+        &roms.bios,     &roms.sub,        &roms.kanji_driver, &roms.disk,
+        &roms.fm_music, &roms.kanji_font, &roms.firmware};
+    for (const std::string* name : required) {
+        const std::filesystem::path p = std::filesystem::path(path) / *name;
+        std::ifstream in(p, std::ios::binary);
+        char first = 0;
+        if (!in || !in.get(first)) {  // absent, unopenable, or unreadable/empty
+            std::cerr << "sdl3: BIOS folder " << path << " is missing/unreadable " << *name
+                      << "; keeping current BIOS folder " << config_.bios_dir << "\n";
+            return;  // OLD config + machine fully intact, no mutation
+        }
+    }
+
+    // COMMIT: point config at the new folder, then power-cycle at the SAME RAM
+    // size. power_cycle() re-applies set_asset_root(config_.bios_dir) +
+    // set_bios_filenames + cold_boot + the audio-cursor/reset_pacing block
+    // (LIFECYCLE-AUDIO INVARIANT), with mounted disks + inserted carts surviving.
+    const std::string previous = config_.bios_dir;
+    config_.bios_dir = path;
+    power_cycle(config_.ram_bytes);
+    // power_cycle() has its OWN transactional pre-read (occupied cartridge bays);
+    // if THAT aborted, the machine was never rebuilt -- roll bios_dir back so
+    // config and the live machine stay consistent. asset_root() is the witness:
+    // a successful cycle set it to the new path.
+    if (machine_->asset_root() != std::filesystem::path(path)) {
+        config_.bios_dir = previous;
+        std::cerr << "sdl3: BIOS folder unchanged (power-cycle aborted); still "
+                  << config_.bios_dir << "\n";
+        return;
+    }
+    std::cerr << "sdl3: BIOS folder -> " << path << "\n";
 }
 
 void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
