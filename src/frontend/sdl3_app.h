@@ -539,6 +539,14 @@ private:
     // result under the mutex and applies it on the main thread (apply_*). Inert
     // under --hidden-window (never called: menu_ == null).
     void drain_dialog_mailbox();
+    // M61 (DEC-0090): the usable bounds of the display the live window is on
+    // (SDL_GetDisplayForWindow -> SDL_GetPrimaryDisplay fallback ->
+    // SDL_GetDisplayUsableBounds). Returns false -- and NEVER queries SDL -- under
+    // --hidden-window or a null window, so the deterministic ctest path performs
+    // no display query at all (structural inertness). Both the init-time window
+    // fit and the runtime Video > Scale clamp feed the SAME pure
+    // geometry::fit_window_to_display (window_fit.h) from this.
+    bool query_display_usable_bounds(int& out_w, int& out_h);
     // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
     void on_disk_swap_hotkey();
     // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot

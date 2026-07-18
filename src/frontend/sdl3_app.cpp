@@ -30,6 +30,7 @@
 #include "frontend/audio_pacer.h"
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
 #include "frontend/sdl3_menu.h"      // M55 (DEC-0083): interactive ImGui menu (complete type)
+#include "frontend/window_fit.h"     // M61 (DEC-0090): pure display-fit for the interactive window
 #include "machine/cartridge_identifier.h"
 #include "machine/debug_format.h"
 #include "peripherals/msx_key_names.h"
@@ -423,7 +424,43 @@ bool Sdl3App::init() {
         // the fixed surface instead -- both correct.
         const int bar_h = menu_->bar_height();
         if (bar_h > 0) {
-            SDL_SetWindowSize(window_, config_.window_width, config_.window_height + bar_h);
+            // M61 (DEC-0090): FIT the interactive window to the display so it
+            // never opens larger than the usable screen bounds (owner Pi 4B +
+            // 800x480 panel: the 960x739 default overflowed and the menu bar
+            // landed off-screen). Query the usable bounds of the display the
+            // window opened on; on ANY query failure fall back to today's
+            // requested size unchanged (log one line, no regression). The fit
+            // itself is the pure window_fit.h function: largest integer scale
+            // whose 320N x (240N + bar) fits, else clamp to min(requested,
+            // usable) -- the EXISTING M57 letterbox (set_top_inset +
+            // letterbox_into_band) then fits the 4:3 picture into whatever band
+            // remains, so the picture stays aspect-correct + fully visible on
+            // ANY display. hidden-window never reaches this block (menu_ ==
+            // null path unchanged: no display query, no resize). In fullscreen
+            // SDL_SetWindowSize does not alter the fullscreen surface (it only
+            // updates the restored windowed size) and the band math insets
+            // within the fixed surface -- path unchanged.
+            int win_w = config_.window_width;
+            int win_h = config_.window_height + bar_h;
+            int usable_w = 0;
+            int usable_h = 0;
+            if (query_display_usable_bounds(usable_w, usable_h)) {
+                const geometry::WindowFit fit = geometry::fit_window_to_display(
+                    config_.window_width, config_.window_height, bar_h, usable_w, usable_h);
+                win_w = fit.w;
+                win_h = fit.h;
+                // The ONE diagnostic line (DEC-0090): the owner is live on the Pi
+                // and needs the real display metrics behind "--scale 1 made it
+                // worse" -- keep the exact format stable.
+                std::cerr << "sdl3: display usable " << usable_w << "x" << usable_h << "; requested "
+                          << config_.window_width << "x" << (config_.window_height + bar_h)
+                          << "; window " << win_w << "x" << win_h << " (scale " << fit.scale
+                          << ")\n";
+            } else {
+                std::cerr << "sdl3: display usable-bounds query failed (" << SDL_GetError()
+                          << "); keeping requested window size\n";
+            }
+            SDL_SetWindowSize(window_, win_w, win_h);
             if (video_presenter_) {
                 video_presenter_->set_top_inset(bar_h);
             }
@@ -1566,6 +1603,34 @@ void Sdl3App::toggle_fullscreen() {
     }
 }
 
+bool Sdl3App::query_display_usable_bounds(int& out_w, int& out_h) {
+    // M61 (DEC-0090): the usable bounds of the display the window lives on.
+    // STRUCTURALLY inert on the deterministic path: --hidden-window (and a null
+    // window) NEVER queries the display, so ctest runs are byte-identical.
+    // SDL_GetDisplayForWindow returns the display containing the window's
+    // center (src/external/sdl3/include/SDL3/SDL_video.h:991); fall back to the
+    // primary display (SDL_video.h:679) if that fails, then
+    // SDL_GetDisplayUsableBounds (SDL_video.h:783) -- the desktop area minus
+    // system-reserved portions (taskbar/dock/menubar).
+    if (config_.hidden_window || window_ == nullptr) {
+        return false;
+    }
+    SDL_DisplayID display = SDL_GetDisplayForWindow(window_);
+    if (display == 0) {
+        display = SDL_GetPrimaryDisplay();
+    }
+    if (display == 0) {
+        return false;
+    }
+    SDL_Rect usable{};
+    if (!SDL_GetDisplayUsableBounds(display, &usable) || usable.w <= 0 || usable.h <= 0) {
+        return false;
+    }
+    out_w = usable.w;
+    out_h = usable.h;
+    return true;
+}
+
 void Sdl3App::set_scale(const int scale) {
     // Menu Video > Scale N: 320N x (240N + menu-strip) window. Clamp to [1,8] to
     // match the CLI --scale range. No effect in fullscreen (SDL keeps the
@@ -1573,10 +1638,29 @@ void Sdl3App::set_scale(const int scale) {
     // M57 (DEC-0085, §4.4): grow the window height by the menu-strip inset so the
     // PICTURE band stays a full 240N tall (unclipped N-scale) with the strip above
     // it. The inset is 0 when no menu exists -> 320N x 240N, the legacy size.
+    // M61 (DEC-0090): clamp the pick through the SAME window_fit function used at
+    // init, so a runtime Video > Scale choice can never re-overflow a small
+    // display. On a query failure (or hidden-window, where the helper never
+    // queries) the legacy unclamped size applies -- today's behavior.
     const int n = std::clamp(scale, 1, 8);
     if (window_ != nullptr) {
         const int inset = video_presenter_ ? video_presenter_->top_inset() : 0;
-        SDL_SetWindowSize(window_, 320 * n, 240 * n + inset);
+        int win_w = 320 * n;
+        int win_h = 240 * n + inset;
+        int usable_w = 0;
+        int usable_h = 0;
+        if (query_display_usable_bounds(usable_w, usable_h)) {
+            const geometry::WindowFit fit =
+                geometry::fit_window_to_display(320 * n, 240 * n, inset, usable_w, usable_h);
+            if (fit.w != win_w || fit.h != win_h) {
+                std::cerr << "sdl3: scale " << n << " exceeds display usable " << usable_w << "x"
+                          << usable_h << "; window " << fit.w << "x" << fit.h << " (scale "
+                          << fit.scale << ")\n";
+            }
+            win_w = fit.w;
+            win_h = fit.h;
+        }
+        SDL_SetWindowSize(window_, win_w, win_h);
     }
 }
 
