@@ -96,18 +96,23 @@ the sections below and the source are the authoritative spec.)
 
 ## Build and test
 
-One codebase, two toolchains — **Windows (MSVC) and macOS (AppleClang)** build from the same
-`CMakeLists.txt`, selected automatically at configure time. There is no fork and no
-per-platform build file. There is also one build tree, `build/`, on both.
+One codebase, multiple toolchains — **Windows (MSVC), macOS (AppleClang), and Linux /
+Raspberry Pi (GCC)** build from the same `CMakeLists.txt`, selected automatically at configure
+time. There is no fork and no per-platform build file. There is also one build tree, `build/`,
+on every host.
+
+The one-command bootstrap lives in [`setup/`](setup/) (published, so a fresh clone has it —
+the day-to-day dev/test/debug helpers under `tools/` are not published): `setup/build.ps1` on
+Windows, `setup/build.sh` on macOS / Linux / Raspberry Pi. See [`setup/README.md`](setup/README.md).
 
 The one difference that matters: Visual Studio is a **multi-config** generator (pick the config
-at build/test time with `--config` / `-C`), while Ninja is **single-config** (pick it at
-*configure* time with `CMAKE_BUILD_TYPE`, then pass no `--config` / `-C` at all).
+at build/test time with `--config` / `-C`), while Ninja / Unix Makefiles are **single-config**
+(pick it at *configure* time with `CMAKE_BUILD_TYPE`, then pass no `--config` / `-C` at all).
 
 ### Windows
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File tools/bootstrap-build.ps1 -RunTests
+powershell -ExecutionPolicy Bypass -File setup/build.ps1 -RunTests
 ```
 
 This builds SDL3 once from the vendored SDL3 source into `build/_sdl3_install` (only if it is
@@ -128,15 +133,16 @@ ctest --test-dir build -C Debug --output-on-failure
 
 Requirements: CMake, a C++20-capable MSVC toolchain (Visual Studio 2022+ with the "Desktop
 development with C++" workload), and PowerShell. No separate SDL3 install is needed — it is
-built from the bundled source.
+built from the bundled source. (Windows on ARM64 builds the same tree with the ARM64 MSVC
+toolchain, auto-detected.)
 
 ### macOS
 
 ```bash
-tools/bootstrap-build.sh --run-tests
+setup/build.sh --run-tests
 ```
 
-Manual equivalent — note **no `--config` / `-C Debug`** (Ninja is single-config):
+Manual equivalent — note **no `--config` / `-C Debug`** (single-config generator):
 
 ```bash
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DSONY_MSX_ENABLE_SDL3=ON
@@ -149,19 +155,38 @@ ctest --test-dir build --output-on-failure
 - Fast subset: `ctest --test-dir build -LE m24_slow_full_sweep`.
 
 Requirements: the Xcode Command Line Tools (`xcode-select --install`) for AppleClang, plus
-`brew install ninja cmake sdl3`. Unlike the Windows path, macOS links **Homebrew's** SDL3 —
-`find_package(SDL3 CONFIG REQUIRED)` locates it with no `CMAKE_PREFIX_PATH` argument — this is
-the tested macOS route. To build SDL3 from the vendored source instead (on a machine with no
-Homebrew SDL3), `tools/bootstrap-build.sh --vendored-sdl3` mirrors what the Windows bootstrap
-does, though that fallback branch has not yet been exercised on macOS. `brew install powershell`
-is optional and only needed to run the `tools/*.ps1` asset gates; the test suite itself is pure
-C++ and needs no PowerShell.
+`brew install ninja cmake sdl3`. macOS links **Homebrew's** SDL3 — `find_package(SDL3 CONFIG
+REQUIRED)` locates it with no `CMAKE_PREFIX_PATH` argument. To build SDL3 from the vendored
+source instead (a machine with no Homebrew SDL3), `setup/build.sh --vendored-sdl3` mirrors what
+the Windows bootstrap does. `brew install powershell` is optional and only needed to run the
+`tools/*.ps1` asset gates; the test suite itself is pure C++ and needs no PowerShell.
+
+### Linux / Raspberry Pi
+
+```bash
+sudo apt install cmake ninja-build build-essential libsdl3-dev   # Debian / Raspberry Pi OS
+setup/build.sh --run-tests
+```
+
+Same single-config flow as macOS (executables in `build/`, no `--config` / `-C`). The GCC
+toolchain — including **aarch64** on a Raspberry Pi 4/5 — is auto-detected; `setup/build.sh`
+uses the system `libsdl3-dev` by default, or `--vendored-sdl3` to build SDL3 from the bundled
+source. On a small attached panel (e.g. the 7" 800×480 display) the interactive window fits
+itself to the usable screen bounds and the menu bar stays fully visible at any scale.
+
+Manual equivalent:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DSONY_MSX_ENABLE_SDL3=ON
+cmake --build build
+ctest --test-dir build --output-on-failure
+```
 
 ### Both platforms
 
 - Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
   `-DSONY_MSX_ENABLE_SDL3=OFF`. This **changes the test count** — the SDL3-gated tests drop out
-  of the suite (the standard SDL3=ON fast subset is **268**; the OFF configuration reports a
+  of the suite (the standard SDL3=ON fast subset is **273**; the OFF configuration reports a
   correspondingly smaller number). A lower count in that configuration is expected, not a
   regression.
 - Some tests report `SKIP` and still pass when an optional game asset is absent; the count stays
@@ -342,13 +367,27 @@ Newest first. Each release was gated by the full deterministic test suite and, f
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
 ### Since v1.4.1 (unreleased)
+- **F-1 Spirit 3D Special flicker fixed** — the command-row sink no longer seals rows *ahead*
+  of the render beam with frame-start scroll registers and a not-yet-written sprite table, so
+  the racing view is stable (a permanent regression oracle guards it, and *Aleste 2* /
+  *Firebird* / *Laydock 2* stay flicker-free). Classified as an emulator defect — not authentic
+  sprite multiplex — by a decisive openMSX A/B.
+- **Raspberry Pi / small-display polish** — the interactive window now fits itself to the usable
+  screen bounds at launch (so it never opens larger than, e.g., a 7" 800×480 panel) and re-clamps
+  on resize/maximize; the in-window menu bar renders correctly in windowed **and** fullscreen on
+  the Pi's SDL3 render driver.
+- **File-dialog default directories** — Machine ▸ BIOS Folder… opens at the current `bios/`
+  directory; File ▸ Open Cartridge opens at the working directory.
 - **Machine ▸ BIOS Folder…** — a runtime BIOS-directory selector: pick a folder, and the
   machine power-cycles into it (same RAM, mounted media survive). Transactional — the folder
   is validated to hold all seven BIOS ROMs before switching, else the selection is declined
   with the running machine untouched.
-- Windows-ARM64 + Raspberry Pi (Linux/aarch64) bring-up is in progress — the first-ever
-  optimized (Release) build is validated on x64 and the codebase audits clean for
-  case-sensitivity and ARM signedness.
+- **Published one-command build bootstrap** in [`setup/`](setup/): `setup/build.ps1` (Windows)
+  and `setup/build.sh` (macOS / Linux / Raspberry Pi), so a fresh clone builds without hunting
+  for a script.
+- **Windows-ARM64 + Raspberry Pi (Linux/aarch64) bring-up** — the same tree builds with the
+  ARM64 MSVC and GCC-aarch64 toolchains (auto-detected); the first optimized (Release) build is
+  validated on x64 and the codebase audits clean for case-sensitivity and ARM signedness.
 
 ### v1.4.1 — FDC disk-change protocol fix
 - The Sony FDC's disk-change (DSKCHG) one-shot is now reported and consumed **only when the
@@ -420,10 +459,14 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
 ## Repository layout
 
-- `src/` — emulator source (`core`, `devices`, `peripherals`, `machine`, `frontend`).
+- `src/` — emulator source (`core`, `devices`, `peripherals`, `machine`, `frontend`), plus the
+  standalone `msx-disk` tool source in `src/diskutils/` and vendored build inputs in
+  `src/external/` (ImGui / SDL3 / ZEXALL).
+- `setup/` — the published one-command build bootstrap (`build.ps1`, `build.sh`) — see
+  [`setup/README.md`](setup/README.md).
 - `bios/`, `roms/`, `disks/`, `games/` — local, legally-sourced development assets (see below).
-- `build/` — the CMake build tree (gitignored; recreate any time with
-  `tools/bootstrap-build.ps1`).
+- `build/` — the CMake build tree (gitignored; recreate any time with `setup/build.ps1` on
+  Windows or `setup/build.sh` on macOS / Linux / Raspberry Pi).
 
 ## Assets (BIOS / ROM / disk policy)
 
