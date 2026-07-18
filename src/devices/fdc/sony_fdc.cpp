@@ -47,9 +47,33 @@ core::BusData SonyFdc::mem_read(const core::BusAddress address) {
             // Bug B; full derivation: DiskDrive::take_disk_changed). The
             // debug/snapshot peek path stays on the const, non-clearing
             // drive_.disk_changed() (mirrors const peekMem :90).
-            std::uint8_t res = static_cast<std::uint8_t>(drive_reg_ & ~0x04);
-            if (!drive_.take_disk_changed()) {
-                res |= 0x04;
+            //
+            // DEF-M58-DSKCHG (drive-select gating): the /DSKCHG sense is a
+            // per-drive output on the 34-pin Shugart-style FDD bus (fact-sheet
+            // "FDC for Sony HB-F1XV.md" §1 block diagram), and Shugart-bus drive
+            // outputs are gated by the drive's Drive Select input -- an
+            // UNSELECTED drive never drives the line, so with drive-select bits
+            // 01 (absent B) or 11 (NONE) the interface reads the line pulled up
+            // = "not changed" and drive A's changed latch is NOT consumed
+            // (fact-sheet §7: unused/undriven bus bits read back high through
+            // the S1985 pull-ups; §8 DSKCHG quirk: report changed consistently
+            // with whether the SELECTED medium was swapped). openMSX models the
+            // same effect: readMem 0x3FFD -> multiplexer.diskChanged() -> the
+            // SELECTED drive's flag, where B/NONE resolve to a DummyDrive that
+            // returns false without touching drive A
+            // (references/openmsx-21.0/src/fdc/DriveMultiplexer.cc:112-114,
+            // PhilipsFDC.cc:35-41 -- behaviour reference only, never copied).
+            // Without this gate, the Sony disk ROM's DSKCHG probe -- which reads
+            // 0x7FFD once BEFORE selecting drive A and again after -- consumed
+            // the one-shot on the unselected first read and reported "unchanged"
+            // to DOS after a disk swap, so DOS kept the previous disk's FAT/DPB
+            // and every post-swap file load resolved through a stale FAT (the
+            // M58 Sangokushi 2 scrambled China map). drive_.available() is true
+            // exactly when a PRESENT physical drive (A) is selected
+            // (write_drive_register below).
+            std::uint8_t res = static_cast<std::uint8_t>(drive_reg_ | 0x04);
+            if (drive_.available() && drive_.take_disk_changed()) {
+                res = static_cast<std::uint8_t>(res & ~0x04);
             }
             return res;
         }
