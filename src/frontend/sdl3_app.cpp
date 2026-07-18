@@ -28,6 +28,7 @@
 #include "frontend/app_icon_data.h"
 #include "frontend/blank_disk_image.h"  // M56 (DEC-0084): F5 New Blank Disk writer
 #include "frontend/audio_pacer.h"
+#include "frontend/dialog_default_dir.h"  // M63: pure BIOS-folder-picker default-dir pick
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
 #include "frontend/sdl3_menu.h"      // M55 (DEC-0083): interactive ImGui menu (complete type)
 #include "frontend/window_fit.h"     // M61 (DEC-0090): pure display-fit for the interactive window
@@ -43,6 +44,18 @@ namespace {
 // runtime (never duplicated as a literal below). This constant only anchors
 // the doc comment's ms/frame arithmetic for humans reading the source.
 constexpr std::uint64_t kFrameCycles = 228 * 262;
+
+// M63: the emulator's working directory as an absolute native string, for the
+// file-dialog default_location. Degrades to "" (= "no preference" -> the
+// launcher passes SDL nullptr, today's behavior) on ANY filesystem error --
+// the dialog opener must never throw.
+std::string current_dir_or_empty() {
+    try {
+        return std::filesystem::absolute(std::filesystem::current_path()).string();
+    } catch (const std::exception&) {
+        return {};
+    }
+}
 }  // namespace
 
 // M42 (DEC-0061): size the machine's main RAM from config_.ram_bytes. config_ is
@@ -1377,7 +1390,14 @@ void Sdl3App::open_cartridge_dialog(const int slot) {
     }
     static const SDL_DialogFileFilter kCartFilters[] = {{"MSX cartridge ROM", "rom"},
                                                         {"All files", "*"}};
-    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 2, nullptr,
+    // M63: default the picker to the emulator's working directory (where the
+    // owner launches from, next to roms/ + games/). Stored in the MEMBER so the
+    // string outlives the async (possibly deferred) callback -- the same
+    // lifetime rule as the static filter arrays above (SDL_dialog.h:145);
+    // "" degrades to nullptr = no preference (today's behavior).
+    dialog_default_dir_ = current_dir_or_empty();
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 2,
+                           dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
                            /*allow_many=*/false);
 }
 
@@ -1418,11 +1438,28 @@ void Sdl3App::open_bios_folder_dialog() {
     if (busy) {
         return;
     }
+    // M63: default the picker to the CURRENT BIOS directory when it exists (the
+    // folder the ROMs already live in); otherwise the working directory; "" ->
+    // nullptr = no preference. The policy is the pure choose_bios_dialog_dir()
+    // (frontend/dialog_default_dir.h, unit-tested); the filesystem probing here
+    // must NEVER throw out of the dialog opener, so it degrades to "" on error.
+    dialog_default_dir_.clear();
+    try {
+        const std::filesystem::path bios(config_.bios_dir);
+        const bool is_dir = std::filesystem::exists(bios) && std::filesystem::is_directory(bios);
+        const std::string bios_abs = is_dir ? std::filesystem::absolute(bios).string() : std::string();
+        dialog_default_dir_ = choose_bios_dialog_dir(bios_abs, current_dir_or_empty(), is_dir);
+    } catch (const std::exception&) {
+        dialog_default_dir_.clear();  // no preference -- never throw out of the opener
+    }
     // The folder picker (src/external/sdl3/include/SDL3/SDL_dialog.h:258) shares
     // the SDL_DialogFileCallback contract with the file dialogs -- filelist[0]
     // is the chosen folder path -- so the ONE dialog_callback handles it too.
+    // The MEMBER default-dir outlives the async callback (see the M63 note in
+    // open_cartridge_dialog; one member suffices -- one dialog in flight).
     SDL_ShowOpenFolderDialog(&Sdl3App::dialog_callback, this, window_,
-                             /*default_location=*/nullptr, /*allow_many=*/false);
+                             dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
+                             /*allow_many=*/false);
 }
 
 void Sdl3App::apply_bios_folder(const std::string& path) {
@@ -1629,6 +1666,25 @@ void Sdl3App::toggle_fullscreen() {
     fullscreen_ = !fullscreen_;
     if (window_ != nullptr) {
         SDL_SetWindowFullscreen(window_, fullscreen_);
+        // M63: one-line geometry diagnostic (same stderr channel as the M61
+        // "sdl3: window clamped..." line) so the owner can read the
+        // points-vs-pixels divergence on the Pi after a fullscreen toggle --
+        // the menu-bar mis-scaling root cause -- without another blind
+        // iteration. Interactive-only (window_ != null), stderr-only.
+        int pt_w = 0;
+        int pt_h = 0;
+        int px_w = 0;
+        int px_h = 0;
+        int out_w = 0;
+        int out_h = 0;
+        SDL_GetWindowSize(window_, &pt_w, &pt_h);
+        SDL_GetWindowSizeInPixels(window_, &px_w, &px_h);
+        if (renderer_ != nullptr) {
+            SDL_GetRenderOutputSize(renderer_, &out_w, &out_h);
+        }
+        std::cerr << "sdl3: fullscreen " << (fullscreen_ ? "on" : "off") << "; window " << pt_w
+                  << "x" << pt_h << " pts, " << px_w << "x" << px_h << " px, render output "
+                  << out_w << "x" << out_h << " px\n";
     }
 }
 

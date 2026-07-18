@@ -651,6 +651,14 @@ private:
     // and the whole dialog path stays inert on the deterministic path.
     DialogMailbox dialog_;
 
+    // M63: the default_location string passed to SDL_ShowOpen*Dialog. A MEMBER
+    // (not a local) because the dialogs are async and SDL may reference the
+    // pointer after the launcher returns -- the same lifetime rule that keeps
+    // the filter arrays static (SDL_dialog.h:145). One member suffices: the
+    // in_flight/pending mailbox guard admits at most ONE dialog at a time.
+    // Empty = "no preference" (the launcher passes nullptr, today's behavior).
+    std::string dialog_default_dir_;
+
     // M27-S7 (item 3, §2.4): default-constructed = empty = a genuine no-op
     // (the cursor never advances because events_ is empty) -- zero effect on
     // any pre-existing M26 run_one_frame() caller when

@@ -17,6 +17,7 @@
 #include "imgui_impl_sdl3.h"
 #include "imgui_impl_sdlrenderer3.h"
 
+#include "frontend/render_scale.h"  // M63: pure points->pixels corrective scale
 #include "frontend/sdl3_app.h"
 #include "frontend/sdl3_video_presenter.h"
 
@@ -153,7 +154,28 @@ void Sdl3Menu::render(SDL_Renderer* renderer) {
     SDL_RendererLogicalPresentation mode = SDL_LOGICAL_PRESENTATION_DISABLED;
     SDL_GetRenderLogicalPresentation(renderer, &w, &h, &mode);
     SDL_SetRenderLogicalPresentation(renderer, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+    // M63: fullscreen points->pixels corrective scale (owner Pi 4B, 7" 800x480
+    // panel). ImGui lays out + hit-tests in io.DisplaySize == window POINTS, but
+    // the backend submits vertices RAW at the renderer's current scale while
+    // scaling only the clip rects by FramebufferScale -- so when points diverge
+    // from the true render-output pixels (Pi fullscreen), the bar draws
+    // mis-scaled/mis-clipped (File/Machine off the left edge yet clickable).
+    // Backend-sanctioned fix (imgui_impl_sdlrenderer3.cpp:126-133): set the
+    // renderer scale to out_px/display_pts around the draw -- the backend's own
+    // render_scale collapses to 1.0 so it stops double-scaling, and SDL applies
+    // OUR scale to BOTH vertices and clip rects. Identity (1,1) whenever
+    // points == pixels, so the working windowed path is untouched.
+    int out_w = 0;
+    int out_h = 0;
+    SDL_GetRenderOutputSize(renderer, &out_w, &out_h);
+    const ImVec2 ds = ImGui::GetIO().DisplaySize;
+    const geometry::RenderScale rs = geometry::imgui_render_scale(ds.x, ds.y, out_w, out_h);
+    float osx = 1.0f;
+    float osy = 1.0f;
+    SDL_GetRenderScale(renderer, &osx, &osy);
+    SDL_SetRenderScale(renderer, rs.x, rs.y);
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+    SDL_SetRenderScale(renderer, osx, osy);
     SDL_SetRenderLogicalPresentation(renderer, w, h, mode);
 }
 
