@@ -37,7 +37,7 @@ against openMSX. Around the core:
   auto-detected at configure time, with ARM64 and Raspberry Pi support in progress;
 - the standalone **`msx-disk`** utility for creating, inspecting, and formatting
   machine-exact 720 KB MSX-DOS floppy images;
-- a deterministic test suite (267 tests) including the full ZEXALL/ZEXDOC Z80
+- a deterministic test suite (268 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
 **Current release: [v1.4.1](#build-history)** — fixes the FDC disk-change protocol so
@@ -84,8 +84,9 @@ the sections below and the source are the authoritative spec.)
   exposing the existing runtime controls (pause, speed, ren-sha, fullscreen, scale, filter,
   persistence, volume, mute, fast-disk, disk-writable, swap disk, exit) **plus** runtime media
   operations: Open Cartridge (slot 1/2, implies reset), Open Disk(s) with multi-select (REPLACEs the
-  `F11` cycle), Eject (disk / cartridge per slot), Reset (disks + carts persist), and New Blank Disk
-  (a fresh 720 KB MSX-DOS `.dsk`). Dirty-disk safety: an outgoing disk flushes to its host `.dsk`
+  `F11` cycle), Eject (disk / cartridge per slot), Reset (disks + carts persist), New Blank Disk
+  (a fresh 720 KB MSX-DOS `.dsk`), and BIOS Folder… (pick a BIOS directory — validated then
+  applied by a power-cycle). Dirty-disk safety: an outgoing disk flushes to its host `.dsk`
   first when disk-writable is on. The menu is mouse-operated and appears only in an interactive
   window — never under `--hidden-window` / headless, so it never affects determinism or tests.
 - Passes the ZEXALL / ZEXDOC Z80 instruction exercisers.
@@ -160,7 +161,7 @@ C++ and needs no PowerShell.
 
 - Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
   `-DSONY_MSX_ENABLE_SDL3=OFF`. This **changes the test count** — the SDL3-gated tests drop out
-  of the suite (the standard SDL3=ON fast subset is **267**; the OFF configuration reports a
+  of the suite (the standard SDL3=ON fast subset is **268**; the OFF configuration reports a
   correspondingly smaller number). A lower count in that configuration is expected, not a
   regression.
 - Some tests report `SKIP` and still pass when an optional game asset is absent; the count stays
@@ -339,6 +340,15 @@ to its exact built-in default, each commented with its type and allowed range/en
 
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
+
+### Since v1.4.1 (unreleased)
+- **Machine ▸ BIOS Folder…** — a runtime BIOS-directory selector: pick a folder, and the
+  machine power-cycles into it (same RAM, mounted media survive). Transactional — the folder
+  is validated to hold all seven BIOS ROMs before switching, else the selection is declined
+  with the running machine untouched.
+- Windows-ARM64 + Raspberry Pi (Linux/aarch64) bring-up is in progress — the first-ever
+  optimized (Release) build is validated on x64 and the codebase audits clean for
+  case-sensitivity and ARM signedness.
 
 ### v1.4.1 — FDC disk-change protocol fix
 - The Sony FDC's disk-change (DSKCHG) one-shot is now reported and consumed **only when the
