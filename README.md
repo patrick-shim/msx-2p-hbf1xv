@@ -5,7 +5,16 @@ deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RA
 Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
 full slot/mapper fabric) plus an optional SDL3 desktop frontend.
 
-Current release: **v1.4.0** — **live RAM switching from the menu** (Machine ▸ RAM 64/128/256/512 KB
+Current release: **v1.4.1** — a **disk-change (DSKCHG) protocol fix** in the Sony FDC: the
+disk-change one-shot is now reported and consumed **only when the drive is actually selected**
+(Shugart drive-select gating, per the hardware fact sheet). Previously an unselected-drive probe
+consumed the notification, so after a mid-game disk swap MSX-DOS could keep the previous disk's
+FAT and resolve every file on the new disk through stale filesystem state — the cause of
+whole-screen garbage in multi-disk titles that load data after a swap (root-caused and verified
+with Sangokushi 2 / Romance of the Three Kingdoms 2, which now renders its map correctly; a
+permanent regression oracle guards it, and swap-then-save flows like YS II's save disk are now
+protocol-correct).
+On top of v1.4.0's **live RAM switching from the menu** (Machine ▸ RAM 64/128/256/512 KB
 power-cycles the machine into the new size — a true off/on with mounted disks and cartridges
 surviving, verified byte-identical to a fresh boot at every size), plus two critical v1.3.0
 fixes: **audio silence after any menu-driven reset** (the audio pacer's cumulative accounting
