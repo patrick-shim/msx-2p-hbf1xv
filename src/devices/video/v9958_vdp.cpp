@@ -720,8 +720,10 @@ void V9958Vdp::command_row_sync(const unsigned dy) {
     //     VdpFrameRenderer::vertical_scroll_wrap(line) = (line + R#23) & 0xFF
     //     (vdp_frame_renderer.cpp:170-171). The horizontal/multi-page geometry
     //     needs no inversion -- render_line reads it live. The WRAP guard (never
-    //     tripping the accumulator's mid-command finalize) is enforced at the
-    //     commit primitive (Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to),
+    //     tripping the accumulator's mid-command finalize) and the M62 BEAM
+    //     CLAMP (DEC-0091-AMENDMENT-A: never sealing rows AHEAD of the beam
+    //     with commit-time register/SAT state) are enforced at the commit
+    //     primitive (Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to),
     //     which alone knows the authoritative accumulator watermark.
     const int display_line =
         (static_cast<int>(dy & 0xFFu) - control_regs_[23]) & 0xFF;

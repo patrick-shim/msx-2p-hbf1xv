@@ -149,29 +149,69 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
     // destination-row commit primitive. V9958Vdp::command_row_sync has already
     // applied the bitmap-mode / visible-page / active-display gates and computed
-    // `display_line` = the exact vertical-scroll inverse. Here we commit
-    // [watermark, display_line) from the current live VRAM, mirroring
-    // on_before_state_change but with NO +2 beam margin (the destination-line
-    // mapping is exact, not a beam-rounding).
+    // `display_line` = the exact vertical-scroll inverse of the destination row.
+    //
+    // M62 BEAM CLAMP (DEC-0091-AMENDMENT-A) -- the background-register half of
+    // the M51 sibling defect. This sink previously committed [watermark,
+    // display_line) even when the destination rows lay far AHEAD of the render
+    // beam, sealing every swept row with the COMMIT-TIME state: the frame-start
+    // R#26/R#27 horizontal-scroll pair + R#25/R#23 (F-1 Spirit's straight-road
+    // full-scene flash, docs/m62-investigation-report.md -- a dashboard blit
+    // landing at raster ~2 sealed ~145 rows once per ~13-frame beat) and the
+    // instantaneous sprite buffers via the M51 pacing (F1's vanishing car: the
+    // SAT written later in the frame was never seen by the sealed rows).
+    //
+    // On real hardware a command writing VRAM rows ahead of the beam has NO
+    // early-display effect: each display line is generated when the beam scans
+    // it, from the register file and sprite state live AT THAT LINE
+    // (references/fact-sheets/Yamaha V9958 VDP.md §6 per-scanline model,
+    // tier 1). openMSX renders strictly the BACKLOG on every command write --
+    // renderUntil(current time), never ahead ("Subsystem synchronisation should
+    // happen before the commit, to be able to draw backlog using old state",
+    // references/openmsx-21.0/src/video/VDPVRAM.hh:575-593;
+    // PixelRenderer.cc:549-571) -- EFFECT re-expressed here, never copied.
+    //
+    // The clamp: never advance the accumulator (or the M51 sprite pacing) past
+    // the io-write seam's beam boundary `raster + 2` -- the SAME M39-calibrated
+    // left-margin rounding on_before_state_change uses (hbf1xv_machine.cpp
+    // above), so the sink and the seam agree on a single "displayed so far"
+    // frontier. Rows in [watermark, min(display_line, raster+2)) still commit
+    // pre-write (the M44 backlog capture: rows the beam already passed keep the
+    // pre-command state); rows AHEAD of the beam are simply LEFT for the beam
+    // path -- subsequent io-write seam syncs and the vsync finalize render them
+    // per-line-live (their then-current R#26/R#27/R#25/R#23 and SAT), exactly
+    // like every non-command write path (the M32 seam) already does. Since
+    // every state change between the command and a row's beam crossing fires
+    // the hooked io-write seam first, each row's committed content equals the
+    // state as of the last hooked write before its beam+2 crossing -- the
+    // hardware contract at the M49 line-granular ceiling.
     if (suspended_) {
         return;  // debug_io_write exclusion (same as on_before_state_change)
     }
     machine_.scanline_accumulator_.mark_completed_frame_stale();
-    // WRAP guard (§2.4 step 4): ADVANCE-ONLY. Skip when the destination display
-    // line is at or below the accumulation point -- that row was already swept
-    // (it reappears next frame, exactly as on real hardware) and a sync_to_line
+    const int raster = machine_.vdp_.raster_display_line();
+    if (raster < 0) {
+        return;  // border/vblank (command_row_sync gates this too; defensive)
+    }
+    const int beam_limit = raster + 2;
+    const int target = display_line < beam_limit ? display_line : beam_limit;
+    // WRAP guard (§2.4 step 4): ADVANCE-ONLY. Skip when the commit target is at
+    // or below the accumulation point -- that row was already swept (it
+    // reappears next frame, exactly as on real hardware) and a sync_to_line
     // below the watermark would otherwise seal a partial frame mid-command.
-    if (display_line <= machine_.scanline_accumulator_.watermark()) {
+    // With the M62 clamp this is also the common ahead-of-beam case: the
+    // io-write seam at the command-issuing OUT already committed to raster+2.
+    if (target <= machine_.scanline_accumulator_.watermark()) {
         if (devices::video::m51_sprite_trace_enabled()) {
             devices::video::m51_sprite_trace(
-                "CMDCOMMIT-SKIP display_line=%d acc_wm=%d sprite_wm=%d", display_line,
-                machine_.scanline_accumulator_.watermark(),
+                "CMDCOMMIT-SKIP display_line=%d clamp=%d acc_wm=%d sprite_wm=%d", display_line,
+                target, machine_.scanline_accumulator_.watermark(),
                 machine_.vdp_.sprite_engine().watermark());
         }
         return;
     }
     // M51 Task 2 trace (event classes 3+4): the command-row commit range
-    // [acc_wm, display_line) with the SPRITE watermark at this instant, plus
+    // [acc_wm, target) with the SPRITE watermark at this instant, plus
     // the per-line visible-sprite counts the imminent sync_to_line() will
     // composite from, over the designated player band
     // (SONY_MSX_M51_TRACE_BAND="lo:hi", default 148:176 -- the Aleste 2 plane
@@ -188,10 +228,10 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
         }();
         const int acc_wm = machine_.scanline_accumulator_.watermark();
         const int sprite_wm = machine_.vdp_.sprite_engine().watermark();
-        devices::video::m51_sprite_trace("CMDCOMMIT range=[%d,%d) sprite_wm=%d", acc_wm,
-                                         display_line, sprite_wm);
+        devices::video::m51_sprite_trace("CMDCOMMIT range=[%d,%d) req=%d sprite_wm=%d", acc_wm,
+                                         target, display_line, sprite_wm);
         const int lo = acc_wm > band.first ? acc_wm : band.first;
-        const int hi = display_line < band.second ? display_line : band.second;
+        const int hi = target < band.second ? target : band.second;
         for (int line = lo; line < hi; ++line) {
             devices::video::m51_sprite_trace(
                 "BAND-ROW line=%d visible=%zu past_sprite_wm=%d", line,
@@ -208,10 +248,12 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // consumer-side sync contract openMSX documents and implements
     // (PixelRenderer.cc:580-584 / SpriteChecker.hh:242-247, effect only) and
     // the M49 seam already applies on the beam path (commit_sprite_split at
-    // on_before_state_change); the command sink now honors it too.
+    // on_before_state_change); the command sink honors it too, at the SAME
+    // M62 beam-clamped boundary (never pacing the sprite pass ahead of the
+    // beam either -- the SAT half of the F1 defect).
     // Advance-only-when-active: see V9958Vdp::commit_sprite_rows.
-    machine_.vdp_.commit_sprite_rows(display_line);
-    machine_.scanline_accumulator_.sync_to_line(display_line);
+    machine_.vdp_.commit_sprite_rows(target);
+    machine_.scanline_accumulator_.sync_to_line(target);
 }
 
 void Hbf1xvMachine::wire_bus() {

@@ -90,9 +90,16 @@ public:
     // Driven by the command engine's per-destination-row sink so each display
     // row observes the correct partial-command state (the openMSX
     // writeCommon->window.notify->renderUntil analog, with the destination
-    // display line standing in for openMSX's EmuTime). DEFAULT EMPTY => every
-    // existing listener (and the M32 render-sync seam unit oracle) is inert and
-    // byte-identical; only the machine's VdpRenderSyncAdapter overrides it.
+    // display line standing in for openMSX's EmuTime). M62 BEAM CLAMP
+    // (DEC-0091-AMENDMENT-A): the implementation MUST NOT commit rows AHEAD of
+    // the render beam -- a command writing rows the beam has not reached has no
+    // early-display effect on real hardware (fact-sheet §6 per-scanline model;
+    // openMSX renders only the BACKLOG per command write, VDPVRAM.hh:575-593),
+    // so the machine adapter clamps the sweep to its beam+2 seam boundary and
+    // leaves rows ahead of the beam to render per-line-live on the beam path.
+    // DEFAULT EMPTY => every existing listener (and the M32 render-sync seam
+    // unit oracle) is inert and byte-identical; only the machine's
+    // VdpRenderSyncAdapter overrides it.
     virtual void on_commit_up_to(int /*display_line*/) {}
 };
 
