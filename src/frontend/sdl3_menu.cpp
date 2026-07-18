@@ -156,6 +156,21 @@ void Sdl3Menu::render(SDL_Renderer* renderer) {
     SDL_GetRenderLogicalPresentation(renderer, &w, &h, &mode);
     SDL_SetRenderLogicalPresentation(renderer, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
     ImGui_ImplSDLRenderer3_RenderDrawData(ImGui::GetDrawData(), renderer);
+    // M63 (owner Pi 4B, 7" 800x480): FLUSH the menu geometry NOW, while logical
+    // presentation is still DISABLED. Diagnosis grounded in real geometry
+    // (window == pixels == render output, FramebufferScale 1x1 -- identical to
+    // Windows, where the bar is correct): the menu is drawn 1:1 in output
+    // pixels, so the ONLY thing that shifts it is the 320x240 LETTERBOX
+    // transform. On the Pi GLES driver SDL_RenderGeometryRaw is BATCHED and,
+    // without this flush, is not rasterized until SDL_RenderPresent -- by which
+    // point the RESTORE below has re-enabled LETTERBOX, so the whole bar is
+    // pulled through the pillarbox offset (File/Machine slide off the left edge
+    // by EXACTLY that offset: ~80px @ 800x480, ~253px @ 800x221). The picture
+    // (SDL_RenderTexture) is immune because texture draws flush eagerly on this
+    // driver, which is why the picture band renders correctly. Flushing here
+    // forces the bar to rasterize under DISABLED (1:1). Windows/D3D already
+    // rasterizes the bar correctly, so this flush is a safe no-op there.
+    SDL_FlushRenderer(renderer);
     SDL_SetRenderLogicalPresentation(renderer, w, h, mode);
 }
 
