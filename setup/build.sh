@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # ============================================================================
 #  Sony HB-F1XV MSX2+ Emulator
 #  Copyright (c) 2026 Patrick Shim <patrick.shim@live.co.kr>
@@ -10,7 +11,6 @@
 #  Proprietary BIOS/ROM/disk assets remain the property of their respective
 #  rights holders and are NOT licensed by this notice.
 # ============================================================================
-#!/usr/bin/env bash
 #
 # setup/build.sh -- the Linux / macOS twin of setup/build.ps1: the single way to
 # build and test this project on a single-config generator (Ninja or Unix
@@ -96,7 +96,13 @@ else
 fi
 
 echo "[bootstrap] configuring canonical build/ (SDL3=ON superset, CMAKE_BUILD_TYPE=$CONFIG)"
-cmake -S . -B build "${GEN_ARGS[@]}" -DCMAKE_BUILD_TYPE="$CONFIG" -DSONY_MSX_ENABLE_SDL3=ON "${PREFIX_ARGS[@]}"
+# NOTE: the ${arr[@]+"${arr[@]}"} guard is REQUIRED, not decoration -- macOS ships
+# bash 3.2, where `set -u` treats "${empty_array[@]}" as an unbound variable and
+# aborts. Both arrays are legitimately empty on common paths (no Ninja / system SDL3).
+cmake -S . -B build \
+    ${GEN_ARGS[@]+"${GEN_ARGS[@]}"} \
+    -DCMAKE_BUILD_TYPE="$CONFIG" -DSONY_MSX_ENABLE_SDL3=ON \
+    ${PREFIX_ARGS[@]+"${PREFIX_ARGS[@]}"}
 
 echo "[bootstrap] building"
 cmake --build build
