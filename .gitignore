@@ -170,10 +170,21 @@ CMakeUserPresets.json
 !/disks/.gitkeep
 
 # Local game library at the repo root (user-provisioned game disks/roms, e.g.
-# games/disks/<title>/*.dsk). Same non-redistributable, never-tracked policy as
+# games/disks/<title>/*.dsk). DEC-0047-AMENDMENT-D (2026-07-18): the DIRECTORY
+# SKELETON is exposed on the remote via .gitkeep markers (folder/title names
+# visible), but every content file (.dsk/.rom/saves) stays untracked — the same
+# non-redistributable, never-tracked policy as
 # disks/ and roms/ -- provisioned locally, never committed or pushed.
-/games/
-
+# Only games/, games/disks/, games/roms/ (+ this README) are exposed on the
+# remote; the per-title subfolders and every content file stay untracked
+# (DEC-0047-AMENDMENT-E: title names are private).
+/games/**
+!/games/.gitkeep
+!/games/README.md
+!/games/disks/
+!/games/disks/.gitkeep
+!/games/roms/
+!/games/roms/.gitkeep
 # --- Editor / IDE / OS cruft ---
 .vs/
 *.user
