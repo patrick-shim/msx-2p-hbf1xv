@@ -1,55 +1,48 @@
 # sony-msx-hbf1xv
 
-Production-oriented **Sony HB-F1XV (MSX2+, 1988)** emulator in C++: a cycle-aware,
-deterministic core (Z80A @ 3.58 MHz, Yamaha V9958 VDP with 128 KB VRAM, 64 KB RAM, PSG,
-Konami SCC, YM2413 FM / MSX-MUSIC, RTC, WD2793-family FDC with a 720 KB 3.5" floppy, and the
-full slot/mapper fabric) plus an optional SDL3 desktop frontend.
+A production-oriented emulator of the **Sony HB-F1XV "HitBit"** — Sony's flagship
+**MSX2+** home computer, released in **Japan in 1988**.
 
-Current release: **v1.4.1** — a **disk-change (DSKCHG) protocol fix** in the Sony FDC: the
-disk-change one-shot is now reported and consumed **only when the drive is actually selected**
-(Shugart drive-select gating, per the hardware fact sheet). Previously an unselected-drive probe
-consumed the notification, so after a mid-game disk swap MSX-DOS could keep the previous disk's
-FAT and resolve every file on the new disk through stale filesystem state — the cause of
-whole-screen garbage in multi-disk titles that load data after a swap (root-caused and verified
-with Sangokushi 2 / Romance of the Three Kingdoms 2, which now renders its map correctly; a
-permanent regression oracle guards it, and swap-then-save flows like YS II's save disk are now
-protocol-correct).
-On top of v1.4.0's **live RAM switching from the menu** (Machine ▸ RAM 64/128/256/512 KB
-power-cycles the machine into the new size — a true off/on with mounted disks and cartridges
-surviving, verified byte-identical to a fresh boot at every size), plus two critical v1.3.0
-fixes: **audio silence after any menu-driven reset** (the audio pacer's cumulative accounting
-survived the reset and muted everything from the first File ▸ Open onward — it now rewinds on
-every machine-lifecycle event, regression-tested at boot AND post-reset) and the **menu strip no
-longer covers the picture** (the display letterboxes into the band below the bar; the window
-grows by the strip height so `--scale N` stays unclipped; fullscreen insets correctly).
-On top of v1.3.0's full **in-window menu bar** (Dear ImGui over the SDL3 renderer,
-identical on Windows and macOS): open floppies at runtime with **multi-select** (the selection
-becomes the disk rotation — F11 keeps swapping through it), insert cartridges mid-session (auto
-mapper detection + the authentic implied reset), eject disks and cartridges, a true power-on
-**Machine ▸ Reset** (byte-identical to a fresh boot; mounted media survive), and **New Blank
-Disk** (720 KB MSX-DOS FAT12, byte-identical to `msx-disk --create`). Disk safety is
-transactional throughout: writable dirty disks flush to the host `.dsk` before any
-replace/eject; a bad selection aborts with the current disk untouched. All menu machinery is
-interactive-only — headless runs and the deterministic test suite are byte-identical to before.
-This release also marks **dual-platform support** (v1.2.2+M54): one codebase building on
-Windows/MSVC and macOS/AppleClang, auto-detected at configure time.
-On top of v1.2.2's **master volume** control (`--volume <0..100>`,
-a `<volume>` knob in the XML config, and live Alt+D / Alt+U steps — applied strictly after the
-machine mix, byte-identical at full volume), **disk-save write-back ON by default** (a real MSX
-writes its floppies; `--no-disk-writable` or the new Alt+S live toggle keep disks read-only), and
-the fast-disk hotkey moved to **Alt+F**; and v1.2.1's critical **V9958 sprite-visibility
-fix**: rows redrawn by the VDP command engine (blits) are now sprite-paced before they are sealed
-into the frame, so sprites no longer vanish or flicker on games that rebuild their scrolling
-terrain with command blits (Aleste 2's plane, Firebird's player and flying enemies, Laydock 2 — a
-v1.1.6 per-line-sprite-rendering regression, root-caused by bisect and verified frame-for-frame
-against openMSX at a 0-flicker match).
-On top of v1.2.0's optional **strict-XML external configuration** (`sony_msx_hbf1xv.xml`: every launch
-knob in an annotated file at the repo root, resolved **CLI > XML > built-in default**, hardware-timing
-constants deliberately not configurable), v1.1.8's **MSX-logo Windows app icon**, v1.1.7's optional
-**phosphor-persistence** flicker-softener (`--persistence`, Alt+B/Alt+M, default off), v1.1.6
-**per-line-live V9958 sprite rendering** (split-screen HUD titles like Space Manbow / Laydock 2 —
-backlog D9), the v1.1.5 command-engine access-slot contention model, and the v1.1.4 Z80A/V9958/PSG
-Sony-hardware timing parity; the FM-PAC peripheral firmware (`roms/fmpac.rom`) is bundled.
+## The machine
+
+The HB-F1XV arrived at the top of Sony's HitBit line just as the MSX2+ standard launched,
+and it packed essentially everything the late MSX platform had to offer into one machine:
+
+- **CPU** — Zilog Z80A at 3.58 MHz, driven through Yamaha's S1985 "MSX-ENGINE" system chipset.
+- **Video** — the Yamaha **V9958** video display processor with **128 KB of VRAM**: text modes
+  (40×24 / 32×24), bitmap modes up to 512×212 and interlaced 256×424, hardware sprites, a
+  VRAM command engine (blits, line draw, fills) — and the MSX2+ headline feature, the
+  **YJK modes**, capable of **19,268 simultaneous colors** on screen.
+- **Sound** — built-in **MSX-MUSIC**: a Yamaha **YM2413 (OPLL)** 9-channel FM synthesizer with
+  its BASIC extension ROM, alongside the S1985's PSG. (The Panasonic FM-PAC cartridge — FM plus
+  8 KB of battery-backed save SRAM — was a popular external add-on and is emulated as one.)
+- **Storage** — a built-in **720 KB 3.5″ floppy drive** on a WD2793-family controller,
+  plus the cassette interface.
+- **Memory / firmware** — 64 KB of main RAM and an 80 KB ROM set: MSX-BASIC/BIOS (32 KB),
+  the MSX2+ SUB-ROM with BASIC 3.0 (16 KB), KANJI BASIC plus the kanji character ROM (16 KB),
+  and the disk ROM (16 KB) — full Japanese text support was standard.
+- **I/O** — two cartridge slots, two joystick ports, printer port, RGB/composite/RF video out,
+  and a full-stroke keyboard with five function keys, a numeric keypad, and cursor keys.
+
+## The emulator
+
+This project recreates that machine in modern C++ with a **cycle-aware, deterministic core**:
+identical inputs produce identical state and output on every run, timing-sensitive behavior is
+modeled against real-hardware documentation, and behavior-affecting changes are A/B-verified
+against openMSX. Around the core:
+
+- an **SDL3 desktop frontend** (real-time window, live audio, an in-window menu bar with
+  runtime disk/cartridge management) and a **headless frontend** for scripting and testing;
+- one codebase, multiple platforms — **Windows (MSVC)** and **macOS (AppleClang)** today,
+  auto-detected at configure time, with ARM64 and Raspberry Pi support in progress;
+- the standalone **`msx-disk`** utility for creating, inspecting, and formatting
+  machine-exact 720 KB MSX-DOS floppy images;
+- a deterministic test suite (267 tests) including the full ZEXALL/ZEXDOC Z80
+  instruction exercisers.
+
+**Current release: [v1.4.1](#build-history)** — fixes the FDC disk-change protocol so
+multi-disk games load correctly after mid-game swaps. See [Build History](#build-history)
+for the full release log.
 
 ## Architecture
 
@@ -166,8 +159,9 @@ C++ and needs no PowerShell.
 ### Both platforms
 
 - Headless-only fallback (no `SDL3Config.cmake` available): reconfigure the same tree with
-  `-DSONY_MSX_ENABLE_SDL3=OFF`. This **changes the test count** — 16 tests are SDL3-gated, so
-  the fast subset reports **237** instead of **253**. That is the fallback configuration, not a
+  `-DSONY_MSX_ENABLE_SDL3=OFF`. This **changes the test count** — the SDL3-gated tests drop out
+  of the suite (the standard SDL3=ON fast subset is **267**; the OFF configuration reports a
+  correspondingly smaller number). A lower count in that configuration is expected, not a
   regression.
 - Some tests report `SKIP` and still pass when an optional game asset is absent; the count stays
   green.
@@ -335,6 +329,79 @@ to its exact built-in default, each commented with its type and allowed range/en
 - **Hardware timing is not configurable.** The Z80A clock, interrupt-acknowledge timings, V9958
   access-slot/line cycles, WD2793 FDC timing, and the strict 128 KB VRAM are the silicon spec and
   stay fixed in code, so no config edit can degrade emulation accuracy.
+
+## Build History
+
+Newest first. Each release was gated by the full deterministic test suite and, for
+behavior-affecting changes, screen/trace A/B comparison against openMSX.
+
+### v1.4.1 — FDC disk-change protocol fix
+- The Sony FDC's disk-change (DSKCHG) one-shot is now reported and consumed **only when the
+  drive is actually selected** (Shugart drive-select gating, per the hardware fact sheet).
+- Previously, an unselected-drive probe consumed the notification, so after a mid-game disk
+  swap MSX-DOS could keep the previous disk's FAT and read every file on the new disk through
+  stale filesystem state — whole-screen garbage in multi-disk titles that load after a swap.
+- Root-caused and verified with *Sangokushi 2 (Romance of the Three Kingdoms 2)*, which now
+  renders correctly; a permanent regression oracle guards it. Swap-then-save flows
+  (e.g. YS II's save disk) are now protocol-correct.
+- Also in this release: third-party build inputs vendored under `src/external/`
+  (ImGui / SDL3 / ZEXALL, licenses in-tree), so a fresh clone builds out of the box.
+
+### v1.4.0 — live RAM switching + menu fixes
+- **Machine ▸ RAM 64/128/256/512 KB** now power-cycles the machine into the new size — a true
+  off/on with mounted disks and cartridges surviving, verified byte-identical to a fresh boot
+  at every size.
+- Fixed **audio silence after any menu-driven reset**: the audio pacer's cumulative accounting
+  survived the reset and muted everything from the first File ▸ Open onward; it now rewinds on
+  every machine-lifecycle event (regression-tested at boot *and* post-reset).
+- Fixed the **menu strip covering the picture**: the display letterboxes into the band below
+  the bar, the window grows by the strip height so `--scale N` stays unclipped, and fullscreen
+  insets correctly.
+
+### v1.3.0 — the in-window menu bar
+- A full **Dear ImGui menu bar** (File / Machine / Video / Audio / Disk / Help), identical on
+  Windows and macOS, with **runtime media management**: open floppies with multi-select (the
+  selection becomes the F11 rotation), insert cartridges mid-session (auto mapper detection +
+  the authentic implied reset), eject, a true power-on Reset, and New Blank Disk.
+- Disk safety is transactional: writable dirty disks flush to the host `.dsk` before any
+  replace/eject; a bad selection aborts with the current disk untouched.
+- All menu machinery is interactive-only — headless runs and the deterministic suite are
+  byte-identical with or without it.
+
+### Between v1.2.2 and v1.3.0 (untagged)
+- The standalone **`msx-disk`** utility (create / hex-read / format, byte-exact 720 KB images).
+- **macOS support**: one codebase, two toolchains (MSVC + AppleClang), auto-detected at
+  configure time — no fork, no per-platform build files.
+
+### v1.2.2 — sound and disk quality-of-life
+- **Master volume** (`--volume <0..100>`, an XML config knob, live Alt+D / Alt+U steps) applied
+  strictly after the machine mix — byte-identical at full volume.
+- **Disk-save write-back ON by default** (a real MSX writes its floppies); `--no-disk-writable`
+  or the Alt+S live toggle keep disks read-only. Fast-disk hotkey moved to **Alt+F**.
+
+### v1.2.1 — V9958 sprite-visibility fix
+- Rows redrawn by the VDP command engine (blits) are now sprite-paced before being sealed into
+  the frame, so sprites no longer vanish or flicker in games that rebuild scrolling terrain
+  with command blits (*Aleste 2*, *Firebird*, *Laydock 2*) — a v1.1.6 regression, root-caused
+  by bisect and verified frame-for-frame against openMSX at a zero-flicker match.
+
+### v1.2.0 — external configuration
+- Optional **strict-XML configuration** ([`sony_msx_hbf1xv.xml`](sony_msx_hbf1xv.xml)): every
+  launch knob in one annotated file, resolved **CLI > XML > built-in default**. Hardware-timing
+  constants are deliberately *not* configurable.
+
+### The v1.1.x line
+- **v1.1.8** — MSX-logo Windows app icon.
+- **v1.1.7** — optional phosphor-persistence flicker softener (`--persistence`, Alt+B / Alt+M).
+- **v1.1.6** — per-line-live V9958 sprite rendering (split-screen HUD titles like
+  *Space Manbow* / *Laydock 2*).
+- **v1.1.5** — the V9958 command-engine access-slot contention model.
+- **v1.1.4** — Z80A / V9958 / PSG timing parity with the real Sony hardware
+  (interrupt-acknowledge timings, command-engine durations, PSG counter phase).
+- **v1.1.2** — convenience-first launch defaults (512 KB RAM, fast-disk ON, FM-PAC
+  auto-loaded into slot 2), with `--stock` restoring the authentic bare 1988 machine.
+- **v1.1.0–v1.1.1** — FM-PAC screen/SRAM fidelity and the WD2793 write-path fixes that made
+  in-game disk saves byte-exact.
 
 ## Repository layout
 
