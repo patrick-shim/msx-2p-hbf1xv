@@ -480,6 +480,26 @@ bool Sdl3App::init() {
                 video_presenter_->set_top_inset(bar_h);
             }
         }
+        // M63 (owner Pi 4B, 7" 800x480 -- the definitive menu-bar-shift fix):
+        // TURN OFF SDL's 320x240 LETTERBOX logical presentation for the whole
+        // INTERACTIVE session. The on-device diagnostic proved window == pixels
+        // == render output with FramebufferScale 1x1 in every state (identical
+        // to Windows, where the bar is correct), so the bar is drawn 1:1 in
+        // output pixels and the ONLY thing that could displace it is the
+        // letterbox transform -- and the observed shift matched the pillarbox
+        // offset EXACTLY (~80px @ 800x480, ~253px @ 800x221). The Pi builds
+        // against SYSTEM SDL3 (not src/external/sdl3), whose logical-presentation
+        // + SDL_RenderGeometryRaw interaction differs from Windows/D3D and leaks
+        // that offset into the ImGui menu (the picture is immune -- it draws via
+        // explicit output-pixel band rects). The interactive path NEVER needs
+        // SDL letterboxing: the presenter already letterboxes the picture itself
+        // (set_top_inset + letterbox_into_band, explicit rects). Removing the
+        // transform from the pipeline removes a letterbox-sized shift on ANY
+        // SDL version. HEADLESS is untouched (this block is inside the
+        // !hidden_window guard): the 320x240 LETTERBOX set above (for the
+        // top_inset==0 nullptr-dst path / the pixel-integration test) stays,
+        // so the deterministic suite is byte-identical.
+        SDL_SetRenderLogicalPresentation(renderer_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
     }
 
     initialized_ = true;
