@@ -78,6 +78,9 @@ public:
     void begin_frame();
     void build(Sdl3App& app);
     void render(SDL_Renderer* renderer);
+    // M63 diagnostic: print io.DisplaySize + io.DisplayFramebufferScale (what
+    // ImGui uses to lay out/draw the bar) to stderr; interactive-only.
+    void log_io_geometry(const char* tag) const;
 
 private:
     void render_menu_bar(Sdl3App& app);

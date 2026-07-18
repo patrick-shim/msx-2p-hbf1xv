@@ -894,6 +894,9 @@ void Sdl3App::run_one_frame() {
                 // correct; this keeps it robust. Presentation-only; menu_ == null
                 // (--hidden-window) never runs it, so the inset stays 0.
                 video_presenter_->set_top_inset(menu_->bar_height());
+                // M63 diagnostic: log window/pixel/render-output geometry once
+                // per change (io.DisplaySize is valid now that begin_frame ran).
+                log_geometry_if_changed();
             }
             video_presenter_->present();
         } else {
@@ -1666,26 +1669,50 @@ void Sdl3App::toggle_fullscreen() {
     fullscreen_ = !fullscreen_;
     if (window_ != nullptr) {
         SDL_SetWindowFullscreen(window_, fullscreen_);
-        // M63: one-line geometry diagnostic (same stderr channel as the M61
-        // "sdl3: window clamped..." line) so the owner can read the
-        // points-vs-pixels divergence on the Pi after a fullscreen toggle --
-        // the menu-bar mis-scaling root cause -- without another blind
-        // iteration. Interactive-only (window_ != null), stderr-only.
-        int pt_w = 0;
-        int pt_h = 0;
-        int px_w = 0;
-        int px_h = 0;
-        int out_w = 0;
-        int out_h = 0;
-        SDL_GetWindowSize(window_, &pt_w, &pt_h);
-        SDL_GetWindowSizeInPixels(window_, &px_w, &px_h);
-        if (renderer_ != nullptr) {
-            SDL_GetRenderOutputSize(renderer_, &out_w, &out_h);
-        }
-        std::cerr << "sdl3: fullscreen " << (fullscreen_ ? "on" : "off") << "; window " << pt_w
-                  << "x" << pt_h << " pts, " << px_w << "x" << px_h << " px, render output "
-                  << out_w << "x" << out_h << " px\n";
+        // M63: the actual post-transition geometry is logged by the per-frame
+        // log_geometry_if_changed() (below) -- reading sizes synchronously here
+        // can report PRE-transition values on compositors that apply fullscreen
+        // asynchronously (owner Pi). This just marks the intent.
+        std::cerr << "sdl3: fullscreen toggled " << (fullscreen_ ? "on" : "off") << "\n";
     }
+}
+
+void Sdl3App::log_geometry_if_changed() {
+    // M63 diagnostic (interactive-only): the Pi fullscreen menu-bar mis-scaling
+    // is a points-vs-pixels problem, so print -- once per geometry CHANGE, from
+    // the per-frame path so the numbers are always POST-transition/accurate --
+    // the SDL window size (points), window size in pixels, and the true render
+    // output size, alongside what ImGui itself sees (io.DisplaySize +
+    // FramebufferScale, via menu_->log_io_geometry). Never runs headless
+    // (menu_/window_ null). Change-gated so it never spams.
+    if (window_ == nullptr || config_.hidden_window || menu_ == nullptr) {
+        return;
+    }
+    int pt_w = 0;
+    int pt_h = 0;
+    int px_w = 0;
+    int px_h = 0;
+    int out_w = 0;
+    int out_h = 0;
+    SDL_GetWindowSize(window_, &pt_w, &pt_h);
+    SDL_GetWindowSizeInPixels(window_, &px_w, &px_h);
+    if (renderer_ != nullptr) {
+        SDL_GetRenderOutputSize(renderer_, &out_w, &out_h);
+    }
+    if (pt_w == diag_last_pt_w_ && pt_h == diag_last_pt_h_ && px_w == diag_last_px_w_ &&
+        px_h == diag_last_px_h_ && out_w == diag_last_out_w_ && out_h == diag_last_out_h_) {
+        return;  // no geometry change since the last log -- stay quiet
+    }
+    diag_last_pt_w_ = pt_w;
+    diag_last_pt_h_ = pt_h;
+    diag_last_px_w_ = px_w;
+    diag_last_px_h_ = px_h;
+    diag_last_out_w_ = out_w;
+    diag_last_out_h_ = out_h;
+    std::cerr << "sdl3: geometry " << (fullscreen_ ? "[fullscreen]" : "[windowed]") << " window "
+              << pt_w << "x" << pt_h << " pts, " << px_w << "x" << px_h << " px, render output "
+              << out_w << "x" << out_h << " px, bar_h " << menu_->bar_height() << "\n";
+    menu_->log_io_geometry(fullscreen_ ? "fullscreen" : "windowed");
 }
 
 bool Sdl3App::query_display_usable_bounds(int& out_x, int& out_y, int& out_w, int& out_h) {

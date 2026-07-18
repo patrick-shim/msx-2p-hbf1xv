@@ -557,6 +557,10 @@ private:
     // the resize event our own corrective calls generate is a no-op here and
     // the clamp settles in one step). Inert under --hidden-window / fullscreen.
     void clamp_window_to_display();
+    // M63 diagnostic: log window/pixel/render-output geometry + ImGui's
+    // io.DisplaySize/FramebufferScale once per geometry CHANGE, from the
+    // per-frame path (accurate post-transition numbers). Interactive-only.
+    void log_geometry_if_changed();
     // M35-S4/S5: hotkey handler for F11 disk-swap and title/logging helpers.
     void on_disk_swap_hotkey();
     // M36 Phase 3: F12 hotkey handler -- requests a comprehensive debug snapshot
@@ -618,6 +622,15 @@ private:
     // M37 Slice E (DEC-0056): tracked fullscreen state for the Alt+Enter
     // runtime toggle. Seeded from config_.fullscreen in init().
     bool fullscreen_ = false;
+    // M63 diagnostic: last-logged geometry (window pts/px + render output px), so
+    // log_geometry_if_changed() prints one line per CHANGE, not per frame. -1 =
+    // nothing logged yet (the first interactive frame always prints).
+    int diag_last_pt_w_ = -1;
+    int diag_last_pt_h_ = -1;
+    int diag_last_px_w_ = -1;
+    int diag_last_px_h_ = -1;
+    int diag_last_out_w_ = -1;
+    int diag_last_out_h_ = -1;
     // M52 (DEC-0079): cached master-volume percent for the live Alt+D/Alt+U
     // steppers (the audio presenter holds the authoritative copy; this mirrors it
     // so the hotkeys can step without querying SDL). Seeded from
