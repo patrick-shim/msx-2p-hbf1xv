@@ -178,6 +178,7 @@ CMakeUserPresets.json
 .vs/
 *.user
 .idea/
+/.vscode/
 .vscode/*.log
 Thumbs.db
 Desktop.ini
@@ -218,6 +219,7 @@ Desktop.ini
 /agent-protocol/
 /debug/
 /docs/
+/src/external/
 /references/
 /tests/
 /tools/

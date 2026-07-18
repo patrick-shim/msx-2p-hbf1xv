@@ -160,7 +160,7 @@ if(SONY_MSX_ENABLE_SDL3)
     find_package(SDL3 CONFIG REQUIRED)
 
     # --- M55 (DEC-0083): Dear ImGui in-window menu-bar dependency --------------
-    # ImGui is MIT-licensed (references/imgui/LICENSE.txt) so, unlike the GPL
+    # ImGui is MIT-licensed (src/external/imgui/LICENSE.txt) so, unlike the GPL
     # openMSX / non-commercial fMSX reference trees, its vendored sources are
     # COMPILED into our binary -- the owner-ratified "vendored like SDL3" model.
     # Owner-vendored tree: 1.92.9 WIP (IMGUI_VERSION_NUM 19285).
@@ -173,15 +173,15 @@ if(SONY_MSX_ENABLE_SDL3)
     # sony_msx_sdl3_frontend below -- the headless / msx_disk / core targets never
     # see it, so the default (=OFF) headless configuration compiles ZERO ImGui TUs.
     add_library(imgui STATIC
-        references/imgui/imgui.cpp
-        references/imgui/imgui_draw.cpp
-        references/imgui/imgui_tables.cpp
-        references/imgui/imgui_widgets.cpp
-        references/imgui/backends/imgui_impl_sdl3.cpp
-        references/imgui/backends/imgui_impl_sdlrenderer3.cpp)
+        src/external/imgui/imgui.cpp
+        src/external/imgui/imgui_draw.cpp
+        src/external/imgui/imgui_tables.cpp
+        src/external/imgui/imgui_widgets.cpp
+        src/external/imgui/backends/imgui_impl_sdl3.cpp
+        src/external/imgui/backends/imgui_impl_sdlrenderer3.cpp)
     target_include_directories(imgui PUBLIC
-        references/imgui
-        references/imgui/backends)
+        src/external/imgui
+        src/external/imgui/backends)
     target_link_libraries(imgui PUBLIC SDL3::SDL3)
     # A5: third-party sources are not held to the project's -Wall -Wextra intent;
     # target-scoped warning suppression keeps ImGui's noise out of our build log
