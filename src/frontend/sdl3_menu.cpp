@@ -52,6 +52,7 @@ MenuState snapshot(const Sdl3App& app) {
     s.master_volume = app.master_volume();
     s.fast_disk = machine.fast_disk();
     s.disk_writable = app.disk_writable();
+    s.recent = app.recent_entries();  // DEC-0095: File > Recent MRU (empty unless enabled)
     return s;
 }
 
@@ -234,6 +235,7 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
         case MenuAction::EjectDisk: app.eject_disk(); break;
         case MenuAction::EjectCartridgeSlot1: app.eject_cartridge(1); break;
         case MenuAction::EjectCartridgeSlot2: app.eject_cartridge(2); break;
+        case MenuAction::OpenRecent: app.open_recent(param); break;  // DEC-0095
         case MenuAction::Exit: app.request_quit(); break;
         // Machine
         case MenuAction::Reset: app.request_reset(); break;

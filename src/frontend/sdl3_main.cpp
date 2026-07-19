@@ -504,6 +504,24 @@ int main(int argc, char** argv) {
         config.cart2_type_explicit = parsed.cartridges.slot2.type_was_explicit;
     }
 
+    // DEC-0095 (frontend-only settings + recent persistence): hand the app the
+    // loaded config as the re-emit BASELINE, and -- ONLY for a genuinely
+    // interactive launch with no explicit --config -- the beside-exe save paths.
+    // THIS IS THE DETERMINISM GATE: --hidden-window / headless / --config leave
+    // both paths unset, so the app never reads or writes them and the ctest suite
+    // stays byte-identical. --config means "the user manages this file", so we
+    // neither split-brain (load X, save Y) nor clobber their named file.
+    config.config_baseline = cfg;
+    if (!parsed.hidden_window && !parsed.config_path.has_value()) {
+        const std::string exe_dir = exe_directory(argv[0]);
+        const auto beside = [&exe_dir](const char* name) {
+            return exe_dir.empty() ? std::string(name)
+                                   : (std::filesystem::path(exe_dir) / name).string();
+        };
+        config.settings_save_path = beside("sony_msx_hbf1xv.xml");
+        config.recent_save_path = beside("sony_msx_recent.txt");
+    }
+
     // Copy (not move) config into the app so it stays valid for the startup
     // summary printed after a successful init(); a one-time startup copy is
     // negligible.

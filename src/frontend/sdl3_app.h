@@ -25,6 +25,7 @@
 
 #include "devices/cartridge/cartridge_mapper_type.h"
 #include "frontend/dialog_result.h"
+#include "frontend/recent_files.h"
 #include "frontend/sdl3_audio_presenter.h"
 #include "frontend/sdl3_input_mapper.h"
 #include "frontend/sdl3_video_presenter.h"
@@ -262,6 +263,22 @@ struct Sdl3AppConfig {
     // DEC-0072 per-frame CPU-state fingerprint CSV path (same columns as the
     // headless --fingerprint). std::nullopt (default) = no dump.
     std::optional<std::string> fingerprint_path;
+
+    // --- DEC-0095: interactive settings/recent persistence (frontend-only) -----
+    // The LOADED EmulatorConfig baseline (or built-in defaults when nothing was
+    // loaded). maybe_save_settings() re-emits the FULL config from this baseline
+    // with only the presentation + sticky knobs overwritten from live state, so a
+    // hand-authored <machine> section is preserved on rewrite rather than dropped.
+    machine::EmulatorConfig config_baseline{};
+    // Where to auto-save `sony_msx_hbf1xv.xml`. std::nullopt (the default, and
+    // ALWAYS so under --hidden-window / headless / an explicit --config) DISABLES
+    // all settings writes -> the deterministic suite is byte-identical. sdl3_main
+    // sets it (beside the exe, CWD fallback) only for a genuinely interactive
+    // launch with no explicit --config. THE determinism gate for this feature.
+    std::optional<std::string> settings_save_path;
+    // Where to load/save the File > Recent sidecar list. Same gate as
+    // settings_save_path (interactive-only) -> never read or written headless.
+    std::optional<std::string> recent_save_path;
 };
 
 // M55 (DEC-0083): the ImGui in-window menu view/controller, owned by Sdl3App
@@ -451,6 +468,17 @@ public:
     // Menu Disk > Disk Writable: the same runtime toggle as the Alt+S hotkey.
     void toggle_disk_writable() { on_disk_writable_toggle_hotkey(); }
 
+    // --- DEC-0095: File > Recent seams. open_recent(i) resolves the i-th recent
+    // path and routes it by extension through the EXISTING media-open seams
+    // (.rom -> apply_open_cartridge(slot 1); anything else -> apply_open_disks),
+    // so a recent pick behaves exactly like the corresponding File > Open. Public
+    // (the apply_* precedent) so a hidden-window test can drive it. recent_entries()
+    // feeds the menu snapshot; it is empty unless recent persistence is enabled.
+    void open_recent(int index);
+    [[nodiscard]] const std::vector<std::string>& recent_entries() const {
+        return recent_.entries();
+    }
+
     // --- M56 (DEC-0084): the F1-F5 runtime media seams the menu dispatch calls.
     // The dialog launchers run on the MAIN thread only (ImGui build/dispatch runs
     // inside run_one_frame(), satisfying SDL_dialog.h:152,201); their results are
@@ -609,6 +637,24 @@ private:
     void update_window_title_for_current_disk();
     void log_disk_swap();
 
+    // --- DEC-0095: interactive settings/recent persistence (frontend-only). ----
+    // All THREE no-op when config_.settings_save_path / recent_save_path are unset
+    // (the --hidden-window / headless / explicit-config gate), so the deterministic
+    // path never touches the filesystem and stays byte-identical.
+    //   * current_settings_xml(): build the FULL EmulatorConfig = config_baseline
+    //     with the 9 presentation+sticky knobs overwritten from live state, then
+    //     serialize via emulator_config_to_xml(). Used to seed the debounce cache
+    //     in init() and to compare/write in maybe_save_settings().
+    //   * maybe_save_settings(): called once at the END of run_one_frame(); writes
+    //     the file only when the serialized settings actually changed (debounced
+    //     against last_saved_settings_xml_). One stderr WARNING on write failure,
+    //     never throws.
+    //   * push_recent(): prepend a just-opened media path to the MRU list and
+    //     rewrite the sidecar (dedup + cap live in RecentFiles).
+    std::string current_settings_xml();
+    void maybe_save_settings();
+    void push_recent(const std::string& path);
+
     Sdl3AppConfig config_;
     // M57 (DEC-0085-AMENDMENT-A): the machine is a std::optional so a live RAM
     // change (Machine>RAM radio) can rebuild it at the new size via emplace() --
@@ -715,6 +761,15 @@ private:
     // otherwise retained in the frontend (apply_open_cartridge loads transiently),
     // so this path is the sole re-insert source across a power-cycle.
     std::optional<std::string> cart_path_[2];
+
+    // DEC-0095: the File > Recent MRU list (most-recent first, deduped, capped).
+    // Loaded from config_.recent_save_path in init() and rewritten by push_recent;
+    // empty + never persisted unless recent persistence is enabled (interactive).
+    RecentFiles recent_;
+    // DEC-0095: debounce cache for maybe_save_settings() -- the last settings XML
+    // actually written (seeded in init() from the initial live state), so an
+    // unchanged frame writes nothing. Empty until the first write/seed.
+    std::string last_saved_settings_xml_;
 
     std::uint64_t frames_run_ = 0;
 

@@ -133,6 +133,22 @@ MenuModel build_menu_model(const MenuState& state) {
         eject.children.push_back(
             item(MenuAction::EjectCartridgeSlot2, "Cartridge Slot 2", /*enabled=*/state.slot2_loaded));
         file.items.push_back(std::move(eject));
+        // DEC-0095: Recent submenu -- one OpenRecent child per MRU path (param =
+        // its index in state.recent; label = the path basename). Empty list =>
+        // a single disabled "(none)" info item. The whole subtree is inert when
+        // recent persistence is off (state.recent stays empty).
+        MenuItem recent;
+        recent.label = "Recent";
+        if (state.recent.empty()) {
+            recent.children.push_back(item(MenuAction::None, "(none)", /*enabled=*/false));
+        } else {
+            for (std::size_t i = 0; i < state.recent.size(); ++i) {
+                MenuItem entry = item(MenuAction::OpenRecent, dir_basename(state.recent[i]));
+                entry.param = static_cast<int>(i);
+                recent.children.push_back(std::move(entry));
+            }
+        }
+        file.items.push_back(std::move(recent));
         file.items.push_back(separator());
         file.items.push_back(item(MenuAction::Exit, "Exit"));
         model.menus.push_back(std::move(file));

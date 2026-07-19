@@ -27,6 +27,7 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/app_icon_data.h"
 #include "frontend/blank_disk_image.h"  // M56 (DEC-0084): F5 New Blank Disk writer
+#include "frontend/config_xml_writer.h"  // DEC-0095: settings persistence (EmulatorConfig -> XML)
 #include "frontend/audio_pacer.h"
 #include "frontend/dialog_default_dir.h"  // M63/M64: pure dialog default-dir pick (all pickers)
 #include "frontend/master_volume.h"  // M52 (DEC-0079): step_master_volume for Alt+D/Alt+U
@@ -55,6 +56,48 @@ std::string current_dir_or_empty() {
     } catch (const std::exception&) {
         return {};
     }
+}
+
+// DEC-0095-AMENDMENT-B: media-type + write-back safety guards for the runtime
+// media-open seams. Motivation: opening bios/f1xvbios.rom via File > Open Disk(s)
+// with disk-writable ON bound it for host write-back; DiskImage 0x00-pads any
+// bytes to the 2DD size and flush() wrote the 720 KB-padded image back over the
+// 32 KB ROM (data loss). Two layers close it: (1) accept ONLY disk-extension
+// files as disks and ROM-extension files as cartridges; (2) never bind a host
+// file for write-back unless it is EXACTLY the 2DD size.
+//
+// kDiskImageBytes MUST match devices::fdc::DiskImage::kImageBytes (737280); it is
+// re-expressed here (not #included) to keep this frontend guard free of a device
+// header dependency -- the same "re-express the documented layout fact" discipline
+// the blank-disk writer uses.
+constexpr std::uintmax_t kDiskImageBytes = 737280;  // 720 KB: 2 sides x 80 tracks x 9 x 512
+
+// The lowercased file extension INCLUDING the leading dot ("" when the basename
+// has none). Tolerant of dots in parent directory names.
+std::string extension_lower(const std::string& path) {
+    const std::size_t slash = path.find_last_of("/\\");
+    const std::size_t dot = path.find_last_of('.');
+    if (dot == std::string::npos || (slash != std::string::npos && dot < slash)) {
+        return {};
+    }
+    std::string e = path.substr(dot);
+    for (char& c : e) {
+        c = static_cast<char>((c >= 'A' && c <= 'Z') ? c - 'A' + 'a' : c);
+    }
+    return e;
+}
+
+// Accepted disk-image extensions (the HB-F1XV drive is 720 KB 2DD; .dsk is the
+// canonical raw sector image, the rest are common raw-image aliases).
+bool is_disk_extension(const std::string& path) {
+    const std::string e = extension_lower(path);
+    return e == ".dsk" || e == ".di1" || e == ".di2" || e == ".360" || e == ".720";
+}
+
+// Accepted cartridge-ROM extensions.
+bool is_cartridge_extension(const std::string& path) {
+    const std::string e = extension_lower(path);
+    return e == ".rom" || e == ".mx1" || e == ".mx2";
 }
 
 // M64: resolve a CONFIGURED dialog default directory (config cartridge_dir /
@@ -156,6 +199,9 @@ bool Sdl3App::load_configured_assets() {
         // M57 (DEC-0085-AMENDMENT-A): record the startup cart source so a power-
         // cycle can re-read this bay.
         cart_path_[slot_number - 1] = *path;
+        // DEC-0095: a --cartN cartridge opened at startup also enters File > Recent
+        // (inert unless recent persistence is on).
+        push_recent(*path);
         return true;
     };
 
@@ -254,6 +300,9 @@ bool Sdl3App::load_configured_assets() {
         machine_->disk_drive().attach_image(&machine_->disk_image());
         update_window_title_for_current_disk();
         log_disk_swap();
+        // DEC-0095: a --disk media set opened at startup enters File > Recent (its
+        // first disk; inert unless recent persistence is on).
+        push_recent(config_.disk_paths.front());
     } else {
         // M35-S2: explicitly detach when no disk in list (safety/clarity)
         machine_->disk_drive().attach_image(nullptr);
@@ -387,6 +436,19 @@ bool Sdl3App::init() {
     // flips it live below.
     machine_->set_fast_disk(config_.fast_disk);
 
+    // DEC-0095: load the File > Recent sidecar BEFORE load_configured_assets() so
+    // any --disk / --cartN media opened at startup stacks on TOP of the saved MRU.
+    // Interactive-only (recent_save_path unset headless -> never read); a missing
+    // or unreadable file is a clean empty list (RecentFiles::parse tolerates it).
+    if (config_.recent_save_path.has_value()) {
+        std::ifstream rin(*config_.recent_save_path, std::ios::binary);
+        if (rin) {
+            const std::string rtext((std::istreambuf_iterator<char>(rin)),
+                                    std::istreambuf_iterator<char>());
+            recent_ = RecentFiles::parse(rtext);
+        }
+    }
+
     if (!load_configured_assets()) {
         shutdown();
         return false;
@@ -519,6 +581,15 @@ bool Sdl3App::init() {
         // top_inset==0 nullptr-dst path / the pixel-integration test) stays,
         // so the deterministic suite is byte-identical.
         SDL_SetRenderLogicalPresentation(renderer_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
+    }
+
+    // DEC-0095: seed the settings debounce cache from the initial live state so a
+    // frame that changes nothing writes nothing (the file is created on the FIRST
+    // real change, not at every launch). Interactive-only; a no-op when settings
+    // persistence is disabled. current_settings_xml() reads the just-initialized
+    // machine + presenter, so it must run here, after the whole setup above.
+    if (config_.settings_save_path.has_value()) {
+        last_saved_settings_xml_ = current_settings_xml();
     }
 
     initialized_ = true;
@@ -997,6 +1068,14 @@ void Sdl3App::run_one_frame() {
     }
 
     ++frames_run_;
+
+    // DEC-0095: persist interactive settings once per frame at the clean frame
+    // boundary. INERT under --hidden-window / headless (settings_save_path unset ->
+    // an immediate return, no filesystem touch), and debounced so an unchanged
+    // frame writes nothing. Placed here, AFTER input + menu dispatch have settled
+    // this frame's state, so both the hotkey and menu paths are captured by one
+    // call site (no per-knob hooks).
+    maybe_save_settings();
 }
 
 void Sdl3App::on_disk_swap_hotkey() {
@@ -1429,15 +1508,17 @@ void Sdl3App::open_disk_dialog() {
         return;
     }
     // static: the filters must outlive the (possibly deferred) callback (SDL_dialog.h:145).
-    static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk"},
-                                                        {"All files", "*"}};
+    // DEC-0095-AMENDMENT-B: disk-image extensions ONLY (no "All files" escape hatch)
+    // so a non-disk file (e.g. a BIOS ROM) cannot be picked as a disk; apply_open_disks
+    // re-validates regardless of how the path arrives (recent/CLI/typed).
+    static const SDL_DialogFileFilter kDiskFilters[] = {{"MSX disk image", "dsk;di1;di2;360;720"}};
     // M64: default the picker to the configured disk directory (XML
     // <machine><disk dir>, default "disks") when it exists, else the working
     // directory; "" degrades to nullptr = no preference. Stored in the MEMBER
     // so the string outlives the async (possibly deferred) callback -- the same
     // lifetime rule as the static filter arrays above (SDL_dialog.h:145).
     dialog_default_dir_ = resolve_dialog_default_dir(config_.disk_dir);
-    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 2,
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kDiskFilters, 1,
                            dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
                            /*allow_many=*/true);  // multi-select (owner UX contract)
 }
@@ -1457,8 +1538,9 @@ void Sdl3App::open_cartridge_dialog(const int slot) {
     if (busy) {
         return;
     }
-    static const SDL_DialogFileFilter kCartFilters[] = {{"MSX cartridge ROM", "rom"},
-                                                        {"All files", "*"}};
+    // DEC-0095-AMENDMENT-B: cartridge-ROM extensions ONLY (no "All files"); a .dsk
+    // cannot be picked as a cart. apply_open_cartridge re-validates the extension.
+    static const SDL_DialogFileFilter kCartFilters[] = {{"MSX cartridge ROM", "rom;mx1;mx2"}};
     // M64 (was M63 cwd): default the picker to the configured cartridge
     // directory (XML <machine><cartridge dir>, default "roms") when it exists,
     // else the working directory. Stored in the MEMBER so the string outlives
@@ -1466,7 +1548,7 @@ void Sdl3App::open_cartridge_dialog(const int slot) {
     // static filter arrays above (SDL_dialog.h:145); "" degrades to nullptr =
     // no preference.
     dialog_default_dir_ = resolve_dialog_default_dir(config_.cartridge_dir);
-    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 2,
+    SDL_ShowOpenFileDialog(&Sdl3App::dialog_callback, this, window_, kCartFilters, 1,
                            dialog_default_dir_.empty() ? nullptr : dialog_default_dir_.c_str(),
                            /*allow_many=*/false);
 }
@@ -1581,6 +1663,20 @@ void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
         return;
     }
 
+    // 0. DEC-0095-AMENDMENT-B: accept ONLY disk-image files. Primary fix for the
+    //    f1xvbios.rom incident -- a ROM opened as a WRITABLE disk gets 0x00-padded
+    //    to 720 KB and flushed back over the original. Reject the WHOLE set on any
+    //    non-disk path; the current mount is never touched (checked before the
+    //    pre-read so a mixed selection cannot partially apply).
+    for (const std::string& path : new_paths) {
+        if (!is_disk_extension(path)) {
+            std::cerr << "sdl3: refusing to open '" << path
+                      << "' as a disk -- not a disk image (expected .dsk/.di1/.di2/.360/.720). "
+                         "Nothing changed.\n";
+            return;
+        }
+    }
+
     // 1. TRANSACTIONAL PRE-READ (no state change yet).
     std::vector<std::vector<std::uint8_t>> temp;
     temp.reserve(new_paths.size());
@@ -1611,12 +1707,30 @@ void Sdl3App::apply_open_disks(const std::vector<std::string>& new_paths) {
     current_disk_index_ = 0;
     machine_->disk_image() = devices::fdc::DiskImage(disk_images_[0]);
     if (config_.disk_writable) {
-        machine_->disk_image().set_host_path(config_.disk_paths[0]);
+        // DEC-0095-AMENDMENT-B: bind host write-back ONLY for an exact 2DD image.
+        // A smaller/larger file would be 0x00-padded to 720 KB and overwritten on
+        // flush, so it mounts READ-ONLY instead (readable, never corrupted).
+        std::error_code ec;
+        const std::uintmax_t sz = std::filesystem::file_size(config_.disk_paths[0], ec);
+        if (!ec && sz == kDiskImageBytes) {
+            machine_->disk_image().set_host_path(config_.disk_paths[0]);
+        } else {
+            std::cerr << "sdl3: '" << config_.disk_paths[0] << "' is "
+                      << (ec ? std::string("unsized") : std::to_string(sz)) << " bytes, not "
+                      << kDiskImageBytes
+                      << " (720 KB) -- mounted READ-ONLY (write-back disabled to avoid "
+                         "overwriting a non-2DD file)\n";
+        }
     }
     machine_->disk_drive().attach_image(&machine_->disk_image());
     machine_->disk_drive().set_disk_changed(true);  // media-change signal (like a swap)
     update_window_title_for_current_disk();
     log_disk_swap();
+    // DEC-0095: record the opened set's first disk in File > Recent (the entry
+    // that represents "open this game"); inert unless recent persistence is on.
+    if (!new_paths.empty()) {
+        push_recent(new_paths.front());
+    }
 }
 
 void Sdl3App::apply_open_cartridge(const int slot, const std::string& rom_path) {
@@ -1625,6 +1739,16 @@ void Sdl3App::apply_open_cartridge(const int slot, const std::string& rom_path) 
     // (the cart persists cold_boot).
     using devices::cartridge::CartridgeLoadResult;
     using devices::cartridge::CartridgeMapperType;
+
+    // DEC-0095-AMENDMENT-B: accept ONLY ROM-image files as cartridges (symmetry
+    // with the disk guard; a .dsk inserted as a cart is a user error). Slot state
+    // is untouched on rejection.
+    if (!is_cartridge_extension(rom_path)) {
+        std::cerr << "sdl3: refusing to insert '" << rom_path
+                  << "' -- not a cartridge ROM (expected .rom/.mx1/.mx2). Slot " << slot
+                  << " unchanged.\n";
+        return;
+    }
 
     std::ifstream in(rom_path, std::ios::binary);
     if (!in) {
@@ -1672,6 +1796,9 @@ void Sdl3App::apply_open_cartridge(const int slot, const std::string& rom_path) 
     reset_machine();  // insert implies power-on-with-cart-inserted (cart persists cold_boot)
     std::cerr << "sdl3: inserted " << rom_path << " into slot " << slot << " ("
               << devices::cartridge::to_string(resolution.type) << "); machine reset\n";
+    // DEC-0095: record the inserted cartridge in File > Recent; inert unless
+    // recent persistence is on.
+    push_recent(rom_path);
 }
 
 void Sdl3App::apply_new_blank_disk(const std::string& path) {
@@ -1975,6 +2102,95 @@ int Sdl3App::window_scale() const {
         return std::clamp(config_.window_width / 320, 1, 8);
     }
     return std::clamp((w + 160) / 320, 1, 8);
+}
+
+std::string Sdl3App::current_settings_xml() {
+    // DEC-0095: the FULL config = the loaded baseline with the presentation +
+    // sticky knobs overwritten from LIVE runtime state, so a hand-authored knob
+    // NOT in scope survives a rewrite. Sampled: the 9 presentation/sticky knobs
+    // PLUS the effective BIOS location (dir + role filenames) -- the BIOS folder
+    // is a "set once, remember it" preference (Machine > BIOS Folder... mutates
+    // config_.bios_dir at runtime), so it MUST reflect the live value, not the
+    // baseline (DEC-0095-AMENDMENT-A: without this, changing only the BIOS dir
+    // produced XML identical to the init seed -> debounced -> nothing written).
+    // Still intentionally NOT sampled: RAM / speed / Ren-Sha -- machine-affecting
+    // knobs kept session-only, so they retain their baseline values.
+    machine::EmulatorConfig c = config_.config_baseline;
+    c.video_scale = window_scale();
+    c.video_filter =
+        (video_presenter_ && video_presenter_->scale_mode() == SDL_SCALEMODE_NEAREST) ? "nearest"
+                                                                                      : "linear";
+    c.master_volume = master_volume_;
+    c.persistence_percent = persistence();
+    c.persistence_mode = (persistence_mode() == PhosphorMode::Peak) ? "peak" : "avg";
+    c.fullscreen = fullscreen_;
+    c.border_enabled = video_presenter_ ? video_presenter_->border_enabled() : c.border_enabled;
+    c.fast_disk = machine_->fast_disk();
+    c.disk_writable = config_.disk_writable;
+    // The effective BIOS asset location the machine is actually using (BIOS
+    // Folder... updates config_.bios_dir; the role filenames travel with it).
+    c.bios_dir = config_.bios_dir;
+    c.bios_roms = config_.bios_roms;
+    return emulator_config_to_xml(c);
+}
+
+void Sdl3App::maybe_save_settings() {
+    // DEC-0095 determinism gate: no save path (default, and ALWAYS so under
+    // --hidden-window / headless / an explicit --config) -> return immediately,
+    // touching nothing. This is what keeps the deterministic suite byte-identical.
+    if (!config_.settings_save_path.has_value()) {
+        return;
+    }
+    const std::string xml = current_settings_xml();
+    if (xml == last_saved_settings_xml_) {
+        return;  // debounce: nothing changed since the last write / the init() seed
+    }
+    std::ofstream out(*config_.settings_save_path, std::ios::binary | std::ios::trunc);
+    if (!out) {
+        // Non-fatal: a read-only install simply cannot persist. Warn ONCE-ish
+        // (the debounce below is not updated, but an unwritable path stays
+        // unwritable, so this repeats at most once per actual settings change).
+        std::cerr << "sdl3: WARNING could not write settings to " << *config_.settings_save_path
+                  << " (settings will not persist this session)\n";
+        return;
+    }
+    out << xml;
+    last_saved_settings_xml_ = xml;
+}
+
+void Sdl3App::push_recent(const std::string& path) {
+    // DEC-0095 gate: recent persistence disabled (headless / --hidden-window) ->
+    // do nothing, so the in-memory list and the sidecar file are never touched on
+    // the deterministic path.
+    if (!config_.recent_save_path.has_value()) {
+        return;
+    }
+    recent_.push(path);  // dedup + move-to-front + cap live in RecentFiles
+    std::ofstream out(*config_.recent_save_path, std::ios::binary | std::ios::trunc);
+    if (out) {
+        out << recent_.serialize();
+    }
+    // A failed recent write is silent -- it is non-critical UX, not user data.
+}
+
+void Sdl3App::open_recent(const int index) {
+    // DEC-0095: resolve the index -> path and route through the EXISTING media-open
+    // seams so a recent pick is indistinguishable from the matching File > Open.
+    if (index < 0) {
+        return;
+    }
+    const std::string path = recent_.at(static_cast<std::size_t>(index));
+    if (path.empty()) {
+        return;  // out-of-range / stale index
+    }
+    // Extension routing (DEC-0095-AMENDMENT-B): a cartridge ROM -> slot 1;
+    // anything else -> disk. Both apply_* seams then re-validate the extension and
+    // reject a mismatch, so a stale/odd recent entry can never open unsafely.
+    if (is_cartridge_extension(path)) {
+        apply_open_cartridge(1, path);
+    } else {
+        apply_open_disks({path});
+    }
 }
 
 void Sdl3App::update_window_title_for_current_disk() {

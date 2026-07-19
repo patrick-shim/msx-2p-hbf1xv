@@ -115,6 +115,8 @@ add_library(sony_msx_core STATIC
     src/machine/input_script.cpp
     src/frontend/sdl3_cli.cpp
     src/frontend/config_runtime.cpp
+    src/frontend/config_xml_writer.cpp
+    src/frontend/recent_files.cpp
     src/frontend/session_summary.cpp
     src/frontend/menu_model.cpp
     src/frontend/blank_disk_image.cpp

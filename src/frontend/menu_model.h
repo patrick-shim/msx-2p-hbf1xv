@@ -53,6 +53,7 @@ enum class MenuAction {
     EjectDisk,            // M56 (F3): flush-if-writable + empty the drive (enabled iff disk_count > 0)
     EjectCartridgeSlot1,  // M56 (F3): unload slot 1 + reset (enabled iff slot1_loaded)
     EjectCartridgeSlot2,  // M56 (F3): unload slot 2 + reset (enabled iff slot2_loaded)
+    OpenRecent,           // DEC-0095: File > Recent > <path>; param = index into MenuState::recent
     Exit,
 
     // --- Machine ---
@@ -96,6 +97,10 @@ struct MenuState {
     std::size_t disk_count = 0;      // Swap Disk enabled iff > 1; Eject Disk iff > 0
     bool slot1_loaded = false;       // M56: Eject Cartridge Slot 1 enabled iff true
     bool slot2_loaded = false;       // M56: Eject Cartridge Slot 2 enabled iff true
+    // DEC-0095: the File > Recent MRU paths (most-recent first). Empty => the
+    // Recent submenu renders a single disabled "(none)" item. Each entry becomes
+    // an OpenRecent child whose param is its index here.
+    std::vector<std::string> recent;
     // Machine
     bool paused = false;
     int speed_level = 0;             // 0..7
