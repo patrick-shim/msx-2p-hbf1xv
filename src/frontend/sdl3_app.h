@@ -529,6 +529,10 @@ public:
     // M60 (DEC-0089): the CURRENT BIOS directory -- feeds the menu snapshot
     // (MenuState::bios_dir) and the BIOS-folder integration oracle.
     [[nodiscard]] const std::string& bios_dir() const { return config_.bios_dir; }
+    // DEC-0096: display names for the bottom status bar. Basename of the mounted
+    // disk / the slot's cartridge, or "" when none. Read-only.
+    [[nodiscard]] std::string current_disk_name() const;
+    [[nodiscard]] std::string cart_name(int slot) const;
     // Current window scale N (window width / 320), clamped to [1,8] for the radio.
     [[nodiscard]] int window_scale() const;
 

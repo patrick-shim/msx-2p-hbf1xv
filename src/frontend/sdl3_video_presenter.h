@@ -122,6 +122,11 @@ public:
     // this from Sdl3Menu::bar_height() each frame; hidden-window never touches it.
     void set_top_inset(int px) { top_inset_px_ = px < 0 ? 0 : px; }
     [[nodiscard]] int top_inset() const { return top_inset_px_; }
+    // DEC-0096: the status-bar strip reserved along the window BOTTOM (mirror of
+    // set_top_inset). The picture letterboxes into the band BETWEEN the two
+    // strips. 0 (hidden-window / no status bar) keeps the legacy behavior.
+    void set_bottom_inset(int px) { bottom_inset_px_ = px < 0 ? 0 : px; }
+    [[nodiscard]] int bottom_inset() const { return bottom_inset_px_; }
 
     // SDL_RenderPresent() -- the real-time loop's per-frame swap. Kept separate from
     // blit_frame() (see class doc).
@@ -158,6 +163,7 @@ private:
     int texture_height_ = 0;
     // M57 (DEC-0085): menu-strip top inset in output pixels (0 = legacy path).
     int top_inset_px_ = 0;
+    int bottom_inset_px_ = 0;  // DEC-0096: status-bar strip along the window bottom
     std::string last_error_;
 };
 

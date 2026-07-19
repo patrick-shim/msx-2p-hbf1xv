@@ -534,22 +534,29 @@ bool Sdl3App::init() {
             // SDL_SetWindowSize does not alter the fullscreen surface (it only
             // updates the restored windowed size) and the band math insets
             // within the fixed surface -- path unchanged.
+            // DEC-0096: the bottom status bar reserves a second strip. The window
+            // grows by BOTH bars (picture keeps its size where the display has
+            // room); the fit reserves the TOTAL vertical chrome (top + bottom), so
+            // on a size-constrained panel the picture band shrinks by both strips
+            // rather than overflowing. The picture insets BETWEEN the two strips.
+            const int status_h = menu_->status_bar_height();
+            const int chrome_h = bar_h + status_h;
             int win_w = config_.window_width;
-            int win_h = config_.window_height + bar_h;
+            int win_h = config_.window_height + chrome_h;
             int usable_x = 0;
             int usable_y = 0;
             int usable_w = 0;
             int usable_h = 0;
             if (query_display_usable_bounds(usable_x, usable_y, usable_w, usable_h)) {
                 const geometry::WindowFit fit = geometry::fit_window_to_display(
-                    config_.window_width, config_.window_height, bar_h, usable_w, usable_h);
+                    config_.window_width, config_.window_height, chrome_h, usable_w, usable_h);
                 win_w = fit.w;
                 win_h = fit.h;
                 // The ONE diagnostic line (DEC-0090): the owner is live on the Pi
                 // and needs the real display metrics behind "--scale 1 made it
                 // worse" -- keep the exact format stable.
                 std::cerr << "sdl3: display usable " << usable_w << "x" << usable_h << "; requested "
-                          << config_.window_width << "x" << (config_.window_height + bar_h)
+                          << config_.window_width << "x" << (config_.window_height + chrome_h)
                           << "; window " << win_w << "x" << win_h << " (scale " << fit.scale
                           << ")\n";
             } else {
@@ -559,6 +566,7 @@ bool Sdl3App::init() {
             SDL_SetWindowSize(window_, win_w, win_h);
             if (video_presenter_) {
                 video_presenter_->set_top_inset(bar_h);
+                video_presenter_->set_bottom_inset(status_h);
             }
         }
         // M63 (owner Pi 4B, 7" 800x480 -- the definitive menu-bar-shift fix):
@@ -1024,6 +1032,7 @@ void Sdl3App::run_one_frame() {
                 // correct; this keeps it robust. Presentation-only; menu_ == null
                 // (--hidden-window) never runs it, so the inset stays 0.
                 video_presenter_->set_top_inset(menu_->bar_height());
+                video_presenter_->set_bottom_inset(menu_->status_bar_height());  // DEC-0096
                 // M63 diagnostic: log window/pixel/render-output geometry once
                 // per change (io.DisplaySize is valid now that begin_frame ran).
                 log_geometry_if_changed();
@@ -2007,10 +2016,13 @@ void Sdl3App::clamp_window_to_display() {
     // letterbox fills ANY band below the bar, and the owner goal on the 7"
     // panel is the BIGGEST picture that keeps the menu bar visible (a clamped
     // maximize = 800x444, picture ~567x425 -- not a snap-down to 320x259).
+    // DEC-0096: reserve BOTH bars (top menu + bottom status) as the vertical chrome.
     const int bar_h = menu_ ? menu_->bar_height() : 0;
-    const int pic_h = std::max(1, cur_h - bar_h);
+    const int status_h = menu_ ? menu_->status_bar_height() : 0;
+    const int chrome_h = bar_h + status_h;
+    const int pic_h = std::max(1, cur_h - chrome_h);
     const geometry::WindowFit fit =
-        geometry::fit_window_to_display(cur_w, pic_h, bar_h, usable_w, usable_h, cur_w, pic_h);
+        geometry::fit_window_to_display(cur_w, pic_h, chrome_h, usable_w, usable_h, cur_w, pic_h);
     // Keep the menu bar's FULL height inside the usable area: the top edge must
     // not sit above the usable top. x is left alone -- a horizontal off-screen
     // drag is a user choice and never hides the top-anchored bar; the clamped
@@ -2040,16 +2052,20 @@ void Sdl3App::set_scale(const int scale) {
     // queries) the legacy unclamped size applies -- today's behavior.
     const int n = std::clamp(scale, 1, 8);
     if (window_ != nullptr) {
+        // DEC-0096: grow the window by BOTH bars so the picture band stays a full
+        // 240N tall between them.
         const int inset = video_presenter_ ? video_presenter_->top_inset() : 0;
+        const int bottom = video_presenter_ ? video_presenter_->bottom_inset() : 0;
+        const int chrome = inset + bottom;
         int win_w = 320 * n;
-        int win_h = 240 * n + inset;
+        int win_h = 240 * n + chrome;
         int usable_x = 0;
         int usable_y = 0;
         int usable_w = 0;
         int usable_h = 0;
         if (query_display_usable_bounds(usable_x, usable_y, usable_w, usable_h)) {
             const geometry::WindowFit fit =
-                geometry::fit_window_to_display(320 * n, 240 * n, inset, usable_w, usable_h);
+                geometry::fit_window_to_display(320 * n, 240 * n, chrome, usable_w, usable_h);
             if (fit.w != win_w || fit.h != win_h) {
                 std::cerr << "sdl3: scale " << n << " exceeds display usable " << usable_w << "x"
                           << usable_h << "; window " << fit.w << "x" << fit.h << " (scale "
@@ -2102,6 +2118,22 @@ int Sdl3App::window_scale() const {
         return std::clamp(config_.window_width / 320, 1, 8);
     }
     return std::clamp((w + 160) / 320, 1, 8);
+}
+
+std::string Sdl3App::current_disk_name() const {
+    // DEC-0096: basename of the mounted disk for the status bar ("" = none).
+    if (current_disk_index_ < config_.disk_paths.size()) {
+        return std::filesystem::path(config_.disk_paths[current_disk_index_]).filename().string();
+    }
+    return {};
+}
+
+std::string Sdl3App::cart_name(const int slot) const {
+    // DEC-0096: basename of the slot's cartridge for the status bar ("" = empty).
+    if (slot >= 1 && slot <= 2 && cart_path_[slot - 1].has_value()) {
+        return std::filesystem::path(*cart_path_[slot - 1]).filename().string();
+    }
+    return {};
 }
 
 std::string Sdl3App::current_settings_xml() {

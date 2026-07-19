@@ -53,6 +53,13 @@ MenuState snapshot(const Sdl3App& app) {
     s.fast_disk = machine.fast_disk();
     s.disk_writable = app.disk_writable();
     s.recent = app.recent_entries();  // DEC-0095: File > Recent MRU (empty unless enabled)
+    // DEC-0096: bottom status-bar fields.
+    s.fdd_motor = machine.disk_drive().motor_on(machine.elapsed_cycles());
+    s.disk_name = app.current_disk_name();
+    s.fdd_track = machine.disk_drive().physical_track();
+    s.disk_write_protected = machine.disk_drive().write_protected();
+    s.slot1_name = app.cart_name(1);
+    s.slot2_name = app.cart_name(2);
     return s;
 }
 
@@ -133,6 +140,13 @@ int Sdl3Menu::bar_height() const {
     return h > 0.0f ? static_cast<int>(h + 0.999f) : 0;
 }
 
+int Sdl3Menu::status_bar_height() const {
+    // DEC-0096: same GetFrameHeight() basis as the top bar (rounded up), so the
+    // bottom strip reserves exactly the space the status window fills.
+    const float h = ImGui::GetFrameHeight();
+    return h > 0.0f ? static_cast<int>(h + 0.999f) : 0;
+}
+
 void Sdl3Menu::begin_frame() {
     ImGui_ImplSDLRenderer3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
@@ -141,7 +155,57 @@ void Sdl3Menu::begin_frame() {
 
 void Sdl3Menu::build(Sdl3App& app) {
     render_menu_bar(app);
+    render_status_bar(app);
     render_help_windows();
+}
+
+void Sdl3Menu::render_status_bar(Sdl3App& app) {
+    const int status_h = status_bar_height();
+    if (status_h <= 0) {
+        return;
+    }
+    const ImVec2 disp = ImGui::GetIO().DisplaySize;
+    if (disp.x <= 0.0f || disp.y <= 0.0f) {
+        return;
+    }
+    const MenuState state = snapshot(app);
+
+    // A fixed, non-interactive strip pinned to the reserved bottom band. The band
+    // is reserved by Sdl3App (window grows by status_h; the picture insets ABOVE
+    // it), so this window never overlaps the MSX picture.
+    ImGui::SetNextWindowPos(ImVec2(0.0f, disp.y - static_cast<float>(status_h)));
+    ImGui::SetNextWindowSize(ImVec2(disp.x, static_cast<float>(status_h)));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(6.0f, 2.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, IM_COL32(20, 22, 26, 235));
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse |
+        ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNav |
+        ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoFocusOnAppearing;
+    if (ImGui::Begin("##fdd_status_bar", nullptr, flags)) {
+        // FDD activity LED at the far left: pulsing green while the motor is on,
+        // a dim dot when idle (so the indicator is always locatable).
+        const float lit = fdd_led_alpha(state.fdd_motor, ImGui::GetTime());
+        const ImVec2 origin = ImGui::GetCursorScreenPos();
+        const float line = ImGui::GetTextLineHeight();
+        const float radius = line * 0.34f;
+        const ImVec2 center(origin.x + radius + 1.0f, origin.y + line * 0.5f);
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+        if (lit > 0.0f) {
+            const int a = static_cast<int>(lit * 255.0f);
+            dl->AddCircleFilled(center, radius * 1.6f, IM_COL32(40, 255, 90, a / 4));
+            dl->AddCircleFilled(center, radius, IM_COL32(48, 240, 96, a));
+        } else {
+            dl->AddCircleFilled(center, radius, IM_COL32(70, 90, 70, 180));  // idle
+        }
+        ImGui::SetCursorScreenPos(ImVec2(origin.x + radius * 2.0f + 8.0f, origin.y));
+        ImGui::TextUnformatted(format_status_bar(state).c_str());
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
 }
 
 void Sdl3Menu::render(SDL_Renderer* renderer) {

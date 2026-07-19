@@ -173,7 +173,7 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
     // 320x240 LETTERBOX logical presentation (init sdl3_app.cpp) fills+letterboxes
     // the whole output via a nullptr dst. This branch is byte-identical to the
     // pre-M57 present.
-    if (top_inset_px_ <= 0) {
+    if (top_inset_px_ <= 0 && bottom_inset_px_ <= 0) {
         if (!SDL_RenderTexture(renderer_, texture_, nullptr, nullptr)) {
             last_error_ = SDL_GetError();
             return false;
@@ -196,7 +196,8 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
     int out_h = 0;
     bool ok = SDL_GetRenderOutputSize(renderer_, &out_w, &out_h);
     if (ok) {
-        const geometry::Rect band = geometry::letterbox_into_band(out_w, out_h, top_inset_px_);
+        const geometry::Rect band =
+            geometry::letterbox_into_band(out_w, out_h, top_inset_px_, bottom_inset_px_);
         const SDL_FRect dst{static_cast<float>(band.x), static_cast<float>(band.y),
                             static_cast<float>(band.w), static_cast<float>(band.h)};
         ok = SDL_RenderTexture(renderer_, texture_, nullptr, &dst);

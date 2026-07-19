@@ -123,6 +123,14 @@ struct MenuState {
     // Disk
     bool fast_disk = false;
     bool disk_writable = false;
+    // DEC-0096: extra read-only status the bottom status bar surfaces (all
+    // presentation-only; populated by snapshot() from public accessors).
+    bool fdd_motor = false;             // drive motor on (the activity LED)
+    std::string disk_name;              // mounted disk basename ("" = no disk)
+    int fdd_track = 0;                  // physical head cylinder
+    bool disk_write_protected = false;  // mounted disk is write-protected
+    std::string slot1_name;             // slot-1 cartridge basename ("" = empty)
+    std::string slot2_name;             // slot-2 cartridge basename ("" = empty)
 };
 
 // One rendered menu leaf/branch. A non-empty `children` makes this a submenu; a
@@ -170,6 +178,22 @@ std::string hotkey_label_for(MenuAction action);
 
 // Build the complete v1 menu tree from a state snapshot (pure function).
 MenuModel build_menu_model(const MenuState& state);
+
+// The [0,1] opacity of the FDD-activity LED overlay (a translucent green circle
+// the SDL3 frontend draws in the upper-right corner). Returns 0 when the drive is
+// idle (LED fully hidden) and a gentle ~2.5 Hz pulse in [0.40, 0.90] while the
+// floppy motor is on -- driven by the REAL hardware motor line
+// (DiskDrive::motor_on, which keeps spinning ~4 s after each access, so even a
+// brief fast-disk read shows). Pure + SDL/ImGui-free so the pulse curve is
+// unit-testable; sdl3_menu applies it to the ImGui draw. `t` = seconds (monotonic).
+[[nodiscard]] float fdd_led_alpha(bool motor_on, double t);
+
+// DEC-0096: the bottom status-bar TEXT (the FDD activity LED is drawn separately
+// as a colored dot before it). Pure function of the snapshot so the exact layout
+// is unit-testable; sdl3_menu renders the returned string. Format (segments
+// joined by "  |  "): FDD <disk|no disk> [trk<n>] [WP]  |  S1 <name|->  |
+// S2 <name|->  |  RAM <kb>K  [ |  SPD <n>]  [ |  FAST]  |  <WR|RO>.
+[[nodiscard]] std::string format_status_bar(const MenuState& state);
 
 // The pure event-capture predicate (§4.1 / §5.2 test 3). Returns true when a
 // polled event must be SWALLOWED by the menu -- i.e. NOT forwarded to the host

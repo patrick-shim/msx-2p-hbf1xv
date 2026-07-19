@@ -13,6 +13,8 @@
 
 #include "frontend/menu_model.h"
 
+#include <cmath>
+
 namespace sony_msx::frontend {
 
 namespace {
@@ -310,6 +312,40 @@ MenuModel build_menu_model(const MenuState& state) {
     }
 
     return model;
+}
+
+float fdd_led_alpha(const bool motor_on, const double t) {
+    if (!motor_on) {
+        return 0.0f;  // drive idle -> LED fully hidden
+    }
+    // A gentle ~2.5 Hz pulse in [0.40, 0.90]: clearly "active" without strobing.
+    constexpr double kTwoPi = 6.283185307179586;
+    const double phase = std::sin(t * 2.5 * kTwoPi);  // -1..1
+    return static_cast<float>(0.65 + 0.25 * phase);
+}
+
+std::string format_status_bar(const MenuState& s) {
+    std::string out = "FDD ";
+    if (s.disk_name.empty()) {
+        out += "(no disk)";
+    } else {
+        out += s.disk_name;
+        out += " trk" + std::to_string(s.fdd_track);
+        if (s.disk_write_protected) {
+            out += " WP";
+        }
+    }
+    out += "  |  S1 " + (s.slot1_name.empty() ? std::string("-") : s.slot1_name);
+    out += "  |  S2 " + (s.slot2_name.empty() ? std::string("-") : s.slot2_name);
+    out += "  |  RAM " + std::to_string(s.dram_kb) + "K";
+    if (s.speed_level > 0) {
+        out += "  |  SPD " + std::to_string(s.speed_level);
+    }
+    if (s.fast_disk) {
+        out += "  |  FAST";
+    }
+    out += s.disk_writable ? "  |  WR" : "  |  RO";
+    return out;
 }
 
 }  // namespace sony_msx::frontend

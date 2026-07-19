@@ -67,6 +67,12 @@ public:
     // frame so this is valid immediately at init() (before the first render).
     [[nodiscard]] int bar_height() const;
 
+    // DEC-0096: the live bottom STATUS-BAR height in pixels (same GetFrameHeight()
+    // basis as bar_height()). Sdl3App reserves this many pixels at the window
+    // BOTTOM so the emulated picture insets ABOVE the strip (mirror of the top
+    // bar). Valid immediately at init() (the ctor primes one empty frame).
+    [[nodiscard]] int status_bar_height() const;
+
     // Per-frame, called between Sdl3VideoPresenter::blit_frame() and present():
     //   begin_frame() -> the three NewFrame calls,
     //   build()       -> read Sdl3App state, build the model, draw the menu bar +
@@ -85,6 +91,10 @@ public:
 private:
     void render_menu_bar(Sdl3App& app);
     void render_help_windows();
+    // DEC-0096: the bottom system status bar (FDD activity LED + disk/slot/machine
+    // status), drawn as a fixed ImGui window pinned to the reserved bottom strip.
+    // Interactive-only by construction (Sdl3Menu exists only when !hidden_window).
+    void render_status_bar(Sdl3App& app);
     void dispatch(MenuAction action, int param, Sdl3App& app);
 
     bool show_hotkeys_window_ = false;

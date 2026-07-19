@@ -23,15 +23,19 @@ namespace sony_msx::frontend::geometry {
 // SDL renderer -- it compiles in BOTH configs (SDL3=ON and SDL3=OFF) and the
 // geometry oracle targets this pure function directly.
 //
-// The menu bar owns a `top_inset`-pixel-tall strip along the window top. This
-// function fits a cw:ch (default 320x240 = MSX 4:3) rectangle into the BAND
-// BELOW the strip -- band = {x:0, y:top_inset, w:win_w, h:win_h - top_inset} --
+// The menu bar owns a `top_inset`-pixel-tall strip along the window top, and
+// (DEC-0096) an optional status bar owns a `bottom_inset`-pixel-tall strip along
+// the window bottom. This function fits a cw:ch (default 320x240 = MSX 4:3)
+// rectangle into the BAND BETWEEN the two strips --
+// band = {x:0, y:top_inset, w:win_w, h:win_h - top_inset - bottom_inset} --
 // aspect-preserved and CENTERED in the band. The returned rect never overlaps
-// [0, top_inset) (the strip), so zero MSX pixels hide behind the menu.
+// [0, top_inset) (the menu strip) NOR [win_h - bottom_inset, win_h) (the status
+// strip), so zero MSX pixels hide behind either bar.
 //
-// top_inset == 0 (hidden-window / no menu) degenerates to the FULL-WINDOW
-// letterbox -- byte-identical geometry to SDL's LOGICAL_PRESENTATION_LETTERBOX
-// of the same 320x240 canvas -- so the legacy path (which passes 0) is neutral.
+// top_inset == bottom_inset == 0 (hidden-window / no menu) degenerates to the
+// FULL-WINDOW letterbox -- byte-identical geometry to SDL's
+// LOGICAL_PRESENTATION_LETTERBOX of the same 320x240 canvas -- so the legacy
+// path (which passes 0/0) is neutral.
 // ---------------------------------------------------------------------------
 
 struct Rect {
@@ -41,20 +45,21 @@ struct Rect {
     double h = 0.0;
 };
 
-// Fit a cw:ch rect into the band below `top_inset`, aspect-preserved + centered.
-// Degenerate inputs (non-positive window/canvas, or an inset >= win_h leaving no
-// band) return a zero-size rect anchored at the band top -- the caller draws
-// nothing rather than inverting the geometry.
+// Fit a cw:ch rect into the band between `top_inset` and `bottom_inset`,
+// aspect-preserved + centered. Degenerate inputs (non-positive window/canvas, or
+// the insets together >= win_h leaving no band) return a zero-size rect anchored
+// at the band top -- the caller draws nothing rather than inverting the geometry.
 [[nodiscard]] inline Rect letterbox_into_band(const int win_w, const int win_h, const int top_inset,
-                                              const int cw = 320, const int ch = 240) {
+                                              const int bottom_inset = 0, const int cw = 320,
+                                              const int ch = 240) {
     Rect r;
     r.y = static_cast<double>(top_inset);
     if (win_w <= 0 || win_h <= 0 || cw <= 0 || ch <= 0) {
         return r;  // degenerate window/canvas
     }
-    const int band_h_i = win_h - top_inset;
+    const int band_h_i = win_h - top_inset - (bottom_inset < 0 ? 0 : bottom_inset);
     if (band_h_i <= 0) {
-        return r;  // the inset is taller than the window: no band to draw into
+        return r;  // the insets are taller than the window: no band to draw into
     }
     const double band_w = static_cast<double>(win_w);
     const double band_h = static_cast<double>(band_h_i);
