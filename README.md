@@ -81,9 +81,9 @@ against openMSX. Around the core:
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.6.0](#build-history)** — interactive settings now persist across sessions,
-File ▸ Recent lists previously opened media, and media-open safety guards close a disk-write-back
-footgun. See [Build History](#build-history) for the full release log.
+**Current release: [v1.6.1](#build-history)** — a floppy activity LED and system status bar, on top
+of v1.6.0's persistent settings and File ▸ Recent. See [Build History](#build-history) for the full
+release log.
 
 ## Architecture
 
@@ -415,8 +415,13 @@ hand-edit it from there.
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
-### Since v1.6.0 (unreleased)
-- **Floppy activity LED + bottom system status bar** — at-a-glance machine state while running.
+### v1.6.1 — floppy activity LED + system status bar
+- **A bottom status bar** showing live machine state, and an **FDD activity LED** driven by the
+  *real* drive motor line (with the hardware's ~4 s delayed motor-off, so even a brief fast-disk
+  access stays lit — exactly like a real front-panel floppy LED).
+- The picture reserves the strip and the window grows to match — mirroring the top menu bar — so
+  the MSX display keeps its size wherever the screen has room.
+- Frontend/ImGui only: no device changes, and the deterministic suite is byte-identical.
 
 ### v1.6.0 — persistent settings + File ▸ Recent
 - **Your settings now persist across sessions.** An interactive session writes
