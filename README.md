@@ -81,9 +81,9 @@ against openMSX. Around the core:
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.5.0](#build-history)** — Raspberry Pi / Linux support and small-display
-polish, the F-1 Spirit 3D Special flicker fix, a runtime BIOS-folder selector, and a published
-one-command build bootstrap. See [Build History](#build-history) for the full release log.
+**Current release: [v1.6.0](#build-history)** — interactive settings now persist across sessions,
+File ▸ Recent lists previously opened media, and media-open safety guards close a disk-write-back
+footgun. See [Build History](#build-history) for the full release log.
 
 ## Architecture
 
@@ -380,11 +380,15 @@ identification path) keep their own stock defaults and each print their own usag
 ## Configuration file (optional)
 
 Every default and knob can be externalized to a strict XML config file, so the machine is
-configurable without recompiling. The annotated reference [`sony_msx_hbf1xv.xml`](sony_msx_hbf1xv.xml)
-at the repository root lists **every** externalized field (RAM/VRAM, fast-disk, FM-PAC auto-load,
-video scale/filter, persistence, border, disk-writable, master volume, speed, fullscreen, capture,
-BIOS directory + the seven ROM filenames, FM-PAC ROM/SRAM paths, and the software-database path) set
-to its exact built-in default, each commented with its type and allowed range/enum.
+configurable without recompiling: RAM/VRAM, fast-disk, FM-PAC auto-load, video scale/filter,
+persistence, border, disk-writable, master volume, speed, fullscreen, capture, BIOS directory + the
+seven ROM filenames, FM-PAC ROM/SRAM paths, the cartridge/disk dialog directories, and the
+software-database path — each written with its type and allowed range/enum as a comment.
+
+**You do not have to create this file.** As of v1.6.0 an interactive session **writes it for you**,
+as `sony_msx_hbf1xv.xml` beside the executable, so your settings persist across runs. Launch the
+emulator once, adjust things from the menu, quit — the file appears, fully annotated, and you can
+hand-edit it from there.
 
 - **Optional.** The emulator always runs standalone with zero config; if no config file is found it
   prints one warning line and continues on the built-in defaults.
@@ -393,8 +397,12 @@ to its exact built-in default, each commented with its type and allowed range/en
 - **Auto-load** happens only on an interactive SDL3 launch (a real window), searching
   `<exe-dir>/sony_msx_hbf1xv.xml` then `<cwd>/sony_msx_hbf1xv.xml`. The headless executable and the
   deterministic hidden-window/test paths never auto-load. `--config <path>` force-loads in any mode.
-  The shipped reference lives at the repo root and is not auto-found from `build/Debug/` — copy it
-  next to the executable (or into the working directory) and edit it to activate.
+- **Auto-save** is deliberately narrow: it happens **only** for a genuinely interactive launch with
+  no explicit `--config`. Under `--hidden-window`, headless, or an explicit `--config`, settings
+  writes are disabled outright — that gate is what keeps the deterministic suite byte-identical.
+- **Your hand edits survive.** A rewrite re-emits the full config from the loaded file as its
+  baseline, overwriting only the presentation and sticky knobs from live state — so a hand-authored
+  `<machine>` section is preserved rather than flattened back to defaults.
 - **Strict but never fatal:** each value is type- and range/enum-checked; a bad value warns naming
   the offending key and falls back to that key's default (the rest of the file still applies), never
   crashing.
@@ -406,6 +414,22 @@ to its exact built-in default, each commented with its type and allowed range/en
 
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
+
+### Since v1.6.0 (unreleased)
+- **Floppy activity LED + bottom system status bar** — at-a-glance machine state while running.
+
+### v1.6.0 — persistent settings + File ▸ Recent
+- **Your settings now persist across sessions.** An interactive session writes
+  `sony_msx_hbf1xv.xml` beside the executable, so scale, filter, volume, persistence, fast-disk and
+  the rest come back the way you left them. Hand-authored `<machine>` sections survive the rewrite —
+  it re-emits from the loaded file as a baseline rather than flattening to defaults. Writes are
+  disabled entirely under `--hidden-window` / headless / explicit `--config`, which is what keeps
+  the deterministic suite byte-identical.
+- **File ▸ Recent** lists previously opened disks and cartridges for one-click reloading.
+- **Media-open safety guards** — extension and 720 KB write-back checks, closing a disk-write-back
+  data-loss footgun.
+- Also in this release: the host disk utility was renamed `msx-disk` → **`msx-diskutil`**
+  (source now under `src/utils/`).
 
 ### v1.5.0 — Raspberry Pi / Linux support, small-display polish, F-1 Spirit fix
 - **Raspberry Pi & Linux are now first-class build targets** (GCC, including aarch64) alongside
@@ -481,7 +505,7 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
   by bisect and verified frame-for-frame against openMSX at a zero-flicker match.
 
 ### v1.2.0 — external configuration
-- Optional **strict-XML configuration** ([`sony_msx_hbf1xv.xml`](sony_msx_hbf1xv.xml)): every
+- Optional **strict-XML configuration** (`sony_msx_hbf1xv.xml`): every
   launch knob in one annotated file, resolved **CLI > XML > built-in default**. Hardware-timing
   constants are deliberately *not* configurable.
 
