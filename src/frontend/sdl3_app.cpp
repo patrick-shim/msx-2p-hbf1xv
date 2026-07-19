@@ -27,6 +27,7 @@
 #include "devices/fdc/disk_image.h"
 #include "frontend/app_icon_data.h"
 #include "frontend/blank_disk_image.h"  // M56 (DEC-0084): F5 New Blank Disk writer
+#include "frontend/config_paths.h"      // DEC-0095-AMENDMENT-D: absolutize persisted asset paths
 #include "frontend/config_xml_writer.h"  // DEC-0095: settings persistence (EmulatorConfig -> XML)
 #include "frontend/audio_pacer.h"
 #include "frontend/dialog_default_dir.h"  // M63/M64: pure dialog default-dir pick (all pickers)
@@ -591,13 +592,27 @@ bool Sdl3App::init() {
         SDL_SetRenderLogicalPresentation(renderer_, 0, 0, SDL_LOGICAL_PRESENTATION_DISABLED);
     }
 
-    // DEC-0095: seed the settings debounce cache from the initial live state so a
-    // frame that changes nothing writes nothing (the file is created on the FIRST
-    // real change, not at every launch). Interactive-only; a no-op when settings
-    // persistence is disabled. current_settings_xml() reads the just-initialized
-    // machine + presenter, so it must run here, after the whole setup above.
+    // DEC-0095: seed the settings debounce cache so a frame that changes nothing
+    // writes nothing. Interactive-only; a no-op when persistence is disabled.
+    // current_settings_xml() reads the just-initialized machine + presenter, so
+    // this must run here, after the whole setup above.
+    //
+    // DEC-0095-AMENDMENT-D: seed from the FILE when one exists, not from live
+    // state. The debounce has to mean "what is currently ON DISK" -- seeding from
+    // live state masks a stale on-disk form: a pre-AMENDMENT-D config carrying
+    // RELATIVE asset paths would compare equal to every later emission, so the
+    // file would never be upgraded to the absolute form and FM-PAC auto-load
+    // would keep silently failing. With no file yet we keep the original
+    // behavior (seed from live state) so a launch that changes nothing still
+    // creates nothing.
     if (config_.settings_save_path.has_value()) {
-        last_saved_settings_xml_ = current_settings_xml();
+        std::ifstream in(*config_.settings_save_path, std::ios::binary);
+        if (in) {
+            last_saved_settings_xml_.assign(std::istreambuf_iterator<char>(in),
+                                            std::istreambuf_iterator<char>());
+        } else {
+            last_saved_settings_xml_ = current_settings_xml();
+        }
     }
 
     initialized_ = true;
@@ -2163,6 +2178,20 @@ std::string Sdl3App::current_settings_xml() {
     // Folder... updates config_.bios_dir; the role filenames travel with it).
     c.bios_dir = config_.bios_dir;
     c.bios_roms = config_.bios_roms;
+    // DEC-0095-AMENDMENT-D: persist asset paths ABSOLUTE. The settings file lives
+    // beside the EXE, but relative asset paths resolve against the WORKING
+    // DIRECTORY -- so a persisted `roms/fmpac.rom` silently stopped resolving
+    // whenever the emulator was launched from anywhere but the repo root, and
+    // FM-PAC auto-load skipped with an empty slot 2 and no error. Rewriting to
+    // the path THIS session actually resolved keeps the file working regardless
+    // of where it is launched from next (frontend/config_paths.h). current_path()
+    // can throw (deleted CWD) -- on failure just emit what we have rather than
+    // lose the settings write entirely.
+    std::error_code ec;
+    const std::filesystem::path cwd = std::filesystem::current_path(ec);
+    if (!ec) {
+        c = with_absolute_asset_paths(c, cwd);
+    }
     return emulator_config_to_xml(c);
 }
 
