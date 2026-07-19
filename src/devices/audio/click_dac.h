@@ -139,9 +139,7 @@ public:
     // this per-frame to report the voice-window edge RATE.
     [[nodiscard]] std::uint64_t edge_count() const { return edge_count_; }
     // Pending (not-yet-integrated) edges currently buffered -- for tests.
-    [[nodiscard]] std::size_t pending_edges() const { return edges_.size(); }
     // Current DC-blocked-source's held level (false=0x80 idle) -- for tests.
-    [[nodiscard]] bool current_level() const { return current_level_; }
 
 private:
     struct Edge {

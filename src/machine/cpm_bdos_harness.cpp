@@ -24,7 +24,11 @@ CpmBdosHarness::LoadResult CpmBdosHarness::load_com(Hbf1xvMachine& machine, std:
     // when the load is about to be refused.
     machine.map_flat_ram();
 
-    const std::uint32_t end_address = static_cast<std::uint32_t>(kLoadBase) + image.size();
+    // Both operands are narrowed EXPLICITLY: `kLoadBase + image.size()` would
+    // promote to std::size_t (64-bit) and then narrow implicitly on assignment.
+    // image.size() is bounded by the 64 KB guard below, so the cast is lossless.
+    const std::uint32_t end_address =
+        static_cast<std::uint32_t>(kLoadBase) + static_cast<std::uint32_t>(image.size());
     if (end_address >= top_of_memory) {
         // Defensive, generic safety guard (not a magic number specific to
         // any one CP/M program): refuse to load rather than risk silently

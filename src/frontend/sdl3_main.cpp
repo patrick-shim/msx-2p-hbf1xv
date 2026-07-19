@@ -571,7 +571,8 @@ int main(int argc, char** argv) {
     // neither split-brain (load X, save Y) nor clobber their named file.
     config.config_baseline = cfg;
     if (!parsed.hidden_window && !parsed.config_path.has_value()) {
-        const std::string exe_dir = exe_directory(argv[0]);
+        // Reuses the exe_dir resolved once above (DEC-0097) -- re-declaring it
+        // here shadowed the outer one and called exe_directory() a second time.
         // DEC-0097: persist to the PROJECT ROOT -- beside the assets the config
         // names, and identical on every platform (the exe dir is build/Debug on
         // Windows but build/ elsewhere, so "beside the exe" was inherently

@@ -30,13 +30,21 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # warns C4819 on files carrying UTF-8 comments (em-dashes, etc.). /utf-8 makes
 # MSVC treat sources as UTF-8. Clang/GCC are UTF-8 native and need no equivalent.
 #
-# AppleClang/Clang/GCC: -Wall -Wextra mirrors the MSVC intent (diagnostics on)
-# without changing what builds. -Werror is deliberately NOT set: MSVC carries no
-# /WX counterpart, so adding it would make the toolchains asymmetric and let a
-# benign warning block the build. else() rather than if(APPLE) so a future
-# Linux/GCC host inherits the same regime.
+# Diagnostics are kept SYMMETRIC across toolchains: /W4 on MSVC is the rough
+# counterpart of -Wall -Wextra on Clang/GCC. This matters -- MSVC previously got
+# only /utf-8, i.e. the default /W1, so unused locals, shadowed declarations and
+# narrowing conversions were invisible on Windows while the macOS/Pi builds saw
+# them. A defect found on one host and not the other is a portability trap.
+#
+# /wd4996 silences MSVC's deprecation nagging about getenv/fopen/sscanf. Those
+# are portable Standard C; the suggested replacements (_dupenv_s, fopen_s, ...)
+# are MSVC-only and would break the other two toolchains, so the warning is
+# advice this project cannot take.
+#
+# -Werror / /WX are deliberately NOT set: a benign warning must never block a
+# build. else() rather than if(APPLE) so a Linux/GCC host inherits the same regime.
 if(MSVC)
-    add_compile_options(/utf-8)
+    add_compile_options(/utf-8 /W4 /wd4996)
 else()
     add_compile_options(-Wall -Wextra)
 endif()

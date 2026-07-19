@@ -53,10 +53,8 @@ public:
 
     [[nodiscard]] const std::vector<std::string>& diagnostics() const { return diagnostics_; }
     [[nodiscard]] bool ok() const { return diagnostics_.empty(); }
-    void clear_diagnostics() { diagnostics_.clear(); }
 
     [[nodiscard]] const std::filesystem::path& root() const { return root_; }
-    void set_root(std::filesystem::path root) { root_ = std::move(root); }
 
 private:
     std::filesystem::path root_;

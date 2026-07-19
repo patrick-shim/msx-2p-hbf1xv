@@ -120,7 +120,6 @@ public:
 
     [[nodiscard]] std::uint64_t samples_produced() const { return samples_produced_; }
     [[nodiscard]] std::uint64_t samples_dropped() const { return samples_dropped_; }
-    [[nodiscard]] std::uint64_t silence_samples_pushed() const { return silence_samples_pushed_; }
     [[nodiscard]] std::uint64_t low_water_samples() const { return low_water_samples_; }
     [[nodiscard]] std::uint64_t max_queued_samples() const { return max_queued_samples_; }
 

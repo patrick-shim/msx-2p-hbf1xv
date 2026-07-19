@@ -413,7 +413,6 @@ public:
     // (mirrors request_snapshot()/swap_to_next_disk()). Flips the machine-level
     // stream capture: ON stamps a deterministic stream id (the current
     // snapshot_id()); OFF finalizes (dumps the trace ring + a final snapshot).
-    void request_stream_toggle() { on_stream_toggle_hotkey(); }
     [[nodiscard]] bool stream_capture_active() const { return machine_->stream_capture_active(); }
 
     // Phosphor-persistence live-control seams, exposed publicly so an
@@ -548,14 +547,12 @@ public:
     // load_configured_assets(), for the startup banner + integration tests.
     [[nodiscard]] FmPacAutoloadOutcome fmpac_autoload_outcome() const { return fmpac_autoload_outcome_; }
     [[nodiscard]] const std::string& last_error() const { return last_error_; }
-    [[nodiscard]] bool quit_requested() const { return quit_requested_; }
     [[nodiscard]] std::uint64_t frames_run() const { return frames_run_; }
 
     [[nodiscard]] SDL_Window* window() const { return window_; }
     [[nodiscard]] SDL_Renderer* renderer() const { return renderer_; }
     [[nodiscard]] Sdl3VideoPresenter* video_presenter() const { return video_presenter_.get(); }
     [[nodiscard]] Sdl3AudioPresenter* audio_presenter() const { return audio_presenter_.get(); }
-    [[nodiscard]] Sdl3InputMapper& input_mapper() { return input_mapper_; }
 
 private:
     void poll_and_dispatch_events();

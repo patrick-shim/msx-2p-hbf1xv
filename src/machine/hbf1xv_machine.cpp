@@ -1525,10 +1525,12 @@ std::string Hbf1xvMachine::serialize_state_dump() const {
     // cartridge's 8 KB battery SRAM when present, and is empty (size=0)
     // otherwise -- matching real hardware ("NO S-RAM AVAILABLE" on a bare
     // machine). Slot 1 preferred, then slot 2.
-    if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(1)) {
-        out += debug_dump::serialize_region("SRAM", cart->sram().data(), cart->sram().size());
-    } else if (const devices::cartridge::CartridgeFmPacRom* cart = fmpac(2)) {
-        out += debug_dump::serialize_region("SRAM", cart->sram().data(), cart->sram().size());
+    if (const devices::cartridge::CartridgeFmPacRom* cart_slot1 = fmpac(1)) {
+        out += debug_dump::serialize_region("SRAM", cart_slot1->sram().data(),
+                                            cart_slot1->sram().size());
+    } else if (const devices::cartridge::CartridgeFmPacRom* cart_slot2 = fmpac(2)) {
+        out += debug_dump::serialize_region("SRAM", cart_slot2->sram().data(),
+                                            cart_slot2->sram().size());
     } else {
         out += debug_dump::serialize_region("SRAM", nullptr, 0);
     }

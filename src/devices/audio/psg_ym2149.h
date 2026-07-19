@@ -131,7 +131,6 @@ public:
     // owns (reuses advance_cycles()).
     void attach_audio_cycle_source(PsgCycleSource* source) { audio_cycle_source_ = source; }
     void set_audio_sync_enabled(bool enabled) { audio_sync_enabled_ = enabled; }
-    [[nodiscard]] bool audio_sync_enabled() const { return audio_sync_enabled_; }
     // Advance the box-average integral + generator to absolute machine cycle
     // `now` using the CURRENT register state (advance_cycles(now -
     // last_sync_cycle_)). Monotonic: a `now` at or before the last sync is a
@@ -140,7 +139,6 @@ public:
     // Reset the sync cursor to `cycle` WITHOUT advancing (frontend frame/stream
     // alignment). Used when (re)starting interleaved production.
     void reset_audio_sync(std::uint64_t cycle) { last_sync_cycle_ = cycle; }
-    [[nodiscard]] std::uint64_t last_sync_cycle() const { return last_sync_cycle_; }
     // ------------------------------------------------------------------
 
     // Bus-independent register access (used by the machine wiring and tests).
