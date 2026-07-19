@@ -26,6 +26,15 @@ build/
 /utils/msx-diskutil
 /utils/msx-diskutil.exe
 
+# DEC-0097: the runtime settings file + File>Recent sidecar now live at the
+# PROJECT ROOT (beside the assets they name, identical on every platform --
+# the exe dir is build/Debug on Windows but build/ elsewhere). They are
+# PER-MACHINE generated state: the emulator writes them, they carry absolute
+# asset paths resolved on THIS machine, and committing one would push a
+# Windows path onto the Mac/Pi and break their asset resolution. Never track.
+/sony_msx_hbf1xv.xml
+/sony_msx_recent.txt
+
 # Python bytecode
 __pycache__/
 *.pyc

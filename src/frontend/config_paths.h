@@ -14,6 +14,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <string>
 
 #include "machine/emulator_config.h"
@@ -51,6 +52,57 @@ namespace sony_msx::frontend {
 // Pure: the base directory is INJECTED rather than read from the process, so
 // the behavior is unit-testable without touching the real working directory.
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// DEC-0097: find the PROJECT ROOT from the executable's own location.
+//
+// The asset directories (bios/, roms/, disks/, games/) and the config file all
+// live at the project root, but the executable does NOT: it sits at
+// <root>/build/Debug/ on Windows (multi-config) and <root>/build/ on macOS and
+// Linux (single-config). Hard-coding "../.." would be wrong on one of them, and
+// resolving against the WORKING DIRECTORY makes everything depend on where the
+// user happened to launch from -- the defect that made FM-PAC silently fail.
+//
+// So: walk UP from the start directory and take the first level that looks like
+// the project root. `is_root` is INJECTED so the search is unit-testable without
+// a real filesystem; discover_project_root() below supplies the real predicate
+// (a directory containing `bios/`).
+//
+// Level 0 is the start directory itself, so a FLAT install (exe sitting beside
+// bios/) is found too -- the same code covers all three layouts with no
+// per-platform branching.
+// ---------------------------------------------------------------------------
+template <typename IsRootPredicate>
+[[nodiscard]] std::optional<std::filesystem::path> find_project_root(
+    const std::filesystem::path& start, IsRootPredicate is_root, const int max_levels = 4) {
+    if (start.empty()) {
+        return std::nullopt;
+    }
+    std::filesystem::path dir = start.lexically_normal();
+    for (int level = 0; level <= max_levels; ++level) {
+        if (is_root(dir)) {
+            return dir;
+        }
+        const std::filesystem::path parent = dir.parent_path();
+        if (parent.empty() || parent == dir) {
+            break;  // hit the filesystem root -- stop rather than spin
+        }
+        dir = parent;
+    }
+    return std::nullopt;
+}
+
+// The real-filesystem wrapper: the project root is the nearest ancestor of the
+// executable that contains a `bios` directory. Returns nullopt when nothing
+// matches (a detached/installed binary), leaving the caller on its previous
+// working-directory behavior rather than inventing a root.
+[[nodiscard]] inline std::optional<std::filesystem::path> discover_project_root(
+    const std::filesystem::path& exe_dir) {
+    return find_project_root(exe_dir, [](const std::filesystem::path& dir) {
+        std::error_code ec;
+        return std::filesystem::is_directory(dir / "bios", ec);
+    });
+}
+
 [[nodiscard]] inline machine::EmulatorConfig with_absolute_asset_paths(
     const machine::EmulatorConfig& cfg, const std::filesystem::path& base) {
     machine::EmulatorConfig out = cfg;

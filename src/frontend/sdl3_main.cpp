@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "devices/cartridge/cartridge_mapper_type.h"
+#include "frontend/config_paths.h"  // DEC-0097: project-root discovery + asset-path resolution
 #include "frontend/config_runtime.h"
 #include "frontend/sdl3_app.h"
 #include "frontend/sdl3_cli.h"
@@ -389,12 +390,29 @@ int main(int argc, char** argv) {
     // ctest/CI harness mode) NEVER auto-loads, so the deterministic suite stays
     // byte-identical. When the gate is false, `cfg` stays all-built-in-defaults
     // and resolve_runtime_config() reproduces the exact pre-M50 resolution.
+    // DEC-0097: locate the PROJECT ROOT from the executable's own location. The
+    // assets (bios/, roms/, disks/, games/) and the config file all live there,
+    // but the exe does not -- it is <root>/build/Debug/ on Windows and
+    // <root>/build/ on macOS/Linux. Walking up until we find bios/ absorbs that
+    // difference with no per-platform branching, and makes the emulator
+    // independent of the WORKING DIRECTORY (launching from build/ used to leave
+    // every relative asset path unresolvable, so BIOS and FM-PAC silently
+    // failed). std::nullopt = no root found -> keep the historical CWD behavior.
+    const std::string exe_dir = exe_directory(argv[0]);
+    const std::optional<std::filesystem::path> project_root =
+        exe_dir.empty() ? std::nullopt
+                        : sony_msx::frontend::discover_project_root(std::filesystem::path(exe_dir));
+
     sony_msx::machine::EmulatorConfig cfg;  // built-in defaults
     {
         const bool interactive = !parsed.hidden_window;
         if (sony_msx::frontend::config_should_load(interactive, parsed.config_path.has_value())) {
             std::vector<std::string> auto_paths;
-            const std::string exe_dir = exe_directory(argv[0]);
+            // Project root FIRST: the config belongs beside the assets it names.
+            if (project_root.has_value()) {
+                auto_paths.push_back((*project_root / "sony_msx_hbf1xv.xml").string());
+            }
+            // Back-compat: configs written beside the exe by v1.6.0-v1.6.2.
             if (!exe_dir.empty()) {
                 auto_paths.push_back((std::filesystem::path(exe_dir) / "sony_msx_hbf1xv.xml").string());
             }
@@ -405,6 +423,14 @@ int main(int argc, char** argv) {
             for (const std::string& w : config_warnings) {
                 std::cerr << w << "\n";
             }
+        }
+        // Resolve relative asset paths against the project root, NOT the working
+        // directory. This is what makes `bios`, `roms/fmpac.rom` etc. work from
+        // any launch directory on every platform. Absolute values (a user's
+        // explicit choice, or a BIOS folder picked via the menu) pass through
+        // untouched.
+        if (project_root.has_value()) {
+            cfg = sony_msx::frontend::with_absolute_asset_paths(cfg, *project_root);
         }
     }
     // Apply precedence CLI > XML(cfg) > built-in default across every S2-scope
@@ -514,12 +540,20 @@ int main(int argc, char** argv) {
     config.config_baseline = cfg;
     if (!parsed.hidden_window && !parsed.config_path.has_value()) {
         const std::string exe_dir = exe_directory(argv[0]);
-        const auto beside = [&exe_dir](const char* name) {
+        // DEC-0097: persist to the PROJECT ROOT -- beside the assets the config
+        // names, and identical on every platform (the exe dir is build/Debug on
+        // Windows but build/ elsewhere, so "beside the exe" was inherently
+        // platform-specific). Falls back to the exe dir, then the CWD, when no
+        // project root can be found (a detached/installed binary).
+        const auto persist_to = [&exe_dir, &project_root](const char* name) {
+            if (project_root.has_value()) {
+                return (*project_root / name).string();
+            }
             return exe_dir.empty() ? std::string(name)
                                    : (std::filesystem::path(exe_dir) / name).string();
         };
-        config.settings_save_path = beside("sony_msx_hbf1xv.xml");
-        config.recent_save_path = beside("sony_msx_recent.txt");
+        config.settings_save_path = persist_to("sony_msx_hbf1xv.xml");
+        config.recent_save_path = persist_to("sony_msx_recent.txt");
     }
 
     // Copy (not move) config into the app so it stays valid for the startup
