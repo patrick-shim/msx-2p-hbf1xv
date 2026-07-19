@@ -81,9 +81,9 @@ against openMSX. Around the core:
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.6.3](#build-history)** — the emulator now finds its BIOS, ROMs and config
-from the project root regardless of where you launch it from, on every platform. See
-[Build History](#build-history) for the full release log.
+**Current release: [v1.7.0](#build-history)** — a floppy activity LED and system status bar, plus
+the emulator now finds its BIOS, ROMs and config from the project root regardless of where you
+launch it from, on every platform. See [Build History](#build-history) for the full release log.
 
 ## Architecture
 
@@ -415,41 +415,26 @@ hand-edit it from there.
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
 
-### v1.6.3 — assets resolve from the project root, on every platform
-- **Fixed: BIOS and FM-PAC failing to load depending on where you launched from.** Asset paths
-  were resolved against the *current directory*, so running the emulator from `build/` (or
-  anywhere but the project root) left every relative path unresolvable — a blank machine, an empty
+### v1.7.0 — floppy activity LED, status bar, and project-root asset resolution
+- **A bottom status bar** showing live machine state, and an **FDD activity LED** driven by the
+  *real* drive motor line (with the hardware's ~4 s delayed motor-off, so even a brief fast-disk
+  access stays lit — exactly like a real front-panel floppy LED). The picture reserves the strip and
+  the window grows to match, mirroring the top menu bar, so the display keeps its size where the
+  screen has room.
+- **Fixed: BIOS and FM-PAC failing to load depending on where you launched from.** Asset paths were
+  resolved against the *current directory*, so running the emulator from `build/` — or anywhere but
+  the project root — left every relative path unresolvable: a blank machine, an empty cartridge
   slot 2, and no error explaining why.
 - The emulator now locates the **project root from its own executable**, walking up until it finds
   `bios/`. That covers `build\Debug\` on Windows, `build/` on macOS and Linux, and a flat install —
   one mechanism, no per-platform special-casing. **Launch directory no longer matters.**
-- The settings file and File ▸ Recent list move back to the **project root**, beside the assets
-  they name, so the layout is identical on every platform.
-- Persisted asset paths are now **relative to the project root** (with forward slashes), so the
-  config survives renaming or moving the project directory and can be shared between machines.
-  Paths you deliberately point elsewhere — e.g. a BIOS folder picked via the menu — stay absolute.
-
-### v1.6.2 — FM-PAC auto-load path fix
-- **Fixed: cartridge slot 2 coming up empty.** FM-PAC failed to auto-load — silently, with no
-  error — whenever the emulator was launched from a directory other than the one its asset paths
-  were relative to. The status bar just showed `S2 -` and FM-PAC battery saves were unavailable.
-- Cause: v1.6.0 writes the settings file beside the executable, but relative asset paths resolve
-  against the *working directory*, so a persisted `roms/fmpac.rom` stopped resolving as soon as you
-  launched from elsewhere. (The BIOS directory was unaffected only because the BIOS-folder picker
-  already stored an absolute path — which is why the machine still booted normally.)
-- Settings are now persisted with **absolute** asset paths, and an existing config upgrades itself
-  on the next run. Hand-authored absolute paths are preserved verbatim, and the BIOS ROM *filenames*
-  stay relative to the BIOS directory so `Machine ▸ BIOS Folder…` keeps working.
-- On a new machine, launch once from the repo root with your assets in place — the paths that get
-  locked in are the ones that resolved at that moment.
-
-### v1.6.1 — floppy activity LED + system status bar
-- **A bottom status bar** showing live machine state, and an **FDD activity LED** driven by the
-  *real* drive motor line (with the hardware's ~4 s delayed motor-off, so even a brief fast-disk
-  access stays lit — exactly like a real front-panel floppy LED).
-- The picture reserves the strip and the window grows to match — mirroring the top menu bar — so
-  the MSX display keeps its size wherever the screen has room.
-- Frontend/ImGui only: no device changes, and the deterministic suite is byte-identical.
+- The settings file and File ▸ Recent list live at the **project root**, beside the assets they
+  name, so the layout is identical on every platform. Persisted asset paths are stored **relative**
+  to that root (forward slashes), so the config survives renaming or moving the project and can be
+  shared between machines; paths you deliberately point elsewhere stay absolute.
+- **A configured asset path that no longer exists is never honoured silently.** It falls back to the
+  standard project-root location and says so, or warns plainly if nothing resolves — so an empty
+  slot 2 can't go unexplained again.
 
 ### v1.6.0 — persistent settings + File ▸ Recent
 - **Your settings now persist across sessions.** An interactive session writes

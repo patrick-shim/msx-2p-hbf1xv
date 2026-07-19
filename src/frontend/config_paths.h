@@ -16,6 +16,7 @@
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "machine/emulator_config.h"
 
@@ -127,6 +128,44 @@ template <typename IsRootPredicate>
     absolutize(out.fmpac_sram);
     absolutize(out.softwaredb_path);
     return out;
+}
+
+// ---------------------------------------------------------------------------
+// DEC-0098: never honour a configured asset path that does not exist, SILENTLY.
+//
+// THE FAILURE THIS ENDS: a config written by v1.6.2 could carry an absolute
+// path that was correct only for the directory it was launched from once
+// (e.g. <root>/build/roms/fmpac.rom). Later versions treated any absolute path
+// as the user's deliberate choice and passed it through untouched -- so FM-PAC
+// auto-load looked up a file that was not there, skipped, and left cartridge
+// slot 2 empty with NOTHING on screen or on stderr to explain it. Three separate
+// debugging sessions across three machines traced back to that silence.
+//
+// Policy: if the configured path is missing but the STANDARD project-root
+// location exists, use that and SAY SO. If neither exists, keep the configured
+// value (so the existing loader reports it in its own diagnostics) and WARN.
+// `exists` is injected, so the decision logic is unit-testable with no
+// filesystem.
+//
+// Returns {effective_path, message}; message empty means nothing notable.
+// ---------------------------------------------------------------------------
+template <typename ExistsPredicate>
+[[nodiscard]] std::pair<std::string, std::string> resolve_existing_asset(
+    const std::string& label, const std::string& configured,
+    const std::string& default_relative, const std::filesystem::path& root,
+    ExistsPredicate exists) {
+    if (configured.empty() || exists(configured)) {
+        return {configured, std::string()};
+    }
+    std::filesystem::path fallback = (root / default_relative).lexically_normal();
+    fallback.make_preferred();
+    const std::string fallback_str = fallback.string();
+    if (fallback_str != configured && exists(fallback_str)) {
+        return {fallback_str, "config: NOTE " + label + " \"" + configured +
+                                  "\" not found; using \"" + fallback_str + "\" instead"};
+    }
+    return {configured, "config: WARNING " + label + " \"" + configured +
+                            "\" not found -- this asset will not load"};
 }
 
 // ---------------------------------------------------------------------------

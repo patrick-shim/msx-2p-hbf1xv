@@ -431,6 +431,38 @@ int main(int argc, char** argv) {
         // untouched.
         if (project_root.has_value()) {
             cfg = sony_msx::frontend::with_absolute_asset_paths(cfg, *project_root);
+
+            // DEC-0098: a configured asset path that does NOT exist must never be
+            // honoured silently. A config written by v1.6.2 could carry an
+            // absolute path valid only for the directory it was once launched
+            // from; later versions passed absolute paths through untouched, so
+            // FM-PAC auto-load looked up a missing file, skipped, and left slot 2
+            // empty with nothing on screen or stderr to explain it. Fall back to
+            // the standard project-root location when that exists, and SAY SO.
+            // Only the two assets whose absence is silently fatal are checked --
+            // fmpac.rom.sram and softwaredb are legitimately optional, so
+            // checking them would only add noise.
+            const auto dir_exists = [](const std::string& p) {
+                std::error_code ec;
+                return std::filesystem::is_directory(p, ec);
+            };
+            const auto file_exists = [](const std::string& p) {
+                std::error_code ec;
+                return std::filesystem::is_regular_file(p, ec);
+            };
+            const sony_msx::machine::EmulatorConfig defaults{};
+            auto [bios_dir, bios_msg] = sony_msx::frontend::resolve_existing_asset(
+                "BIOS directory", cfg.bios_dir, defaults.bios_dir, *project_root, dir_exists);
+            cfg.bios_dir = bios_dir;
+            if (!bios_msg.empty()) {
+                std::cerr << bios_msg << "\n";
+            }
+            auto [fmpac_rom, fmpac_msg] = sony_msx::frontend::resolve_existing_asset(
+                "FM-PAC ROM", cfg.fmpac_rom, defaults.fmpac_rom, *project_root, file_exists);
+            cfg.fmpac_rom = fmpac_rom;
+            if (!fmpac_msg.empty()) {
+                std::cerr << fmpac_msg << "\n";
+            }
         }
     }
     // Apply precedence CLI > XML(cfg) > built-in default across every S2-scope
