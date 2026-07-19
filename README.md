@@ -81,9 +81,9 @@ against openMSX. Around the core:
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.6.1](#build-history)** — a floppy activity LED and system status bar, on top
-of v1.6.0's persistent settings and File ▸ Recent. See [Build History](#build-history) for the full
-release log.
+**Current release: [v1.6.2](#build-history)** — fixes FM-PAC auto-load silently failing (empty
+cartridge slot 2) when launched from outside the project directory, on top of v1.6.1's activity LED
+and status bar. See [Build History](#build-history) for the full release log.
 
 ## Architecture
 
@@ -414,6 +414,20 @@ hand-edit it from there.
 
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
+
+### v1.6.2 — FM-PAC auto-load path fix
+- **Fixed: cartridge slot 2 coming up empty.** FM-PAC failed to auto-load — silently, with no
+  error — whenever the emulator was launched from a directory other than the one its asset paths
+  were relative to. The status bar just showed `S2 -` and FM-PAC battery saves were unavailable.
+- Cause: v1.6.0 writes the settings file beside the executable, but relative asset paths resolve
+  against the *working directory*, so a persisted `roms/fmpac.rom` stopped resolving as soon as you
+  launched from elsewhere. (The BIOS directory was unaffected only because the BIOS-folder picker
+  already stored an absolute path — which is why the machine still booted normally.)
+- Settings are now persisted with **absolute** asset paths, and an existing config upgrades itself
+  on the next run. Hand-authored absolute paths are preserved verbatim, and the BIOS ROM *filenames*
+  stay relative to the BIOS directory so `Machine ▸ BIOS Folder…` keeps working.
+- On a new machine, launch once from the repo root with your assets in place — the paths that get
+  locked in are the ones that resolved at that moment.
 
 ### v1.6.1 — floppy activity LED + system status bar
 - **A bottom status bar** showing live machine state, and an **FDD activity LED** driven by the
