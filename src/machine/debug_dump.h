@@ -21,7 +21,7 @@
 
 namespace sony_msx::machine::debug_dump {
 
-// Deterministic full-state debug-dump serializers (M10-S3).
+// Deterministic full-state debug-dump serializers.
 //
 // Build a byte-stable, diff-friendly ASCII text representation of the
 // machine's architectural state for offline inspection and regression

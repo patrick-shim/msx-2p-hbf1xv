@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Audio_ClickDac_Unit (M39-A, the MSX 1-bit key-click DAC).
+// Suite: Devices_Audio_ClickDac_Unit (the MSX 1-bit key-click DAC).
 //
 // The ClickDac is the additive band-limited source for PPI port-C bit-7 edges
 // (openMSX KeyClick -> DACSound; ClickDac.h). Oracles:

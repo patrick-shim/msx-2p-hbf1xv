@@ -28,7 +28,8 @@ void VdpScanlineAccumulator::reset() {
     for (Row& row : rows_) {
         row.valid = false;
         row.width = 0;
-        // pixels keeps its capacity -- reused staging rows (R-M32-3).
+        // pixels keeps its capacity -- reused staging rows (no per-frame
+        // allocation churn).
     }
     watermark_ = 0;
     completed_frame_ = FrameBuffer{};
@@ -41,13 +42,13 @@ void VdpScanlineAccumulator::sync_to_line(const int exclusive_end_line) {
     const int end = std::clamp(exclusive_end_line, 0, std::min(height, kMaxLines));
 
     if (end > 0 && end < watermark_) {
-        // Wrap safety (§2.2): a positive raster position behind the
+        // Wrap safety: a positive raster position behind the
         // accumulation point -- the previous frame was never finalized
-        // (step-only caller, DEC-0034 loop-shape class) or a mid-frame
-        // geometry change moved the active window (D10 class). Seal
+        // (a step-only caller let the 262-line arithmetic wrap) or a
+        // mid-frame geometry change moved the active window. Seal
         // deterministically and start over. (end == 0 -- a border/vblank
         // position -- is always a plain no-op: border writes never reset a
-        // partial frame.)
+        // partial frame.) (DEC-0034)
         finalize(Field::Progressive);
         // watermark_ is now 0; fall through to accumulate [0, end).
     }
@@ -63,7 +64,7 @@ void VdpScanlineAccumulator::sync_to_line(const int exclusive_end_line) {
         if (static_cast<int>(row.pixels.size()) != width) {
             row.pixels.assign(static_cast<std::size_t>(width), 0);
         }
-        // M21 per-line workhorse against LIVE registers -- the openMSX
+        // Per-line workhorse against LIVE registers -- the openMSX
         // sync-before-change analogue at line granularity
         // (PixelRenderer.cc:549-571 Accuracy::LINE rounding).
         renderer_->render_line(line, Field::Progressive,
@@ -78,9 +79,9 @@ void VdpScanlineAccumulator::emit_adapted_row(const Row& row, std::uint16_t* con
         std::copy_n(row.pixels.data(), static_cast<std::size_t>(out_width), out);
         return;
     }
-    // Deterministic width-adaptation policy (§2.4; the D10 remainder covers
-    // per-line-perfect fidelity for geometry-mixed frames -- no title in
-    // the current evidence set switches width mid-frame).
+    // Deterministic width-adaptation policy (per-line-perfect fidelity for
+    // geometry-mixed frames is not attempted -- no title in the current
+    // evidence set switches width mid-frame).
     if (row.width * 2 == out_width) {
         for (int x = 0; x < row.width; ++x) {
             out[x * 2 + 0] = row.pixels[static_cast<std::size_t>(x)];
@@ -96,7 +97,8 @@ void VdpScanlineAccumulator::emit_adapted_row(const Row& row, std::uint16_t* con
     }
     // Non-2x mismatch (e.g. the 240/480-wide TEXT families vs a bitmap
     // width): copy the overlapping prefix, pad the remainder with the
-    // border color. Deterministic; D10-class depth.
+    // border color. A deterministic approximation; per-line-perfect
+    // fidelity for such mixed-geometry frames is not attempted.
     const int n = std::min(row.width, out_width);
     std::copy_n(row.pixels.data(), static_cast<std::size_t>(n), out);
     for (int x = n; x < out_width; ++x) {

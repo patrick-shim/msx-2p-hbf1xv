@@ -26,14 +26,15 @@ namespace {
 // VdpAccessDelta values ALREADY present + license-blessed in
 // vdp_access_timing.h:72-88 (the header re-derived those as "hardware fact, not
 // copied code", :65-71). A COMPOSITION of existing deltas -- NOT a transcription
-// of openMSX's ~340-entry VDPAccessSlots.cc slot-position table (that is the
-// deferred Phase-2b cycle-exact model + the license-sensitive-scope ban).
+// of openMSX's ~340-entry VDPAccessSlots.cc slot-position table (a cycle-exact
+// slot-position model is deliberately not implemented, and transcribing that
+// table is banned for GPL license isolation).
 //
 // TWO cost components per command (VDP command-timing hardware-parity
 // correction):
 //   (a) PER-UNIT (per pixel or byte) -- charged for every drawn unit; and
 //   (b) PER-LINE end-of-line overhead -- charged once per completed row.
-// Both are grounded in TIER-1 references/fact-sheets/Yamaha V9958 VDP.md §8 (the
+// Both are grounded in the Yamaha V9958 VDP fact sheet §8 (the
 // openMSX 2013 logic-analyzer table, "per pixel" and "per line" columns) and
 // corroborated by openMSX VDPCmdEngine.cc's own Delta usage (behavior reference
 // only, never copied), where the per-line overhead is exactly the end-of-line
@@ -113,8 +114,8 @@ std::uint64_t rect_duration_tstates(const int ticks_per_unit, const int per_line
 // re-expressed as a runtime table keyed by scrMode instead of the
 // reference's compile-time template parameter -- behaviorally equivalent,
 // simpler to dispatch on a value computed from R#0/R#1/R#25 at runtime.
-// `address_of` is one of the five vdp_command_address.h functions (the
-// D7-closing piece, §1.5), never V9958Vdp::effective_address().
+// `address_of` is one of the five vdp_command_address.h
+// functions, never V9958Vdp::effective_address().
 struct ModeTraits {
     std::uint8_t color_mask;
     std::uint8_t pixels_per_byte;
@@ -288,7 +289,7 @@ void VdpCommandEngine::reset() {
 // --- status side effects -------------------------------------------------
 
 void VdpCommandEngine::on_color_register_read() {
-    ++color_read_count_;  // DEC-0072 diagnostic: count every S#7 color-register read
+    ++color_read_count_;  // diagnostic: count every S#7 color-register read (DEC-0072)
     if (transfer_kind_ != TransferKind::Lmcm || !ce()) {
         return;
     }
@@ -371,13 +372,13 @@ void VdpCommandEngine::write_pixel(const int scr_mode, const unsigned x, const u
 // --- command dispatch ------------------------------------------------------
 
 void VdpCommandEngine::execute_command() {
-    // M44 Phase 2a: default this command's reported duration to 0 (instant).
+    // Default this command's reported duration to 0 (instant).
     // Every atomic rectangle/LINE/SRCH command below overwrites it from its own
     // work count; ABRT, degenerate no-ops, POINT/PSET, illegal-mode, and the
     // event-driven transfers all leave it 0 (paced by their own mechanism).
     last_cmd_duration_tstates_ = 0;
     if (scr_mode_ < 0) {
-        // No commands possible at all (A-M22-6): writing CMD immediately
+        // No commands possible at all: writing CMD immediately
         // behaves as ABRT (VDPCmdEngine.cc:1944-1947).
         command_done();
         transfer_kind_ = TransferKind::None;
@@ -424,7 +425,7 @@ void VdpCommandEngine::run_srch() {
     const int tx = (arg_ & kDix) ? -1 : 1;
     const bool aeq = (arg_ & kEq) != 0;
     asx_ = sx_;
-    std::uint64_t searched = 0;  // M44 Phase 2a: examined-pixel count
+    std::uint64_t searched = 0;  // examined-pixel count (feeds the duration estimate)
     for (;;) {
         ++searched;
         const std::uint8_t p = point_pixel(scr_mode_, asx_, sy_, vram_);
@@ -439,7 +440,7 @@ void VdpCommandEngine::run_srch() {
             break;
         }
     }
-    last_cmd_duration_tstates_ = duration_tstates(kTicksSrch, searched);  // M44 Phase 2a
+    last_cmd_duration_tstates_ = duration_tstates(kTicksSrch, searched);  // per-searched-pixel cost
     command_done();
 }
 
@@ -458,7 +459,7 @@ void VdpCommandEngine::run_hmmv() {
         return;
     }
     last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmv, kPerLineHmmv, tmp_nx, tmp_ny);
-    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
+    notify_dest_row(dy);  // render-sync BEFORE this row's writes
     for (;;) {
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, col_);
         adx = wrap_step(adx, tx);
@@ -468,7 +469,7 @@ void VdpCommandEngine::run_hmmv() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
-            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
+            notify_dest_row(dy);  // render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -490,7 +491,7 @@ void VdpCommandEngine::run_hmmm() {
         return;
     }
     last_cmd_duration_tstates_ = rect_duration_tstates(kTicksHmmm, kPerLineHmmm, tmp_nx, tmp_ny);
-    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
+    notify_dest_row(dy);  // render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(asx, sy) & 0x1FFFFu);
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, byte);
@@ -504,7 +505,7 @@ void VdpCommandEngine::run_hmmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
-            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
+            notify_dest_row(dy);  // render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -527,7 +528,7 @@ void VdpCommandEngine::run_ymmm() {
         return;
     }
     last_cmd_duration_tstates_ = rect_duration_tstates(kTicksYmmm, kPerLineYmmm, tmp_nx, tmp_ny);
-    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
+    notify_dest_row(dy);  // render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t byte = vram_.read(t.address_of(adx, sy) & 0x1FFFFu);
         vram_.write(t.address_of(adx, dy) & 0x1FFFFu, byte);
@@ -539,7 +540,7 @@ void VdpCommandEngine::run_ymmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
-            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
+            notify_dest_row(dy);  // render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -551,7 +552,7 @@ void VdpCommandEngine::run_pset() {
     const DecodedOp decoded = decode_op(static_cast<std::uint8_t>(cmd_ & 0x0F));
     const ModeTraits& t = traits_for(scr_mode_);
     const std::uint8_t cl = static_cast<std::uint8_t>(col_ & t.color_mask);
-    notify_dest_row(dy_);  // M44: render-sync BEFORE the single PSET write
+    notify_dest_row(dy_);  // render-sync BEFORE the single PSET write
     write_pixel(scr_mode_, dx_, dy_, cl, decoded.op, decoded.transparent, vram_);
     command_done();
 }
@@ -570,12 +571,12 @@ void VdpCommandEngine::run_line() {
     unsigned dy = dy_;
     unsigned anx = 0;
 
-    // M44: LINE advances dy per PIXEL; the destination-row sink must fire only
-    // when dy actually changes (R-5), BEFORE that row's write. sync_to_line is
+    // LINE advances dy per PIXEL; the destination-row sink must fire only
+    // when dy actually changes, BEFORE that row's write. sync_to_line is
     // idempotent so a redundant equal-line call would be harmless anyway.
     bool row_notified = false;
     unsigned last_notified_dy = 0;
-    std::uint64_t line_pixels = 0;  // M44 Phase 2a: drawn major-axis pixel count
+    std::uint64_t line_pixels = 0;  // drawn pixel count (feeds the duration estimate)
     std::uint64_t minor_steps = 0;  // minor-axis (Bresenham) advances (+32 VDP cycles each)
 
     for (int guard = 0; guard < 1'000'000; ++guard) {
@@ -648,7 +649,7 @@ void VdpCommandEngine::run_lmmv() {
         return;
     }
     last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmv, kPerLineLmmv, tmp_nx, tmp_ny);
-    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
+    notify_dest_row(dy);  // render-sync BEFORE this row's writes
     for (;;) {
         write_pixel(scr_mode_, adx, dy, cl, decoded.op, decoded.transparent, vram_);
         adx = wrap_step(adx, tx);
@@ -658,7 +659,7 @@ void VdpCommandEngine::run_lmmv() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
-            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
+            notify_dest_row(dy);  // render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -680,7 +681,7 @@ void VdpCommandEngine::run_lmmm() {
         return;
     }
     last_cmd_duration_tstates_ = rect_duration_tstates(kTicksLmmm, kPerLineLmmm, tmp_nx, tmp_ny);
-    notify_dest_row(dy);  // M44: render-sync BEFORE this row's writes
+    notify_dest_row(dy);  // render-sync BEFORE this row's writes
     for (;;) {
         const std::uint8_t src = point_pixel(scr_mode_, asx, sy, vram_);
         write_pixel(scr_mode_, adx, dy, src, decoded.op, decoded.transparent, vram_);
@@ -694,7 +695,7 @@ void VdpCommandEngine::run_lmmm() {
             adx = dx_;
             anx = tmp_nx;
             if (tmp_ny == 0) break;
-            notify_dest_row(dy);  // M44: render-sync BEFORE the next row's writes
+            notify_dest_row(dy);  // render-sync BEFORE the next row's writes
         }
     }
     command_done();
@@ -703,7 +704,7 @@ void VdpCommandEngine::run_lmmm() {
 // --- event-driven transfer commands: LMCM/LMMC/HMMC -----------------------
 
 void VdpCommandEngine::start_lmcm() {
-    ++lmcm_start_count_;  // DEC-0072 diagnostic: count every LMCM command issue
+    ++lmcm_start_count_;  // diagnostic: count every LMCM command issue (DEC-0072)
     const ModeTraits& t = traits_for(scr_mode_);
     ny_ &= 1023u;
     const bool dix = (arg_ & kDix) != 0;
@@ -813,14 +814,14 @@ std::uint64_t VdpCommandEngine::transfer_unit_cost_tstates() const {
     // S#2 TR (transfer-ready, bit7) bit drops for after each serviced transfer
     // unit, then re-raises. openMSX PUNTS on transfer per-unit timing
     // (nextAccessSlot(limit), "timing is inaccurate", VDPCmdEngine.cc:1288/1349/
-    // 1770) and TIER-1 gives no transfer figure, so this reuses the closest
+    // 1770) and the fact sheet gives no transfer figure, so this reuses the closest
     // grounded per-unit constant of the byte/dot analog (the audit's "consistent
     // with the command's per-unit tick cost"):
     //   HMMC byte write ~ HMMV 48/byte;  LMMC RMW pixel ~ LMMV 96/px;
     //   LMCM pixel read ~ SRCH 88/read-px.
     // 0 when no transfer is active (kind None), e.g. immediately after the final
     // unit completes -- leaving TR raised as real HW does after the last byte
-    // (fact-sheet §8: "the transfer can end ... even though TR was 1 after the
+    // (fact sheet §8: "the transfer can end ... even though TR was 1 after the
     // last byte").
     switch (transfer_kind_) {
     case TransferKind::Hmmc: return tstates_from_vdp_cycles(kTicksHmmv);  // 8

@@ -21,7 +21,7 @@ namespace {
 
 using devices::cartridge::parse_cartridge_mapper_type;
 
-// Case-insensitive match for the M30 `auto` type value (mirrors the enum
+// Case-insensitive match for the `auto` type value (mirrors the enum
 // parser's case-insensitivity for canonical names).
 bool is_auto_value(const std::string& value) {
     if (value.size() != 4) {
@@ -55,15 +55,16 @@ std::optional<std::string> take_value(const std::vector<std::string>& args, cons
 ParsedCartridgeCli parse_cartridge_cli(const std::vector<std::string>& args) {
     ParsedCartridgeCli parsed;
 
-    // M46 (DEC-0071): apply a --slotN-type / --cartN-type VALUE to the target
+    // Apply a --slotN-type / --cartN-type VALUE to the target
     // slot spec. Shared by both spellings so `--slotN-type` and `--cartN-type`
     // write byte-identical results; last occurrence on the linear scan wins
     // (identical to every other repeated-flag rule here). `flag_name` is only
-    // used for the diagnostic text so the error names the spelling the user typed.
+    // used for the diagnostic text so the error names the spelling the user
+    // typed. (DEC-0071)
     const auto apply_type = [&](ParsedCartridgeSlotCli& slot, const std::string& value,
                                 const char* flag_name) {
         if (is_auto_value(value)) {
-            // M30: `auto` == "as if the flag were omitted" (last occurrence
+            // `auto` == "as if the flag were omitted" (last occurrence
             // wins, like every repeated flag here).
             slot.type = devices::cartridge::CartridgeMapperType::Mirrored;
             slot.type_was_explicit = false;
@@ -79,11 +80,12 @@ ParsedCartridgeCli parse_cartridge_cli(const std::vector<std::string>& args) {
     for (std::size_t i = 0; i < args.size(); ++i) {
         const std::string& arg = args[i];
 
-        // M46 (DEC-0071): `--slotN` is the official-MSX-term rename of `--cartN`;
+        // `--slotN` is the official-MSX-term rename of `--cartN`;
         // both spellings write the SAME slot1/slot2 fields, so they parse
         // byte-identically and a `--slotN`/`--cartN` collision for one slot
         // last-occurrence-wins (a plain linear-scan overwrite). `--cartN`
-        // remains an accepted silent backward-compat alias (existing scripts).
+        // remains an accepted silent backward-compat alias (existing
+        // scripts). (DEC-0071)
         if (arg == "--cart1" || arg == "--slot1") {
             if (auto value = take_value(args, i, arg.c_str(), parsed.errors)) {
                 parsed.slot1.path = *value;
@@ -105,7 +107,7 @@ ParsedCartridgeCli parse_cartridge_cli(const std::vector<std::string>& args) {
                 apply_type(parsed.slot2, *value, arg.c_str());
             }
         } else if (arg == "--softwaredb") {
-            // M30 (backlog G2): identification-database path override.
+            // Identification-database path override.
             if (auto value = take_value(args, i, "--softwaredb", parsed.errors)) {
                 parsed.softwaredb_path = *value;
                 ++i;

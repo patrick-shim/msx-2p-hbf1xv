@@ -27,7 +27,7 @@ constexpr std::uint8_t kDeformRotateAll = 0x40;
 }  // namespace
 
 void SccWavetable::reset() {
-    // enen-measured power-on state (SCC fact-sheet §7; A-M29-5 disclosure in
+    // enen-measured power-on state (SCC fact-sheet §7; the disclosure in
     // the header): openMSX fills the "random-ish mostly 0xFF" measured wave
     // content deterministically with 0xFF -- mirrored here.
     for (auto& w : wave_) {
@@ -64,7 +64,7 @@ std::uint8_t SccWavetable::read_wave(const int channel, const std::uint8_t offse
         return static_cast<std::uint8_t>(wave_[ch][offset & 0x1F]);
     }
     // Rotation-shifted readback (fact-sheet §6): shift advances once per
-    // (period+1) MASTER cycles off the internal accumulator (A-M29-6; the
+    // (period+1) MASTER cycles off the internal accumulator (the
     // measured Pazos rate -- see the header's disclosed divergence from
     // openMSX's /32 tick granularity). In all-rotate mode, ch4 (index 3)
     // uses ch5's (index 4) period (plain-SCC quirk).
@@ -219,7 +219,7 @@ void SccWavetable::apply_deform(const std::uint8_t value) {
         case 0xC0:
             // bits6+7: only ch1-3 rotate; ALL wave RAM read-only. (Pazos's
             // data-bus noise anomaly in this configuration is documented,
-            // NOT emulated -- planner §1.3.)
+            // NOT emulated.)
             for (int i = 0; i < 3; ++i) {
                 rotate_[static_cast<std::size_t>(i)] = true;
                 read_only_[static_cast<std::size_t>(i)] = true;
@@ -235,10 +235,10 @@ void SccWavetable::apply_deform(const std::uint8_t value) {
 }
 
 void SccWavetable::advance_cycles(const std::uint64_t delta_cycles) {
-    deform_cycles_ += delta_cycles;  // rotation time base (A-M29-6)
+    deform_cycles_ += delta_cycles;  // rotation time base (see header disclosure)
     for (int ch = 0; ch < kChannels; ++ch) {
         const auto i = static_cast<std::size_t>(ch);
-        // M34 (§2.3.2): enable gating of the dwell integral matches sample()
+        // Enable gating of the dwell integral matches sample()
         // exactly -- a disabled channel contributes 0 while its phase keeps
         // running.
         const bool enabled = ((enable_ >> ch) & 1) != 0;
@@ -247,17 +247,17 @@ void SccWavetable::advance_cycles(const std::uint64_t delta_cycles) {
             // entirely -- the current output byte is held (fact-sheet §4,
             // §9.2 arbitration; count deliberately NOT accumulated). Held
             // output constant across the whole delta => exact contribution
-            // out × delta (M34 §2.3.2).
+            // out × delta.
             if (enabled) {
                 level_dwell_integral_ +=
                     static_cast<std::int64_t>(out_[i]) * static_cast<std::int64_t>(delta_cycles);
             }
             continue;
         }
-        // M34 dwell walk at the channel's own (period+1)-master-cycle
+        // Dwell walk at the channel's own (period+1)-master-cycle
         // position-step boundaries. Phase-state evolution (count_/pos_/out_)
-        // is IDENTICAL to the pre-M34 bulk advance; only the Σ level×dwell
-        // bookkeeping is new. Boundary convention (§2.3.3): the completing
+        // is IDENTICAL to the earlier bulk advance; only the Σ level×dwell
+        // bookkeeping is new. Boundary convention: the completing
         // cycle's dwell belongs to the PRE-step held output.
         const std::uint64_t step_cycles = static_cast<std::uint64_t>(period_[i]) + 1;
         std::uint64_t remaining = delta_cycles;
@@ -287,7 +287,7 @@ std::int32_t SccWavetable::take_integrated_sample(const std::uint64_t window_cyc
     const std::int64_t integral = level_dwell_integral_;
     level_dwell_integral_ = 0;
     if (window_cycles == 0) {
-        // §2.3.5 zero-window guard: silence, no division.
+        // Zero-window guard: silence, no division.
         return 0;
     }
     return static_cast<std::int32_t>(

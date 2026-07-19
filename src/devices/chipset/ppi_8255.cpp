@@ -21,7 +21,7 @@ Ppi8255::Ppi8255(SlotBus& slot_bus, KeyboardRowSource& keyboard)
 
 void Ppi8255::reset() {
     // Port A (slot select) is reset by the machine to a defined value via #A8
-    // writes (M13 reset flip); here we reset the added B/C/control surface.
+    // writes; here we reset the added B/C/control surface.
     latch_b_ = 0;
     latch_c_ = 0;
     control_ = kResetControl;
@@ -52,7 +52,7 @@ void Ppi8255::write_control(const std::uint8_t value) {
     }
     // Bit set/reset on a single port-C bit (I8255.cc:330-340). Bit 7
     // (key-click) can be driven this way as well as by a full #AA write, so
-    // both paths must emit the M39-A click edge.
+    // both paths must emit the click edge.
     const std::uint8_t prev_latch_c = latch_c_;
     const std::uint8_t bit = static_cast<std::uint8_t>((value & kBitNr) >> 1);
     const std::uint8_t mask = static_cast<std::uint8_t>(1u << bit);
@@ -103,7 +103,7 @@ void Ppi8255::io_write(const core::BusAddress port, const core::BusData value) {
     case 2: {
         const std::uint8_t prev_latch_c = latch_c_;
         latch_c_ = value;               // #AA port C (row select / LED / cassette)
-        emit_click_edge_if_toggled(prev_latch_c);  // M39-A key-click 1-bit DAC
+        emit_click_edge_if_toggled(prev_latch_c);  // key-click 1-bit DAC edge
         break;
     }
     case 3:

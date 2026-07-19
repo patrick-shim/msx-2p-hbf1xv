@@ -23,10 +23,10 @@
 
 namespace sony_msx::devices::video {
 
-// Display-path row-pointer resolution for the G6/G7 planar VRAM interleave
-// (M21-S4, backlog D7; A-M21-11). For an even LOGICAL row_base (always true
+// Display-path row-pointer resolution for the G6/G7 planar VRAM interleave.
+// For an even LOGICAL row_base (always true
 // for G6/G7 display rows: row_base = page*0x10000 + line*256), the CPU
-// port's 17-bit rotate-right-by-1 (A-M21-10) degenerates to two CONTIGUOUS
+// port's 17-bit rotate-right-by-1 degenerates to two CONTIGUOUS
 // half-length spans in flat physical VRAM: even logical bytes at
 // [bank0_base, bank0_base+half_length), odd at [bank1_base, +half_length)
 // (bank1_base == bank0_base + 0x10000).
@@ -38,10 +38,10 @@ struct PlanarRowSpans {
 
 [[nodiscard]] PlanarRowSpans planar_row_spans(std::uint32_t row_base, std::size_t length);
 
-// Deterministic, pull-model, frozen-register-snapshot VDP pixel renderer
-// (M21, backlog D1/D5/D6, D7). Pure function of V9958Vdp's stored
-// VRAM/register state: no elapsed_cycles() dependency, no new clock consumer
-// (mirrors the M17/M19/M20 "no new clock consumer" precedent). Carries no
+// Deterministic, pull-model, frozen-register-snapshot VDP pixel renderer.
+// Pure function of V9958Vdp's stored
+// VRAM/register state: no elapsed_cycles() dependency, no new clock
+// consumer. Carries no
 // slot/bus knowledge (matches V9958Vdp, src/CLAUDE.md device-family
 // placement). Behavior cites its openmsx-21.0/src/video/*.{hh,cc} grounding
 // in vdp_frame_renderer.cpp; never copied verbatim (GPL isolation).
@@ -49,8 +49,7 @@ class VdpFrameRenderer {
 public:
     explicit VdpFrameRenderer(const V9958Vdp& vdp);
 
-    // Active-display pixel width/height for the CURRENT mode (planner
-    // package §2.2's independently-derived dimension table).
+    // Active-display pixel width/height for the CURRENT mode.
     [[nodiscard]] int width() const;
     [[nodiscard]] int height() const;
 
@@ -62,7 +61,7 @@ public:
     [[nodiscard]] FrameBuffer render_frame(Field field = Field::Progressive) const;
 
     // Mode-aware backdrop/border color (VDP.hh:211-226 getBackgroundColor;
-    // A-M21-4 GRAPHIC7 fixed-color decode; the GRAPHIC5 even-pixel border
+    // GRAPHIC7 fixed-color decode; the GRAPHIC5 even-pixel border
     // half, SDLRasterizer.cc:376-393 -- FrameBuffer.border_color is a single
     // value, so the even-pixel half is used for GRAPHIC5, a documented
     // simplification since real hardware alternates two border colors).
@@ -71,26 +70,28 @@ public:
 private:
     void dispatch_content(int line, Field field, std::span<std::uint16_t> out) const;
 
-    // Sprite pixel compositing (M22-S2, backlog D2). Called from
+    // Sprite pixel compositing. Called from
     // render_line() after dispatch_content() fills the background row and
     // BEFORE the border-mask step (mirrors the reference's "background then
-    // sprite overdraw" order, planner package §1.4 Resolution 1). Reads
+    // sprite overdraw" order). Reads
     // vdp_->sprite_engine().visible_sprites(line) -- state V9958Vdp::on_vsync()
     // already computed -- so this stays a PURE, read-only consumer.
     void composite_sprites(int line, Field field, std::span<std::uint16_t> out) const;
 
-    // V9958 table addressing (DEF-M43-FMPAC-SCREEN / DEC-0063). The real V9958
+    // V9958 table addressing. The real V9958
     // uses the TMS9918-legacy AND-MASK model, NOT an additive base+offset: the
     // pattern/color table effectiveBaseMask forces the "unused" low bits of the
     // base register to 1 (mirror bits, not address bits) and ANDs it with the
     // index (which carries its own high-bit fill). Canonical SCREEN 2 registers
     // (R#4=0x03, R#3=0xFF) therefore address pattern @ 0x0000 / color @ 0x2000 --
-    // the additive model wrongly landed them at 0x1800 / 0x3FC0 (blank), the
-    // DEF-M43 defect. name_table_base() stays a plain base (name addressing is
+    // an additive model wrongly lands them at 0x1800 / 0x3FC0 (blank screen),
+    // the defect this mask model fixes. name_table_base() stays a plain base
+    // (name addressing is
     // additive-equivalent for valid configs and was already correct); the
     // *_mask() helpers return the openMSX effectiveBaseMask (VDP.cc:1299-1355
     // updateColorBase/updatePatternBase; VDPVRAM.hh:153-180 setMask / :266-269
     // readNP `data[effectiveBaseMask & index]`) -- re-derived, never copied.
+    // (DEC-0063)
     [[nodiscard]] std::uint32_t name_table_base() const;
     [[nodiscard]] std::uint32_t pattern_table_mask() const;
     [[nodiscard]] std::uint32_t color_table_mask() const;
@@ -102,7 +103,7 @@ private:
     // fix). Real V99x8 behavior: R#8 TP bit CLEAR -> color 0 is TRANSPARENT,
     // so a color-0 content pixel shows the BACKDROP color (R#7 low nibble),
     // not palette entry 0. Grounded:
-    //   * fact-sheet: references/fact-sheets/Yamaha V9958 VDP.md:72 ("TP
+    //   * Yamaha V9958 VDP fact sheet ("TP
     //     colour0 transparent");
     //   * openMSX: VDP.hh:189-191 getTransparency() == (R#8 & 0x20) == 0;
     //     SDLRasterizer.cc:346-373 precalcColorIndex0() -- palFg[0] =
@@ -135,14 +136,14 @@ private:
     // columns of one name row (CharacterConverter.cc:255-270's `scroll =
     // getHorizontalScrollHigh(); charCode = namePtr[scroll & 0x1F]`). The
     // name-table-page-crossing nuance (`scroll & 0x20` selecting an alternate
-    // 0x8000-offset name-table half) is NOT reproduced -- out of scope,
-    // distinct from the bitmap-mode multi-page-scroll feature this milestone
-    // DOES implement (R#25 bit0 + R#2 bit5).
+    // 0x8000-offset name-table half) is NOT reproduced -- deliberately
+    // unimplemented, distinct from the bitmap-mode multi-page-scroll feature
+    // this renderer DOES implement (R#25 bit0 + R#2 bit5).
     [[nodiscard]] int scrolled_name_col(int col) const;
     // Horizontal scroll for bitmap modes (R#26 coarse + R#27 fine) -- a
-    // DIFFERENT mechanism from the character-mode one above (A-M21-8), and
-    // internally TWO independent mechanisms with OPPOSITE effect (M38 Phase B,
-    // re-derived from openMSX SDLRasterizer.cc:464-538 + PixelRenderer.cc:
+    // DIFFERENT mechanism from the character-mode one above, and
+    // internally TWO independent mechanisms with OPPOSITE effect
+    // (re-derived from openMSX SDLRasterizer.cc:464-538 + PixelRenderer.cc:
     // 586-604 + VDP.hh:335-370/629-631 -- never copied):
     //   * COARSE (R#26 & 0x1F): rotates the display LEFT in 8-dot steps
     //     (`8 * (lineWidth/256) * (R#26&0x1F)`, 16-dot for 512-wide G5/G6).
@@ -151,7 +152,8 @@ private:
     //     BORDER/backdrop (PixelRenderer.cc:586-594: "the 0..7 extra horizontal
     //     scroll low pixels should be drawn in border color"; displayL =
     //     getLeftBackground() = getLeftSprites() + R#27*4). NOT a circular wrap,
-    //     NOT the same sign as coarse. This was the M38 Phase-A root cause.
+    //     NOT the same sign as coarse. Getting this wrong was the root cause
+    //     of an earlier fine-scroll rendering defect.
     // compose_bitmap_scroll() applies both to the already-decoded page
     // buffer(s): `page_first` is the primary page's decoded line, `page_wrap`
     // the page supplying the coarse wrap tail (== `page_first` unless multi-page
@@ -171,7 +173,7 @@ private:
     // Bitmap-mode page selection (R#2 bits 5-6; VDP.hh getDisplayPage()),
     // multi-page scroll (R#25 bit0 + R#2 bit5; VDP.hh:362-370
     // isMultiPageScrolling(), "wraps to the lower even page"), and the
-    // even/odd field page-alternation hedge (A-M21-7). NOTE: deliberately
+    // even/odd field page-alternation hedge. NOTE: deliberately
     // narrower than VDP.hh:443-459 getEvenOddMask() -- that formula's
     // "EO-bit-clear implies alternate" term actually concerns per-SCANLINE
     // page splitting for multi-page-scroll smooth-blit (SDLRasterizer.cc:
@@ -217,7 +219,7 @@ private:
     void render_yjk_yae(int line, Field field, std::span<std::uint16_t> out) const;
     // TEXT1Q, MULTIQ, and any undefined mode byte render flat blank (palette
     // entry 15), NEVER TMS9918-compatible content -- the HB-F1XV's V9958 is
-    // never isMSX1VDP() (A-M21-6, re-derived from CharacterConverter.cc:
+    // never isMSX1VDP() (re-derived from CharacterConverter.cc:
     // 64-84's isMSX1VDP() branch and renderBlank(), :368-373).
     void render_blank(std::span<std::uint16_t> out) const;
 

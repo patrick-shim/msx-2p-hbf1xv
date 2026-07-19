@@ -21,22 +21,22 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `Konami` MVP mapper type, NO SCC (M19-S2), grounds
-// references/openmsx-21.0/src/memory/RomKonami.cc (behaviour reference only,
+// `Konami` mapper type, NO SCC. Grounded in
+// openMSX 21.0: src/memory/RomKonami.cc (behaviour reference only,
 // never copied -- GPL isolation). The single most common real-world MSX
 // MegaROM scheme, used by many classic Konami cartridge titles (including
 // a stealth-action cartridge title). The SCC-chip-bearing sibling is CartridgeKonamiScc
-// (cartridge_konami_scc_rom.h, added M29, backlog G1).
+// (cartridge_konami_scc_rom.h).
 //
 // Construction: set_block_mask(31) -- "Konami mapper is 256kB in size, even
 // if ROM is smaller" (RomKonami.cc:24). An image exceeding 256 KB is loaded
 // anyway (never rejected, matching openMSX's own non-fatal warning,
 // RomKonami.cc:27-31) -- and since the mask is only a FALLBACK for
-// out-of-range requests (A-M19-6), every byte-value bank request 0..255
+// out-of-range requests, every byte-value bank request 0..255
 // against a >256KB image is used UNMASKED (the mask never engages).
 // Deliberately does NOT call reset() in the constructor, matching
 // RomKonami.cc:33-35 exactly ("Do not call reset() here... there will be a
-// reset() at power up anyway"); CartridgeSlot::load() (M19-S3) calls the
+// reset() at power up anyway"); CartridgeSlot::load() calls the
 // newly constructed mapper's reset() explicitly before installing it as
 // active -- a documented no-op-until-loaded state, not a bug.
 //
@@ -47,7 +47,7 @@ namespace sony_msx::devices::cartridge {
 // page==4 or 5, ALSO window.set_bank(page+2, block) (mirrors into
 // window-slots 6/7) -- RomKonami.cc:38-52.
 // mem_write: only when 0x6000 <= addr < 0xC000; bank_switch(addr>>13, val)
-// (RomKonami.cc:61-67). QUIRK (deliberately preserved, R-M19-3): slot 2
+// (RomKonami.cc:61-67). QUIRK (deliberately preserved): slot 2
 // (0x4000-0x5FFF) is never a write target -- writes only trigger at addr >=
 // 0x6000 ("[0x4000..0x6000) is fixed at segment 0", RomKonami.cc:63) -- so
 // bank_switch(2,...) only ever runs from reset(), leaving slots 0 and 2
@@ -73,7 +73,7 @@ public:
     void mem_write(core::BusAddress address, core::BusData value) override;
 
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
-    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    // Debug-snapshot seam: exposes the bank window for generic bank-state dumps.
     [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
 
 private:

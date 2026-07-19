@@ -20,14 +20,14 @@
 
 namespace sony_msx::devices::fdc {
 
-// Deterministic 3.5" 720 KB (2DD) sector image for the HB-F1XV built-in drive
-// (M16-S1). Geometry: 80 cylinders x 2 sides x 9 sectors x 512 bytes =
-// 737,280 bytes, MFM double density, media descriptor 0xF9 (fact-sheet
-// "FDC for Sony HB-F1XV.md" §5; openMSX behaviour reference
-// references/openmsx-21.0/src/fdc/DSKDiskImage.cc / SectorAccessibleDisk.cc —
+// Deterministic 3.5" 720 KB (2DD) sector image for the HB-F1XV built-in drive.
+// Geometry: 80 cylinders x 2 sides x 9 sectors x 512 bytes =
+// 737,280 bytes, MFM double density, media descriptor 0xF9 (the
+// "FDC for Sony HB-F1XV" fact sheet §5; openMSX behaviour reference,
+// openMSX 21.0: src/fdc/DSKDiskImage.cc / SectorAccessibleDisk.cc —
 // read only, never copied, GPL isolation).
 //
-// Determinism (hard requirement, planner §5.1 / A-M16-4): the medium is built
+// Determinism (hard requirement): the medium is built
 // from CONSTANTS by a pure function; there is NO host-filesystem or wall-clock
 // input feeding emulation state. `synthesize()` produces a byte-for-byte
 // reproducible image (a repository fixture tests/parity/m16_boot.dsk is a
@@ -80,7 +80,7 @@ public:
     [[nodiscard]] bool present() const { return present_; }
     void set_present(bool present) { present_ = present; }
 
-    // ----- Optional host-file write-back persistence (M36-S-c) -----
+    // ----- Optional host-file write-back persistence -----
     //
     // OFF BY DEFAULT and completely additive: an image with no host path
     // behaves byte-for-byte as before (writes stay in the in-memory `data_`,
@@ -88,7 +88,7 @@ public:
     // `--disk-writable` CLI path calls set_host_path() so `flush()` writes the
     // final `data_` back to that `.dsk`.
     //
-    // Determinism (planner §2.2, hard requirement): flush() is WRITE-ONLY
+    // Determinism (hard requirement): flush() is WRITE-ONLY
     // output. It never re-reads the host file into emulation state -- emulation
     // reads `data_` only, loaded once at attach. A flush is a pure function of
     // the final `data_`, so two identical scripted write runs produce

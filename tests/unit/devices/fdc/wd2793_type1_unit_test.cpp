@@ -11,14 +11,14 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793Type1_Unit  (M16-S2)
+// Suite: Devices_Fdc_Wd2793Type1_Unit
 //
 // WD2793 core: 5 registers, master-reset TR=0xFF, Type I Restore/Seek, Type-I
 // status-bit layout (Busy/Track00/Seek-Error/Index/Head-Loaded), INTRQ set/clear,
 // step-rate/settle timing computed off an injected deterministic cycle clock
 // (never wall-clock).
 //
-// Grounding (read only, never copied - GPL isolation): references/openmsx-21.0/
+// Grounding (read only, never copied - GPL isolation): openMSX 21.0:
 // src/fdc/WD2793.cc status constants (:15-26), reset (:60-77), startType1Cmd/seek/
 // step/endType1Cmd (:420-519); fact-sheet "FDC for Sony HB-F1XV.md" §3 (TR=0xFF at
 // reset), §8 ("Seek to track 0" edge cases: up to 255 step pulses, Seek Error if

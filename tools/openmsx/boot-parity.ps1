@@ -18,8 +18,8 @@ param(
     [string]$WorkDir = "build",
     [string]$DiffOut = "docs/m16-parity-trace-diff.md",
     [int]$BootTraceSteps = 3000,
-    [string]$FdcProbeBin = "tests/parity/m16_fdc_probe.bin",
-    [string]$FdcDisk = "tests/parity/m16_boot.dsk",
+    [string]$FdcProbeBin = "tests/parity/fdc_probe.bin",
+    [string]$FdcDisk = "tests/parity/boot.dsk",
     [int]$FdcProbeSafetyCapSteps = 20000,
     [int]$BootSeconds = 6
 )
@@ -36,11 +36,11 @@ param(
 #     openMSX single-stepped via chained break-callbacks). Diffed on full
 #     architectural state (PC/opcode/registers/flags) via tools/analyze/trace-diff.py.
 #
-#   Subject 2 -- FDC register/command sequence probe (planner Section 7): the
-#     SAME Z80 program as tests/integration/machine/hbf1xv_m16_fdc_integration_
-#     test.cpp's build_restore_read_sector_probe() (assembled by
-#     tools/gen/fdc-probe.py into tests/parity/m16_fdc_probe.bin), run from
-#     a flat-RAM base with the IDENTICAL tests/parity/m16_boot.dsk (tools/
+#   Subject 2 -- FDC register/command sequence probe: the SAME Z80 program as
+#     tests/integration/machine/hbf1xv_fdc_integration_test.cpp's
+#     build_restore_read_sector_probe() (assembled by
+#     tools/gen/fdc-probe.py into tests/parity/fdc_probe.bin), run from
+#     a flat-RAM base with the IDENTICAL tests/parity/boot.dsk (from
 #     tools/gen/boot-disk.py; byte-identical to this emulator's default
 #     synthesized medium) mounted as drive A on BOTH sides. It writes side/
 #     drive/motor (0x7FFC/0x7FFD), issues a Type I Restore, polls status

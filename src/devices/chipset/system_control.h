@@ -21,14 +21,14 @@
 
 namespace sony_msx::devices::chipset {
 
-// System-control register on port #F5 (M15-S3).
+// System-control register on port #F5.
 //
 // On the HB-F1XV the RTC (RP5C01) is gated by the system-control port #F5
-// bit 7 — the CLOCK-IC enable (fact-sheet
-// references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md §5). This models the
+// bit 7 — the CLOCK-IC enable (the
+// Yamaha S1985 MSX-ENGINE Chipset fact sheet §5). This models the
 // #F5 latch and exposes the gate to the RTC via rtc::RtcClockGate.
 //
-// Polarity / reset value (grounded, A-M15-2 / R-4): bit 7 = 1 -> CLOCK-IC
+// Polarity / reset value (grounded): bit 7 = 1 -> CLOCK-IC
 // enabled (active-high enable). openMSX does not model an #F5 gate at all — its
 // MSXRTC answers #B4/#B5 unconditionally (MSXRTC.cc:24-46). To preserve A/B
 // boot parity with that always-on behaviour, the reset value enables the clock

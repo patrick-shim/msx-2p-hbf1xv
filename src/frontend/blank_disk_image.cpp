@@ -17,9 +17,9 @@ namespace sony_msx::frontend {
 
 namespace {
 
-// The 720 KB (2DD) MSX-DOS FAT12 geometry (re-expressed from the documented
-// tools/gen/format-blank-disk.ps1:82-133 spec -- NOT a code dependency on
-// src/utils, DEC-0080 both-ways build isolation).
+// The 720 KB (2DD) MSX-DOS FAT12 geometry, re-expressed from the documented
+// layout spec -- NOT a code dependency on src/utils (both-ways build
+// isolation, DEC-0080).
 constexpr std::uint32_t kSectorSize = 512;
 constexpr std::uint32_t kSectorsPerTrack = 9;
 constexpr std::uint32_t kSides = 2;
@@ -32,9 +32,9 @@ constexpr std::uint8_t kMediaDescriptor = 0xF9;
 
 std::vector<std::uint8_t> build_blank_disk_image() {
     // Zero-initialized image (empty formatted filesystem); only the BPB + the two
-    // FAT seeds are written, so the root directory and data area stay all-zero
-    // (empty, DOS-recognizable, deliberately NON-bootable -- no proprietary DOS
-    // system files, DEC-0080).
+    // FAT seeds are written, so the root directory and data area stay all-zero --
+    // empty, DOS-recognizable, deliberately NON-bootable: no proprietary DOS
+    // system files are ever written (DEC-0080).
     std::vector<std::uint8_t> image(kImageBytes, 0x00);
 
     // --- Boot sector + BPB at LBA 0 (standard MSX 720 KB FAT12). ---

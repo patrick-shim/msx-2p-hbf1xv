@@ -26,8 +26,8 @@ void CartridgeRomWindow::set_bank(const int slot, const unsigned requested_block
         return;
     }
 
-    // Byte-exact RomBlocks<BANK_SIZE>::setRom (A-M19-6,
-    // references/openmsx-21.0/src/memory/RomBlocks.cc:107-118): the mask is a
+    // Byte-exact RomBlocks<BANK_SIZE>::setRom
+    // (openMSX 21.0: src/memory/RomBlocks.cc:107-118): the mask is a
     // FALLBACK consulted ONLY when the requested block is already out of
     // range, never an unconditional AND-mask.
     unsigned block = requested_block;

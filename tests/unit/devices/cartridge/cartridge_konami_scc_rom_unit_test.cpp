@@ -17,13 +17,13 @@
 
 #include "devices/cartridge/cartridge_konami_scc_rom.h"
 
-// Suite: Devices_CartridgeKonamiSccRom_Unit (M29-S3, backlog G1)
+// Suite: Devices_CartridgeKonamiSccRom_Unit
 //
-// Grounds references/openmsx-21.0/src/memory/RomKonamiSCC.cc (behaviour
-// reference only, never copied -- GPL isolation) and references/fact-sheets/
-// "Konami SCC.md" §2 (the "SCC fact-sheet"). Asserts specifically the facts
-// that DIFFER from the already-shipped M19 plain Konami mapper, so a
-// copy-paste inversion (risk R-M29-1) cannot pass silently:
+// Grounds openMSX 21.0: src/memory/RomKonamiSCC.cc (behaviour
+// reference only, never copied -- GPL isolation) and the
+// Konami SCC fact sheet §2. Asserts specifically the facts
+// that DIFFER from the plain Konami mapper, so a
+// copy-paste inversion cannot pass silently:
 //   - mirroring direction is the OPPOSITE (pages 2/3 -> slots 6/7,
 //     pages 4/5 -> slots 0/1);
 //   - the write-decode lower bound is 0x5000 (not 0x6000) and page 2
@@ -79,7 +79,8 @@ int main() {
     expect(CartridgeKonamiScc(make_marker_image(4)).mapper_type() == CartridgeMapperType::KonamiSCC,
            "MapperType_ReportsKonamiSCC");
 
-    // --- Constructor does NOT self-reset (M19 convention). ---
+    // --- Constructor does NOT self-reset (the convention shared by the
+    //     cartridge mappers: reset() is a separate, explicit step). ---
     {
         CartridgeKonamiScc rom(make_marker_image(16));
         expect(rom.mem_read(0x8000) == CartridgeRomWindow::kOpenBus,
@@ -95,7 +96,7 @@ int main() {
         expect(rom.mem_read(0x6000) == 1, "Reset_Page3_Bank1");
         expect(rom.mem_read(0x8000) == 2, "Reset_Page4_Bank2");
         expect(rom.mem_read(0xA000) == 3, "Reset_Page5_Bank3");
-        // Mirror direction is the OPPOSITE of plain Konami (R-M29-1): the
+        // Mirror direction is the OPPOSITE of plain Konami: the
         // 0x4000-region content appears at 0xC000+, the 0x8000-region
         // content at 0x0000+. (Plain Konami puts bank0/1 at 0x0000+ and
         // bank2/3 at 0xC000+ -- asserted the other way around here.)
@@ -156,7 +157,7 @@ int main() {
         expect(rom.mem_read(0x4000) == 4, "BlockMask_ImageDerivedDefault_WrapsAtImageSize");
     }
 
-    // --- SCC enable semantics (A-M29-2 / fact-sheet §9.6): masked compare
+    // --- SCC enable semantics (fact-sheet §9.6): masked compare
     //     (value & 0x3F) == 0x3F -- 0x3F AND 0xBF enable; 0x3E disables;
     //     decode anywhere in 0x9000-0x97FF. ---
     {
@@ -194,8 +195,8 @@ int main() {
                "BothEffects_DisableWriteAlsoBankSwitches");
     }
 
-    // --- SCC register window at 0x9800-0x9FFF: routing, the 0x9900 mirror
-    //     (A-M29-1), disabled-SCC ROM readback, and the ROM-mirror-pages-
+    // --- SCC register window at 0x9800-0x9FFF: routing, the 0x9900 mirror,
+    //     disabled-SCC ROM readback, and the ROM-mirror-pages-
     //     never-expose-the-SCC rule. ---
     {
         CartridgeKonamiScc rom = make_reset_mapper();

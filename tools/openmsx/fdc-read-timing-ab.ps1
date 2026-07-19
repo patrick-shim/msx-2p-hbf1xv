@@ -14,7 +14,7 @@
 param(
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$Machine  = "Sony_HB-F1XV",
-    [string]$FdcDisk  = "tests/parity/m16_boot.dsk",
+    [string]$FdcDisk  = "tests/parity/boot.dsk",
     [string]$WorkDir  = "build",
     [string]$OutDoc   = "docs/openmsx-fdc-read-timing-ab.md",
     [int]$BootSeconds = 6

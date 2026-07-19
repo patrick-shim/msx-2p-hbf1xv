@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Diskutils_BlankLayout_Unit  (M53-S2, planner package §6.1)
+// Suite: Diskutils_BlankLayout_Unit
 //
 // Byte oracle over build_blank_image(): size, JMP/OEM, every BPB field
 // (0x0B..0x1D), boot signature, the all-zero boot-code region, the two
@@ -57,7 +57,7 @@ int main() {
     }
     expect(oem_ok, "Oem_SONYMSX");
 
-    // --- Every BPB field of §2.2 (offset 0x0B..0x1D). ---
+    // --- Every BPB field (offset 0x0B..0x1D). ---
     struct Field {
         std::size_t offset;
         std::uint8_t value;

@@ -24,13 +24,13 @@ namespace sony_msx::machine {
 namespace {
 
 // The tolerant XML tokenizer (TagScanner) + xml_trim()/xml_decode_entities() that used
-// to live here file-local were extracted to machine/xml_tokenizer.{h,cpp} in
-// M50-S1 (docs/m50-planner-package.md §5) so software_db and the new
+// to live here file-local were extracted to machine/xml_tokenizer.{h,cpp}
+// so software_db and the
 // emulator_config parser share ONE reader. This file now consumes the shared
 // XmlTagScanner / xml_trim() / xml_decode_entities() with capture_attributes
 // left OFF (the default) -- the softwaredb schema is element-TEXT based, so the
 // tokenization is byte-for-byte identical to the pre-extraction code (the
-// software_db unit tests are the behavior-preserving guard, AC-S1-4).
+// software_db unit tests are the behavior-preserving guard).
 
 bool is_valid_sha1_hex(const std::string& s) {
     if (s.size() != 40) {
@@ -94,7 +94,7 @@ std::optional<SoftwareDb> SoftwareDb::load_from_file(const std::string& path,
     std::string text_accum;
 
     // On a malformed region: record one diagnostic, drop the current
-    // <software>, and resync at the next </software> (planner §2.2.1's
+    // <software>, and resync at the next </software> (the
     // skip-to-next-<software> recovery rule).
     auto resync_after_malformed = [&](const std::string& why) {
         diagnostics.push_back("software_db: malformed entry skipped (" + why + ")");

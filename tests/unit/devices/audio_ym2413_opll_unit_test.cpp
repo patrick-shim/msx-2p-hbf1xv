@@ -16,14 +16,14 @@
 
 #include "devices/audio/ym2413_opll.h"
 
-// Suite: Devices_AudioYm2413Opll_Unit  (M17-S1/S2, backlog B3)
+// Suite: Devices_AudioYm2413Opll_Unit
 //
 // YM2413 (OPLL) register-accurate model: two-port address-latch/data write
 // protocol (address-latch masking at USE time, not latch time), reset zeroes
 // all 64 registers, open-bus read behaviour, per-channel decode (F-Num/Block/
 // Key-on/Sustain/Instrument/Volume/Patch), rhythm-mode decode, the 15+3-entry
 // ROM instrument patch table, and two-run determinism. Grounding: YM2413
-// fact-sheet §3/§4/§6; references/openmsx-21.0/src/sound/YM2413Okazaki.cc
+// fact-sheet §3/§4/§6; openMSX 21.0: src/sound/YM2413Okazaki.cc
 // (behaviour reference only, never copied -- GPL isolation).
 
 namespace {
@@ -42,7 +42,7 @@ void expect(const bool condition, const char* name) {
 }  // namespace
 
 int main() {
-    // --- A-M17-3: two-port write protocol lands in the correct register. ---
+    // --- Two-port write protocol lands in the correct register. ---
     {
         Ym2413Opll ym;
         ym.reset();
@@ -51,7 +51,7 @@ int main() {
         expect(ym.register_value(0x10) == 0x5A, "TwoPortWrite_LandsInLatchedRegister");
     }
 
-    // --- A-M17-3: latch masking applied at USE time, not latch time. ---
+    // --- Latch masking applied at USE time, not latch time. ---
     {
         Ym2413Opll ym;
         ym.reset();
@@ -77,7 +77,7 @@ int main() {
         expect(all_ok, "AllRegisters_IndependentlyAddressable");
     }
 
-    // --- A-M17-4: reset zeroes all 64 registers (and the latch). ---
+    // --- Reset zeroes all 64 registers (and the latch). ---
     {
         Ym2413Opll ym;
         ym.reset();
@@ -99,7 +99,7 @@ int main() {
         expect(ym.register_value(0x00) == 0x42, "Reset_ZeroesLatchToo");
     }
 
-    // --- A-M17-5: io_read always 0xFF regardless of prior writes. ---
+    // --- io_read always 0xFF regardless of prior writes. ---
     {
         Ym2413Opll ym;
         ym.reset();
@@ -271,7 +271,7 @@ int main() {
             expect(ok, "RomPatch_ByteExact_AgainstFactSheetTable");
         }
 
-        // Spot-check example from the planner package: rom_patch(3).modulator.mul == 3.
+        // Independent spot-check of one decoded field: rom_patch(3).modulator.mul == 3.
         expect(Ym2413Opll::rom_patch(3).modulator.multiple == 3, "RomPatch3_Piano_ModulatorMul3");
 
         // Rhythm patches: BD, SD/HH, TOM/T-CY.

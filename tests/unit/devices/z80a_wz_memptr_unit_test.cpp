@@ -20,7 +20,7 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80AWzMemptr_Unit  (M12-S3, gaps #3 / #4 / #5 / #35)
+// Suite: Devices_Z80AWzMemptr_Unit
 //
 // Proves the internal WZ/MEMPTR register is tracked at every fact-sheet §4 rule
 // site and that BIT n,(HL) / BIT n,(IX+d) source undocumented X/Y from the WZ

@@ -19,10 +19,11 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80A16BitDaa_Unit  (M12-S1, PRESENT-item regression floor for
-// gaps #10 ADD HL,rr, #11 ADC/SBC HL,rr (SBC N=1), #2 X/Y from 16-bit high byte,
-// #12 full-table DAA after add AND subtract). Grounding: fact-sheet §4;
-// openMSX CPUCore.cc alu16 / daa.
+// Suite: Devices_Z80A16BitDaa_Unit
+//
+// Regression floor for ADD HL,rr; ADC/SBC HL,rr (SBC N=1); undocumented X/Y
+// sourced from the 16-bit high byte; and full-table DAA after add AND
+// subtract. Grounding: fact-sheet §4; openMSX CPUCore.cc alu16 / daa.
 
 namespace {
 

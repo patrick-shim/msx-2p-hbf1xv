@@ -84,7 +84,7 @@ EmulatorConfig effective_config(const bool interactive, const std::optional<std:
 }  // namespace
 
 int main() {
-    const fs::path base = fs::temp_directory_path() / "hbf1xv_m50_s2_config_wiring";
+    const fs::path base = fs::temp_directory_path() / "hbf1xv_config_wiring";
     std::error_code ec;
     fs::remove_all(base, ec);
     fs::create_directories(base, ec);

@@ -21,12 +21,13 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80AParityUndocumented_Unit  (M12-S1, PRESENT-item regression
-// floor for gaps #13 SLL, #14 IXH/IXL, #15 prefix chaining/NONI, #16 ED-hole
-// 2-NOP, #17 R rules, #18 LD R,A bit7, #19 OUT (C),0=0).
+// Suite: Devices_Z80AParityUndocumented_Unit
 //
-// These lock behavior already implemented in M9 so later fixes cannot regress
-// them. Deterministic opcode buffers + a fake bus with I/O tracking; exact
+// Regression floor for: SLL, IXH/IXL, prefix chaining/NONI, ED-hole
+// 2-NOP, the R-register rules, LD R,A bit7, and OUT (C),0 = 0.
+//
+// These lock behavior that was already implemented so later fixes cannot regress
+// it. Deterministic opcode buffers + a fake bus with I/O tracking; exact
 // register/flag/T-state/R assertions. Grounding: fact-sheet §4/§7/§8.
 
 namespace {

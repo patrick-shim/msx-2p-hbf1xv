@@ -17,11 +17,11 @@
 
 #include "peripherals/rensha_turbo.h"
 
-// Suite: Peripherals_RenshaTurbo_Unit (M25-S2, backlog C8)
+// Suite: Peripherals_RenshaTurbo_Unit
 //
-// Isolated unit tests for the Ren-Sha Turbo autofire signal generator, per
-// docs/m25-planner-package.md §2.5/M25-S2. Zero peripheral wiring at this
-// slice. The half_period_cycles() derivation (A-M25-6) is independently
+// Isolated unit tests for the Ren-Sha Turbo autofire signal generator.
+// Zero peripheral wiring here. The half_period_cycles() derivation is
+// independently
 // re-verified BY THE TEST ITSELF at concrete speed values, hand-computed
 // from the header's documented formula:
 //   ints(speed) = kDefaultMaxInts - (speed * (kDefaultMaxInts - kDefaultMinInts)) / 100

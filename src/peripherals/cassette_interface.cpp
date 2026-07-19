@@ -32,7 +32,7 @@ void CassetteInterface::attach_clock_source(CassetteClockSource* source) {
 }
 
 bool CassetteInterface::motor_on() const {
-    // Port C bit4: "1 = off" (Ppi8255::cassette_motor_off, A-M18-9).
+    // Port C bit4: "1 = off" (Ppi8255::cassette_motor_off).
     return !ppi_.cassette_motor_off();
 }
 
@@ -59,7 +59,7 @@ bool CassetteInterface::tape_loaded() const {
 
 bool CassetteInterface::cassette_input_high() const {
     if (!tape_loaded_ || clock_source_ == nullptr) {
-        return true;  // idle-high default (A-M18-11)
+        return true;  // idle-high default with no tape/clock attached
     }
     const std::uint64_t now = clock_source_->cpu_cycles();
     const std::uint64_t elapsed = (now >= start_cycle_) ? (now - start_cycle_) : 0;

@@ -49,10 +49,10 @@ std::uint8_t KeyboardMatrix::keyboard_row(const int row) const {
         return 0xFF;
     }
     std::uint8_t value = rows_[static_cast<std::size_t>(row)];
-    // Ren-Sha Turbo autofire (M25, A-M25-7): row 8 bit0 = SPACE. Unattached
+    // Ren-Sha Turbo autofire: row 8 bit0 = SPACE. Unattached
     // leaves value exactly as computed above -- byte-for-byte identical to
-    // pre-M25 behavior (regression guard, M25-S3). OR-only: can only force a
-    // 0 bit (pressed) to 1 (a periodic release), never the reverse (R-M25-6).
+    // the no-autofire behavior (regression guard). OR-only: can only force a
+    // 0 bit (pressed) to 1 (a periodic release), never the reverse.
     if (row == 8 && rensha_ != nullptr) {
         value = static_cast<std::uint8_t>(value | rensha_->keyboard_row8_or_mask());
     }

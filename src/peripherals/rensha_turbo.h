@@ -17,13 +17,13 @@
 
 namespace sony_msx::peripherals {
 
-// Deterministic emulated-cycle clock source for Ren-Sha Turbo (M25,
-// X-pattern of RtcClockSource/FdcClockSource/CassetteClockSource -- mirrors
+// Deterministic emulated-cycle clock source for Ren-Sha Turbo (the shared
+// pattern of RtcClockSource/FdcClockSource/CassetteClockSource -- mirrors
 // src/devices/rtc/rp5c01.h:14-18, src/devices/fdc/fdc_clock_source.h, and
 // src/peripherals/cassette_interface.h:20-24). The autofire signal advances
 // read-only off the machine cycle clock (Hbf1xvMachine::elapsed_cycles() ==
 // scheduler total cycles), never the host wall clock; CPU T-state accounting
-// is never touched (protects the M9/M12/M23 zero-tolerance CPU-timing
+// is never touched (protects the zero-tolerance CPU-timing
 // oracles). Consulted pull-style only, from
 // KeyboardMatrix::keyboard_row()/JoystickPorts::read_port_a(), never wired
 // into step_cpu_instruction()/run_cycles()/run_frame().
@@ -33,25 +33,25 @@ public:
     [[nodiscard]] virtual std::uint64_t cpu_cycles() const = 0;
 };
 
-// Ren-Sha Turbo autofire (M25, backlog C8 sub-item) -- rapid button-press
+// Ren-Sha Turbo autofire -- rapid button-press
 // synthesis on the space bar and joystick trigger-A of both ports.
 //
 // Grounded in real openMSX behavior (behavior reference, never copied -- GPL
 // isolation) rather than guessed:
-//   - references/openmsx-21.0/src/RenShaTurbo.{hh,cc}: a thin wrapper owning
+//   - openMSX 21.0: src/RenShaTurbo.{hh,cc}: a thin wrapper owning
 //     one Autofire circuit.
-//   - references/openmsx-21.0/src/Autofire.{hh,cc}: the actual signal
+//   - openMSX 21.0: src/Autofire.{hh,cc}: the actual signal
 //     generator -- a DynamicClock running at a speed-derived frequency;
 //     getSignal(time) returns whether the elapsed tick count is odd (a
 //     square wave); speed 0 = disabled (special-cased, not "very slow").
-//   - references/openmsx-21.0/src/MSXPPI.cc:90-93 (keyboard row 8 bit 0) and
-//     references/openmsx-21.0/src/sound/MSXPSG.cc:90-93 (PSG R14 bit 4):
+//   - openMSX 21.0: src/MSXPPI.cc:90-93 (keyboard row 8 bit 0) and
+//     openMSX 21.0: src/sound/MSXPSG.cc:90-93 (PSG R14 bit 4):
 //     both combine the autofire signal via bitwise-OR, applied after the
 //     normal (possibly-pressed) row/port read -- the autofire signal can
 //     only ever force a bit from 0->1 (a periodic release), never force a 0
 //     (a press). This is a critical correctness invariant this class's
 //     consumers (KeyboardMatrix/JoystickPorts) must preserve exactly.
-//   - references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:16-19: a real,
+//   - openMSX 21.0: share/machines/Sony_HB-F1XV.xml:16-19: a real,
 //     per-machine `<RenShaTurbo>` calibration block (min_ints=47,
 //     max_ints=221), attributed to a real serial-numbered HB-F1XV unit
 //     (line 14: "serialnumber Meits's machine: 225891"). Two small, real,
@@ -60,11 +60,11 @@ public:
 //     a large data table).
 //
 // The toggle-frequency formula below is independently derived from the
-// config data's own documented meaning (references/openmsx-21.0/src/
-// Autofire.hh:66-76: "Number of interrupts ... for 50 periods, measured in
+// config data's own documented meaning (openMSX 21.0:
+// src/Autofire.hh:66-76: "Number of interrupts ... for 50 periods, measured in
 // ntsc mode (which gives 60 interrupts per second)"), not transcribed from
 // openMSX's own setClock() code shape
-// (references/openmsx-21.0/src/Autofire.cc:79-87,
+// (openMSX 21.0: src/Autofire.cc:79-87,
 // `(2 * 50 * 60) / (max_ints - (speed * (max_ints - min_ints)) / 100)`):
 // 50 on/off periods occur over `ints` VBlank interrupts, i.e. ints/60
 // seconds, so freq_hz = 50 / (ints/60) = 3000/ints. A full square-wave cycle
@@ -82,7 +82,7 @@ public:
 class RenshaTurbo {
 public:
     static constexpr std::uint64_t kSystemClockHz = 3579545;
-    // Sony_HB-F1XV.xml:17-18 -- real per-machine calibration (A-M25-5).
+    // Sony_HB-F1XV.xml:17-18 -- real per-machine calibration.
     static constexpr unsigned kDefaultMinInts = 47;   // fastest (speed=100)
     static constexpr unsigned kDefaultMaxInts = 221;  // slowest (speed=1)
 

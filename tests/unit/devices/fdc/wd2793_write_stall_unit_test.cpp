@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793WriteStall_Unit  (M45 / DEF-M45-WRITEDRQ)
+// Suite: Devices_Fdc_Wd2793WriteStall_Unit
 //
 // ANTI-REGRESSION for the WD2793 accurate-mode disk-WRITE corruption that
 // destroyed a real RPG-title save (DEC-0067). The existing wd2793_type2/fastdisk
@@ -31,11 +31,11 @@
 // write time, so a merely-late byte is COMMITTED, never lost.
 //
 // This suite drives DRIFTING / STALLING write cadences (NOT the ideal poll) and
-// asserts BYTE-PERFECT output in BOTH --fast-disk modes. Reusing the stall
-// cadence from debug/fdc-write-investigation/wd2793_stall_probe.cpp, it
+// asserts BYTE-PERFECT output in BOTH --fast-disk modes. Using the stall
+// cadence recovered from the original corruption investigation, it
 // reproduces the corruption against the PRE-FIX code (proven by an adversarial
-// revert: restore the zero-substitution and this suite FAILS -- see the M45
-// implementation report / commit message) and passes against the fix.
+// revert: restore the zero-substitution and this suite FAILS) and passes
+// against the fix.
 
 #include <cstdint>
 #include <iostream>
@@ -166,8 +166,8 @@ WriteOutcome run_write(bool fast, std::uint8_t sec1, int nsec, int stall_at,
     // Settle > one disk revolution. A multi-record (0xB0) write of nsec < 9
     // sectors auto-advances to the NEXT sector after the last one supplied and
     // then waits for its first byte; since the CPU stops feeding, that sector
-    // terminates via the first-byte CHECK_WRITE timeout -> INTRQ. DEF-M45-WRITEDRQ
-    // -FIX made that window the correct rotational + full-revolution span (was a
+    // terminates via the first-byte CHECK_WRITE timeout -> INTRQ. The window
+    // fix made that window the correct rotational + full-revolution span (was a
     // too-short ~1140-cycle window), so the settle must now span a full revolution
     // for the natural multi-write termination to be observed. Single-sector (0xA0)
     // writes complete at byte 511 regardless, so the larger settle is harmless.

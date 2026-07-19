@@ -31,7 +31,7 @@ struct KeyNameBinding {
 // array literal (rows 0-8), re-keyed by the SDL_Scancode enumerator's suffix
 // string instead of the SDL_Scancode value. Every (row, column) pair below was
 // copied verbatim, in the same order/grouping, from that file (never
-// independently re-derived) -- see the header doc comment / R-M27-4. A dedicated
+// independently re-derived) -- see the header doc comment. A dedicated
 // SDL3-gated cross-consistency test proves the two tables agree.
 const std::array<KeyNameBinding, 72>& key_name_table() {
     static const std::array<KeyNameBinding, 72> kMap{{

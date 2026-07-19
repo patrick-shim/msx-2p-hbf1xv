@@ -17,7 +17,7 @@
 
 #include "devices/memory/rom_device.h"
 
-// Suite: Devices_MemoryRomDevice_Unit  (M13-S1)
+// Suite: Devices_MemoryRomDevice_Unit
 //
 // Deterministic isolation coverage for the read-only ROM window device:
 //   - reads inside [base, base+size) return the image bytes at address - base;

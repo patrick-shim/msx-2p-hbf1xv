@@ -11,12 +11,12 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793Type3_Unit  (M16-S3)
+// Suite: Devices_Fdc_Wd2793Type3_Unit
 //
 // WD2793 core Type III (Read Address, Write Track) + Type IV (Force Interrupt)
 // interrupting an in-flight Type II transfer.
 //
-// Grounding (read only, never copied - GPL isolation): references/openmsx-21.0/
+// Grounding (read only, never copied - GPL isolation): openMSX 21.0:
 // src/fdc/WD2793.cc startType3Cmd (:820), readAddressCmd, startWriteTrack/
 // writeTrackData; startType4Cmd/endCmd (:1035-1073); fact-sheet "FDC for Sony
 // HB-F1XV.md" §3 (Type III/IV tables), §5 ("How the WD2793 constructs this" -

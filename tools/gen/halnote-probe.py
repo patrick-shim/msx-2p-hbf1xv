@@ -88,7 +88,7 @@ def build_halnote_image():
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--output", default="tests/parity/m20_halnote.rom",
+    parser.add_argument("--output", default="tests/parity/halnote.rom",
                         help="synthetic 1 MB Halnote image output path")
     parser.add_argument("--self-check", action="store_true",
                         help="verify determinism (two assemblies byte-identical) and exit")

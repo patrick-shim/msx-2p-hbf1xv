@@ -24,7 +24,7 @@ CartridgeMirroredRom::CartridgeMirroredRom(std::vector<std::uint8_t> image) : wi
 }
 
 void CartridgeMirroredRom::reset() {
-    // Bank 0 at 0x0000 (A-M19-8: no placement ambiguity -- the whole 64 KB
+    // Bank 0 at 0x0000 (no placement ambiguity -- the whole 64 KB
     // window IS the external slot). For window-slot s < nrBlocks this lands
     // bank s directly; for s >= nrBlocks it falls through to
     // CartridgeRomWindow::set_bank's default-mask fallback, WHICH IS THE SAME

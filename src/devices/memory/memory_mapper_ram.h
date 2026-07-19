@@ -23,7 +23,7 @@
 
 namespace sony_msx::devices::memory {
 
-// DEC-0052 (M36 stream-light): non-perturbing CPU-memory-write observer. When
+// Non-perturbing CPU-memory-write observer (DEC-0052 stream-light). When
 // installed (non-null) it is notified on every mem_write() with the
 // CPU-VISIBLE address (the 16-bit address the CPU wrote, NOT the folded
 // physical segment offset), so a diagnostic can watch specific addresses
@@ -38,20 +38,20 @@ public:
     virtual void on_mem_write(core::BusAddress address, core::BusData value) = 0;
 };
 
-// Memory-mapper RAM device occupying slot 3-0, pages 0-3 (M13-S1; RAM size
-// parameterized by M42/DEC-0061).
+// Memory-mapper RAM device occupying slot 3-0, pages 0-3 (RAM size
+// parameterized, DEC-0061).
 //
 // This is the CPU RAM backing for the HB-F1XV (Sony_HB-F1XV.xml:125-130,
-// MemoryMapper size 64). It replaces the M11 inert flat `RamSlotBacking`.
+// MemoryMapper size 64).
 //
-// RAM size (M42, DEC-0061): the STOCK spec configuration is 64 KB = 4 segments
+// RAM size (DEC-0061): the STOCK spec configuration is 64 KB = 4 segments
 // (the default and the only stock size). The opt-in NON-STOCK `--ram` sizes
 // 128/256/512 KB fit 8/16/32 segments (a fully-populated S1985; 512 KB is the
 // internal ceiling of the 5-bit mapper read-back). The device is size-agnostic:
 // its populated segment count is DERIVED at construction from the backing region
 // (num_segments() == ram.size() / kSegmentBytes), never hard-coded to 4.
 //
-// Segment ownership is SPLIT (single source of truth): the M11
+// Segment ownership is SPLIT (single source of truth):
 // chipset::MapperIo remains the SOLE owner of the four #FC-#FF segment registers
 // and of the S1985 `100xxxxx` (0x80 | seg & 0x1F) 5-bit readback. This device is
 // a pure CONSUMER: for each CPU access it reads the live segment for that page
@@ -59,7 +59,7 @@ public:
 // duplicated here, so a mapper write is observed on the very next CPU access.
 //
 // Physical address (behaviour reference — read only, never copied; GPL):
-// references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:72-83 folds
+// openMSX 21.0: src/memory/MSXMemoryMapperBase.cc:72-83 folds
 // segment*0x4000 + (addr & 0x3FFF), wrapping the segment with
 // `segment & (numSegments - 1)`. numSegments is a power of two for every offered
 // size, so the wrap == `segment & (numSegments-1)`: `& 3` at 64 KB, `& 7/15/31`
@@ -88,7 +88,7 @@ public:
 
     // Fold a (segment, address) pair onto a physical store of `num_segments`
     // 16 KB segments, matching openMSX calcAddress
-    // (references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:72-83):
+    // (openMSX 21.0: src/memory/MSXMemoryMapperBase.cc:72-83):
     //   physical = (segment & (num_segments - 1)) * 0x4000 + (addr & 0x3FFF).
     // `num_segments` MUST be a power of two (true for all four offered sizes);
     // the caller passes the fitted count -- there is NO built-in assumption of 4.
@@ -99,7 +99,7 @@ public:
     core::BusData mem_read(core::BusAddress address) override;
     void mem_write(core::BusAddress address, core::BusData value) override;
 
-    // DEC-0052 stream-light: install (non-null) / remove (nullptr) the
+    // Stream-light observer (DEC-0052): install (non-null) / remove (nullptr) the
     // non-perturbing memory-write observer. Default null => zero behaviour
     // change (mirrors Wd2793::set_sector_read_observer exactly); it is an
     // externally-owned lifecycle pointer, managed by the installing machine.
@@ -108,10 +108,10 @@ public:
 private:
     machine::MemoryRegion& ram_;
     const chipset::MapperIo& mapper_io_;
-    // M42/DEC-0061: fitted segment count (ram_.size() / kSegmentBytes), computed
-    // once in the constructor. A power of two for every offered size.
+    // Fitted segment count (ram_.size() / kSegmentBytes), computed
+    // once in the constructor. A power of two for every offered size. (DEC-0061)
     int num_segments_;
-    // DEC-0052 stream-light: externally-owned; default null => no-op.
+    // Stream-light observer (DEC-0052): externally-owned; default null => no-op.
     MemWriteObserver* write_observer_ = nullptr;
 };
 

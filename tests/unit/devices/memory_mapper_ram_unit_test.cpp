@@ -19,10 +19,10 @@
 #include "devices/memory/memory_mapper_ram.h"
 #include "machine/memory_region.h"
 
-// Suite: Devices_MemoryMapperRam_Unit  (M13-S1; M42/DEC-0061 RAM-size param)
+// Suite: Devices_MemoryMapperRam_Unit
 //
 // Deterministic isolation coverage for the mapper-RAM device driven by a
-// real M11 chipset::MapperIo:
+// real chipset::MapperIo:
 //   - a segment write changes which physical 16 KB cell a page reads/writes;
 //   - the linear config {0,1,2,3} gives a flat 64 KB view (page p -> phys p);
 //   - the unpopulated-segment wrap folds seg 4 -> 0 and seg 0x25 -> 1
@@ -30,9 +30,9 @@
 //   - readback independence: the same write that folds physical to seg&3 still
 //     reads back 0x80 | (seg & 0x1F) on the MapperIo (5-bit vs 2-bit masks).
 //
-// M42 (DEC-0061): physical_address() is now parameterized by the fitted segment
-// count (no built-in assumption of 4). The 64 KB (num_segments==4) assertions
-// below are UNCHANGED IN VALUE -- they now pass the explicit `4` and prove the
+// physical_address() is parameterized by the fitted segment count (no built-in
+// assumption of 4) (DEC-0061). The 64 KB (num_segments==4) assertions
+// below pass the explicit `4` and prove the
 // stock default fold is byte-identical. New parameterized fold tests
 // (64/128/256/512 KB -> 4/8/16/32 segments) prove the RAM-detection-correctness
 // invariant: distinct banks within the fitted range, high segments mirroring low
@@ -61,15 +61,15 @@ int main() {
     MemoryMapperRam device(ram, mapper);
 
     // --- physical_address folds exactly like openMSX for 4 segments (stock
-    // 64 KB; M42 passes the explicit fitted count, values UNCHANGED). ---
+    // 64 KB; the assertions pass the explicit fitted count). ---
     expect(MemoryMapperRam::physical_address(0, 0x0000, 4) == 0x0000, "Phys_Seg0_Addr0");
     expect(MemoryMapperRam::physical_address(1, 0x4321, 4) == 0x4000u + 0x0321u, "Phys_Seg1_KeepsLow14");
     expect(MemoryMapperRam::physical_address(3, 0xFFFF, 4) == 0xC000u + 0x3FFFu, "Phys_Seg3_Top");
     expect(MemoryMapperRam::physical_address(4, 0x0000, 4) == 0x0000, "Phys_Seg4_WrapsToSeg0");
     expect(MemoryMapperRam::physical_address(0x25, 0x0000, 4) == 0x4000, "Phys_Seg0x25_WrapsToSeg1");
 
-    // --- M42/DEC-0061: the device derives its segment count from the backing
-    // region. A 64 KB region reports 4 segments (the stock default). ---
+    // --- The device derives its segment count from the backing
+    // region (DEC-0061). A 64 KB region reports 4 segments (the stock default). ---
     expect(device.num_segments() == 4, "NumSegments_64KB_Is4");
 
     // --- Linear flat 64 KB view with segments {0,1,2,3}. ---
@@ -105,7 +105,7 @@ int main() {
     expect(mapper.segment(0) == 0x25, "SegmentAccessor_ReturnsRawWrittenValue");
 
     // ========================================================================
-    // M42 (DEC-0061): parameterized fold / RAM-detection-correctness tests.
+    // Parameterized fold / RAM-detection-correctness tests (DEC-0061).
     //
     // For each offered size (64/128/256/512 KB -> 4/8/16/32 segments):
     //   (a) segments 0..num_segments-1 map to DISTINCT physical 16 KB banks

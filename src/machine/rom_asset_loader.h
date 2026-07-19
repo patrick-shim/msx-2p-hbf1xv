@@ -20,7 +20,7 @@
 
 namespace sony_msx::machine {
 
-// Machine-side ROM asset loader (M13-S2).
+// Machine-side ROM asset loader.
 //
 // Resolves local `bios/` image paths, reads them into byte images, validates
 // the image size against the expected role size (from the machine XML `<mem>`
@@ -29,14 +29,13 @@ namespace sony_msx::machine {
 //   A required-but-absent (or unreadable, or wrong-size) file yields a ROM
 //   image filled with open-bus 0xFF of the exact expected size, plus a
 //   human-readable diagnostic note appended to `diagnostics()`. Never a
-//   silent zero-fill, never fabricated SHA/provenance (guardrails "Asset and
-//   Script Safety"; planner A-7). The overall `tools/gates/validate-assets.ps1`
-//   gate still fails if a required BIOS is missing, so a green run always
-//   has real assets; the fill path exists for determinism/robustness and is
-//   unit-tested with a bad path.
+//   silent zero-fill, never fabricated SHA/provenance. The overall
+//   `tools/gates/validate-assets.ps1` gate still fails if a required BIOS is
+//   missing, so a green run always has real assets; the fill path exists for
+//   determinism/robustness and is unit-tested with a bad path.
 //
-// This type keeps `devices::memory::RomDevice` ignorant of the filesystem
-// (boundary rule, src/CLAUDE.md).
+// This type keeps `devices::memory::RomDevice` ignorant of the filesystem;
+// device types never touch the filesystem directly.
 class RomAssetLoader {
 public:
     struct Spec {

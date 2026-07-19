@@ -16,29 +16,29 @@
 
 #include "devices/audio/ym2413_opll.h"
 
-// Suite: Devices_AudioYm2413WriteTiming_Unit  (M28-S1, backlog E2)
+// Suite: Devices_AudioYm2413WriteTiming_Unit
 //
-// E2: YM2413 register-write minimum-spacing gate, grounded in
-// references/fact-sheets/Yamaha YM2413 FM Chip.md §8 ("after an address
+// YM2413 register-write minimum-spacing gate, grounded in
+// the Yamaha YM2413 FM Chip fact sheet §8 ("after an address
 // write, wait >=12 master cycles ... after a data write, wait >=84 master
 // cycles ... before the next write ... Violating the 84-cycle rule causes
-// dropped/wrong register writes on real hardware"). Mirrors the M15 X4
-// pattern: Ym2413ClockSource is consulted READ-ONLY, pull-style, from
+// dropped/wrong register writes on real hardware").
+// Ym2413ClockSource is consulted READ-ONLY, pull-style, from
 // write_address()/write_data() only -- this test never touches
 // step_cpu_instruction() or any CPU-timing formula.
 //
-// Regression pre-check (R-M28-1, performed before writing this file): `rg`
-// against the EXISTING M17 tests
+// Regression pre-check (performed before writing this file): `rg`
+// against the EXISTING OPLL tests
 // (tests/unit/devices/audio_ym2413_opll_unit_test.cpp,
-// tests/integration/machine/hbf1xv_m17_ym2413_integration_test.cpp) found
+// tests/integration/machine/hbf1xv_ym2413_integration_test.cpp) found
 // back-to-back #7C/#7D register writes with zero/near-zero cycle spacing
 // (the unit test never attaches a clock source at all; the integration
 // test's Hbf1xvMachine::debug_io_write() helper is a zero-cycle-advance raw
-// bus poke). Per docs/m28-planner-package.md §2.1b, the resolution chosen
-// here is (b): the gate DEFAULTS OFF (Ym2413Opll::write_timing_enforced()
+// bus poke). The resolution chosen
+// here: the gate DEFAULTS OFF (Ym2413Opll::write_timing_enforced()
 // == false), matching openMSX's own documented default-disabled stance
 // (fact-sheet §8), and is exposed as an explicit, unit-tested toggle. This
-// keeps every existing M17 test byte-for-byte unmodified.
+// keeps every pre-existing OPLL test byte-for-byte unmodified.
 
 namespace {
 
@@ -74,7 +74,7 @@ int main() {
     }
 
     // --- Gate disabled (even with a clock attached): writes land regardless
-    //     of spacing -- exact M17 back-to-back behaviour is preserved. ---
+    //     of spacing -- the ungated back-to-back behaviour is preserved. ---
     {
         Ym2413Opll ym;
         FakeClock clock;

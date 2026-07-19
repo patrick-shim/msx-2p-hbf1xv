@@ -20,7 +20,7 @@ namespace sony_msx::devices::chipset {
 
 void S1985Engine::reset() {
     // openMSX MSXS1985::reset clears color1/color2/pattern/address (not the SRAM
-    // contents, which are battery-backed). M11 backup RAM is volatile (A-5); we
+    // contents, which are battery-backed). This model's backup RAM is volatile; we
     // additionally zero it here so cold_boot is deterministic.
     address_ = 0;
     pattern_ = 0;

@@ -30,10 +30,11 @@ using debug_format::to_hex;
 
 void CpuTraceSink::on_instruction_retired(const devices::cpu::Z80aTraceRecord& record) {
     records_.push_back(record);
-    // DEC-0072 DIAGNOSTIC (env-gated; default 0 => unbounded original behavior).
-    // SONY_MSX_TRACE_RING=<N> retains only the last ~N records (drop-oldest in
-    // amortized-O(1) chunks) so a very long run's crash TAIL is capturable without
-    // an unbounded trace. The global .sequence stays absolute across drops.
+    // Diagnostic trace-ring cap (env-gated; default 0 => unbounded original
+    // behavior). SONY_MSX_TRACE_RING=<N> retains only the last ~N records
+    // (drop-oldest in amortized-O(1) chunks) so a very long run's crash TAIL is
+    // capturable without an unbounded trace. The global .sequence stays absolute
+    // across drops. (DEC-0072)
     static const std::size_t ring = []() -> std::size_t {
         const char* p = std::getenv("SONY_MSX_TRACE_RING");
         return (p != nullptr && *p != '\0') ? std::strtoul(p, nullptr, 10) : 0U;

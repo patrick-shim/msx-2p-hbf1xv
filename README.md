@@ -169,7 +169,7 @@ ctest --test-dir build -C Debug --output-on-failure
 ```
 
 - Executables land in `build/Debug/`: `sony_msx_headless.exe`, `sony_msx_sdl3.exe`.
-- Fast subset: `ctest --test-dir build -C Debug -LE m24_slow_full_sweep` excludes the
+- Fast subset: `ctest --test-dir build -C Debug -LE slow_cpu_sweep` excludes the
   ~30-minute ZEXALL / ZEXDOC sweep.
 
 Requirements: CMake, a C++20-capable MSVC toolchain (Visual Studio 2022+ with the "Desktop
@@ -193,7 +193,7 @@ ctest --test-dir build --output-on-failure
 
 - Executables land in **`build/`, not `build/Debug/`**, with no `.exe` suffix:
   `sony_msx_headless`, `sony_msx_sdl3`, `msx-diskutil`. This is the most common trip hazard.
-- Fast subset: `ctest --test-dir build -LE m24_slow_full_sweep`.
+- Fast subset: `ctest --test-dir build -LE slow_cpu_sweep`.
 
 Requirements: the Xcode Command Line Tools (`xcode-select --install`) for AppleClang, plus
 `brew install ninja cmake sdl3`. macOS links **Homebrew's** SDL3 — `find_package(SDL3 CONFIG

@@ -23,8 +23,7 @@
 #include "machine/sha1.h"
 #include "machine/software_db.h"
 
-// Suite: Machine_CartridgeIdentifier_Unit (M30-S3, backlog G2, docs/m30-
-// planner-package.md §2.3/§2.4/§4-S3)
+// Suite: Machine_CartridgeIdentifier_Unit
 //
 // The re-derived guessRomType heuristic (score table, ASCII8 handicap, the
 // >= tie-break order KonamiSCC > Konami > ASCII16 > ASCII8, size gates,
@@ -82,8 +81,8 @@ ParsedCartridgeSlotCli auto_spec() {
     return spec;
 }
 
-// The smallest scanning-eligible image: exactly 64 KB WITH the "AB" header
-// (planner §2.3 step 4). Writes are planted from offset 16 up.
+// The smallest scanning-eligible image: exactly 64 KB WITH the "AB" header.
+// Writes are planted from offset 16 up.
 std::vector<std::uint8_t> scan_image(const std::vector<std::uint16_t>& addrs) {
     std::vector<std::uint8_t> image = make_image(0x10000, true);
     std::size_t offset = 16;
@@ -101,7 +100,7 @@ CartridgeMapperType guess_of(const std::vector<std::uint16_t>& addrs) {
 
 std::string write_synthetic_db(const std::string& filename, const std::string& body) {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "sony_msx_m30_identifier_fixtures";
+        std::filesystem::temp_directory_path() / "sony_msx_identifier_fixtures";
     std::filesystem::create_directories(dir);
     const std::filesystem::path path = dir / filename;
     std::ofstream out(path, std::ios::binary | std::ios::trunc);
@@ -129,7 +128,7 @@ int main() {
     expect(guess_of({0x8000}) == CartridgeMapperType::Konami, "Scan_8000_Konami");
     expect(guess_of({0xA000}) == CartridgeMapperType::Konami, "Scan_A000_Konami");
 
-    // ASCII8 handicap (planner §2.3): a SINGLE 0x6800 hit -> ASCII8=1, then
+    // ASCII8 handicap: a SINGLE 0x6800 hit -> ASCII8=1, then
     // the deliberate decrement -> 0 -> all scores zero -> Generic8kB.
     expect(guess_of({0x6800}) == CartridgeMapperType::Generic8kB,
            "Scan_Single6800_Ascii8Handicap_Generic8kB");
@@ -152,9 +151,9 @@ int main() {
     expect(guess_of({0x7000}) == CartridgeMapperType::KonamiSCC, "Scan_7000_TieKonamiSccBeatsAscii16");
 
     // 0x77FF row: ASCII16=1 -> ASCII16.
-    // DEC-0030 disagreement record #2 lives exactly here: fMSX's all-ones
-    // baseline (+GEN8 bias) would yield GEN8 for this same image; adopted
-    // openMSX -> ASCII16 (planner §2.3).
+    // A documented fMSX/openMSX disagreement lives exactly here: fMSX's
+    // all-ones baseline (+GEN8 bias) would yield GEN8 for this same image;
+    // the openMSX interpretation was adopted -> ASCII16 (DEC-0030).
     expect(guess_of({0x77FF}) == CartridgeMapperType::Ascii16kB, "Scan_77FF_Ascii16_OpenMsxArbitration");
 
     // Tie KonamiSCC vs Konami (1-1): winner walk reaches Konami=1 first,
@@ -190,13 +189,13 @@ int main() {
     }
 
     // =====================================================================
-    // Size gates (planner §2.3 steps 2-4).
+    // Size gates.
     // =====================================================================
     {
         // < 64 KB -> Mirrored via the small-image plain-ROM rule, even with
-        // planted bank writes (the scan is NOT eligible below 64 KB --
-        // DEC-0030 disagreement record #1: fMSX would scan a 48 KB image;
-        // adopted openMSX).
+        // planted bank writes (the scan is NOT eligible below 64 KB -- a
+        // documented fMSX/openMSX disagreement: fMSX would scan a 48 KB
+        // image; the openMSX interpretation was adopted; DEC-0030).
         auto image = make_image(0xC000, true);
         plant_write(image, 16, 0x9000);
         const auto ident = resolve_cartridge_type(auto_spec(), image, nullptr);
@@ -233,7 +232,7 @@ int main() {
     }
 
     // =====================================================================
-    // Format signatures (planner §2.3 step 1) -> identified-but-unsupported.
+    // Format signatures -> identified-but-unsupported.
     // =====================================================================
     for (const char* signature : {"ASCII16X", "ROM_NEO8", "ROM_NE16"}) {
         auto image = make_image(0x8000, true);
@@ -244,7 +243,7 @@ int main() {
     }
 
     // =====================================================================
-    // Precedence (planner §2.4.1).
+    // Precedence: explicit flag > softwaredb SHA1 > heuristic.
     // =====================================================================
 
     // Build a scan image whose heuristic answer would be Konami, and a
@@ -405,7 +404,7 @@ int main() {
         expect(second.messages.size() == 1, "Session_MessageE_OncePerSession");
     }
     {
-        // Session default path constant (planner §2.2.3).
+        // Session default path constant.
         CartridgeIdentificationSession session(std::nullopt);
         expect(session.db_path() == std::string(sony_msx::machine::kDefaultSoftwareDbPath),
                "Session_DefaultDbPath_Constant");
@@ -436,7 +435,7 @@ int main() {
     }
 
     // =====================================================================
-    // Two-run determinism (planner §2.4.2): identical inputs -> identical
+    // Two-run determinism: identical inputs -> identical
     // CartridgeIdentification, every field.
     // =====================================================================
     {

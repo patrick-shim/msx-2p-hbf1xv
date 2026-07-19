@@ -39,7 +39,7 @@ int RenshaTurbo::speed() const {
 std::uint64_t RenshaTurbo::half_period_cycles() const {
     // Linear interpolation of `ints` between kDefaultMaxInts (speed=1) and
     // kDefaultMinInts (speed=100) -- see the header comment for the full,
-    // independently-derived frequency formula (A-M25-6).
+    // independently-derived frequency formula.
     const std::uint64_t speed64 = static_cast<std::uint64_t>(speed_);
     const std::uint64_t span = kDefaultMaxInts - kDefaultMinInts;
     const std::uint64_t ints = kDefaultMaxInts - (speed64 * span) / 100;

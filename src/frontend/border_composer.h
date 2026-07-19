@@ -17,10 +17,10 @@
 
 namespace sony_msx::frontend {
 
-// Border/backdrop canvas composition for presentation (border-box fix, DEC-0026-style
-// targeted defect cycle).
+// Border/backdrop canvas composition for presentation -- the border-box defect
+// fix (DEC-0026).
 //
-// The M21 FrameBuffer contract deliberately carries ONLY the active display area plus a
+// The FrameBuffer contract deliberately carries ONLY the active display area plus a
 // single per-frame `border_color` (frame_buffer.h: border geometry is explicitly out of
 // scope). A real display shows that active area surrounded by a border-colored surround
 // (the V9958 emits border pixels for the whole visible raster). This module composes the
@@ -33,16 +33,16 @@ namespace sony_msx::frontend {
 // y in [24,215] for a 256x192 mode):
 //
 //  * One "wide pixel" (256-wide modes) = 4 VDP cycles; 512-wide modes use 2-cycle pixels
-//    (references/fact-sheets/Yamaha V9958 VDP.md §7: display region [258,1282) = 1024
+//    (Yamaha V9958 VDP fact sheet §7: display region [258,1282) = 1024
 //    cycles for 256/512 pixels).
 //  * The true visible line (left border [202,258) + display + right border [1282,1341)) is
 //    1139 cycles = 284.75 wide pixels. The reference presentation
-//    (references/openmsx-21.0/src/video/SDLRasterizer.cc:38-52 translateX(): "Because it
+//    (openMSX 21.0: src/video/SDLRasterizer.cc:38-52 translateX(): "Because it
 //    looks better, the borders are extended") extends the border to a 320-wide (or 640 for
 //    512-pixel modes) canvas centered on the visible-region midpoint; this module adopts
 //    the same convention, giving 32 border pixels each side for a 256-wide mode.
 //  * TEXT modes start 9 wide pixels later than graphics modes and are only 240/480 pixels
-//    wide (references/openmsx-21.0/src/video/VDP.hh:598-604 getLeftSprites(): +9*4 cycles
+//    wide (openMSX 21.0: src/video/VDP.hh:598-604 getLeftSprites(): +9*4 cycles
 //    for V99x8 text; getRightBorder(): 960-cycle text display region), so a 240-wide TEXT1
 //    frame anchors at x=41 (= 32 + 9); empirically confirmed by the openMSX SCREEN 0 raw
 //    screenshot's leftmost text pixel at x=41.
@@ -65,7 +65,7 @@ struct BorderGeometry {
 
 // Geometry for a given active-area size. Known widths anchor per the table
 // above (240 -> 41, 256 -> 32, 480 -> 82, 512 -> 64); unknown sizes fall
-// back to plain centering (defensive only -- the M21 renderer emits only the
+// back to plain centering (defensive only -- the renderer emits only the
 // four known widths and heights 192/212).
 [[nodiscard]] BorderGeometry border_geometry(int active_width, int active_height);
 

@@ -16,13 +16,14 @@
 
 #include "devices/audio/dwell_rounding.h"
 
-// Suite: Devices_AudioDwellRounding_Unit (M34-S1, DEC-0043 Defect A,
-// docs/m34-planner-package.md §2.3.4 / test matrix row 3)
+// Suite: Devices_AudioDwellRounding_Unit
 //
-// The ONE shared integer rounding helper both M34 take_integrated_sample()
-// APIs (PsgYm2149, SccWavetable) divide through. Every expectation below is
-// hand-computed arithmetic (authored BEFORE execution, R-M34-9 anti-tautology
-// rule): round-half-away-from-zero, (2*sum + sign(sum)*window)/(2*window).
+// The ONE shared integer rounding helper both box-average
+// take_integrated_sample() APIs (PsgYm2149, SccWavetable) divide through.
+// Every expectation below is hand-computed arithmetic, authored BEFORE
+// execution so the oracles cannot be back-derived from the code under test:
+// round-half-away-from-zero, (2*sum + sign(sum)*window)/(2*window).
+// (DEC-0043 Defect A)
 
 namespace {
 
@@ -68,7 +69,7 @@ int main() {
     expect(round_div_half_away_from_zero(8, 16) == 1, "Tie_8Over16_RoundsAwayTo1");
     expect(round_div_half_away_from_zero(24, 16) == 2, "Tie_24Over16_RoundsAwayTo2");
 
-    // --- THE FIXED-POINT PROPERTY (§2.3.4, the property the whole M34
+    // --- THE FIXED-POINT PROPERTY (the property the whole box-average
     //     oracle re-baseline rests on): for EVERY constant level L held over
     //     the whole window, round(L*W, W) == L exactly -- proven across the
     //     full PSG summed-level range [0, 62] and the SCC AC extremes
@@ -85,7 +86,7 @@ int main() {
     }
 
     // --- W = 1 degenerates to the identity (the psg_audio_dump per-cycle
-    //     case, §2.3.6). ---
+    //     case). ---
     expect(round_div_half_away_from_zero(31, 1) == 31 &&
                round_div_half_away_from_zero(-120, 1) == -120,
            "WindowOne_Identity");

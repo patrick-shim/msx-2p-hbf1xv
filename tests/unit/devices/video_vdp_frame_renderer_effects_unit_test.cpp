@@ -176,7 +176,7 @@ int main() {
         // translateX(getLeftBackground())), VDP.hh:629-631 (getLeftBackground =
         // getLeftSprites + R#27*4), PixelRenderer.cc:587-594 ("the 0..7 extra
         // horizontal scroll low pixels should be drawn in border color"). A/B
-        // confirmed: tools/m38-run.ps1 s03_g4_fine flips MISMATCH -> MATCH.
+        // confirmed: tools/capture/scroll-scenarios-run.ps1 s03_g4_fine flips MISMATCH -> MATCH.
         expect(row[6] == pf, "HorizontalScroll_BitmapMode_FineR27_ShiftsContentRightByThree");
         expect(row[0] == renderer.border_color(),
                "HorizontalScroll_BitmapMode_FineR27_ExposesLeftBorderStrip");

@@ -20,30 +20,31 @@
 namespace sony_msx::machine {
 
 // ---------------------------------------------------------------------------
-// Externalized emulator configuration model (M50-S1, docs/m50-planner-
-// package.md §1.2/§4.3). Holds the DEFAULTS + KNOBS that M50 moves out of
+// Externalized emulator configuration model. Holds the DEFAULTS + KNOBS that
+// are externalized out of
 // hardcoded C++ into a strict XML file, so the machine is configurable without
 // recompiling.
 //
-// SCOPE (M50-S1): this is the PURE model + parser only. It is NOT wired into
-// any run path yet -- the CLI-default resolution (precedence CLI > XML >
-// default), the determinism/auto-load rule (§4.6), and the machine-sizing
-// plumbing are S2/S3. Nothing here reaches a silicon-timing constant (§3
-// HARD-EXCLUDE); VRAM is validated-to-128 and slots are out of S1 entirely.
+// SCOPE: this is the PURE model + parser only. The CLI-default resolution
+// (precedence CLI > XML >
+// default), the determinism/auto-load rule, and the machine-sizing
+// plumbing live outside this type. Nothing here reaches a silicon-timing
+// constant; VRAM is validated-to-128 and slots are never remapped from here.
 //
 // Every field is initialized to its BUILT-IN DEFAULT. `parse()` overwrites a
 // field ONLY when the XML supplies a valid value for it; an omitted knob keeps
 // its default, and a PRESENT-but-invalid knob keeps its default AND emits a
-// per-key WARNING (graceful, never throws -- §4.2). The convenience defaults
-// (RAM 512 / fast-disk ON / FM-PAC auto-load ON, per M46/DEC-0071) are the
-// base defaults the S2 resolver will fall back to, so they live here.
+// per-key WARNING (graceful, never throws). The convenience defaults
+// (RAM 512 / fast-disk ON / FM-PAC auto-load ON) are the
+// base defaults the CLI-default resolver falls back to, so they live
+// here. (DEC-0071)
 // ---------------------------------------------------------------------------
 
 struct EmulatorConfig {
     // The 7 BIOS ROM filenames (per role). Defaults are the HB-F1XV spec set
-    // (docs/m50-planner-package.md §1.2 table / hbf1xv_machine.cpp load_rom_assets).
+    // (see hbf1xv_machine.cpp load_rom_assets).
     // Only the FILENAME/dir externalizes; the expected size per role stays
-    // code-owned (§6-S3) -- it is a spec fact, not a user knob.
+    // code-owned -- it is a spec fact, not a user knob.
     struct BiosRoms {
         std::string bios = "f1xvbios.rom";          // 32 KB BIOS+BASIC
         std::string sub = "f1xvext.rom";            // 16 KB SUB (MSX-BASIC V3.0)
@@ -61,18 +62,19 @@ struct EmulatorConfig {
     bool fmpac_autoload = true;            // <defaults><fmpac autoload>     (convenience ON)
     int fmpac_slot = 2;                    // <defaults><fmpac slot>         1|2
     bool border_enabled = false;          // <defaults><border enabled>
-    // M52 (DEC-0079): disk-writable default flipped false -> TRUE. This is the XML
-    // BASE default the S2 resolver falls back to, so an SDL3 launch with no
+    // The disk-writable XML BASE default is TRUE: it is the value the
+    // CLI-default resolver falls back to, so an SDL3 launch with no
     // explicit flag resolves disk-writable ON (owner-requested; a real MSX writes
     // its floppies). `--no-disk-writable` is the escape hatch. The Sdl3AppConfig
-    // struct default stays false (anti-drift, planner §2.4); headless src/main.cpp
+    // struct default stays false (anti-drift); headless src/main.cpp
     // default also stays OFF (determinism guard). A persisted sony_msx_hbf1xv.xml
     // therefore carries <disk-writable enabled="true"/>, keeping the emitter/parser
-    // round-trip identity (frontend_config_xml_writer_unit_test).
+    // round-trip identity (frontend_config_xml_writer_unit_test). (DEC-0079)
     bool disk_writable = true;            // <defaults><disk-writable enabled>
-    // M52 (DEC-0079, docs/m52-planner-package.md §2.2): SDL3 master-volume percent
-    // [0,100], default 100 (unity/full -- byte-identical to every pre-M52 session).
-    // SDL3 presentation only (never affects emulation/determinism/headless output).
+    // SDL3 master-volume percent
+    // [0,100], default 100 (unity/full -- no attenuation unless configured).
+    // SDL3 presentation only (never affects emulation/determinism/headless
+    // output). (DEC-0079)
     int master_volume = 100;              // <defaults><volume percent>     0..100
     int speed_level = 0;                  // <defaults><speed level>        0..7
     int video_scale = 3;                  // <defaults><video scale>        1..8 (960x720)
@@ -86,7 +88,7 @@ struct EmulatorConfig {
     int ram_kb = 512;   // <machine><ram kb>   64|128|256|512  (convenience 512)
     int vram_kb = 128;  // <machine><vram kb>  strict spec: 128 ONLY (validated-to-128)
     std::string bios_dir = "bios";                                                  // <machine><bios dir>
-    // M64: default directories the in-window SDL3 file dialogs open at. Pure
+    // Default directories the in-window SDL3 file dialogs open at. Pure
     // dialog UX (never affects emulation/determinism/headless); each is resolved
     // relative to the working directory at dialog-open time and falls back to
     // the working directory when absent.
@@ -104,14 +106,14 @@ struct EmulatorConfig {
     // human-readable WARNING per unknown / bad-type / out-of-range key (naming
     // the offending key) plus, on a structurally-unrecognizable document, a
     // single whole-file WARNING with all built-in defaults returned. NEVER
-    // throws (§4.2).
+    // throws.
     [[nodiscard]] static EmulatorConfig parse(std::string_view xml_text,
                                               std::vector<std::string>& warnings);
 
     // Convenience: read `path` and parse it. An unreadable file yields one
-    // WARNING + built-in defaults (never throws). NOTE (M50-S1): this is not
-    // wired into any run path; the determinism/auto-load search order (§4.6) is
-    // S2's concern.
+    // WARNING + built-in defaults (never throws). NOTE: this does
+    // only the I/O + parse; the determinism/auto-load search order is
+    // the caller's concern (frontend config_runtime / headless --config).
     [[nodiscard]] static EmulatorConfig load_from_file(const std::string& path,
                                                        std::vector<std::string>& warnings);
 };

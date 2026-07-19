@@ -21,12 +21,12 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `Ascii8kB` MVP mapper type (M19-S2), grounds
-// references/openmsx-21.0/src/memory/RomAscii8kB.cc (header comment lines
+// `Ascii8kB` mapper type. Grounded in
+// openMSX 21.0: src/memory/RomAscii8kB.cc (header comment lines
 // 1-10 + code lines 18-52; behaviour reference only, never copied -- GPL
 // isolation). Used by many Japanese-only cartridge titles.
 //
-// Load-time validation (A-M19-7): image size must be a positive multiple of
+// Load-time validation: image size must be a positive multiple of
 // 0x2000 (8 KB).
 //
 // reset(): window-slots 0,1 unmapped; slots 2,3,4,5 ALL = image bank 0;
@@ -50,7 +50,7 @@ public:
     void mem_write(core::BusAddress address, core::BusData value) override;
 
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
-    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    // Debug-snapshot seam: exposes the bank window for generic bank-state dumps.
     [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
 
 private:

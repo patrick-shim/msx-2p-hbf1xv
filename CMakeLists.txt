@@ -199,7 +199,7 @@ if(SONY_MSX_ENABLE_SDL3)
     # beside it, or the Windows loader aborts with 0xc0000135 AND a MODAL
     # error dialog that hangs unattended ctest runs (M33/DEC-0041 finding).
     # Staging the DLL at build time per target makes every build path --
-    # tools/bootstrap-build.ps1, bare cmake, or an IDE -- self-sufficient.
+    # setup/build.ps1, bare cmake, or an IDE -- self-sufficient.
     if(TARGET SDL3::SDL3-shared)
         set(SONY_MSX_SDL3_RUNTIME_TARGET SDL3::SDL3-shared)
     else()

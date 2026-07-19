@@ -46,7 +46,7 @@
 //
 // Harness mirrors sdl3_app_multi_disk_integration_test.cpp (dummy SDL video/
 // audio drivers + hidden window) and the bus write/unlock protocol from
-// hbf1xv_m36_fmpac_cartridge_integration_test.cpp. To avoid ever touching a
+// hbf1xv_fmpac_cartridge_integration_test.cpp. To avoid ever touching a
 // real user's roms/fmpac.rom.sram save, the FM-PAC ROM is COPIED into a temp
 // dir and the derived <copy>.sram lives entirely under temp.
 

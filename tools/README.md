@@ -63,7 +63,7 @@ fixtures are byte-reproducible.
   (64×64 RGBA for `SDL_SetWindowIcon`).
 - `basic-to-disk.py` — places ASCII MSX-BASIC programs / named payloads onto a formatted-blank
   720 KB FAT12 image (deterministic injector; `--read` re-extracts files for round-trip checks).
-- `boot-disk.py` — deterministic 720 KB 2DD disk-image fixture (`tests/parity/m16_boot.dsk`,
+- `boot-disk.py` — deterministic 720 KB 2DD disk-image fixture (`tests/parity/boot.dsk`,
   byte-for-byte port of `DiskImage::synthesize()`).
 - `cartridge-probe.py` — synthetic Generic8kB cartridge image + Z80 driver probe
   (`tests/parity/`).

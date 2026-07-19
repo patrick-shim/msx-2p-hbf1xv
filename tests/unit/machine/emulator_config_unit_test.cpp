@@ -19,8 +19,9 @@
 
 #include "machine/emulator_config.h"
 
-// Suite: Machine_EmulatorConfig_Unit (M50-S1, docs/m50-planner-package.md
-// §4.3/§7 AC-S1). Non-tautological parser + validator tests: the "valid full
+// Suite: Machine_EmulatorConfig_Unit
+//
+// Non-tautological parser + validator tests: the "valid full
 // config" fixture sets EVERY knob to a value DIFFERENT from the compiled
 // default (so a parser that ignored the XML and returned defaults would FAIL),
 // and each per-key error case asserts BOTH that a WARNING names the offending
@@ -60,7 +61,7 @@ int main() {
 
     // ========================================================================
     // 1. Valid FULL config -> every field parses to the given (non-default!)
-    //    value, and ZERO warnings. (AC-S1-1; non-tautology: all values differ
+    //    value, and ZERO warnings. (Non-tautology: all values differ
     //    from the compiled defaults.)
     // ========================================================================
     {
@@ -71,8 +72,8 @@ int main() {
             "    <fast-disk enabled=\"false\"/>\n"           // default true
             "    <fmpac autoload=\"false\" slot=\"1\"/>\n"   // default true / 2
             "    <border enabled=\"true\"/>\n"               // default false
-            "    <disk-writable enabled=\"true\"/>\n"        // M52 (DEC-0079): default now true; XML also true
-            "    <volume percent=\"55\"/>\n"                 // M52 (DEC-0079): default 100
+            "    <disk-writable enabled=\"true\"/>\n"        // default true (DEC-0079); XML also true
+            "    <volume percent=\"55\"/>\n"                 // default 100
             "    <speed level=\"5\"/>\n"                     // default 0
             "    <video scale=\"6\" filter=\"nearest\"/>\n"  // default 3 / linear
             "    <persistence percent=\"40\" mode=\"peak\"/>\n"  // default 0 / avg
@@ -92,8 +93,8 @@ int main() {
             "      <rom role=\"firmware\"     file=\"my-firm.rom\"/>\n"
             "    </bios>\n"
             "    <fmpac rom=\"custom/fm.rom\" sram=\"custom/fm.sram\"/>\n"
-            "    <cartridge dir=\"customcarts\"/>\n"        // M64: default roms
-            "    <disk dir=\"customdisks\"/>\n"             // M64: default disks
+            "    <cartridge dir=\"customcarts\"/>\n"        // default roms
+            "    <disk dir=\"customdisks\"/>\n"             // default disks
             "    <softwaredb path=\"custom/sw.xml\"/>\n"
             "  </machine>\n"
             "</hbf1xv-config>\n";
@@ -107,7 +108,7 @@ int main() {
         expect(cfg.fmpac_slot == 1, "FullValid_FmpacSlot");
         expect(cfg.border_enabled == true, "FullValid_Border");
         expect(cfg.disk_writable == true, "FullValid_DiskWritable");
-        expect(cfg.master_volume == 55, "FullValid_MasterVolume");  // M52 (DEC-0079)
+        expect(cfg.master_volume == 55, "FullValid_MasterVolume");
         expect(cfg.speed_level == 5, "FullValid_Speed");
         expect(cfg.video_scale == 6, "FullValid_Scale");
         expect(cfg.video_filter == "nearest", "FullValid_Filter");
@@ -127,8 +128,8 @@ int main() {
         expect(cfg.bios_roms.firmware == "my-firm.rom", "FullValid_RomFirmware");
         expect(cfg.fmpac_rom == "custom/fm.rom", "FullValid_FmpacRom");
         expect(cfg.fmpac_sram == "custom/fm.sram", "FullValid_FmpacSram");
-        expect(cfg.cartridge_dir == "customcarts", "FullValid_CartridgeDir");  // M64
-        expect(cfg.disk_dir == "customdisks", "FullValid_DiskDir");            // M64
+        expect(cfg.cartridge_dir == "customcarts", "FullValid_CartridgeDir");
+        expect(cfg.disk_dir == "customdisks", "FullValid_DiskDir");
         expect(cfg.softwaredb_path == "custom/sw.xml", "FullValid_SoftwareDb");
 
         // Non-tautology guard: this parsed config MUST differ from the defaults.
@@ -139,7 +140,6 @@ int main() {
     // 2. Per-key validation. Each fixture pairs ONE invalid key with ONE valid
     //    co-present key; asserts (a) a WARNING names the bad key, (b) the bad
     //    field == its built-in default, (c) the valid co-present key applied.
-    //    (AC-S1-2)
     // ========================================================================
 
     // Bad bool (fast-disk) + valid co-present border.
@@ -211,8 +211,8 @@ int main() {
         expect(cfg.persistence_mode == kDefaults.persistence_mode, "BadMode_KeepsDefault");
     }
 
-    // M52 (DEC-0079): <volume percent> valid boundaries + out-of-range + bad type
-    // + missing -> warn+keep-default(100). Mirrors the persistence@percent policy.
+    // <volume percent> valid boundaries + out-of-range + bad type + missing ->
+    // warn+keep-default(100). Mirrors the persistence@percent policy (DEC-0079).
     {
         std::vector<std::string> w0;
         const auto c0 = EmulatorConfig::parse(
@@ -283,7 +283,7 @@ int main() {
         expect(cfg.bios_roms.bios == kDefaults.bios_roms.bios, "BadRole_UnsetRolesDefault");
     }
 
-    // M64: unknown attribute on <cartridge> -> warns naming machine/cartridge@
+    // Unknown attribute on <cartridge> -> warns naming machine/cartridge@
     // <attr>; the known dir attr on the co-present <disk> still applies.
     {
         std::vector<std::string> w;
@@ -299,7 +299,7 @@ int main() {
         expect(cfg.disk_dir == "mydisks", "CartridgeUnknownAttr_CoPresentDiskApplied");
     }
 
-    // M64: <cartridge>/<disk> absent -> the built-in dialog defaults
+    // <cartridge>/<disk> absent -> the built-in dialog defaults
     // "roms"/"disks" hold (and an unrelated machine key parses cleanly).
     {
         std::vector<std::string> w;
@@ -342,7 +342,7 @@ int main() {
 
     // ========================================================================
     // 3. Structural failures -> ONE whole-file warning + all built-in defaults,
-    //    never a throw. (AC-S1-3)
+    //    never a throw.
     // ========================================================================
 
     // Binary/garbage with no XML at all.
@@ -374,7 +374,7 @@ int main() {
     // ========================================================================
     // 4. Built-in-default config == compiled defaults (round-trip identity of
     //    an empty-but-valid root produces exactly the compiled defaults, no
-    //    warnings). (AC-S1-1 / A-1 base)
+    //    warnings).
     // ========================================================================
     {
         std::vector<std::string> w;
@@ -394,8 +394,8 @@ int main() {
     {
         expect(kDefaults.fast_disk == true && kDefaults.fmpac_autoload == true &&
                    kDefaults.fmpac_slot == 2 && kDefaults.border_enabled == false &&
-                   // M52 (DEC-0079, §4.5 enumerated flip): disk-writable default
-                   // false -> true (SDL3 convenience; headless stays OFF). master
+                   // The disk-writable default was flipped from false to true
+                   // (SDL3 convenience; headless stays OFF; DEC-0079). Master
                    // volume default 100 (unity).
                    kDefaults.disk_writable == true && kDefaults.master_volume == 100 &&
                    kDefaults.speed_level == 0 &&
@@ -414,7 +414,7 @@ int main() {
                    kDefaults.bios_roms.firmware == "f1xvfirm.rom" &&
                    kDefaults.fmpac_rom == "roms/fmpac.rom" &&
                    kDefaults.fmpac_sram == "roms/fmpac.rom.sram" &&
-                   // M64: the in-window file-dialog default directories.
+                   // The in-window file-dialog default directories.
                    kDefaults.cartridge_dir == "roms" && kDefaults.disk_dir == "disks" &&
                    kDefaults.softwaredb_path ==
                        "references/openmsx-21.0/share/softwaredb.xml",
@@ -435,7 +435,7 @@ int main() {
         const std::string xml =
             "<hbf1xv-config><machine><ram kb=\"256\"/></machine></hbf1xv-config>";
         const std::filesystem::path dir =
-            std::filesystem::temp_directory_path() / "sony_msx_m50_config_fixtures";
+            std::filesystem::temp_directory_path() / "sony_msx_config_fixtures";
         std::filesystem::create_directories(dir);
         const std::filesystem::path path = dir / "cfg.xml";
         {

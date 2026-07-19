@@ -24,10 +24,10 @@
 
 namespace sony_msx::frontend {
 
-// Owns the SDL_Texture presenting the decoded FrameBuffer (M21) to a real SDL3 renderer
-// (M26-S3, docs/m26-planner-package.md §2.3). Created with `SDL_PIXELFORMAT_XRGB1555` -- a
-// bit-for-bit match with FrameBuffer's RGB555 layout (A-M26-3, confirmed against both
-// `devices/video/frame_buffer.h` and `references/sdl3/include/SDL3/SDL_pixels.h`: bits
+// Owns the SDL_Texture presenting the decoded FrameBuffer to a real SDL3 renderer.
+// Created with `SDL_PIXELFORMAT_XRGB1555` -- a
+// bit-for-bit match with FrameBuffer's RGB555 layout (confirmed against both
+// `devices/video/frame_buffer.h` and `src/external/sdl3/include/SDL3/SDL_pixels.h`: bits
 // 14-10=R, 9-5=G, 4-0=B, bit15/X unused, both plain host-native uint16_t values).
 //
 // Border composition is controlled by `border_enabled`. When true, `blit_frame()` first
@@ -39,25 +39,25 @@ namespace sony_msx::frontend {
 // (composition copies pixel values, never converts them).
 //
 // The CONSTRUCTOR default is false (bare) -- direct/test construction stays byte-for-byte
-// the pre-border presentation. The SDL3 APP also defaults border OFF (M39-D,
-// Sdl3AppConfig::border_enabled = false): the bare edge-to-edge active area is the Sony-
-// original default look per the human's explicit preference. `--border` opts into the
+// the pre-border presentation. The SDL3 APP also defaults border OFF
+// (Sdl3AppConfig::border_enabled = false): the bare edge-to-edge active area is the Sony-
+// original default look per the owner's explicit preference. `--border` opts into the
 // composed canvas, which matches openMSX's vertical framing for BOTH 192- and 212-line
-// modes; `--no-border` is the explicit off (matches the default). (7fac03d/M39-B had
-// briefly defaulted this ON; M39-D reverts it to the human-chosen Sony default.)
+// modes; `--no-border` is the explicit off (matches the default). (Revision 7fac03d had
+// briefly defaulted this ON; it was reverted to the owner-chosen Sony default.)
 //
 // `blit_frame()`/`present()` are split (rather than one combined call) so a test can read
 // back the texture's presented pixel data via `SDL_RenderReadPixels` between the two steps
 // -- SDL3's documented recommendation (SDL_render.h:2556-2558: "should be called after
 // rendering and before SDL_RenderPresent()") -- to prove the "zero conversion" claim is
-// genuinely true (S3 pixel-exact test), not merely plausible.
+// genuinely true (the pixel-exact test), not merely plausible.
 class Sdl3VideoPresenter {
 public:
-    // M37 Slice E (DEC-0056): `scale_mode` selects the texture filter applied via
+    // `scale_mode` selects the texture filter applied via
     // SDL_SetTextureScaleMode each time the texture is (re)created. Default
     // SDL_SCALEMODE_LINEAR matches the renderer's own default (SDL_render.h:1260), so an
-    // unspecified filter is byte-identical to the pre-M37 presentation; SDL_SCALEMODE_NEAREST
-    // gives crisp pixels (--filter nearest).
+    // unspecified filter leaves the presentation byte-identical; SDL_SCALEMODE_NEAREST
+    // gives crisp pixels (--filter nearest). (DEC-0056)
     //
     // `persistence` (0..100, DEFAULT 0 = OFF) is the phosphor-persistence
     // inter-frame blend weight (--persistence): the percent of the previously
@@ -89,11 +89,11 @@ public:
 
     [[nodiscard]] bool border_enabled() const { return border_enabled_; }
 
-    // M37 Slice E (DEC-0056): the configured texture scale mode (--filter).
+    // The configured texture scale mode (--filter). (DEC-0056)
     [[nodiscard]] SDL_ScaleMode scale_mode() const { return scale_mode_; }
-    // M55 (DEC-0083): swap the texture filter live (menu Video > Filter). Applied
+    // Swap the texture filter live (menu Video > Filter). Applied
     // immediately to the existing texture via SDL_SetTextureScaleMode, and also
-    // used for any future texture (re)creation. Presentation-only.
+    // used for any future texture (re)creation. Presentation-only. (DEC-0083)
     void set_scale_mode(SDL_ScaleMode mode);
 
     // Phosphor-persistence blend weight (--persistence / Alt+B). 0 = OFF (the
@@ -112,7 +112,7 @@ public:
     [[nodiscard]] PhosphorMode persistence_mode() const { return persistence_mode_; }
     void set_persistence_mode(PhosphorMode mode) { persistence_mode_ = mode; }
 
-    // M57 (DEC-0085, docs/m57-planner-package.md §4.2): the menu-strip TOP INSET
+    // The menu-strip TOP INSET
     // in output pixels. DEFAULT 0 => the legacy full-window LETTERBOX path VERBATIM
     // (blit_frame relies on the 320x240 logical presentation set in init(), draws
     // SDL_RenderTexture(nullptr, nullptr)); the hidden-window / pixel-integration
@@ -120,11 +120,13 @@ public:
     // blit_frame explicitly letterboxes the picture into the band BELOW the strip
     // (letterbox_geometry.h), so zero MSX pixels hide behind the menu. The app sets
     // this from Sdl3Menu::bar_height() each frame; hidden-window never touches it.
+    // (DEC-0085)
     void set_top_inset(int px) { top_inset_px_ = px < 0 ? 0 : px; }
     [[nodiscard]] int top_inset() const { return top_inset_px_; }
-    // DEC-0096: the status-bar strip reserved along the window BOTTOM (mirror of
+    // The status-bar strip reserved along the window BOTTOM (mirror of
     // set_top_inset). The picture letterboxes into the band BETWEEN the two
     // strips. 0 (hidden-window / no status bar) keeps the legacy behavior.
+    // (DEC-0096)
     void set_bottom_inset(int px) { bottom_inset_px_ = px < 0 ? 0 : px; }
     [[nodiscard]] int bottom_inset() const { return bottom_inset_px_; }
 
@@ -140,7 +142,7 @@ private:
 
     SDL_Renderer* renderer_;
     bool border_enabled_ = false;
-    SDL_ScaleMode scale_mode_ = SDL_SCALEMODE_LINEAR;  // M37 Slice E (DEC-0056): --filter
+    SDL_ScaleMode scale_mode_ = SDL_SCALEMODE_LINEAR;  // --filter (DEC-0056)
     // Phosphor-persistence blend (--persistence): weight in [0,100] of the
     // previously presented frame. 0 = OFF (skips the entire blend block, so no
     // prev buffer is ever touched/allocated -- the byte-identical default path).
@@ -161,9 +163,9 @@ private:
     SDL_Texture* texture_ = nullptr;
     int texture_width_ = 0;
     int texture_height_ = 0;
-    // M57 (DEC-0085): menu-strip top inset in output pixels (0 = legacy path).
+    // Menu-strip top inset in output pixels (0 = legacy path; DEC-0085).
     int top_inset_px_ = 0;
-    int bottom_inset_px_ = 0;  // DEC-0096: status-bar strip along the window bottom
+    int bottom_inset_px_ = 0;  // status-bar strip along the window bottom (DEC-0096)
     std::string last_error_;
 };
 

@@ -20,7 +20,7 @@ namespace sony_msx::devices::video {
 
 namespace {
 
-// D7's rotate-right-by-1 planar interleave (A-M21-10), re-applied here to an
+// The G6/G7 rotate-right-by-1 planar interleave, re-applied here to an
 // arbitrary logical VRAM address (not just a display row): even logical
 // addresses land in bank0 (physical = addr>>1), odd in bank1 (physical =
 // 0x10000 + (addr>>1)). Same physical-bank placement rule as
@@ -73,13 +73,13 @@ std::uint32_t calculate_pattern(const VdpVram& vram, const std::uint32_t pattern
 
 void SpriteEngine::recompute_frame(const VdpVram& vram, std::span<const std::uint8_t, 32> control_regs,
                                    const VdpModeState& mode, const int height) {
-    // M49-S1 (backlog D9): the pre-M49 single all-lines sweep, re-expressed as
+    // The single all-lines sweep, expressed as
     // "bind the frame + check every line in ONE segment". begin_frame() takes
     // the frameStart() per-line clear + the frame-boundary geometry; the single
     // check_until(height-1) below runs the identical sprite loop + collision
     // pass over [1, height) against the identical register/VRAM snapshot and
-    // finalizes S#0/collision -- byte-identical to the old code (AC-S1). This is
-    // the only caller in S1, so on_vsync() behavior is unchanged.
+    // finalizes S#0/collision -- byte-identical to a one-shot full-frame
+    // recompute.
     begin_frame(vram, control_regs, mode, height);
     if (height > 0) {
         check_until(height - 1);
@@ -95,12 +95,13 @@ void SpriteEngine::begin_frame(const VdpVram& vram, std::span<const std::uint8_t
     // Bind the LIVE state read by check_until()/process_segment(). The pointers
     // stay valid for the frame's duration (the caller owns control_regs + vram);
     // reading them LIVE at each check_until() is what makes a mid-frame write
-    // affect only the lines after its commit boundary (the S2 seam drives this).
+    // affect only the lines after its commit boundary (the render-sync seam
+    // drives this).
     vram_ptr_ = &vram;
     regs_ptr_ = control_regs.data();
-    mode_captured_ = mode;  // A-M49-2: sprite-mode/planar are per-frame decisions
+    mode_captured_ = mode;  // sprite-mode/planar are per-frame decisions
     height_ = height;
-    watermark_ = 1;  // line 0 is unconditionally sprite-free (A-M22-9)
+    watermark_ = 1;  // line 0 is unconditionally sprite-free (1-pixel shift)
     finalized_ = false;
     frame_active_ = false;
     fifth_num_ = -1;         // no 5th/9th sprite detected yet
@@ -108,10 +109,9 @@ void SpriteEngine::begin_frame(const VdpVram& vram, std::span<const std::uint8_t
     sprite_end_ = 32;        // sentinel-Y loop-stop index (32 = loop never broke)
 
     // NOTE: collision_events_, next_collision_event_ and status_ are DELIBERATELY
-    // not reset here. The pre-M49 code only cleared them inside the enabled path
-    // (right before its collision loop) and left them frozen on the disabled /
-    // sprite-mode-0 / height<=0 early return; the first ACTIVE segment clears
-    // them (check_until()), preserving that exact behavior.
+    // not reset here: they are cleared only by the first ACTIVE segment
+    // (check_until()), so a disabled / sprite-mode-0 / height<=0 frame leaves
+    // them frozen.
 }
 
 void SpriteEngine::check_until(const int line) {
@@ -131,10 +131,11 @@ void SpriteEngine::check_until(const int line) {
     //  * sprite-mode-0 (SpriteChecker.hh:82-87 no-ops entirely; status frozen);
     //  * spritesEnabledFast() (VDP.hh:313-319): R#1 bit6 displayEnabled AND
     //    R#8 bit1 clear (SPD). A freshly reset VDP (VRAM all-zero, phantom
-    //    sprites at Y=0) must not populate S#0 -- the M14 VBlank status tests
+    //    sprites at Y=0) must not populate S#0 -- the VBlank status tests
     //    call on_vsync() with no sprites configured and rely on this gate.
-    // This is the actual D9 fix: a mid-frame R#1 BL / R#8 SPD / mode toggle now
-    // affects only the lines checked after its commit boundary, not the frame.
+    // This per-segment evaluation is what makes a mid-frame R#1 BL / R#8 SPD /
+    // mode toggle affect only the lines checked after its commit boundary, not
+    // the whole frame.
     const int sprite_mode = vdp_sprite_mode(mode_captured_.base);
     const bool display_enabled = (regs_ptr_[1] & 0x40) != 0;
     const bool sprite_enabled = (regs_ptr_[8] & 0x02) == 0;
@@ -156,14 +157,13 @@ void SpriteEngine::check_until(const int line) {
 }
 
 void SpriteEngine::check_until_visible_only(const int line) {
-    // M49-S2 (backlog D9): the RENDERING-ONLY analogue of check_until -- populate
+    // The RENDERING-ONLY analogue of check_until -- populate
     // the per-line visible-sprite buffers up to `line`, but NEVER touch the
     // collision-event queue or the S#0 status (no clear, no collection, no
     // finalize). The seam drives THIS during the frame so the RENDERED sprite plane
     // splits per-line-live, while the CPU-visible collision/status is left frozen
     // (the previous frame's frame-atomic result) until on_vsync's recompute_frame
-    // recomputes it -- byte-identical to pre-M49 for every game (DEC-0031 + no
-    // game-behaviour change).
+    // recomputes it -- no game-behaviour change. (DEC-0031)
     if (finalized_ || height_ <= 0) {
         return;
     }
@@ -198,7 +198,7 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
     const int mag_size = (mag ? 2 : 1) * size;
     const std::uint8_t pattern_index_mask = size16 ? std::uint8_t{0xFC} : std::uint8_t{0xFF};
 
-    // Table base formulas (VDP.hh:262-268, A-M22-16).
+    // Table base formulas (VDP.hh:262-268).
     const std::uint32_t attrib_base = (static_cast<std::uint32_t>(regs[11]) << 15) |
                                        (static_cast<std::uint32_t>(regs[5]) << 7);
     // Sprite mode 2 attribute-table addressing (a stealth-action cartridge
@@ -235,15 +235,15 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
         const bool sprite_planar = (sprite_mode == 2) && planar;
 
         if (sprite_mode == 1) {
-            // Flat 4-byte-per-sprite table: Y, X, pattern, color (A-M22-16,
-            // SpriteChecker.cc:114-153).
+            // Flat 4-byte-per-sprite table: Y, X, pattern, color
+            // (SpriteChecker.cc:114-153).
             y = read_table_byte(vram, attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 0u, false);
             x_addr = attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 1u;
             pattern_index_addr = attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 2u;
             color_addr_base = attrib_base + static_cast<std::uint32_t>(sprite) * 4u + 3u;
         } else {
             // Mode 2's Y/X/pattern sub-table sits at index offset +512
-            // (A-M22-15, SpriteChecker.cc:284-285/329-330), same 4-byte
+            // (SpriteChecker.cc:284-285/329-330), same 4-byte
             // stride as mode 1 -- addressed through the baseMask/indexMask
             // combine above, NOT a plain base+offset add.
             y = read_table_byte(vram, mode2_attr_addr(512u + static_cast<std::uint32_t>(sprite) * 4u + 0u),
@@ -261,7 +261,7 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
         const int x_base = read_table_byte(vram, x_addr, sprite_planar);
 
         for (int line = lo; line < hi; ++line) {
-            // 1-pixel vertical shift (A-M22-9): sprites are checked one line
+            // 1-pixel vertical shift: sprites are checked one line
             // earlier than displayed; output line 0 is unconditionally
             // sprite-free (the checked range starts at line 1).
             const int sprite_line = ((line - 1) + r23 - y) & 0xFF;
@@ -286,7 +286,7 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
             if (sprite_mode == 1) {
                 color_attrib = read_table_byte(vram, color_addr_base, false);
             } else {
-                // Per-LINE color/attribute byte (A-M22-15): table index
+                // Per-LINE color/attribute byte: table index
                 // sprite*16 + spriteLine (offsets 0-511, NOT the +512
                 // sub-table), through the same baseMask/indexMask combine
                 // (SpriteChecker.cc:312-314/357-359 `(~0u << 10) | (sprite *
@@ -300,17 +300,17 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
 
             int x = x_base;
             if (color_attrib & 0x80) {
-                x -= 32;  // EC: early clock (A-M22-10, applied at check time).
+                x -= 32;  // EC: early clock (applied at check time).
             }
             vis.push_back(VisibleSprite{pattern, x, color_attrib});
         }
     }
     sprite_end_ = local_sprite_end;
 
-    // M49-S2 (backlog D9): the RENDERING-ONLY pass (check_until_visible_only) skips
+    // The RENDERING-ONLY pass (check_until_visible_only) skips
     // this entire collision block, so the incremental per-line split NEVER perturbs
     // the CPU-visible collision -- that stays frame-atomic (recompute_frame at
-    // on_vsync), byte-identical to pre-M49 for every game.
+    // on_vsync).
     if (!collect_collision) {
         return;
     }
@@ -375,7 +375,7 @@ void SpriteEngine::finalize_frame() {
     finalized_ = true;
     if (!frame_active_) {
         // Disabled / sprite-mode-0 / height<=0 frame: status + collision stay
-        // frozen (the pre-M49 early-return behavior).
+        // frozen.
         return;
     }
 
@@ -448,7 +448,7 @@ void SpriteEngine::reset() {
     status_ = 0;
     collision_x_ = 0;
     collision_y_ = 0;
-    // M49-S1: deterministic power-on reset of the progressive-frame state too.
+    // Deterministic power-on reset of the progressive-frame state too.
     vram_ptr_ = nullptr;
     regs_ptr_ = nullptr;
     mode_captured_ = {};

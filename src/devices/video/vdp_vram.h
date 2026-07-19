@@ -19,20 +19,20 @@
 
 namespace sony_msx::devices::video {
 
-// 128 KB V9958 Video RAM store, owned by the V9958 VDP device (M14-S1).
+// 128 KB V9958 Video RAM store, owned by the V9958 VDP device.
 //
 // Authoritative VRAM backing store for the HB-F1XV; migrated out of the
 // machine layer's inert MemoryRegion into the VDP device where it belongs
-// (fact-sheet §2 line 38: HB-F1XV = 128 KB fixed, no expansion socket). The
+// (V9958 fact sheet §2: HB-F1XV = 128 KB fixed, no expansion socket). The
 // CPU never addresses VRAM directly -- only through the VDP I/O ports
 // #98/#99 (+ the S1985 #9C/#9D mirror).
 //
 // Flat, linear 128 KB byte buffer with a 17-bit address space (0..0x1FFFF).
-// The G6/G7 planar interleave (fact-sheet §2 line 42; backlog D7, DONE M22)
+// The G6/G7 planar interleave (V9958 fact sheet §2)
 // is applied by the CALLERS (V9958Vdp::effective_address(),
 // vdp_command_address.h) as an address transform; this store itself stays
 // flat/linear, matching openMSX's flat VRAM store (behavior reference only:
-// references/openmsx-21.0/src/video/VDPVRAM.hh — never copied here, GPL
+// openMSX 21.0: src/video/VDPVRAM.hh — never copied here, GPL
 // isolation).
 //
 // All accessors are bounds-safe and deterministic: out-of-range reads yield
@@ -42,7 +42,7 @@ namespace sony_msx::devices::video {
 // after the migration.
 class VdpVram final {
 public:
-    // HB-F1XV VRAM size, fixed (fact-sheet §2); replaces the machine's
+    // HB-F1XV VRAM size, fixed (V9958 fact sheet §2); replaces the machine's
     // retired kVramBytes constant.
     static constexpr std::size_t kVramBytes = 128 * 1024;
 

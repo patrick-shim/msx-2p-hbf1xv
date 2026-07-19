@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Diskutils_CliValidation_Unit  (M53-S4, planner package §6.5)
+// Suite: Diskutils_CliValidation_Unit
 //
 // Exit-code contract over parse_args + run (NO subprocess): usage errors (1),
 // I/O errors (2), safety refusals (3), and successes (0), including the --force

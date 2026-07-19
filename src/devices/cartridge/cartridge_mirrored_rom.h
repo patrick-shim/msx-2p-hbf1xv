@@ -21,18 +21,18 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `Mirrored` MVP mapper type (M19-S2), grounds the MIRRORED case of
-// references/openmsx-21.0/src/memory/RomPlain.cc (behaviour reference only,
+// `Mirrored` mapper type. Grounds the MIRRORED case of
+// openMSX 21.0: src/memory/RomPlain.cc (behaviour reference only,
 // never copied -- GPL isolation).
 //
-// Load-time validation (A-M19-7, a deliberate STRICTER divergence from
+// Load-time validation (a deliberate STRICTER divergence from
 // openMSX's own short-image 0xFF-padding, RomBlocks.cc:28-39): the image size
 // must be a positive multiple of 0x2000 (8 KB) and <= 0x10000 (64 KB) --
 // RomPlain.cc:39-43's own check ("must be smaller than or equal to 64kB and
 // must be a multiple of 8kB"). An invalid size is REJECTED, never
 // padded/truncated/fabricated.
 //
-// Placement (A-M19-8, RomPlain's guessLocation heuristic is deliberately NOT
+// Placement (RomPlain's guessLocation heuristic is deliberately NOT
 // needed/ported: this machine's external cartridge slots have no narrower
 // `<mem>` sub-window to place inside -- the whole 64 KB window IS the slot):
 // window-slot `s` (0-7) reads image bank `s mod nrBlocks` -- a full,
@@ -55,7 +55,7 @@ public:
     void mem_write(core::BusAddress address, core::BusData value) override;
 
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
-    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    // Debug-snapshot seam: exposes the bank window for generic bank-state dumps.
     [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
 
 private:

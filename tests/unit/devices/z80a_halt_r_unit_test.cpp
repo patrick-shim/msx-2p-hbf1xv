@@ -21,18 +21,18 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80AHaltR_Unit  (M23-S1, closes backlog C2 in full / DEC-0004)
+// Suite: Devices_Z80AHaltR_Unit
 //
 // Proves the Z80 HALT-refetch phantom-M1 fix in isolation, directly against the
 // CPU core (bypassing the machine layer's S1985 M1-wait arithmetic entirely).
-// Grounding: references/openmsx-21.0/src/cpu/Z80.hh:19-21 (HALT_STATES = 4 +
+// Grounding: openMSX 21.0: src/cpu/Z80.hh:19-21 (HALT_STATES = 4 +
 // WAIT_CYCLES) and CPUCore.cc:2508-2511 (incR(advanceHalt(HALT_STATES,...))) --
 // the SAME `halts` computation drives both the R-register increment and the
-// clock advance on real silicon; they are not separable mechanisms. This
-// milestone's ONLY CPU-core change is that the halted branch now calls the
+// clock advance on real silicon; they are not separable mechanisms. The fix's
+// ONLY CPU-core change is that the halted branch calls the
 // EXISTING increment_refresh_register() helper; the branch's own returned
-// `tstates` literal stays the bare, unchanged datasheet 4 (A-M23-1's
-// architectural invariant -- proven directly below).
+// `tstates` literal stays the bare, unchanged datasheet 4 (an
+// architectural invariant -- proven directly below) (DEC-0004).
 
 namespace {
 
@@ -108,7 +108,7 @@ int main() {
     }
 
     // --- R wraps 0x7F -> 0x00 while bit 7 is preserved (mirrors the existing ---
-    // --- M12 R-register low-7-bit test pattern, z80a_parity_undocumented_-  ---
+    // --- R-register low-7-bit test pattern, z80a_parity_undocumented_-      ---
     // --- unit_test.cpp's RLow7Wrap_Bit7Frozen case). ---------------------------
     {
         FakeBus bus;
@@ -132,7 +132,7 @@ int main() {
     }
 
     // --- Z80aCpu::step() called DIRECTLY on an already-halted CPU still returns
-    // --- the bare 4 (A-M23-1's invariant: the CPU-core/machine-layer split is --
+    // --- the bare 4 (the invariant: the CPU-core/machine-layer split is      --
     // --- preserved, not collapsed -- the machine layer's separate +m1_wait -----
     // --- arithmetic is what turns this into 5T, never the CPU core itself). ---
     {
@@ -150,7 +150,7 @@ int main() {
     }
 
     // --- An interrupt arriving while halted still transitions out via the -----
-    // --- UNCHANGED, already-QA-verified M12 interrupt-accept path (IM1, bare --
+    // --- UNCHANGED, already-verified interrupt-accept path (IM1, bare       --
     // --- datasheet 13T ack, unaffected by the HALT-R fix) -- proving zero -----
     // --- coupling between the HALT-R fix and interrupt-accept timing. ---------
     {

@@ -14,14 +14,14 @@
 
 """M17-S5 openMSX A/B YM2413 (OPLL) register-write probe assembler.
 
-Produces `tests/parity/m17_ym2413_probe.bin`: a real Z80 program that drives
+Produces `tests/parity/ym2413_probe.bin`: a real Z80 program that drives
 the two-port write protocol (`OUT (#7C),reg ; OUT (#7D),value`) for a
 representative address set covering user-patch ($00-$07), F-Num/Block/Key-on
 ($10-$18/$20-$28), instrument/volume ($30-$38), and rhythm ($0E, $36-$38) --
 exactly the address families named in docs/m17-planner-package.md §2.5 / §3
 M17-S5.
 
-Also writes a sidecar text file (`tests/parity/m17_ym2413_probe_regs.txt`,
+Also writes a sidecar text file (`tests/parity/ym2413_probe_regs.txt`,
 lines `ADDR=xx VALUE=yy` in uppercase hex) listing the EXACT (address, value)
 pairs the program writes, in program order, so the PowerShell A/B harness
 (tools/openmsx/ym2413-parity.ps1) can compare both emulators' register state
@@ -33,7 +33,7 @@ Run from a flat-RAM base (0xC000) via this emulator's `--parity-trace` /
 tools/openmsx/ym2413-parity.ps1.
 
 Usage:
-  python tools/gen/ym2413-probe.py [-o tests/parity/m17_ym2413_probe.bin]
+  python tools/gen/ym2413-probe.py [-o tests/parity/ym2413_probe.bin]
   python tools/gen/ym2413-probe.py --self-check
 """
 import argparse
@@ -73,11 +73,11 @@ def build_ym2413_write_probe():
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-o", "--output", default="tests/parity/m17_ym2413_probe.bin",
-                        help="output path (default tests/parity/m17_ym2413_probe.bin)")
+    parser.add_argument("-o", "--output", default="tests/parity/ym2413_probe.bin",
+                        help="output path (default tests/parity/ym2413_probe.bin)")
     parser.add_argument("--regs-output", default=None,
                         help="sidecar regs-list path (default <output>_regs.txt "
-                             "next to -o, or tests/parity/m17_ym2413_probe_regs.txt)")
+                             "next to -o, or tests/parity/ym2413_probe_regs.txt)")
     parser.add_argument("--self-check", action="store_true",
                         help="verify determinism (two assemblies byte-identical) and exit")
     args = parser.parse_args(argv[1:])
@@ -95,7 +95,7 @@ def main(argv):
     print("wrote {} ({} bytes, {} register writes)".format(
         args.output, len(program_a), len(pairs_a)))
 
-    regs_output = args.regs_output or "tests/parity/m17_ym2413_probe_regs.txt"
+    regs_output = args.regs_output or "tests/parity/ym2413_probe_regs.txt"
     with open(regs_output, "w", encoding="ascii", newline="\n") as f:
         for addr, value in pairs_a:
             f.write("ADDR={:02X} VALUE={:02X}\n".format(addr, value))

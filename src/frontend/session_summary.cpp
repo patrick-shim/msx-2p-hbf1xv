@@ -17,9 +17,10 @@ namespace sony_msx::frontend {
 
 std::string format_ram_line(const std::size_t ram_bytes) {
     const std::string kb = std::to_string(ram_bytes / 1024u);
-    // 64 KB is the strict target-spec stock RAM (DEC-0050/DEC-0061); anything
-    // else is an opt-in NON-STOCK "fully-populated S1985" mod. The convenience
-    // default is 512 KB, so the modded label points the user back to stock.
+    // 64 KB is the strict target-spec stock RAM; anything else is an opt-in
+    // NON-STOCK "fully-populated S1985" mod. The convenience default is
+    // 512 KB, so the modded label points the user back to stock.
+    // (DEC-0050/DEC-0061)
     if (ram_bytes == 64u * 1024u) {
         return kb + " KB  (stock)";
     }
@@ -66,8 +67,8 @@ std::string format_sram_line(const bool available, const std::string& resolved_p
     if (available) {
         return "available -> " + resolved_path;
     }
-    // DEC-0050 invariant: a bare HB-F1XV has NO internal SRAM. The auto-load
-    // never fabricates any; only an inserted FM-PAC cartridge provides it.
+    // A bare HB-F1XV has NO internal SRAM. The auto-load never fabricates
+    // any; only an inserted FM-PAC cartridge provides it. (DEC-0050)
     return "not available (no FM-PAC; bare machine, DEC-0050)";
 }
 

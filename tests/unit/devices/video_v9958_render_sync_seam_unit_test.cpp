@@ -27,7 +27,7 @@
 //      io_write; io_read never invokes it; detaching (nullptr) stops it.
 //
 // (The machine-level `debug_io_write` hook-exclusion property is proven in
-// tests/integration/machine/hbf1xv_m32_per_line_latch_integration_test.cpp
+// tests/integration/machine/hbf1xv_per_line_latch_integration_test.cpp
 // -- debug_io_write is a Hbf1xvMachine seam, not a V9958Vdp one.)
 
 #include <cstdint>

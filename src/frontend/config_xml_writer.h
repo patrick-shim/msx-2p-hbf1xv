@@ -37,9 +37,9 @@
 // cfg), warnings)` yields a config EQUAL to `cfg` with an EMPTY `warnings` vector.
 // Emitting the built-in defaults (`EmulatorConfig{}`) therefore produces a
 // document that parses to the compiled defaults with zero warnings and documents
-// every knob -- the in-memory anti-drift guard (DEC-0095-AMENDMENT-C: the old
-// file-based repo-root shipped-config round-trip test was retired in favor of
-// this one; the only runtime config lives beside the exe).
+// every knob -- the in-memory anti-drift guard (the old file-based repo-root
+// shipped-config round-trip test was retired in favor of this one; the only
+// runtime config lives beside the exe -- DEC-0095-AMENDMENT-C).
 namespace sony_msx::frontend {
 
 // Serialize `cfg` to a complete, human-readable, round-trippable

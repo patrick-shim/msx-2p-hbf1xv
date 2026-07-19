@@ -17,12 +17,12 @@
 
 #include "machine/cartridge_cli.h"
 
-// Suite: Machine_CartridgeCli_Unit (M19-S5, backlog B7)
+// Suite: Machine_CartridgeCli_Unit
 //
-// Pure argv parser (A-M19-4): order-independent --cart1/--cart1-type/
-// --cart2/--cart2-type recognition, the A-M19-5 omitted-flag-defaults-to-
+// Pure argv parser: order-independent --cart1/--cart1-type/
+// --cart2/--cart2-type recognition, the omitted-flag-defaults-to-
 // Mirrored contract, and the "unrecognized VALUE is always an error, never
-// silently defaulted" contract (contrast A-M19-5). No file I/O, no
+// silently defaulted" contract. No file I/O, no
 // Hbf1xvMachine dependency.
 
 namespace {
@@ -56,7 +56,7 @@ int main() {
         expect(parsed.errors.empty(), "UnrelatedFlags_NoErrors");
     }
 
-    // --- --cart1 <path> alone defaults to Mirrored (A-M19-5). ---
+    // --- --cart1 <path> alone defaults to Mirrored. ---
     {
         const auto parsed = parse_cartridge_cli({"--cart1", "roms/game.rom"});
         expect(parsed.slot1.path.has_value() && *parsed.slot1.path == "roms/game.rom",
@@ -80,12 +80,12 @@ int main() {
             {"ASCII8", CartridgeMapperType::Ascii8kB},      {"ascii8", CartridgeMapperType::Ascii8kB},
             {"ASCII16", CartridgeMapperType::Ascii16kB},    {"ascii16", CartridgeMapperType::Ascii16kB},
             {"Konami", CartridgeMapperType::Konami},        {"KONAMI", CartridgeMapperType::Konami},
-            // M29 (backlog G1): the KonamiSCC mapper type, additive (QA F1).
+            // The later-added KonamiSCC mapper type (additive rows).
             {"KonamiSCC", CartridgeMapperType::KonamiSCC},  {"konamiscc", CartridgeMapperType::KonamiSCC},
         };
         bool all_ok = true;
         for (const auto& c : cases) {
-            // Type flag BEFORE the path flag -- order-independence (A-M19-4).
+            // Type flag BEFORE the path flag -- order-independence.
             const auto parsed = parse_cartridge_cli({"--cart1-type", c.value, "--cart1", "x.rom"});
             if (!parsed.slot1.path.has_value() || parsed.slot1.type != c.expected ||
                 !parsed.slot1.type_was_explicit || !parsed.errors.empty()) {
@@ -96,7 +96,7 @@ int main() {
     }
 
     // --- An unrecognized --cart1-type value is a parse error, never silently
-    //     defaulted (contrast A-M19-5's omitted-flag default). ---
+    //     defaulted (contrast the omitted-flag default). ---
     {
         const auto parsed = parse_cartridge_cli({"--cart1", "x.rom", "--cart1-type", "NotARealType"});
         expect(!parsed.errors.empty(), "UnrecognizedType_IsParseError");
@@ -133,10 +133,10 @@ int main() {
     }
 
     // =====================================================================
-    // M30 additive rows (backlog G2, docs/m30-planner-package.md §2.4/§4-S4).
-    // Every assertion ABOVE this line is the unmodified pre-M30 suite -- the
+    // Additive rows: the --softwaredb flag and the `auto` type value.
+    // Every assertion ABOVE this line is the unmodified earlier suite -- the
     // parser's Mirrored default and type_was_explicit semantics are
-    // unchanged (planner Acceptance Criterion 5).
+    // unchanged.
     // =====================================================================
 
     // --- --softwaredb <path> recorded; absent flag -> std::nullopt. ---
@@ -189,13 +189,14 @@ int main() {
     }
 
     // =====================================================================
-    // M46 (DEC-0071) additive rows: `--slotN`/`--slotN-type` are the official-
+    // Additive rows: `--slotN`/`--slotN-type` are the official-
     // MSX-term renames writing the SAME fields as `--cartN`/`--cartN-type`;
     // `--cartN` stays an accepted silent alias. Every assertion ABOVE is the
-    // unmodified pre-M46 suite (the aliases don't change any existing parse).
+    // unmodified earlier suite -- the aliases don't change any existing
+    // parse (DEC-0071).
     // =====================================================================
 
-    // --- AC-11: --slotN is byte-identical to --cartN (path, type, explicit). ---
+    // --- --slotN is byte-identical to --cartN (path, type, explicit). ---
     {
         const auto slot = parse_cartridge_cli({"--slot1", "x.rom", "--slot1-type", "Konami"});
         const auto cart = parse_cartridge_cli({"--cart1", "x.rom", "--cart1-type", "Konami"});
@@ -215,7 +216,7 @@ int main() {
                "Alias_Slot2_EqualsCart2");
     }
 
-    // --- AC-12: --slotN and --cartN write the SAME field for one slot, so a
+    // --- --slotN and --cartN write the SAME field for one slot, so a
     // collision resolves to the LAST occurrence (plain linear-scan overwrite). ---
     {
         const auto slot_wins = parse_cartridge_cli({"--cart1", "b.rom", "--slot1", "a.rom"});
@@ -226,7 +227,7 @@ int main() {
                "Collision_SlotThenCart_CartWins_LastOccurrence");
     }
 
-    // --- AC-13: --slotN-type auto == "as if omitted" (type_was_explicit=false),
+    // --- --slotN-type auto == "as if omitted" (type_was_explicit=false),
     // mirroring the --cartN-type auto case; an unrecognized --slotN-type value is
     // still a loud parse error that names the spelling the user typed. ---
     {

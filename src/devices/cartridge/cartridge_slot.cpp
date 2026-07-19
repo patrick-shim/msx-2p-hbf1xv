@@ -30,7 +30,7 @@ CartridgeSlot::CartridgeSlot(const int primary_slot_number) : primary_slot_numbe
 }
 
 CartridgeLoadResult CartridgeSlot::load(const CartridgeMapperType type, std::vector<std::uint8_t> image) {
-    // Validate BEFORE constructing anything (A-M19-7): a failed load leaves
+    // Validate BEFORE constructing anything: a failed load leaves
     // the slot's prior state (loaded or empty) completely untouched.
     std::unique_ptr<CartridgeMapperDevice> candidate;
     switch (type) {
@@ -71,17 +71,17 @@ CartridgeLoadResult CartridgeSlot::load(const CartridgeMapperType type, std::vec
             candidate = std::make_unique<CartridgeKonamiRom>(std::move(image));
             break;
         case CartridgeMapperType::KonamiSCC:
-            // M29-S3 (backlog G1): size-validate -> construct -> reset ->
-            // install, the same uniform contract as the six M19 types.
+            // Size-validate -> construct -> reset ->
+            // install, the same uniform contract as the six base types.
             if (!CartridgeKonamiScc::is_valid_image_size(image.size())) {
                 return CartridgeLoadResult::ImageSizeInvalidForMapperType;
             }
             candidate = std::make_unique<CartridgeKonamiScc>(std::move(image));
             break;
         case CartridgeMapperType::FmPac:
-            // M36 (DEC-0050): the external Panasonic FM-PAC peripheral
+            // The external Panasonic FM-PAC peripheral
             // cartridge -- the same uniform validate -> construct -> reset ->
-            // install contract.
+            // install contract. (DEC-0050)
             if (!CartridgeFmPacRom::is_valid_image_size(image.size())) {
                 return CartridgeLoadResult::ImageSizeInvalidForMapperType;
             }
@@ -102,7 +102,7 @@ void CartridgeSlot::unload() {
 }
 
 void CartridgeSlot::reset() {
-    // A-M19-9: reinitializes bank state; no-op when empty; NEVER unloads.
+    // Reinitializes bank state; no-op when empty; NEVER unloads.
     if (mapper_) {
         mapper_->reset();
     }

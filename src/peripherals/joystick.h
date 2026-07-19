@@ -21,8 +21,8 @@
 
 namespace sony_msx::peripherals {
 
-// Source of the cassette input bit (CMI) feeding PSG R14 bit7 (M18-S3,
-// backlog C7). Defined here in JoystickPorts's own header -- the consumer's
+// Source of the cassette input bit (CMI) feeding PSG R14 bit7. Defined here
+// in JoystickPorts's own header -- the consumer's
 // header -- mirroring the existing devices::audio::PsgPortSource precedent
 // (defined in psg_ym2149.h, the PSG's own header, for the same
 // injected-source relationship). The concrete implementation lives in
@@ -36,11 +36,11 @@ public:
 };
 
 // Two MSX general-purpose (joystick) ports, read through PSG port A (R14) and
-// selected through PSG port B (R15) — M15-S2, backlog C6.
+// selected through PSG port B (R15).
 //
-// The joystick pins are wired to the S1985 but read via the PSG (fact-sheet
-// references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md §2 "Joystick
-// ports"; X5: the peripheral connects to the PSG, not the S1985 engine).
+// The joystick pins are wired to the S1985 but read via the PSG (Yamaha S1985
+// MSX-ENGINE Chipset fact sheet §2 "Joystick
+// ports"; the peripheral connects to the PSG, not the S1985 engine).
 // This class implements devices::audio::PsgPortSource and is injected into
 // the PSG.
 //
@@ -49,14 +49,14 @@ public:
 //              on the Japanese HB-F1XV); bit7 cassette input, via the
 //              injectable CassetteInputSource (see
 //              attach_cassette_input_source below). Unattached:
-//              unconditionally idle high (1), a regression guard matching
-//              pre-M18 behavior. Attached: reflects the source's live value.
+//              unconditionally idle high (1), a regression guard preserving
+//              the no-cassette behavior. Attached: reflects the source's live value.
 //   R15 write: bit6 selects which port feeds R14 (0 = port 1, 1 = port 2);
 //              bit7 KANA LED (1 = off). Other bits (pin-6/7/STB output
 //              enables) are inert here.
 //
 // Determinism: default = nothing pressed -> idle R14 read = 0xFF. Live input
-// events are a frontend concern (backlog C9).
+// events are a frontend concern.
 class JoystickPorts final : public devices::audio::PsgPortSource {
 public:
     struct PortState {
@@ -71,7 +71,7 @@ public:
     // Keyboard layout line reported on R14 bit6 (JIS = 1 on the HB-F1XV).
     static constexpr std::uint8_t kLayoutBit = 0x40;
     // Cassette input line on R14 bit7 (idle high by default; reflects the
-    // live CassetteInputSource when attached, M18-S3).
+    // live CassetteInputSource when attached).
     static constexpr std::uint8_t kCassetteInputBit = 0x80;
 
     void reset();
@@ -83,15 +83,15 @@ public:
     [[nodiscard]] int selected_port() const;
     [[nodiscard]] bool kana_led_off() const;
 
-    // Inject the cassette-input source backing R14 bit7 (M18-S3, A-M18-10).
-    // nullptr (the default) reproduces the exact pre-M18 behavior (bit7
-    // unconditionally 1) -- a regression guard, unit-tested explicitly.
+    // Inject the cassette-input source backing R14 bit7.
+    // nullptr (the default) keeps bit7 unconditionally 1 (idle high), the
+    // exact no-cassette behavior -- a regression guard, unit-tested explicitly.
     void attach_cassette_input_source(CassetteInputSource* source);
 
     // Inject the Ren-Sha Turbo autofire source backing R14 bit4/trigger-A
-    // (M25, backlog C8, openMSX sound/MSXPSG.cc:90-93, A-M25-7). nullptr
-    // (the default) reproduces the exact pre-M25 behavior byte-for-byte --
-    // a hard regression guard, unit-tested explicitly.
+    // (openMSX 21.0: src/sound/MSXPSG.cc:90-93). nullptr
+    // (the default) leaves the trigger bit untouched byte-for-byte, exactly
+    // as with no autofire source -- a hard regression guard, unit-tested explicitly.
     void attach_rensha_turbo(const RenshaTurbo* source);
 
     // devices::audio::PsgPortSource

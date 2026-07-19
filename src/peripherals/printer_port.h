@@ -21,12 +21,11 @@
 
 namespace sony_msx::peripherals {
 
-// Centronics-style printer port I/O device on ports #90-#97 (M18-S2, part of
-// backlog C7).
+// Centronics-style printer port I/O device on ports #90-#97.
 //
-// PORT-RANGE FINDING (A-M18-5, docs/m18-planner-package.md §2.7): the backlog
-// text says "#90/#91", but the machine XML claims the fuller eight-port
-// window: references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:74-78,
+// PORT-RANGE FINDING: only two functional registers exist (the classic
+// "#90/#91" pair), but the machine XML claims the fuller eight-port
+// window: openMSX 21.0: share/machines/Sony_HB-F1XV.xml:74-78,
 // `<PrinterPort id="Printer Port"><io base="0x90" num="8" type="IO"/>
 // <bidirectional>true</bidirectional>...`. Because `<bidirectional>true</
 // bidirectional>` is present, `writePortMask = 0x03` (MSXPrinterPort.cc:18)
@@ -37,16 +36,16 @@ namespace sony_msx::peripherals {
 // aliasing. This class implements the #90-#97 claim, attached at all eight
 // ports by the machine and dispatching internally on port & 0x03.
 //
-// Write protocol, byte-exact (A-M18-6, references/openmsx-21.0/src/
-// MSXPrinterPort.cc:46-62):
+// Write protocol, byte-exact (openMSX 21.0:
+// src/MSXPrinterPort.cc:46-62):
 //   mod-4 case 0 (#90,#94) write : set_strobe(value & 1) -- bit0 = strobe. A
 //     falling edge (previous strobe high, new strobe low) appends the
 //     last-written data byte to captured_bytes() (Printer.cc:59-66,
 //     `if (!strobe && prevStrobe) { write(toPrint); }` -- software convention
 //     is to write data first, then pulse strobe low; fact-sheet §8, "BIOS
 //     LPTOUT pulses STROBE low after writing data").
-//   mod-4 case 0 read  : status byte -- always 0x00 (ready) in this
-//     milestone (see the disclosed divergence note below).
+//   mod-4 case 0 read  : status byte -- always 0x00 (ready)
+//     here (see the disclosed divergence note below).
 //   mod-4 case 1 (#91,#95) write : data_ = value.
 //   mod-4 case 1 read  : open-bus 0xFF (the XML declares no separate
 //     `type="I"` entry for #91 -- write-only).
@@ -55,25 +54,25 @@ namespace sony_msx::peripherals {
 //     matching openMSX's own documented scope limit (MSXPrinterPort.cc:57,
 //     "0x93 PDIR (BiDi) is not implemented" -- openMSX's own gap, not ours).
 //
-// DISCLOSED DIVERGENCE (A-M18-7): openMSX's default *unplugged* printer port
+// DISCLOSED DIVERGENCE: openMSX's default *unplugged* printer port
 // (DummyPrinterPortDevice::getStatus, DummyPrinterPortDevice.cc:5-8) reports
 // busy=true (not ready) -- the state of nothing plugged in. This emulator has
 // no pluggable-peripheral framework; this class IS the built-in port, so it
 // reports ready (busy=0) by default, matching an openMSX run WITH a printer
 // actually plugged in (PrinterCore::getStatus, Printer.cc:54-57, returns
-// false=ready). The A/B probe (docs/m18-parity-trace-diff.md) deliberately
+// false=ready). The openMSX A/B parity probe deliberately
 // never reads this bit -- this divergence is disclosed and intentional, not
 // a bug.
 //
-// ARCHITECTURAL SIMPLIFICATION (disclosed, mirrors the M15 Ppi8255/
+// ARCHITECTURAL SIMPLIFICATION (disclosed, mirrors the Ppi8255/
 // PpiSlotSelect folding precedent): openMSX splits the port protocol
 // (MSXPrinterPort, the bus device) from the byte sink (a separately pluggable
 // PrinterCore/ImagePrinterMSX via a Connector/Pluggable framework). This
 // emulator has no pluggable-peripheral framework, so PrinterPort folds both
 // the port protocol and the falling-edge byte-capture into one class.
 //
-// Purely combinational (no clock dependency; A-M18-4's reasoning applies
-// identically). reset() sets strobe_=true (idle high), data_=0, and clears
+// Purely combinational (no clock
+// dependency). reset() sets strobe_=true (idle high), data_=0, and clears
 // captured_bytes_ without triggering a capture: fields are set directly
 // rather than through the edge-detecting setter, so no edge is observed
 // (mirrors MSXPrinterPort::reset()'s own strobe transition false->true, a
@@ -82,7 +81,7 @@ namespace sony_msx::peripherals {
 // Debug/introspection convention: captured_bytes() exposes the raw vector
 // for tests; a machine-level helper may serialize it deterministically to
 // <debug_root>/printer/<filename> (a debug aid, not a rendered "printed
-// page" -- that depth is backlog F2).
+// page" -- rendering real printer output is out of scope here).
 class PrinterPort final : public core::IoDevice {
 public:
     void reset();

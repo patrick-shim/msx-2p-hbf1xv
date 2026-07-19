@@ -98,7 +98,7 @@ int main() {
     set_dummy_drivers();
 
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "hbf1xv_m56_eject";
+        std::filesystem::temp_directory_path() / "hbf1xv_eject";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
 

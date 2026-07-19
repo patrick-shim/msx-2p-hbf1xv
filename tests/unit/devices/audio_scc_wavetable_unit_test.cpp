@@ -17,10 +17,10 @@
 
 #include "devices/audio/scc_wavetable.h"
 
-// Suite: Devices_SccWavetable_Unit (M29-S2, backlog G1)
+// Suite: Devices_SccWavetable_Unit
 //
 // Every case is hand-computable from the measured formulas in
-// references/fact-sheets/Konami SCC.md (De Schrijder amplitude law §5,
+// the Konami SCC fact sheet (De Schrijder amplitude law §5,
 // Pazos deformation semantics §6, NYYRIKKI latching/restart/low-period stop
 // §4, enen power-on state §7) -- no oracle below is transcribed from
 // openMSX/fMSX output (license isolation; both were behaviour references
@@ -313,7 +313,7 @@ int main() {
 
     // --- Deform bits 6/7: rotation readback + read-only wave RAM +
     //     the plain-SCC ch4-at-ch5's-period quirk (fact-sheet §6). Rotation
-    //     oracles drive advance_cycles() explicitly (A-M29-6 / R-M29-8). ---
+    //     oracles drive advance_cycles() explicitly. ---
     {
         SccWavetable scc = make_chip();
         for (int i = 0; i < 32; ++i) {
@@ -413,14 +413,14 @@ int main() {
     }
 
     // =====================================================================
-    // M34 additive take_integrated_sample() cases (DEC-0043 Defect A,
-    // docs/m34-planner-package.md §2.6.5). Every oracle below is dwell
-    // arithmetic authored by hand BEFORE execution (R-M34-9). Boundary
-    // convention (§2.3.3): a position step completing at cycle t changes
-    // the held output effective AFTER cycle t.
+    // Box-average take_integrated_sample() cases. Every oracle below is
+    // dwell arithmetic authored by hand BEFORE execution, so it cannot be
+    // back-derived from the code under test. Boundary
+    // convention: a position step completing at cycle t changes
+    // the held output effective AFTER cycle t. (DEC-0043 Defect A)
     // =====================================================================
 
-    // --- M34: a STOPPED channel (period <= 8) holds its output constant ->
+    // --- A STOPPED channel (period <= 8) holds its output constant ->
     //     integrates to EXACTLY the held constant (negative fixed point:
     //     power-on held output is (int8(0xFF)*15)>>4 = -1). ---
     {
@@ -436,8 +436,8 @@ int main() {
                "M34_StoppedDisabledChannel_ContributesExactlyZero");
     }
 
-    // --- M34: fast-stepping channel, period 9 (8 whole steps per 81-cycle
-    //     window, §2.6.5 hand oracle). Ch1 wave = ramp v[p] = 8p (p 0..15),
+    // --- Fast-stepping channel, period 9 (8 whole steps per 81-cycle
+    //     window, hand oracle). Ch1 wave = ramp v[p] = 8p (p 0..15),
     //     volume 15 -> held out(p) = (8p*15)>>4 = floor(7.5p):
     //     out(0..8) = 0,7,15,22,30,37,45,52,60. Period 9 -> a position step
     //     every 10 master cycles; the period write restarts count and
@@ -463,7 +463,7 @@ int main() {
                "M34_Period9_PhaseStateMatchesBulkAdvanceSemantics");
     }
 
-    // --- M34: enable gating inside the integral matches sample() -- the
+    // --- Enable gating inside the integral matches sample() -- the
     //     SAME running ramp DISABLED integrates to 0 while the phase keeps
     //     stepping. ---
     {
@@ -481,7 +481,7 @@ int main() {
                "M34_DisabledRunningChannel_IntegralZero_PhaseStillRuns");
     }
 
-    // --- M34: constant-wave running channel is a fixed point: uniform wave
+    // --- Constant-wave running channel is a fixed point: uniform wave
     //     0x40 -> held (64*15)>>4 = 60 at every position; period 99 steps
     //     never change the level -> integrated == point == 60 exactly. ---
     {
@@ -499,7 +499,7 @@ int main() {
                "M34_ConstantWaveRunning_FixedPoint_IntegratedEqualsPoint60");
     }
 
-    // --- M34: W=0 guard (§2.3.5) + discard semantics. ---
+    // --- W=0 guard + discard semantics. ---
     {
         SccWavetable scc = make_chip();
         scc.write(0x8F, 0x01);  // enabled stopped ch1, held -1

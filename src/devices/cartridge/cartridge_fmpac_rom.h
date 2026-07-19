@@ -24,8 +24,8 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `FmPac` mapper -- the external Panasonic FM-PAC peripheral cartridge (M36,
-// DEC-0050). Grounds references/openmsx-21.0/src/sound/MSXFmPac.cc
+// `FmPac` mapper -- the external Panasonic FM-PAC peripheral cartridge
+// (DEC-0050). Grounded in openMSX 21.0: src/sound/MSXFmPac.cc
 // (behaviour reference only, never copied -- GPL isolation). The FM-PAC adds
 // the 8 KB battery-backed SRAM that the HB-F1XV's *built-in* MSX-MUSIC (OPLL +
 // APRLOPLL BIOS, no SRAM) deliberately lacks: inserting this cartridge is what
@@ -56,13 +56,13 @@ namespace sony_msx::devices::cartridge {
 // OPLL (0x7FF4/0x7FF5): the FM-PAC carries its OWN YM2413. This device owns one
 // and forwards the memory-mapped address/data writes to it (faithful register
 // interface). It is NOT attached to the machine I/O bus #7C/#7D -- those belong
-// to the built-in MSX-MUSIC, which stays SRAM-less and unaffected (DEC-0050,
-// AC-d4). Mixing this cartridge OPLL's audio into the machine output is a
-// wholly-additive follow-on (planner §1.2 "not new DSP"); the accessor opll()
+// to the built-in MSX-MUSIC, which stays SRAM-less and unaffected (DEC-0050).
+// Mixing this cartridge OPLL's audio into the machine output is a
+// wholly-additive follow-on; the accessor opll()
 // is the ready wiring seam, mirroring cartridge_konami_scc_rom's scc().
 //
-// Universal FM-PAC mapper -- never keyed to any specific game
-// (feedback_universal_fixes_only). Like the M19/M29 mappers the constructor
+// Universal FM-PAC mapper -- never keyed to any specific game.
+// Like the other cartridge mappers the constructor
 // deliberately does NOT self-reset; CartridgeSlot::load() resets once before
 // installing.
 class CartridgeFmPacRom final : public CartridgeMapperDevice {
@@ -75,9 +75,9 @@ public:
     // <cart>.rom.sram is interchangeable with openMSX's for the same content):
     // a 16-byte "PAC2 BACKUP DATA" WRAPPER header followed by the kSramWindow
     // (0x1FFE = 8190) addressable data bytes -- a 8206-byte file. Grounded in
-    // references/openmsx-21.0/src/sound/MSXFmPac.cc:7,11 (PAC_Header +
+    // openMSX 21.0: src/sound/MSXFmPac.cc:7,11 (PAC_Header +
     //   sram(getName()+" SRAM", 0x1FFE, config, PAC_Header)) and
-    // references/openmsx-21.0/src/memory/SRAM.cc:114-131 (save writes header
+    // openMSX 21.0: src/memory/SRAM.cc:114-131 (save writes header
     //   then ram) / :83-112 (load validates the header, else warns + blank).
     // NOTE: the SAME 16 bytes are ALSO the FM-PAC firmware's IN-SRAM signature
     // (master copy at FM-PAC ROM offset 0x5D7C); openMSX's use here is the
@@ -87,11 +87,11 @@ public:
     static constexpr std::size_t kSramHeaderSize = 16;  // strlen("PAC2 BACKUP DATA")
     static constexpr std::size_t kSramFileBytes =
         kSramHeaderSize + static_cast<std::size_t>(kSramWindow);  // 8206
-    static constexpr std::size_t kLegacyRawBytes = kSramBytes;    // 8192 (pre-M43 raw file)
+    static constexpr std::size_t kLegacyRawBytes = kSramBytes;    // 8192 (legacy raw save file)
 
     // 1..4 whole 16 KB banks (the real BIOS is one 16 KB bank; 64 KB variants
     // carry 4). A bank register value is masked against the actual bank count
-    // so a bank>available never reads past the image (planner §2.1).
+    // so a bank>available never reads past the image.
     [[nodiscard]] static bool is_valid_image_size(std::size_t size);
 
     // Precondition: is_valid_image_size(image.size()). Does NOT call reset().
@@ -108,7 +108,7 @@ public:
     // Battery-SRAM persistence in openMSX's EXACT `.sram` file format (16-byte
     // "PAC2 BACKUP DATA" header + 8190 data bytes; see kSramFileBytes above).
     // load_sram(): reads the file, detects the format, and LOSSLESSLY MIGRATES a
-    // legacy raw-8192 save (our pre-M43 headerless format) by carrying its 8190
+    // legacy raw-8192 save (our earlier headerless format) by carrying its 8190
     // addressable bytes forward (the 2 trailing phantom magic-shadow bytes are
     // not real SRAM); absent/short/wrong-header -> store left at its
     // deterministic zero default (never fabricated) and returns false. The
@@ -133,7 +133,7 @@ public:
     [[nodiscard]] bool sram_enabled() const { return sram_enabled_; }
     [[nodiscard]] std::uint8_t bank() const { return bank_; }
     [[nodiscard]] std::uint8_t enable_register() const { return enable_; }
-    // M36 Phase 3 snapshot: the SRAM-unlock magic latch (planner §2.4 item 7).
+    // Debug-snapshot seam: the SRAM-unlock magic-register latches.
     [[nodiscard]] std::uint8_t r1ffe() const { return r1ffe_; }
     [[nodiscard]] std::uint8_t r1fff() const { return r1fff_; }
 

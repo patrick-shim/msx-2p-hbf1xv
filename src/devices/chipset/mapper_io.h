@@ -21,7 +21,7 @@
 
 namespace sony_msx::devices::chipset {
 
-// Memory-mapper I/O registers on ports #FC-#FF (M11-S4).
+// Memory-mapper I/O registers on ports #FC-#FF.
 //
 // One write-only 8-bit segment register per 16 KB page (#FC page0 ... #FF page3;
 // S1985 fact-sheet §4). Reading a mapper port is discouraged by the standard;
@@ -29,8 +29,9 @@ namespace sony_msx::devices::chipset {
 // the measured `100xxxxx` readback pattern (base 0x80, mask 0x1F; fact-sheet §4;
 // openMSX MSXMapperIO / MSXS1985.cc:31-34).
 //
-// M11 models storage + the readback pattern only; the segment does not yet
-// select a physical RAM bank (that is M12).
+// This class models segment storage + the readback pattern only; physical RAM
+// bank selection is its consumer's job (devices/memory/memory_mapper_ram.h
+// reads segment() live on every CPU access).
 class MapperIo final : public core::IoDevice {
 public:
     static constexpr std::uint8_t kBasePort = 0xFC;

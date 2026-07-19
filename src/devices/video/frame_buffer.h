@@ -19,29 +19,26 @@
 
 namespace sony_msx::devices::video {
 
-// Deterministic, SDL3-independent VDP rendering output contract (M21-S1,
-// backlog D1). Tests/tools drive VRAM + registers through the existing M14
-// V9958Vdp port contract, call `VdpFrameRenderer::render_frame()`, and read
-// `pixels` directly (raw std::uint16_t RGB555 values) -- never PNG, never
-// SDL3.
+// Deterministic, SDL3-independent VDP rendering output contract. Tests/tools
+// drive VRAM + registers through the V9958Vdp port contract, call
+// `VdpFrameRenderer::render_frame()`, and read `pixels` directly (raw
+// std::uint16_t RGB555 values) -- never PNG, never SDL3.
 //
-// Field selects which of the two interlace fields to decode (§2.2 of
-// docs/m21-planner-package.md); interleaving both fields into one 424-line
-// raster (the odd field's documented "half a line lower" timing position)
-// is a raster-positioning/timing concern, explicitly out of scope this
-// milestone (backlog D4).
+// Field selects which of the two interlace fields to decode; interleaving
+// both fields into one 424-line raster (the odd field's documented "half a
+// line lower" timing position) is a raster-positioning/timing concern and
+// is not performed by this renderer.
 enum class Field : std::uint8_t {
     Progressive,
     Even,
     Odd,
 };
 
-// One decoded frame: `width`/`height` are mode-dependent (see
-// docs/m21-planner-package.md §2.2's dimension table); `pixels` is a flat,
+// One decoded frame: `width`/`height` are mode-dependent; `pixels` is a flat,
 // row-major buffer of `width*height` native RGB555 values (bits 14-10=R,
 // 9-5=G, 4-0=B); `border_color` is a single RGB555 value per frame (border
-// geometry -- extra canvas rows/columns -- is out of scope this milestone,
-// a D4 raster-geometry concern).
+// geometry -- extra canvas rows/columns -- is not represented in the pixel
+// buffer).
 struct FrameBuffer {
     int width = 0;
     int height = 0;

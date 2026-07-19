@@ -23,23 +23,24 @@
 
 namespace sony_msx::devices::chipset {
 
-// Thin S1985 "MSX-ENGINE" residual layer (M11-S4).
+// Thin S1985 "MSX-ENGINE" residual layer.
 //
-// Per DEC-0002 and fact-sheet §10, the S1985 is NOT a monolith: PPI slot-select,
-// PSG, RTC and the mapper registers are independent modules; this class models
-// only the residual engine-specific behaviour:
+// Per fact-sheet §10, the S1985 is NOT a monolith: PPI slot-select,
+// PSG, RTC and the mapper registers are independent modules (DEC-0002); this
+// class models only the residual engine-specific behaviour:
 //   (a) the 16-byte battery-backed backup RAM on switched-I/O device ID 0xFE,
 //       with the address/data/rotating-pattern/color1/color2 registers
 //       (fact-sheet §6; openMSX MSXS1985.cc:44-91). This class IS that
 //       SwitchedDevice (attach it to the SwitchedIoController).
 //   (b) the mapper readback base 0x80 / mask 0x1F (`100xxxxx`) — apply via
 //       configure_mapper (fact-sheet §4; MSXS1985.cc:31-34).
-//   (c) the +1 M1 opcode-fetch wait state helper (fact-sheet §8; A-4): maps
+//   (c) the +1 M1 opcode-fetch wait state helper (fact-sheet §8): maps
 //       the Z80 core's published M1-cycle count to +1 T-state per M1 cycle,
 //       applied by the machine to the scheduler.
 //
-// SRAM persistence (openMSX saves 16 bytes to a .sram file) is out of M11 scope
-// (A-5 / R-6): storage here is volatile and cleared on reset().
+// The backup-RAM store itself is volatile and cleared on reset(); optional
+// .sram persistence (openMSX saves 16 bytes to a .sram file) is provided via
+// load_backup_ram/save_backup_ram below.
 class S1985Engine final : public core::SwitchedDevice {
 public:
     static constexpr std::uint8_t kId = 0xFE;                 // switched-I/O device ID
@@ -64,22 +65,22 @@ public:
     // Test/debug view of the backup-RAM store.
     [[nodiscard]] std::uint8_t backup_byte(std::uint8_t index) const;
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
-    //     address / rotating-pattern / color registers (planner §2.4 item 11).
+    // --- Debug-snapshot seams: additive read-only introspection of the
+    //     address / rotating-pattern / color registers.
     //     const returns of existing members, ZERO behavior change. ---
     [[nodiscard]] std::uint8_t address_register() const { return address_; }
     [[nodiscard]] std::uint8_t pattern_register() const { return pattern_; }
     [[nodiscard]] std::uint8_t color1_register() const { return color1_; }
     [[nodiscard]] std::uint8_t color2_register() const { return color2_; }
 
-    // Battery-backed backup-RAM .sram persistence (M15-S5, backlog C4).
+    // Battery-backed backup-RAM .sram persistence.
     //
     // openMSX saves the 16-byte backup RAM as an SRAM persistency file
     // (fact-sheet §6; MSXS1985 SRAM "S1985 Backup RAM" size 0x10).
     // load_backup_ram reads exactly kBackupRamBytes from `path` into the
     // store; save_backup_ram writes the store out. An absent/short/unreadable
     // file leaves the store untouched (zero after reset()), preserving the
-    // M11 golden (absent file -> zero state). No wall-clock dependency.
+    // golden absent-file -> zero-state default. No wall-clock dependency.
     bool load_backup_ram(const std::filesystem::path& path);
     [[nodiscard]] bool save_backup_ram(const std::filesystem::path& path) const;
 

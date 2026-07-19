@@ -20,21 +20,20 @@
 
 namespace sony_msx::frontend {
 
-// Deterministic, SDL3-independent PSG audio-sample pump (M26-S5, docs/m26-
-// planner-package.md §2.6 point 1). Advances a PsgYm2149's generator state by
+// Deterministic, SDL3-independent PSG audio-sample pump.
+// Advances a PsgYm2149's generator state by
 // a fixed cycles-per-sample delta and collects its StereoSample output, one
 // sample at a time -- the exact WIRING pattern Sdl3AudioPresenter uses inside
 // its real SDL_AudioStream callback, factored out here with ZERO SDL3
 // dependency so the wiring itself (not just the underlying advance_cycles()/
-// sample() functions in isolation, already unit-tested since M15) is
-// directly, headlessly ctest-provable (R-M26-4's "untested-in-anger" risk).
+// sample() functions in isolation, which are already unit-tested) is
+// directly, headlessly ctest-provable.
 //
-// This is a NEW real-time-driven CONSUMER of PsgYm2149::advance_cycles() --
-// confirmed by a repo-wide grep (A-M26-4) to have ZERO call sites anywhere in
-// this project before M26. Lives in src/frontend/ (presentation-layer sample
+// A real-time-driven CONSUMER of PsgYm2149::advance_cycles(). Lives in
+// src/frontend/ (presentation-layer sample
 // generation, per src/CLAUDE.md's own explicit boundary) but is intentionally
-// SDL3-independent so it stays testable under the default headless
-// (-DSONY_MSX_ENABLE_SDL3=OFF) ctest configuration, mirroring the M26-S4
+// SDL3-independent so it stays testable under the headless
+// (-DSONY_MSX_ENABLE_SDL3=OFF) ctest configuration, mirroring the
 // frame_dump.* headless-buildable precedent. Sdl3AudioPresenter (SDL3-gated)
 // is the thin, real SDL_AudioStream wiring layer built ON TOP of this class.
 class PsgAudioPump {
@@ -47,19 +46,19 @@ public:
     // Advances `psg` by cycles_per_sample() and returns ONE audio-sample
     // tick's worth of real PSG synthesis.
     //
-    // M34 (DEC-0043 Defect A, docs/m34-planner-package.md §2.3.6): the
-    // returned sample is the chip's EXACT box average over the advanced
+    // The returned sample is the chip's EXACT box average over the advanced
     // window (PsgYm2149::take_integrated_sample()), not the instantaneous
     // point sample() -- point-sampling folded >Nyquist chip content (a
     // scroll-shooter title's tone-period-0 ~112 kHz silence idiom) into a loud audible
     // alias. The pump's advance-exactly-W-then-take shape satisfies the
-    // take-API's documented precondition by construction; W == 0 (the M26
+    // take-API's documented precondition by construction; W == 0 (the
     // idle case) stays exactly silent via the chip's zero-window guard.
+    // (DEC-0043)
     [[nodiscard]] devices::audio::PsgYm2149::StereoSample pump_one_sample(devices::audio::PsgYm2149& psg) const;
 
     // Convenience: pump `sample_count` samples in sequence, returning the
-    // full collected sequence (the deterministic oracle shape the M26-S5
-    // numeric test asserts against).
+    // full collected sequence (the deterministic oracle shape the
+    // numeric ctest asserts against).
     [[nodiscard]] std::vector<devices::audio::PsgYm2149::StereoSample> pump_samples(
         devices::audio::PsgYm2149& psg, std::size_t sample_count) const;
 

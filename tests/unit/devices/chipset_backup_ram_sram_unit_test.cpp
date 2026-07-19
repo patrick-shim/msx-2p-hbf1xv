@@ -47,7 +47,7 @@ void write_byte(S1985Engine& eng, std::uint8_t index, std::uint8_t value) {
 
 int main() {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "sony_msx_m15_backup_ram_test.sram";
+        std::filesystem::temp_directory_path() / "sony_msx_backup_ram_test.sram";
     std::error_code ec;
     std::filesystem::remove(path, ec);
 

@@ -14,7 +14,7 @@
 param(
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$BiosDir = "bios",
-    [string]$ProbeBin = "tests/parity/m13_mem_probe.bin",
+    [string]$ProbeBin = "tests/parity/mem_probe.bin",
     [string]$ProbeBaseHex = "C000",
     [int]$ProbeSteps = 13,
     [int]$BootSteps = 24,
@@ -31,7 +31,7 @@ param(
 # Two complementary subjects, both diffed on ARCHITECTURAL Z80 state via
 # tools/analyze/trace-diff.py (never fabricated; empty B side -> BLOCKED):
 #
-#   1. RAM/ROM probe (primary, BIOS-independent): tests/parity/m13_mem_probe.bin
+#   1. RAM/ROM probe (primary, BIOS-independent): tests/parity/mem_probe.bin
 #      run from a RAM-mapped state at 0xC000 on both emulators. It writes+reads a
 #      mapper-RAM cell, switches a mapper segment via OUT (#FC) and reads back the
 #      S1985 100xxxxx value, and reads a BIOS byte via a page-0 slot switch. This

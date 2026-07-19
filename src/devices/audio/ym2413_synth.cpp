@@ -24,10 +24,10 @@ namespace {
 
 constexpr double kPi = 3.14159265358979323846;
 
-// --- S1: operator tables, computed from closed-form math (fact-sheet §4
-// structure; planner §2.1 row 1). Never transcribed from any reference
+// --- Operator tables, computed from closed-form math (fact-sheet §4
+// structure). Never transcribed from any reference
 // source -- identical numeric output from an independently-grounded closed
-// form is expected and acceptable (M28 §2.3(a) finding, ratified DEC-0035).
+// form is expected and acceptable (DEC-0035).
 // Unit tests recompute both tables independently (double-precision math +
 // rounding) and check endpoint/monotonicity/symmetry properties.
 //
@@ -57,13 +57,13 @@ const std::array<std::uint16_t, 256> kLogSin = build_logsin_table();
 const std::array<std::uint16_t, 256> kExp2Neg = build_exp2neg_table();
 
 // §3 MUL table in x2-integer form (0 -> 1/2, 1 -> 1, ..., A -> 10, B -> 10,
-// C -> 12, D -> 12, E -> 15, F -> 15) -- a fact-sheet-printed table, a
-// permitted literal (acceptance criterion 2).
+// C -> 12, D -> 12, E -> 15, F -> 15) -- a table printed in the fact sheet
+// itself, a permitted literal.
 constexpr std::array<std::uint32_t, 16> kMulX2 = {1,  2,  4,  6,  8,  10, 12, 14,
                                                   16, 18, 20, 20, 24, 24, 30, 30};
 
 // §5's four printed 8-entry EG select tables (4/8, 5/8, 6/8, 7/8) -- a
-// fact-sheet-printed table, a permitted literal (acceptance criterion 2).
+// table printed in the fact sheet itself, a permitted literal.
 constexpr std::uint8_t kEgSelect[4][8] = {
     {0, 1, 0, 1, 0, 1, 0, 1},
     {0, 1, 0, 1, 1, 1, 0, 1},
@@ -103,7 +103,7 @@ int effective_rate(const std::uint8_t rate4, const int rks) {
     return std::min(63, 4 * static_cast<int>(rate4) + rks);
 }
 
-// A-M31-3: Rks = (BLOCK*2 + F-Num[8]) when KSR=1 (full 0-15), >> 2 when
+// Rks = (BLOCK*2 + F-Num[8]) when KSR=1 (full 0-15), >> 2 when
 // KSR=0 (0-3) -- §3's stated ranges; cross-checked semantics-only against
 // YM2413Okazaki.cc updateRKS (freq >> (KSR ? 8 : 10)).
 int rks_of(const Ym2413Opll::OperatorPatch& op, const std::uint16_t fnum, const std::uint8_t block) {
@@ -133,11 +133,11 @@ std::uint32_t Ym2413Synth::phase_increment(const std::uint16_t fnum, const std::
                                             const std::uint8_t mul_field) {
     // §8: dP = F-Num * 2^BLOCK * MUL (x2 form carries the MUL=0 -> 1/2 case).
     // Resulting pitch: f = dP * 49716 / 2^19 (native rate = 3.579545 MHz/72).
-    // D-M31-1 (DEC-0030 cross-reference, planner M31 §2.8): fMSX
+    // fMSX
     // (YM2413.c:193-195) uses `(3125*Frq*(1<<Oct))>>15` == a 50000 Hz
-    // rounding of the native rate (~10 cents sharp) -- arbitrated to the
-    // fact-sheet/openMSX 49716 Hz; fMSX independently corroborates the /2^19
-    // accumulator scaling (A-M31-4).
+    // rounding of the native rate (~10 cents sharp) -- resolved in favour of
+    // the fact-sheet/openMSX 49716 Hz; fMSX independently corroborates the
+    // /2^19 accumulator scaling. (DEC-0030)
     return ((static_cast<std::uint32_t>(fnum) << block) * kMulX2[mul_field & 0x0F]) >> 1;
 }
 
@@ -208,9 +208,9 @@ std::uint32_t Ym2413Synth::phase(const int slot) const {
 
 namespace {
 
-// Resolves a slot's live configuration from the register file (the M17
-// decode accessors as the register view, §2.6 -- instrument changes on a
-// keyed channel take effect immediately, register-file-as-truth).
+// Resolves a slot's live configuration from the register file (the
+// Ym2413Opll decode accessors as the register view -- instrument changes on
+// a keyed channel take effect immediately, register-file-as-truth).
 SlotConfig resolve_slot(const Ym2413Opll& regs, const int slot) {
     const int channel = slot / 2;
     const bool is_carrier = (slot & 1) != 0;
@@ -256,7 +256,7 @@ SlotConfig resolve_slot(const Ym2413Opll& regs, const int slot) {
 
 void Ym2413Synth::key_on(const int slot, const Ym2413Opll& regs) {
     SlotState& s = slots_[static_cast<std::size_t>(slot)];
-    // A-M31-5 (disclosure item 8): phase reset + attack from the current
+    // Disclosure item 8: phase reset + attack from the current
     // attenuation; the channel feedback history clears with its modulator.
     s.phase = 0;
     if ((slot & 1) == 0) {
@@ -293,7 +293,7 @@ void Ym2413Synth::refresh_keys(const Ym2413Opll& regs) {
         bool car_key;
         if (rhythm && channel >= 6) {
             // §6 slot commitment; $0E bits key the drums (effective only
-            // while bit5 is set -- D-M31-3 arbitration).
+            // while bit5 is set).
             if (channel == 6) {
                 mod_key = car_key = regs.bd_key();
             } else if (channel == 7) {
@@ -370,7 +370,7 @@ void Ym2413Synth::tick(const Ym2413Opll& regs) {
     const bool rhythm = regs.rhythm_enabled();
 
     // Resolve all 18 slot configurations once for this tick (live register
-    // view, §2.6).
+    // view).
     std::array<SlotConfig, kSlotCount> cfgs;
     for (int slot = 0; slot < kSlotCount; ++slot) {
         cfgs[static_cast<std::size_t>(slot)] = resolve_slot(regs, slot);
@@ -412,7 +412,7 @@ void Ym2413Synth::tick(const Ym2413Opll& regs) {
             } else {
                 int steps = eg_granted_steps(rate, ctx.counter);
                 while (steps-- > 0 && s.level > 0) {
-                    // THE §2.4 ATTACK APPROXIMATION (header disclosure item
+                    // THE ATTACK APPROXIMATION (header disclosure item
                     // 1): exponential approach, k = 2, +1 termination floor.
                     s.level -= (s.level >> 2) + 1;
                 }

@@ -34,7 +34,7 @@ public:
     virtual void write(BusAddress address, BusData value) = 0;
 
     // I/O path (256-port MSX I/O space, keyed on port & 0xFF). Non-pure with
-    // open-bus defaults so existing memory-only fake buses in the M0-M10 test
+    // open-bus defaults so existing memory-only fake buses in the test
     // suites keep compiling unchanged. The default read returns 0xFF, the
     // documented floating/open-bus value for unmapped MSX I/O reads (S1985
     // fact-sheet §10: openMSX concluded true last-byte-on-bus behaviour is not

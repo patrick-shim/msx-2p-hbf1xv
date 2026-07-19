@@ -17,10 +17,10 @@
 
 #include "devices/cartridge/cartridge_slot.h"
 
-// Suite: Devices_CartridgeSlot_Unit (M19-S3, backlog B7)
+// Suite: Devices_CartridgeSlot_Unit
 //
 // The ONE device actually attached to slot_bus_ for an external cartridge
-// bay: empty-slot open-bus regression guard (A-M19-9), load/unload/reset
+// bay: empty-slot open-bus regression guard, load/unload/reset
 // dispatch across all 6 MVP types, size-invalid-load-leaves-prior-state-
 // untouched, and two-run determinism.
 
@@ -53,7 +53,7 @@ std::vector<std::uint8_t> make_marker_image(const unsigned num_banks, const std:
 }  // namespace
 
 int main() {
-    // --- Empty slot: byte-for-byte M13-M18 open-bus default (A-M19-9). ---
+    // --- Empty slot: byte-for-byte the pre-cartridge open-bus default (0xFF). ---
     {
         CartridgeSlot slot(1);
         expect(!slot.loaded(), "Construct_Empty_NotLoaded");
@@ -135,7 +135,7 @@ int main() {
         expect(slot.mem_read(0x0000) == 0xFF, "Unload_RevertsToOpenBus");
     }
 
-    // --- reset() reinitializes bank state without unloading (A-M19-9). ---
+    // --- reset() reinitializes bank state without unloading. ---
     {
         CartridgeSlot slot(1);
         slot.load(CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000));

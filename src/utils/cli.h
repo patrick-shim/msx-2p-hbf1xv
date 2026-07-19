@@ -19,7 +19,7 @@
 
 namespace sony_msx::utils {
 
-// Exit codes (planner package §2.3). Small deterministic set.
+// Exit codes. Small deterministic set.
 inline constexpr int kExitSuccess = 0;  // success (incl. --help)
 inline constexpr int kExitUsage = 1;    // usage / argument error
 inline constexpr int kExitIo = 2;       // I/O error (open/read/write; target missing)

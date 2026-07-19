@@ -18,11 +18,11 @@
 
 #include "devices/chipset/mb670836_pause.h"
 
-// Suite: Devices_Mb670836PauseController_Unit (M25-S1, backlog C8)
+// Suite: Devices_Mb670836PauseController_Unit
 //
 // Isolated unit tests for the Sony MB670836 hardware-PAUSE / Speed-Controller
-// gate, per docs/m25-planner-package.md §2.4/M25-S1. Zero machine wiring at
-// this slice -- this class is tested entirely on its own, deterministic
+// gate. Zero machine wiring here -- this class is tested entirely on its own,
+// deterministic
 // duty-cycle arithmetic hand-computed and asserted, not merely observed.
 
 namespace {

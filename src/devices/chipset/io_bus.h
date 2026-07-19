@@ -21,11 +21,11 @@
 
 namespace sony_msx::devices::chipset {
 
-// 256-port MSX I/O dispatch fabric with S1985 straight-alias mirrors (M11-S3).
+// 256-port MSX I/O dispatch fabric with S1985 straight-alias mirrors.
 //
 // A device registers on one or more of the 256 ports (keyed on port & 0xFF).
 // io_read/io_write dispatch to the registered device, or return open-bus 0xFF /
-// ignore when unmapped (S1985 fact-sheet §10; A-1).
+// ignore when unmapped (S1985 fact-sheet §10).
 //
 // register_mirror models the S1985's incomplete address decoding, which mirrors
 // VDP ports #98-#9B onto #9C-#9F (fact-sheet §7) and PPI ports #A8-#AB onto

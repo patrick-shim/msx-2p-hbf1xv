@@ -11,12 +11,12 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793Type2_Unit  (M16-S3)
+// Suite: Devices_Fdc_Wd2793Type2_Unit
 //
 // WD2793 core Type II (Read Sector / Write Sector): DRQ cadence, Lost Data (read
 // vs write semantics differ), Record Not Found, multi-record track-boundary stop.
 //
-// Grounding (read only, never copied - GPL isolation): references/openmsx-21.0/
+// Grounding (read only, never copied - GPL isolation): openMSX 21.0:
 // src/fdc/WD2793.cc startType2Cmd (:522), getDataReg/LOST_DATA (:249-268),
 // setDataReg (:235-247), RECORD_NOT_FOUND; fact-sheet "FDC for Sony HB-F1XV.md"
 // §3 (Type II table), §8 ("Lost Data semantics differ read vs write").
@@ -54,8 +54,8 @@ public:
 
 constexpr std::uint64_t kReadStartCycles = 2 * 114;  // write / read-addr / read-track tail
 constexpr std::uint64_t kCyclesPerByte = 114;
-// DEC-0055 slice C: Read Sector first-DRQ = rotational wait (until the sector's
-// ID mark rotates under the head) + this fixed intra-sector ID-header->data span.
+// Read Sector first-DRQ = rotational wait (until the sector's ID mark rotates
+// under the head) + this fixed intra-sector ID-header->data span (DEC-0055).
 // 47 * 114 = 5358 (Wd2793::kReadSectorHeaderCycles; openMSX startReadSector
 // gapLength+2, WD2793.cc:624-644). See the rotational-latency case below.
 constexpr std::uint64_t kReadSectorHeaderCycles = 47 * kCyclesPerByte;
@@ -135,10 +135,10 @@ int main() {
         f.fdc.write_command(0x80);
         // Let 5 whole byte-periods elapse past the ACTUAL first-DRQ window before
         // the first read_data() call (deliberate overshoot - the point of this
-        // case). DEC-0055 slice C re-derivation: the first DRQ is now index-pulse-
-        // relative (rotational wait + intra-sector header), not the old fixed
-        // 2-byte kReadStartCycles, so the overshoot is measured from the device's
-        // actual computed first-DRQ deadline. For sector 1 at rotational phase 0
+        // case). The first DRQ is index-pulse-relative (rotational wait +
+        // intra-sector header), not the old fixed 2-byte kReadStartCycles
+        // (DEC-0055), so the overshoot is measured from the device's actual
+        // computed first-DRQ deadline. For sector 1 at rotational phase 0
         // (clock=0 at command issue) the rotational wait is 0, so that deadline is
         // exactly kReadSectorHeaderCycles (5358) -- asserted directly here. The
         // Lost-Data semantics under test are UNCHANGED (5 byte-periods late ->
@@ -151,7 +151,7 @@ int main() {
         expect((status & 0x04) != 0, "ReadSector_MissedDrq_LostDataSet");
     }
 
-    // --- DEC-0055 slice C: Type-II Read Sector first-DRQ ROTATIONAL latency.
+    // --- Type-II Read Sector first-DRQ ROTATIONAL latency (DEC-0055).
     //     The first DRQ is scheduled index-pulse-relative: t + (cycles until the
     //     requested sector's ID mark rotates under the head) + kReadSectorHeader-
     //     Cycles. The rotational wait is VARIABLE in the sector index AND in the
@@ -276,7 +276,7 @@ int main() {
     }
 
     // --- Write Sector first-byte CHECK_WRITE gate + one-byte-pipeline late-byte
-    //     tolerance (DEF-M45-WRITEDRQ; openMSX startWriteSector/checkStartWrite
+    //     tolerance (openMSX startWriteSector/checkStartWrite
     //     WD2793.cc:646-701 + writeSectorData :742-782). The OLD model modelled
     //     DRQ as a free-running absolute-cycle level deadline and, per byte-period
     //     the CPU trailed it, substituted 0x00 + LOST_DATA -- and each injected
@@ -295,7 +295,7 @@ int main() {
         f.fdc.write_track(0);
         f.fdc.write_sector(3);
         f.fdc.write_command(0xA0);
-        // DEF-M45-WRITEDRQ-FIX: the write first-byte DRQ is now rotational-search-
+        // The write first-byte DRQ is rotational-search-
         // relative (begin_write_sector), the SAME model the read path uses -- NOT
         // the old fixed 2-byte read_start_cycles(). Supply the first byte a few
         // byte-periods after the ACTUAL (rotational) first-DRQ deadline: late, but
@@ -335,8 +335,8 @@ int main() {
         f.fdc.write_sector(6);
         f.fdc.write_command(0xA0);
         // Jump the clock one byte-period past the (rotational) CHECK_WRITE deadline
-        // WITHOUT supplying any byte -> the gate aborts. DEF-M45-WRITEDRQ-FIX: the
-        // window is now the rotational first-DRQ + a full revolution, so the
+        // WITHOUT supplying any byte -> the gate aborts. The
+        // window is the rotational first-DRQ + a full revolution, so the
         // overshoot is measured from the device's ACTUAL write_check_deadline().
         f.clock.cycles = f.fdc.write_check_deadline() + kCyclesPerByte;
         (void)f.fdc.drq();  // force a sync() -> the CHECK_WRITE gate aborts here

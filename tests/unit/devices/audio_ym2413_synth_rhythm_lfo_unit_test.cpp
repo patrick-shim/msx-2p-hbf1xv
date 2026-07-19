@@ -11,8 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Ym2413SynthRhythmLfo_Unit (M31-S4, backlog E1,
-// docs/m31-planner-package.md §3-S4)
+// Suite: Devices_Ym2413SynthRhythmLfo_Unit
 //
 // Oracles:
 //   - the x2 DOUBLE-OUTPUT quirk as an exact gain law (fact-sheet §6 quirk
@@ -20,7 +19,7 @@
 //     sample-for-sample exactly 2x the identical 2-op melody note (channel
 //     6, same patch bytes, same registers, same global-counter phase);
 //   - §6 keying/commitment semantics ($0E bits, melody ch6-8 suppression,
-//     register-file-as-written per D-M31-3);
+//     register-file-as-written);
 //   - Yamaha's §6 recommended rhythm setup produces non-silent,
 //     deterministic output for each of the five drums;
 //   - AM depth ~= 4.875 dB (13 x 0.375 dB steps -- §5's 14-level triangle);
@@ -28,8 +27,8 @@
 //     ym2413_synth.h disclosure item 3).
 //
 // The 8-byte BD patch literal below is the fact-sheet §4 printed rhythm
-// patch row (permitted literal, acceptance criterion 2; identical to the
-// already-shipped M17 kRhythmBd).
+// patch row (a permitted transcription from the fact sheet; identical to
+// the Ym2413Opll model's kRhythmBd).
 
 #include <cstdint>
 #include <cstdlib>
@@ -177,8 +176,8 @@ int main() {
         }
     }
 
-    // --- 3. Melody ch6-8 suppression while rhythm mode is on (§6 quirk 2 /
-    //     D-M31-3: the register file keeps what was written; the key bit
+    // --- 3. Melody ch6-8 suppression while rhythm mode is on (§6 quirk 2:
+    //     the register file keeps what was written; the key bit
     //     simply stops having an effect). ---
     {
         Ym2413Opll opll;
@@ -197,7 +196,7 @@ int main() {
 
         write_reg(opll, 0x0E, 0x20);  // rhythm ON, no drums keyed
         // The melody key edge releases ch7's operators; the register file
-        // itself is untouched (D-M31-3 arbitration).
+        // itself is untouched.
         expect(opll.register_value(0x27) == static_cast<std::uint8_t>(0x10 | (4 << 1)),
                "MelodyCh7_RegisterFileKeepsKeyBit_DM31_3");
         (void)collect(opll, 120000);  // let the release run out

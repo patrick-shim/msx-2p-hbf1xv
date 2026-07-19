@@ -19,14 +19,13 @@
 namespace sony_msx::devices::audio {
 
 // Konami SCC 5-channel wavetable sound generator, plain-SCC ("Real") mode as
-// shipped inside Konami SCC MegaROM cartridges (M29-S2, backlog G1; spec
-// docs/m29-planner-package.md §2.2; grounding references/fact-sheets/
-// "Konami SCC.md" -- cited below as "SCC fact-sheet §N").
+// shipped inside Konami SCC MegaROM cartridges (grounding: the Konami SCC
+// fact sheet -- cited below as "SCC fact-sheet §N").
 //
 // NOT a core::IoDevice / core::MemoryDevice: the chip is reached ONLY through
 // its owning CartridgeKonamiScc mapper's memory window at 0x9800-0x9FFF (the
 // openMSX shape: RomKonamiSCC owns a real `SCC scc;` member --
-// references/openmsx-21.0/src/memory/RomKonamiSCC.cc, behaviour reference
+// openMSX 21.0: src/memory/RomKonamiSCC.cc, behaviour reference
 // only, never copied; GPL isolation).
 //
 // Register map (plain SCC, 256-byte map, SCC fact-sheet §3):
@@ -73,9 +72,9 @@ namespace sony_msx::devices::audio {
 //   applied when a frequency register is WRITTEN (matching openMSX
 //   SCC.cc:385-392) -- an already-latched period is not retroactively
 //   re-masked by a later deform write. Pazos's bits6+7 data-bus noise anomaly
-//   is documented hardware behaviour explicitly NOT emulated (planner §1.3).
+//   is documented hardware behaviour explicitly NOT emulated.
 //
-// Rotation time base (A-M29-6, a DISCLOSED simplification): the rotation
+// Rotation time base (a DISCLOSED simplification): the rotation
 // readback shift advances off an internal master-cycle accumulator fed by
 // advance_cycles() ONLY (no machine-clock attachment) -- CPU reads between
 // pump batches see rotation frozen at the last advance. Affects only the
@@ -89,16 +88,16 @@ namespace sony_msx::devices::audio {
 //
 // reset() = the enen-measured POWER-ON state (SCC fact-sheet §7): wave RAM
 // all 0xFF, volumes 15, channel-enable 0, deform 0, periods 0 (i.e. stopped,
-// period < 9), positions 0, held outputs refreshed. A-M29-5 DISCLOSURE:
+// period < 9), positions 0, held outputs refreshed. DISCLOSURE:
 // openMSX splits powerUp (full state) from soft reset (enable/deform only);
 // this project's single deterministic reset() collapses both into the
 // power-on state, consistent with CartridgeSlot::load()'s reset-once
 // contract -- a documented simplification, not an oversight.
 //
-// Mode-awareness (SCC fact-sheet §10.3, R-M29-9): the dispatch below is
-// structured so the SCC-I "Compatible"/"Plus" register maps (backlog row G5)
+// Mode-awareness (SCC fact-sheet §10.3): the dispatch below is
+// structured so the SCC-I "Compatible"/"Plus" register maps
 // can be added later as additional Mode enumerators WITHOUT restructuring --
-// but ONLY Mode::Real ships in M29; no Plus/Compatible behaviour exists or
+// but ONLY Mode::Real is implemented; no Plus/Compatible behaviour exists or
 // is claimed anywhere in this file.
 class SccWavetable {
 public:
@@ -107,7 +106,7 @@ public:
     // De Schrijder DC centre (fact-sheet §5).
     static constexpr std::int32_t kDcCentre = 640;
 
-    // Power-on state per SCC fact-sheet §7 (see class comment / A-M29-5).
+    // Power-on state per SCC fact-sheet §7 (see the class-comment disclosure).
     void reset();
 
     // 256-byte plain-SCC map access (offset = CPU address & 0xFF, supplied by
@@ -119,23 +118,23 @@ public:
 
     // Deterministic generator advance in 3.58 MHz MASTER cycles (SCC
     // fact-sheet §10.1). Also advances the internal rotation time base
-    // (A-M29-6). Never touches CPU T-state accounting.
+    // (the disclosed simplification above). Never touches CPU T-state accounting.
     void advance_cycles(std::uint64_t delta_cycles);
 
     // AC mix sum over the enabled channels (range ~ +-600, fact-sheet §5).
     //
-    // POINT-SAMPLE API, byte-kept by M34 (docs/m34-planner-package.md §2.3):
+    // POINT-SAMPLE API, deliberately kept byte-identical for existing oracles:
     // the instantaneous held-output sum. The PRODUCTION mix path uses
-    // take_integrated_sample() below (DEC-0043 Defect A: point-sampling
-    // aliases >Nyquist wavetable stepping into the audible band).
+    // take_integrated_sample() below (point-sampling
+    // aliases >Nyquist wavetable stepping into the audible band; DEC-0043).
     [[nodiscard]] std::int32_t sample() const;
     // The literal De Schrijder form: 640 + sample() (range +40..+1235).
     [[nodiscard]] std::int32_t amp_out() const;
 
     // ------------------------------------------------------------------
-    // M34 box-average integration API (DEC-0043 Defect A;
-    // docs/m34-planner-package.md §2.3 contract -- the same paired-API shape
-    // as PsgYm2149::take_integrated_sample()).
+    // Box-average integration API -- the anti-aliasing production sample
+    // path (DEC-0043), the same paired-API shape
+    // as PsgYm2149::take_integrated_sample().
     //
     // During advance_cycles(), one mono int64 integral accumulates
     // Σ level(t) × dwell_cycles over the enabled channels, walked at each
@@ -148,18 +147,18 @@ public:
     // bit clear => the channel contributes 0 to the integral while its phase
     // keeps running).
     //
-    // BOUNDARY CONVENTION (§2.3.3): a position step completing at cycle t
+    // BOUNDARY CONVENTION: a position step completing at cycle t
     // changes the level effective AFTER cycle t -- the completing cycle's
     // dwell belongs to the pre-step held output.
     //
     // take_integrated_sample(W) returns round(integral, W) via the shared
-    // round-half-away-from-zero helper (dwell_rounding.h, §2.3.4), then
-    // resets the integral. W == 0 returns 0 (§2.3.5). PRECONDITION
-    // (§2.3.7): the caller advances exactly window_cycles between takes
+    // round-half-away-from-zero helper (dwell_rounding.h), then
+    // resets the integral. W == 0 returns 0. PRECONDITION:
+    // the caller advances exactly window_cycles between takes
     // (MachineAudioMixer guarantees this by construction). FIXED-POINT
     // PROPERTY: a constant summed level L integrates to exactly L.
     //
-    // WHAT THE BOX FILTER HONESTLY IS (package §2.4, disclosed
+    // WHAT THE BOX FILTER HONESTLY IS (a disclosed
     // simplification -- the SAME response as the PSG side, T = W/3,579,545 s):
     // |H(f)| = |sin(pi f T)/(pi f T)| -- a sinc, NOT a brickwall. For a
     // full-volume PSG-style square of half-period H cycles and W = 81 the
@@ -171,10 +170,10 @@ public:
     // stepping (period+1 <= ~40 cycles) is strongly suppressed but NOT
     // erased; audible-band wavetable playback sees only sinc rolloff. This
     // is a disclosed simplification vs openMSX's true band-limited
-    // resampling (references/openmsx-21.0/src/sound/ResampledSoundDevice.hh:
+    // resampling (openMSX 21.0: src/sound/ResampledSoundDevice.hh:
     // 23,29,46-48, BlipBuffer.hh:1-28 -- behaviour reference only, never
-    // copied); genuine band-limited depth is the named E-series backlog row
-    // (agent-protocol/state/deferred-backlog.md).
+    // copied); genuine band-limited resampling remains deferred future
+    // work.
     // ------------------------------------------------------------------
     [[nodiscard]] std::int32_t take_integrated_sample(std::uint64_t window_cycles);
 
@@ -189,8 +188,8 @@ public:
     [[nodiscard]] std::int32_t held_output(int channel) const;
 
 private:
-    // SCC-I readiness seam ONLY (G5, fact-sheet §10.3): a single enumerator
-    // ships; no Compatible/Plus code path exists in M29 (R-M29-9).
+    // SCC-I readiness seam ONLY (fact-sheet §10.3): a single enumerator
+    // ships; no Compatible/Plus code path exists.
     enum class Mode { Real };
 
     // (int8 wave * vol4) >> 4 -- the measured AND-#7FF0-div-16 (fact-sheet §5).
@@ -213,12 +212,12 @@ private:
     std::array<bool, kChannels> read_only_{};
     std::uint8_t enable_ = 0;
     std::uint8_t deform_ = 0;
-    // Internal rotation time base in master cycles (A-M29-6): reset to 0 by
+    // Internal rotation time base in master cycles: reset to 0 by
     // deform-register changes and by period writes under deform bit5 (the
     // Artag-confirmed resync, fact-sheet §6 bit5 row).
     std::uint64_t deform_cycles_ = 0;
-    // M34: mono Σ level×dwell accumulator for take_integrated_sample()
-    // (§2.3 contract above). |level| <= 600, so int64 never overflows for
+    // Mono Σ level×dwell accumulator for take_integrated_sample()
+    // (contract above). |level| <= 600, so int64 never overflows for
     // any realistic window.
     std::int64_t level_dwell_integral_ = 0;
 };

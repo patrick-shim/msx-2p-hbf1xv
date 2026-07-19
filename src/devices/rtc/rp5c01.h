@@ -21,7 +21,7 @@
 
 namespace sony_msx::devices::rtc {
 
-// Deterministic emulated-cycle clock source for the RTC (X4: the RTC advances
+// Deterministic emulated-cycle clock source for the RTC (the RTC advances
 // its time READ-ONLY off the machine clock, never the host wall clock). The
 // machine supplies an adapter returning scheduler total cycles.
 class RtcClockSource {
@@ -39,9 +39,9 @@ public:
     [[nodiscard]] virtual bool clock_ic_enabled() const = 0;
 };
 
-// Ricoh RP5C01(A)-compatible RTC as an IoDevice on #B4/#B5 (M15-S3, backlog B2).
+// Ricoh RP5C01(A)-compatible RTC as an IoDevice on #B4/#B5.
 //
-// Ports (fact-sheet §5; openMSX references/openmsx-21.0/src/MSXRTC.cc:24-46 +
+// Ports (fact-sheet §5; openMSX 21.0: src/MSXRTC.cc:24-46 +
 // RP5C01.cc — behaviour reference, never copied, GPL isolation):
 //   #B4 (port & 1 == 0) : register/address latch (value & 0x0F); read -> 0xFF.
 //   #B5 (port & 1 == 1) : 4-bit data; read -> data | 0xF0 (upper nibble floats 1).
@@ -52,7 +52,7 @@ public:
 // alarm/12-24h/leap, Block 2 = system-init CMOS (reg 0 reads 0x0A = valid marker),
 // Block 3 = title/prompt CMOS.
 //
-// Determinism (DEC-0009 Q2 / A-M15-1): seeded from a FIXED emulated epoch and
+// Determinism (DEC-0009): seeded from a FIXED emulated epoch and
 // advanced only from the RtcClockSource; NO host clock, NO file persistence.
 class Rp5c01 final : public core::IoDevice {
 public:
@@ -80,10 +80,10 @@ public:
     [[nodiscard]] std::uint8_t peek_register(std::uint8_t block, std::uint8_t reg) const;
     [[nodiscard]] std::uint8_t mode_register() const;
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    // --- Debug-snapshot seams: additive read-only introspection of the
     //     write-only test/reset registers + the decoded internal time counters
     //     + last-tick anchor, for a restore-ready snapshot. const returns of
-    //     existing members, ZERO behavior change (planner §2.4 item 8). These
+    //     existing members, ZERO behavior change. These
     //     do NOT advance time (unlike sync_time()); they read the last-synced
     //     stored state, so the snapshot stays non-perturbing. ---
     [[nodiscard]] std::uint8_t test_register() const { return test_reg_; }

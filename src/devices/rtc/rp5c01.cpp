@@ -68,7 +68,7 @@ void Rp5c01::reset() {
 
 void Rp5c01::seed_epoch() {
     // Fixed deterministic epoch: 1988-01-01 00:00:00, Friday. 1988 is a leap
-    // year (88 % 4 == 0). Chosen once; identical every run (A-M15-1).
+    // year (88 % 4 == 0). Chosen once; identical every run.
     fraction_ = 0;
     seconds_ = 0;
     minutes_ = 0;

@@ -23,7 +23,7 @@
 namespace sony_msx::devices::chipset {
 
 // Source of PPI port B keyboard-row columns (injected keyboard matrix). The
-// concrete matrix lives in src/peripherals/ (fact-sheet §3; plan §4.3/§4.5).
+// concrete matrix lives in src/peripherals/ (fact-sheet §3).
 class KeyboardRowSource {
 public:
     virtual ~KeyboardRowSource() = default;
@@ -32,8 +32,8 @@ public:
     [[nodiscard]] virtual std::uint8_t keyboard_row(int row) const = 0;
 };
 
-// Sink for port-C bit-7 (key-click / 1-bit DAC) EDGES (M39-A digitized-voice
-// fix). The PPI fires on_click_edge() ONLY when bit 7 actually toggles (the
+// Sink for port-C bit-7 (key-click / 1-bit DAC) EDGES -- the path digitized
+// voice playback drives. The PPI fires on_click_edge() ONLY when bit 7 actually toggles (the
 // openMSX `(prevBits ^ value) & 8` edge trigger, MSXPPI.cc:128-130), stamping
 // the change with the current scheduler cycle. Nullable + default-unattached
 // -> zero behaviour change (the click DAC is an ADDITIVE mixer source). The
@@ -55,14 +55,14 @@ public:
     [[nodiscard]] virtual std::uint64_t current_cycle() const = 0;
 };
 
-// Full i8255-compatible PPI on ports #A8-#AB (M15-S4, expands the M11
-// PpiSlotSelect per change X1). Grounding: fact-sheet §3; openMSX
-// references/openmsx-21.0/src/I8255.cc + MSXPPI.cc (behaviour reference, never
+// Full i8255-compatible PPI on ports #A8-#AB (expands the minimal
+// PpiSlotSelect). Grounding: fact-sheet §3;
+// openMSX 21.0: src/I8255.cc + MSXPPI.cc (behaviour reference, never
 // copied — GPL isolation).
 //
 //   #A8 port A (r/w)  : primary slot select. PRESERVED byte-for-byte by reusing
-//                       the M11-verified PpiSlotSelect (X1: #A8 is M11/M13-
-//                       critical; it drives SlotBus unconditionally on write and
+//                       the separately unit-tested PpiSlotSelect
+//                       (it drives SlotBus unconditionally on write and
 //                       reads back the latch, exactly as before).
 //   #A9 port B (read) : keyboard matrix row (inverted) of the selected row.
 //   #AA port C (r/w)  : bits0-3 keyboard row select, bit4 cassette motor, bit5
@@ -90,8 +90,9 @@ public:
 
     void reset();
 
-    // M39-A: attach the key-click 1-bit-DAC edge sink + its cycle source
-    // (both nullable; default-unattached preserves pre-M39 behaviour exactly).
+    // Attach the key-click 1-bit-DAC edge sink + its cycle source
+    // (both nullable; default-unattached behaves exactly like a PPI with no
+    // click DAC wired).
     // A bit-7 toggle fires the sink ONLY when BOTH are attached.
     void attach_click_sink(ClickEdgeSink* sink) { click_sink_ = sink; }
     void attach_cycle_source(PpiCycleSource* source) { cycle_source_ = source; }
@@ -111,17 +112,17 @@ private:
     [[nodiscard]] std::uint8_t read_port_b() const;
     [[nodiscard]] std::uint8_t read_port_c() const;
     void write_control(std::uint8_t value);
-    // M39-A: emit a click edge if bit 7 of port C changed between prev_latch_c
+    // Emit a click edge if bit 7 of port C changed between prev_latch_c
     // and the current latch_c_, and both the sink and cycle source are wired.
     void emit_click_edge_if_toggled(std::uint8_t prev_latch_c);
 
-    PpiSlotSelect port_a_;  // #A8 — reused verbatim (X1 preservation)
+    PpiSlotSelect port_a_;  // #A8 — reused verbatim
     KeyboardRowSource& keyboard_;
     std::uint8_t latch_b_ = 0;
     std::uint8_t latch_c_ = 0;
     std::uint8_t control_ = kResetControl;
-    ClickEdgeSink* click_sink_ = nullptr;    // M39-A key-click 1-bit DAC edges
-    PpiCycleSource* cycle_source_ = nullptr;  // M39-A edge cycle-stamp source
+    ClickEdgeSink* click_sink_ = nullptr;    // key-click 1-bit DAC edges
+    PpiCycleSource* cycle_source_ = nullptr;  // edge cycle-stamp source
 };
 
 }  // namespace sony_msx::devices::chipset

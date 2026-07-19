@@ -21,16 +21,16 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `Generic16kB` MVP mapper type (M19-S2), grounds
-// references/openmsx-21.0/src/memory/RomGeneric16kB.cc:6-24 (behaviour
+// `Generic16kB` mapper type. Grounded in
+// openMSX 21.0: src/memory/RomGeneric16kB.cc:6-24 (behaviour
 // reference only, never copied -- GPL isolation).
 //
 // Composes the SAME shared 8 KB-granularity CartridgeRomWindow as every other
-// MVP type (planner §2.1/§2.2): 4 LOGICAL 16 KB banks map onto window-slot
+// mapper type: 4 LOGICAL 16 KB banks map onto window-slot
 // PAIRS {0,1}, {2,3}, {4,5}, {6,7} (window-slot 2n = low half, 2n+1 = high
 // half of logical bank n).
 //
-// Load-time validation (A-M19-7): image size must be a positive multiple of
+// Load-time validation: image size must be a positive multiple of
 // 0x4000 (16 KB).
 //
 // reset(): logical bank 0 unmapped; bank 1 = image bank 0; bank 2 = image
@@ -53,7 +53,7 @@ public:
     void mem_write(core::BusAddress address, core::BusData value) override;
 
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
-    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    // Debug-snapshot seam: exposes the bank window for generic bank-state dumps.
     [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
 
 private:

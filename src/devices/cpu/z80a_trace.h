@@ -20,7 +20,7 @@
 
 namespace sony_msx::devices::cpu {
 
-// Deterministic per-instruction CPU trace record (M10-S1).
+// Deterministic per-instruction CPU trace record.
 //
 // Capture conventions (fixed and documented for byte-stable, diffable output):
 //  - Register/flag fields hold the PRE-EXECUTION snapshot taken at the

@@ -20,7 +20,7 @@ namespace sony_msx::devices::cartridge {
 
 class CartridgeRomWindow;  // fwd (defined in cartridge_rom_window.h)
 
-// Family-local interface (M19-S2), the same X-pattern already used by
+// Family-local interface, the same X-pattern already used by
 // RtcClockSource/FdcClockSource/CassetteClockSource (each defined inside its
 // own device family, not in src/core/ -- src/CLAUDE.md: "Do not place device
 // logic in src/core/"). Lets CartridgeSlot hold ONE polymorphic pointer to
@@ -32,7 +32,7 @@ public:
     ~CartridgeMapperDevice() override = default;
 
     // Reinitialize bank-pointer state to this mapper's documented power-on/
-    // reset default (planner §2.2 per type). Never touches the immutable
+    // reset default. Never touches the immutable
     // loaded image itself -- matches every surveyed openMSX mapper's own
     // reset() (RomGeneric8kB.cc:13-22, RomAscii8kB.cc:24-33,
     // RomAscii16kB.cc:22-28, RomKonami.cc:54-59), none of which re-load or
@@ -41,7 +41,7 @@ public:
 
     [[nodiscard]] virtual CartridgeMapperType mapper_type() const = 0;
 
-    // M36 Phase 3 debug snapshot (planner §2.4 item 13): the mapper's owned
+    // Debug-snapshot seam: the mapper's owned
     // 8-slot ROM window, so the snapshot can dump bank state GENERICALLY
     // without RTTI dispatch. Default nullptr; the window-based mappers
     // (Mirrored/Generic8kB/Generic16kB/Ascii8kB/Ascii16kB/Konami/KonamiSCC)

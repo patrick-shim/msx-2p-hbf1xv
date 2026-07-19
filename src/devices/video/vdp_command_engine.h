@@ -20,8 +20,7 @@
 
 namespace sony_msx::devices::video {
 
-// V9958/V9938 VDP command engine (M22-S3..S7, backlog D3; closes D7's
-// remaining command-engine-path piece, planner package §1.5). Owned INSIDE
+// V9958/V9938 VDP command engine. Owned INSIDE
 // V9958Vdp as a private member (mirrors the SpriteEngine/blink_countdown_
 // ownership style), constructed with a reference to the SAME VdpVram the
 // V9958Vdp owns -- command-engine writes land directly in the shared VRAM
@@ -30,9 +29,9 @@ namespace sony_msx::devices::video {
 //
 // Register file (SX/SY/DX/DY/NX/NY/COL/ARG/CMD + internal ASX/ADX/ANX
 // trackers) is owned HERE, a SEPARATE storage from V9958Vdp::control_regs_
-// (which stays at its existing 32 entries, unchanged; A-M22-2).
+// (which stays at its existing 32 entries, unchanged).
 //
-// Execution model is HYBRID (planner package §1.4 Resolution 2): 10
+// Execution model is HYBRID: 10
 // commands (ABRT/STOP, POINT, SRCH, LINE, LMMV, LMMM, HMMV, HMMM, YMMM,
 // PSET) execute ATOMICALLY -- the whole NX*NY operation completes
 // synchronously within the call that writes CMD (R#46); CE reads 0
@@ -57,19 +56,21 @@ namespace sony_msx::devices::video {
 // executed").
 //
 // Grounding (behavior reference only, GPL isolation -- never copied):
-// references/openmsx-21.0/src/video/VDPCmdEngine.{hh,cc}.
+// openMSX 21.0: src/video/VDPCmdEngine.{hh,cc}.
 class VdpCommandEngine {
 public:
-    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): a default-null per-destination-row
-    // observer. The ATOMIC command writers (run_lmmv/lmmm/hmmv/hmmm/ymmm/pset/
+    // A default-null per-destination-row observer: lets the owner render/commit
+    // a row's display state BEFORE the command's writes land in it. The ATOMIC
+    // command writers (run_lmmv/lmmm/hmmv/hmmm/ymmm/pset/
     // line) invoke it ONCE per destination row, BEFORE that row's VRAM writes,
     // carrying the destination page-row coordinate `dy` (full 10-bit; the
     // implementation derives the display line + page from live registers). This
     // is the structural analog of openMSX routing each command write through
     // VDPVRAM::writeCommon -> VRAMWindow::notify BEFORE committing the byte
     // ("Subsystem synchronisation should happen before the commit, to be able to
-    // draw backlog using old state", references/openmsx-21.0/src/video/
+    // draw backlog using old state", openMSX 21.0: src/video/
     // VDPVRAM.hh:575-593, 309-322) -- read for behavior only, never copied.
+    // (DEC-0065)
     //
     // A NULL sink (the default, and the only state for a bare command engine or
     // any unit test constructing one directly) means ZERO behavior change: the
@@ -86,20 +87,20 @@ public:
 
     explicit VdpCommandEngine(VdpVram& vram) : vram_(vram) {}
 
-    // Install (or detach with nullptr) the M44 per-destination-row sink. The
+    // Install (or detach with nullptr) the per-destination-row sink. The
     // pointer is externally owned; reset() deliberately does NOT clear it
     // (X-pattern of the V9958Vdp render-sync/observer wiring).
     void set_command_row_sink(CommandRowSink* sink) { row_sink_ = sink; }
 
     // R#32..R#46 register-write dispatch (index 0..14). Works identically
     // whether the caller reached it via the #99 two-write latch protocol or
-    // the #9B indirect-register path (A-M22-1) -- both already route through
+    // the #9B indirect-register path -- both already route through
     // V9958Vdp::change_register(), which is the only caller.
     void write_register(int index, std::uint8_t value);
     // Debug/test peek of a command register (mirrors peekCmdReg).
     [[nodiscard]] std::uint8_t read_register(int index) const;
 
-    // scrMode recompute (A-M22-6), called from V9958Vdp::recompute_mode()
+    // scrMode recompute, called from V9958Vdp::recompute_mode()
     // whenever the mode or R#25's CMD bit changes.
     void notify_mode_change(const VdpModeState& mode, bool cmd_bit);
 
@@ -115,16 +116,16 @@ public:
     [[nodiscard]] std::uint8_t color() const { return col_; }
     void on_color_register_read();
 
-    // DEC-0072 diagnostic counters (M47 kill-step): how many times software read
+    // Diagnostic counters: how many times software read
     // the S#7 color register (every on_color_register_read call) and how many
     // LMCM commands were issued. Pure introspection; not part of emulated state
     // (reset() leaves them alone). Used to test whether the save-corruption path
-    // ever exercises the LMCM/color-register read at all.
+    // ever exercises the LMCM/color-register read at all. (DEC-0072)
     [[nodiscard]] std::uint64_t color_read_count() const { return color_read_count_; }
     [[nodiscard]] std::uint64_t lmcm_start_count() const { return lmcm_start_count_; }
 
     // S#8/S#9: ASX (border-X working register), high byte masked by the
-    // caller with | 0xFE (matches the existing M14 stub mask). S#9 read
+    // caller with | 0xFE. S#9 read
     // additionally clears BD (mirrors resetBD()).
     [[nodiscard]] unsigned border_x() const { return asx_; }
     void on_border_x_register_read();
@@ -132,7 +133,7 @@ public:
     // Deterministic power-on reset.
     void reset();
 
-    // M44 Phase 2a (DEF-M44-CMDSYNC, DEC-0069): the estimated emulated DURATION
+    // The estimated emulated DURATION
     // (in CPU T-states) of the command most recently issued through
     // write_register(R#46). PURE function of the command parameters -- no clock,
     // no "now" -- so the value is fully unit-testable in isolation and the VDP
@@ -143,8 +144,9 @@ public:
     // 0 for ABRT/degenerate-no-op/POINT/PSET and the event-driven transfers
     // (LMCM/LMMC/HMMC are paced by their own held kCe + TR handshake). Grounding
     // (behavior reference only, never copied): openMSX VDPCmdEngine::calcFinishTime
-    // (references/openmsx-21.0/src/video/VDPCmdEngine.cc:733-747) + the
+    // (openMSX 21.0: src/video/VDPCmdEngine.cc:733-747) + the
     // per-command ticksPerPixel (:980,1105,1365,1470,1606). reset() clears it.
+    // (DEC-0069)
     [[nodiscard]] std::uint64_t last_cmd_duration_tstates() const {
         return last_cmd_duration_tstates_;
     }
@@ -163,9 +165,9 @@ public:
     // tick cost; see the .cpp for the citation.
     [[nodiscard]] std::uint64_t transfer_unit_cost_tstates() const;
 
-    // --- M36 Phase 3 debug snapshot: additive, read-only introspection of
-    //     the register file + transfer FSM (docs/m36-phase3-planner-package.md
-    //     §2.4 item 4); zero behavior change. Enum fields return numeric
+    // --- Debug snapshot: additive, read-only introspection of
+    //     the register file + transfer FSM; zero behavior change. Enum
+    //     fields return numeric
     //     codes to avoid exposing the private LogicalOp/TransferKind enums. ---
     [[nodiscard]] std::uint8_t status_byte() const { return status_; }
     [[nodiscard]] int scr_mode() const { return scr_mode_; }
@@ -237,7 +239,7 @@ private:
     void start_hmmc();
     void perform_transfer_step();
 
-    // M44: fire the per-destination-row sink (no-op when unset -> strict superset).
+    // Fire the per-destination-row sink (no-op when unset -> strict superset).
     void notify_dest_row(const unsigned dy) {
         if (row_sink_ != nullptr) {
             row_sink_->on_dest_row(dy);
@@ -246,7 +248,7 @@ private:
 
     VdpVram& vram_;
 
-    // M44 per-destination-row render-sync sink (default-null = inert).
+    // Per-destination-row render-sync sink (default-null = inert).
     CommandRowSink* row_sink_ = nullptr;
 
     unsigned sx_ = 0, sy_ = 0, dx_ = 0, dy_ = 0, nx_ = 0, ny_ = 0;
@@ -256,11 +258,11 @@ private:
     std::uint8_t status_ = 0;
     int scr_mode_ = -1;
 
-    // DEC-0072 diagnostic counters (see color_read_count()/lmcm_start_count()).
+    // Diagnostic counters (see color_read_count()/lmcm_start_count(); DEC-0072).
     std::uint64_t color_read_count_ = 0;
     std::uint64_t lmcm_start_count_ = 0;
 
-    // M44 Phase 2a: estimated T-state duration of the last-issued command
+    // Estimated T-state duration of the last-issued command
     // (see last_cmd_duration_tstates()); recomputed on every execute_command().
     std::uint64_t last_cmd_duration_tstates_ = 0;
 

@@ -13,7 +13,7 @@
 
 param(
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
-    [string]$SplitSystemTest = "build/tests/Debug/hbf1xv_m32_split_screen_system_test.exe",
+    [string]$SplitSystemTest = "build/tests/Debug/split_screen_system_test.exe",
     [string]$WorkDir = "build/m32-ab",
     [string]$DiffOut = "docs/m32-parity-trace-diff.md",
     [int]$BasicBootSeconds = 12,
@@ -24,7 +24,7 @@ param(
 # M32 openMSX A/B harness -- the synthetic split-screen scenario
 # (docs/m32-planner-package.md section 2.7, AC-8).
 #
-# Side A (ours): tests/system/hbf1xv_m32_split_screen_system_test.cpp's real
+# Side A (ours): tests/system/split_screen_system_test.cpp's real
 # arm, dumped via its additive `--dump-frame` argv (the ctest invocation is
 # unchanged): in-RAM Z80 program, IE1 line-interrupt handler rewrites R#23
 # mid-frame, frame taken at an on_vsync_boundary().

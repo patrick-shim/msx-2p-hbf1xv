@@ -15,7 +15,7 @@
 // docs/m52-planner-package.md §2.4/§5 item 6, S3-3/S3-4/S3-5).
 //
 // Reproduces the Alt+S disk-writable toggle CONTRACT at the Hbf1xvMachine +
-// DiskImage + temp-.dsk level (the hbf1xv_m36_disk_save_persist pattern). The
+// DiskImage + temp-.dsk level (the hbf1xv_disk_save_persist pattern). The
 // toggle is modeled by DiskImage::set_host_path bind/unbind -- the SAME primitive
 // the Sdl3App::on_disk_writable_toggle_hotkey() handler uses (ZERO src/devices/fdc
 // edits). Three cases:
@@ -68,7 +68,7 @@ std::vector<std::uint8_t> make_sector(const std::uint8_t seed) {
 
 int main() {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "hbf1xv_m52_disk_writable_toggle";
+        std::filesystem::temp_directory_path() / "hbf1xv_disk_writable_toggle";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
 

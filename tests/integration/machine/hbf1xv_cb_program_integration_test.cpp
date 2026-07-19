@@ -39,8 +39,8 @@ bool expect_true(const bool condition, const char* case_name) {
 int main() {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
-    // Authentic reset boots slot-0 BIOS (M13-S4 #A8=0); page flat RAM in for this
-    // CPU-over-RAM program (M11 R-1/R-2).
+    // Authentic reset boots slot-0 BIOS (#A8=0); page flat RAM in for this
+    // CPU-over-RAM program.
     machine.map_flat_ram();
 
     // LD A,0x01 ; LD B,0x03 ; loop: RLC A ; DJNZ loop ; LD (0x4000),A ; HALT

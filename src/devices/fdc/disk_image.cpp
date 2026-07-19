@@ -30,7 +30,7 @@ std::vector<std::uint8_t> DiskImage::synthesize() {
 
     // Per-sector deterministic fill: a pure function of (lba, offset). This gives
     // every sector distinct, reproducible content so read/write and boundary
-    // tests are meaningful and two builds are byte-identical (A-M16-4).
+    // tests are meaningful and two builds are byte-identical.
     for (std::uint32_t lba = 0; lba < kTotalSectors; ++lba) {
         const std::uint32_t base = lba * kSectorSize;
         for (std::uint32_t j = 0; j < kSectorSize; ++j) {

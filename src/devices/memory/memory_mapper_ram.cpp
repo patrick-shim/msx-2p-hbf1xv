@@ -27,7 +27,7 @@ MemoryMapperRam::MemoryMapperRam(machine::MemoryRegion& ram, const chipset::Mapp
     : ram_(ram),
       mapper_io_(mapper_io),
       num_segments_(static_cast<int>(ram.size() / kSegmentBytes)) {
-    // M42/DEC-0061 defensive invariant: the fold `segment & (num_segments - 1)`
+    // Defensive invariant (DEC-0061): the fold `segment & (num_segments - 1)`
     // is a correct power-of-two modulo ONLY when num_segments is a power of two.
     // All four offered sizes satisfy this (64/128/256/512 KB -> 4/8/16/32); the
     // CLI rejects any other value, so this asserts the contract the caller must
@@ -55,7 +55,7 @@ core::BusData MemoryMapperRam::mem_read(const core::BusAddress address) {
 void MemoryMapperRam::mem_write(const core::BusAddress address, const core::BusData value) {
     const std::uint8_t segment = mapper_io_.segment(page_of(address));
     ram_.write(physical_address(segment, address, num_segments_), value);
-    // DEC-0052 stream-light watchlog hook (default-off): notify with the
+    // Stream-light watchlog hook (DEC-0052; default-off): notify with the
     // CPU-VISIBLE address, never the folded physical offset. No-op unless an
     // observer is installed (only while a stream capture is armed).
     if (write_observer_ != nullptr) {

@@ -20,11 +20,11 @@
 #include <iterator>
 #include <string>
 
-#include "frontend/sdl3_cli.h"  // reuse parse_ram_kb / parse_speed_level (§4.3)
+#include "frontend/sdl3_cli.h"  // reuse parse_ram_kb / parse_speed_level
 #include "machine/xml_tokenizer.h"
 
-// NOTE (M50-S1 layering): emulator_config lives in src/machine/ and, per the
-// planner (docs/m50-planner-package.md §4.3), reuses the ALREADY-TESTED value
+// NOTE (layering): emulator_config lives in src/machine/ and
+// reuses the ALREADY-TESTED value
 // validators parse_ram_kb() / parse_speed_level() so the {64,128,256,512}KB and
 // [0..7] range policy has ONE source of truth (no duplicate range policy). Those
 // two helpers are pure + SDL-free (see their contract in sdl3_cli.h); the
@@ -35,7 +35,7 @@ namespace sony_msx::machine {
 
 namespace {
 
-// ---- warning emitters (§4.2 message shapes) --------------------------------
+// ---- warning emitters ------------------------------------------------------
 
 void warn_value(std::vector<std::string>& warnings, const std::string& key, const std::string& value,
                 const std::string& reason, const std::string& def) {
@@ -114,7 +114,7 @@ void apply_bool(const XmlToken& tok, const char* attr, const std::string& key, b
 }
 
 // Dispatch one element (identified by its parent context + own name) into the
-// config, validating each known attribute per §4.3 and warning per-key on any
+// config, validating each known attribute and warning per-key on any
 // unknown element / unknown attribute / bad value. Never throws.
 void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfig& cfg,
                    std::vector<std::string>& warnings) {
@@ -152,8 +152,9 @@ void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfi
             warn_unknown_attrs(warnings, tok, "defaults/disk-writable", {"enabled"});
             apply_bool(tok, "enabled", "defaults/disk-writable@enabled", cfg.disk_writable, warnings);
         } else if (name == "volume") {
-            // M52 (DEC-0079): master gain percent [0,100]; out-of-range/bad keeps
-            // the default 100 + a per-key warning (mirrors defaults/persistence@percent).
+            // Master gain percent [0,100]; out-of-range/bad keeps
+            // the default 100 + a per-key warning (mirrors
+            // defaults/persistence@percent). (DEC-0079)
             warn_unknown_attrs(warnings, tok, "defaults/volume", {"percent"});
             if (const std::string* v = tok.attribute("percent")) {
                 int pct = 0;
@@ -259,13 +260,13 @@ void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfi
                 cfg.fmpac_sram = *v;
             }
         } else if (name == "cartridge") {
-            // M64: Open Cartridge (slot 1/2) dialog default directory.
+            // Open Cartridge (slot 1/2) dialog default directory.
             warn_unknown_attrs(warnings, tok, "machine/cartridge", {"dir"});
             if (const std::string* v = tok.attribute("dir")) {
                 cfg.cartridge_dir = *v;
             }
         } else if (name == "disk") {
-            // M64: Open Disk(s) dialog default directory.
+            // Open Disk(s) dialog default directory.
             warn_unknown_attrs(warnings, tok, "machine/disk", {"dir"});
             if (const std::string* v = tok.attribute("dir")) {
                 cfg.disk_dir = *v;
@@ -276,8 +277,8 @@ void apply_element(const std::string& parent, const XmlToken& tok, EmulatorConfi
                 cfg.softwaredb_path = *v;
             }
         } else if (name == "slots") {
-            // OPTIONAL/advanced; validated-to-builtin in S3 (§4.5). S1 accepts +
-            // ignores the whole <slots> subtree (it never remaps here) -- no warning.
+            // OPTIONAL/advanced; the whole <slots> subtree is accepted and
+            // ignored (it never remaps here) -- no warning.
         } else {
             warn_unknown(warnings, "machine/" + name);
         }
@@ -353,7 +354,7 @@ EmulatorConfig EmulatorConfig::parse(std::string_view xml_text, std::vector<std:
 
         // The FIRST element token must be the <hbf1xv-config> root; anything
         // else (wrong root, a stray close, binary garbage) is a STRUCTURAL
-        // failure -> whole-file fallback (§4.2).
+        // failure -> whole-file fallback.
         if (!started) {
             started = true;
             const bool is_element =

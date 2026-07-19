@@ -38,7 +38,7 @@ param(
 # is a small, bounded, decision-relevant check of the LOADING CONVENTION +
 # BDOS-TRAP MECHANISM itself (org 0x0100, the CP/M "top of memory" word, the
 # CALL-5 dispatch), not the full ~1.7M-combinatorial-case-per-suite sweep
-# (already covered, in-process, by tests/system/hbf1xv_m24_zexall_system_test.cpp
+# (already covered, in-process, by tests/system/zexall_system_test.cpp
 # + this project's own pre-existing, independently QA-verified M9/M10/M12
 # CPU-timing oracles).
 #
@@ -326,7 +326,7 @@ $lines += ("This probe compares the LOADING CONVENTION + BDOS-TRAP MECHANISM its
            "the CP/M ``top of memory`` word; the ``CALL 5`` dispatch and its captured C=9 output) " +
            "for a small, live-Tcl-feasible prefix -- NOT the full ~1.7 million-combinatorial-case-" +
            "per-suite correctness sweep (already covered, in-process, by " +
-           "``tests/system/hbf1xv_m24_zexall_system_test.cpp`` and this project's own pre-existing, " +
+           "``tests/system/zexall_system_test.cpp`` and this project's own pre-existing, " +
            "independently QA-verified M9/M10/M12 CPU-timing oracles). A full-suite live-Tcl single-" +
            "step A/B is explicitly, honestly NOT attempted here -- see " +
            "``docs/m24-implementation-report.md`` for the measured full-sweep runtime and " +

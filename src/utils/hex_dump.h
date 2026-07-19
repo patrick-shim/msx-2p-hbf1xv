@@ -19,7 +19,7 @@
 
 namespace sony_msx::utils {
 
-// Deterministic xxd/hexdump-C hybrid formatter (planner package §2.3). Emits one
+// Deterministic xxd/hexdump-C hybrid formatter. Emits one
 // 16-byte line per row:
 //   0000fe00: eb fe 90 53 4f 4e 59 4d  53 58 20 00 02 02 01 00  |...SONYMSX .....|
 // - 8-hex-digit zero-padded byte offset (base_offset + row index), ": ".

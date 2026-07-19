@@ -27,12 +27,12 @@ using devices::cartridge::CartridgeMapperType;
 using devices::cartridge::parse_cartridge_mapper_type;
 using devices::cartridge::to_string;
 
-// §2.3 step 1 -- third-party ROM-format magic values at offset 16 (facts of
-// those file formats, not license-sensitive data; RomFactory.cc:90-95 checks
-// the same three strings). All three name G4-tail mapper types this project
+// Heuristic step 1 -- third-party ROM-format magic values at offset 16 (facts
+// of those file formats, not license-sensitive data; RomFactory.cc:90-95
+// checks the same three strings). All three name mapper types this project
 // does not implement, so a match is a loud identified-but-unsupported
 // outcome -- misbooting them as Generic8kB is exactly the garbage-screen
-// class M30 exists to kill.
+// failure class auto-identification exists to kill.
 constexpr std::size_t kSignatureOffset = 16;
 constexpr std::size_t kSignatureSize = 8;
 constexpr const char* kFormatSignatures[] = {"ASCII16X", "ROM_NEO8", "ROM_NE16"};
@@ -41,7 +41,7 @@ std::string unsigned_to_string(const unsigned value) {
     return std::to_string(value);
 }
 
-// The §2.3 step-4 bank-select-write scan, re-derived from
+// The heuristic's step-4 bank-select-write scan, re-derived from
 // RomFactory.cc:117-167 (behavior only, never code).
 CartridgeIdentification run_bank_write_scan(std::span<const std::uint8_t> image) {
     unsigned konami_scc = 0;
@@ -94,12 +94,12 @@ CartridgeIdentification run_bank_write_scan(std::span<const std::uint8_t> image)
     // The deliberate ASCII8 handicap (RomFactory.cc:160), guarded exactly as
     // the reference guards its unsigned underflow.
     //
-    // DEC-0030 disagreement record #2 (baseline biasing): openMSX
+    // Reference disagreement #2 (baseline biasing): openMSX
     // zero-initializes all counters and applies only this conditional ASCII8
     // decrement; fMSX initializes ALL counters to 1, then GEN8 +1 and
     // ASCII8 -1 (MSX.c:2840-2844) -- e.g. a single 0x77FF hit yields ASCII16
     // under openMSX but GEN8 under fMSX. Software policy, no hardware truth;
-    // adopted: openMSX (planner §2.3).
+    // adopted: openMSX. (DEC-0030)
     if (ascii8 > 0) {
         --ascii8;
     }
@@ -114,9 +114,9 @@ CartridgeIdentification run_bank_write_scan(std::span<const std::uint8_t> image)
     // never re-win) -- ties therefore resolve KonamiSCC > Konami > ASCII16 >
     // ASCII8.
     //
-    // DEC-0030 disagreement record #3 (tie-break direction): fMSX uses a
+    // Reference disagreement #3 (tie-break direction): fMSX uses a
     // strict `>` first-index-wins scan instead (MSX.c:2872-2874). Software
-    // policy; adopted: openMSX (planner §2.3).
+    // policy; adopted: openMSX. (DEC-0030)
     CartridgeMapperType winner = CartridgeMapperType::Generic8kB;
     unsigned winner_score = 0;
     const struct {
@@ -150,7 +150,7 @@ CartridgeIdentification run_bank_write_scan(std::span<const std::uint8_t> image)
 CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spec,
                                                std::span<const std::uint8_t> image,
                                                const SoftwareDb* db) {
-    // Precedence step 1 (planner §2.4.1): an explicit --cartN-type VALUE.
+    // Precedence step 1: an explicit --cartN-type VALUE.
     // No DB read, no heuristic, no SHA1 -- byte-for-byte today's behavior.
     if (spec.type_was_explicit) {
         CartridgeIdentification ident;
@@ -173,18 +173,18 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
             } else {
                 // Outside our implemented seven (incl. <start>-composed
                 // subtypes and <megarom>-without-<type> ""): loud
-                // identified-but-unsupported (planner §2.4.3).
+                // identified-but-unsupported.
                 ident.unsupported = true;
             }
             return ident;
         }
     }
 
-    // Precedence step 3: the heuristic (planner §2.3, re-derived from
+    // Precedence step 3: the heuristic (re-derived from
     // RomFactory.cc:82-169).
 
-    // §2.3 step 1 -- format signatures (checked BEFORE the size gates, as in
-    // RomFactory.cc:90-95).
+    // Heuristic step 1 -- format signatures (checked BEFORE the size gates, as
+    // in RomFactory.cc:90-95).
     if (image.size() >= kSignatureOffset + kSignatureSize) {
         for (const char* signature : kFormatSignatures) {
             if (std::memcmp(image.data() + kSignatureOffset, signature, kSignatureSize) == 0) {
@@ -197,14 +197,14 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
         }
     }
 
-    // M36 (DEC-0050) -- FM-PAC BIOS signature. Checked before the small-image
+    // FM-PAC BIOS signature. Checked before the small-image
     // plain-ROM rule below (a 16 KB FM-PAC BIOS is < 64 KB and would otherwise
     // fall through to Mirrored and mis-detect). Positive SIGNATURE detection
     // (facts of the FM-PAC BIOS format, not license-sensitive data): "AB"
     // cart header at 0, "PAC2OPLL" detect marker at 0x18 (grounded in the real
-    // roms/fmpac.rom + references/openmsx-21.0/share/extensions/fmpac.xml's own
-    // note that FM-PAC dumps vary in the mapped-register region). Size must be
-    // a valid 1..4-bank FM-PAC image.
+    // roms/fmpac.rom + the note in openMSX 21.0's share/extensions/fmpac.xml
+    // that FM-PAC dumps vary in the mapped-register region). Size must be
+    // a valid 1..4-bank FM-PAC image. (DEC-0050)
     {
         static constexpr char kFmPacMarker[] = "PAC2OPLL";
         static constexpr std::size_t kFmPacMarkerOffset = 0x18;
@@ -221,18 +221,18 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
         }
     }
 
-    // §2.3 step 2 -- size < 0x10000: plain-ROM rule -> Mirrored. openMSX's
+    // Heuristic step 2 -- size < 0x10000: plain-ROM rule -> Mirrored. openMSX's
     // PAGE2 refinement for <= 16 KB "AB" images (RomFactory.cc:97-108) is a
-    // DISCLOSED simplification here (planner §1.3): our Mirrored device
+    // DISCLOSED, deliberate simplification here: our Mirrored device
     // mirrors the image across the whole 64 KB window
-    // (cartridge_mirrored_rom.h, ratified A-M19-8), so a PAGE2-class ROM's
+    // (cartridge_mirrored_rom.h), so a PAGE2-class ROM's
     // content is present at 0x8000 anyway and the BIOS calls the header's
     // own INIT address. No PageNN enum value is added.
     //
-    // DEC-0030 disagreement record #1 (eligibility threshold): openMSX scans
+    // Reference disagreement #1 (eligibility threshold): openMSX scans
     // only at >= 64 KB (RomFactory.cc:96-117); fMSX scans anything > 32 KB
     // (MSX.c:3246). A 48 KB image: openMSX -> Mirrored, fMSX -> scan.
-    // Software policy; adopted: openMSX (planner §2.3).
+    // Software policy; adopted: openMSX. (DEC-0030)
     if (image.size() < 0x10000) {
         ident.type = CartridgeMapperType::Mirrored;
         ident.method = CartridgeIdentificationMethod::SmallImagePlainRule;
@@ -240,7 +240,7 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
         return ident;
     }
 
-    // §2.3 step 3 -- exactly 64 KB without an "AB" header: plain -> Mirrored
+    // Heuristic step 3 -- exactly 64 KB without an "AB" header: plain -> Mirrored
     // (RomFactory.cc:112-116).
     if (image.size() == 0x10000 && !(image[0] == 'A' && image[1] == 'B')) {
         ident.type = CartridgeMapperType::Mirrored;
@@ -249,14 +249,15 @@ CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spe
         return ident;
     }
 
-    // §2.3 step 4 -- the bank-select-write scan (64 KB with "AB", or bigger).
+    // Heuristic step 4 -- the bank-select-write scan (64 KB with "AB", or
+    // bigger).
     //
-    // DEC-0030 disagreement record #4 (an AGREEMENT, recorded as
+    // Reference record #4 (an AGREEMENT, recorded as
     // corroboration): both references run their database lookup BEFORE this
     // heuristic (RomFactory.cc:180-201; MSX.c:2790-2837 -- CRC, then SHA,
     // then scan), independently corroborating this file's precedence design;
-    // their DB FORMATS differ (CARTS.SHA/CARTS.CRC evaluated and skipped,
-    // planner §2.2.5).
+    // their DB FORMATS differ (fMSX's CARTS.SHA/CARTS.CRC formats were
+    // evaluated and not adopted). (DEC-0030)
     CartridgeIdentification scan = run_bank_write_scan(image);
     scan.sha1_hex = std::move(ident.sha1_hex);
     return scan;
@@ -269,13 +270,13 @@ std::string format_cartridge_identification_message(const int slot_number,
 
     switch (ident.method) {
         case CartridgeIdentificationMethod::ExplicitFlag:
-            // The explicit path produces NO new output (planner §2.4.1).
+            // The explicit path produces NO new output.
             return "";
 
         case CartridgeIdentificationMethod::SoftwareDbSha1:
         case CartridgeIdentificationMethod::HeuristicBankScan:
             if (ident.unsupported) {
-                // Message B (planner §2.4.4).
+                // Message B.
                 const std::string source = (ident.method == CartridgeIdentificationMethod::SoftwareDbSha1)
                                                ? "softwaredb SHA1 match"
                                                : "ROM format signature";
@@ -287,25 +288,25 @@ std::string format_cartridge_identification_message(const int slot_number,
                        slot_flag + "-type to force one. Aborting.";
             }
             if (ident.method == CartridgeIdentificationMethod::SoftwareDbSha1) {
-                // Message A (planner §2.4.4).
+                // Message A.
                 return "cartridge: " + slot_flag + ": identified as \"" + ident.title + "\" (" +
                        ident.db_type_name + ") via softwaredb SHA1 match [sha1=" + ident.sha1_hex +
                        ", db=" + db_path + "]";
             }
-            // Message C (planner §2.4.4).
+            // Message C.
             return "cartridge: " + slot_flag + ": no softwaredb match [sha1=" + ident.sha1_hex +
                    "]; guessed " + std::string(to_string(ident.type)) +
                    " via bank-write heuristic (scores: " + ident.detail + "); pass " + slot_flag +
                    "-type to override";
 
         case CartridgeIdentificationMethod::SmallImagePlainRule:
-            // Message D (planner §2.4.4).
+            // Message D.
             return "cartridge: " + slot_flag + ": no softwaredb match [sha1=" + ident.sha1_hex +
                    "]; " + ident.detail + " -> Mirrored (plain-ROM rule); pass " + slot_flag +
                    "-type to override";
 
         case CartridgeIdentificationMethod::SignatureFmPac:
-            // M36: FM-PAC BIOS signature match (positive, high-confidence).
+            // FM-PAC BIOS signature match (positive, high-confidence).
             return "cartridge: " + slot_flag + ": no softwaredb match [sha1=" + ident.sha1_hex +
                    "]; " + ident.detail + " -> FMPAC (FM-PAC peripheral cartridge); pass " +
                    slot_flag + "-type to override";
@@ -338,7 +339,7 @@ CartridgeIdentificationSession::Resolution CartridgeIdentificationSession::resol
     }
 
     // Empty image: identification skipped -- the existing loud load-failure
-    // path owns this case (planner §2.3 preamble). Pass the parser default
+    // path owns this case. Pass the parser default
     // through unchanged.
     if (image.empty()) {
         resolution.type = spec.type;
@@ -347,7 +348,7 @@ CartridgeIdentificationSession::Resolution CartridgeIdentificationSession::resol
         return resolution;
     }
 
-    // Lazy, at-most-once DB load (planner §2.2.1).
+    // Lazy, at-most-once DB load.
     if (!db_load_attempted_) {
         db_load_attempted_ = true;
         std::vector<std::string> diagnostics;

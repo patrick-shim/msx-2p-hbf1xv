@@ -16,10 +16,10 @@
 
 #include "peripherals/keyboard_matrix.h"
 
-// Suite: Peripherals_KeyboardMatrix_Unit  (M15-S4, backlog C6)
+// Suite: Peripherals_KeyboardMatrix_Unit
 //
 // 11x8 inverted matrix (0 = pressed); idle rows read 0xFF. Grounding:
-// fact-sheet §3/§10; MSXPPI.cc:88-95.
+// the keyboard hardware fact sheet; openMSX 21.0: src/MSXPPI.cc:88-95.
 
 namespace {
 

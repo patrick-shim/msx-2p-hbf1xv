@@ -38,11 +38,11 @@ std::optional<CartridgeMapperType> parse_cartridge_mapper_type(const std::string
     if (iequals(name, "ASCII8")) return CartridgeMapperType::Ascii8kB;
     if (iequals(name, "ASCII16")) return CartridgeMapperType::Ascii16kB;
     if (iequals(name, "Konami")) return CartridgeMapperType::Konami;
-    // M29 (backlog G1): canonical openMSX name, RomInfo.cc:24. Checked AFTER
+    // Canonical openMSX name, RomInfo.cc:24. Checked AFTER
     // the exact "Konami" compare (iequals requires equal length, so there is
     // no prefix ambiguity either way; order kept for readability).
     if (iequals(name, "KonamiSCC")) return CartridgeMapperType::KonamiSCC;
-    // M36 (DEC-0050): the external Panasonic FM-PAC peripheral cartridge. Not
+    // The external Panasonic FM-PAC peripheral cartridge (DEC-0050). Not
     // an openMSX RomType -- the token mirrors the openMSX `fmpac` extension
     // name (see the enum comment in the header). Also accept the hyphenated
     // "FM-PAC" device spelling for user convenience.

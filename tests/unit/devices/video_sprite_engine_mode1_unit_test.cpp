@@ -13,10 +13,10 @@
 
 // Suite: Devices_SpriteEngineMode1_Unit
 //
-// Deterministic unit coverage for M22-S1: SpriteEngine's Sprite Mode 1
+// Deterministic unit coverage for SpriteEngine's Sprite Mode 1
 // (TMS9918-compatible, max 4/line) check/collision/5th-sprite algorithm,
 // wired into V9958Vdp::on_vsync() and the S#0/S#3-S#6 status registers.
-// Grounded in references/openmsx-21.0/src/video/SpriteChecker.{hh,cc} --
+// Grounded in openMSX 21.0: src/video/SpriteChecker.{hh,cc} --
 // never copied (GPL isolation).
 
 #include <cstdint>
@@ -88,7 +88,7 @@ int main() {
     // Pattern/attrib table base registers default to 0 (matches kAttribBase);
     // R#6 (pattern table) is set explicitly to point at kPatternBase.
 
-    // --- A-M22-9: 1-pixel vertical shift. Y=0 sprite invisible on output
+    // --- 1-pixel vertical shift: a Y=0 sprite is invisible on output
     //     line 0, first visible on output line 1. ---
     {
         V9958Vdp vdp;
@@ -108,7 +108,7 @@ int main() {
         }
     }
 
-    // --- A-M22-10: EC (bit7) applies x -= 32 at check time. ---
+    // --- EC (bit7) applies x -= 32 at check time. ---
     {
         V9958Vdp vdp;
         set_register(vdp, 1, 0x40);  // R#1 bit6: display enable (spritesEnabledFast() gate)
@@ -146,7 +146,7 @@ int main() {
         expect(vdp.sprite_engine().visible_sprites(1).size() == 4, "Mode1_FifthSprite_OnlyFourVisible");
     }
 
-    // --- A-M22-14: S#0 read clears ONLY bits 7/6/5, leaving the stale
+    // --- S#0 read clears ONLY bits 7/6/5, leaving the stale
     //     sprite-number field (bits 4-0) intact until the next recompute. ---
     {
         V9958Vdp vdp;

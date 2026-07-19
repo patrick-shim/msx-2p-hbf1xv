@@ -12,18 +12,17 @@
 #  rights holders and are NOT licensed by this notice.
 # ============================================================================
 
-"""M19-S6 openMSX A/B cartridge-loading probe assembler (backlog B7).
+"""openMSX A/B cartridge-loading probe assembler.
 
 Produces TWO deterministic artifacts:
 
-  1. `tests/parity/m19_cartridge.rom` -- a SYNTHETIC `Generic8kB` cartridge
-     image (planner A-M19-10 track 1 precedent: synthetic, hand-authored
-     fixtures for every byte-exact protocol claim, never a real, provenance-
-     uncertain file). 4 banks of 8 KB; bank N's every byte equals N, a
-     clearly distinguishable marker per bank
-     (references/openmsx-21.0/src/memory/RomGeneric8kB.cc:7-36).
+  1. `tests/parity/cartridge.rom` -- a SYNTHETIC `Generic8kB` cartridge
+     image (synthetic, hand-authored fixtures for every byte-exact protocol
+     claim, never a real, provenance-uncertain file). 4 banks of 8 KB; bank
+     N's every byte equals N, a clearly distinguishable marker per bank
+     (openMSX 21.0: src/memory/RomGeneric8kB.cc:7-36).
 
-  2. `tests/parity/m19_cartridge_probe.bin` -- a real Z80 driver program that:
+  2. `tests/parity/cartridge_probe.bin` -- a real Z80 driver program that:
        - `OUT (#A8),A` with A=0xF7, repointing CPU page 1 (0x4000-0x7FFF) at
          primary slot 1 while pages 0/2/3 stay at primary slot 3 RAM (this
          project's OWN established SlotBus bit layout,
@@ -41,17 +40,16 @@ Produces TWO deterministic artifacts:
      the EXISTING per-instruction CpuTraceSink trace (AF register field)
      captures the read-back byte VALUES directly -- no separate memory-dump
      subject is needed; an empty PC/register/flags diff across the whole
-     trace (tools/analyze/trace-diff.py, exactly the M13/M16/M17/M18 mechanism) is
-     simultaneously the architectural parity proof AND the content-bearing
-     proof (planner §2.7: "both sides load the identical authored file, so
-     expected bytes are fully known in advance").
+     trace (tools/analyze/trace-diff.py, the same mechanism as the other
+     parity probes) is simultaneously the architectural parity proof AND the
+     content-bearing proof (both sides load the identical authored file, so
+     expected bytes are fully known in advance).
 
 Run via this emulator's `--parity-trace <probe.bin> C000 <max_steps> <out>
 --cart1 <cartridge.rom> --cart1-type 8kB` and, on the openMSX side, via
 tools/openmsx/cartridge-parity.ps1 (which mounts the SAME cartridge file
-via `-carta`, empirically confirmed to land in this machine's primary slot 1 --
-see docs/m19-parity-trace-diff.md for the live WSL Tcl slot-lettering probe
-this finding is grounded on, R-M19-6).
+via `-carta`, empirically confirmed -- via a live openMSX Tcl slot-lettering
+probe -- to land in this machine's primary slot 1).
 
 Usage:
   python tools/gen/cartridge-probe.py
@@ -65,7 +63,7 @@ NUM_BANKS = 4
 
 
 def build_cartridge_image():
-    """4 x 8 KB banks; bank N's every byte == N (A-M19-10 track 1 marker)."""
+    """4 x 8 KB banks; bank N's every byte == N (per-bank marker)."""
     image = bytearray()
     for bank in range(NUM_BANKS):
         image.extend(bytes([bank & 0xFF]) * BANK_SIZE)
@@ -90,9 +88,9 @@ def build_driver_program():
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--cart-output", default="tests/parity/m19_cartridge.rom",
+    parser.add_argument("--cart-output", default="tests/parity/cartridge.rom",
                         help="synthetic cartridge image output path")
-    parser.add_argument("--probe-output", default="tests/parity/m19_cartridge_probe.bin",
+    parser.add_argument("--probe-output", default="tests/parity/cartridge_probe.bin",
                         help="Z80 driver program output path")
     parser.add_argument("--self-check", action="store_true",
                         help="verify determinism (two assemblies byte-identical) and exit")

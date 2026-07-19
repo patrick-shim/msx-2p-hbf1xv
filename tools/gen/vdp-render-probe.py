@@ -18,19 +18,19 @@ Produces four small, flat-RAM Z80 programs under `tests/parity/`, each
 exercising ONE of the M21 A/B subjects named in docs/m21-planner-package.md
 §2.7:
 
-  m21_vdp_render_palette_probe.bin  -- 16-color palette expansion sweep
+  vdp_render_palette_probe.bin  -- 16-color palette expansion sweep
                                         (writes palette entries 0-7 to
                                         r=g=b=index via #9A, covering all 8
                                         A-M21-3 boundary values).
-  m21_vdp_render_planar_probe.bin   -- GRAPHIC6 (planar) mode + a CPU-port
+  vdp_render_planar_probe.bin   -- GRAPHIC6 (planar) mode + a CPU-port
                                         write at logical address 0/1 -- the
                                         D7 CPU-port planar-transform subject
                                         (references/openmsx-21.0/src/video/
                                         VDP.cc:849-857).
-  m21_vdp_render_graphic7_probe.bin -- GRAPHIC7 mode + the GGGRRRBB
+  vdp_render_graphic7_probe.bin -- GRAPHIC7 mode + the GGGRRRBB
                                         byte-order boundary case
                                         (A-M21-4: green in the TOP 3 bits).
-  m21_vdp_render_yjk_probe.bin      -- SCREEN12 (YJK) mode + a 4-pixel group
+  vdp_render_yjk_probe.bin      -- SCREEN12 (YJK) mode + a 4-pixel group
                                         chosen to hit the negative,
                                         non-multiple-of-4 pre-clamp B-channel
                                         numerator (A-M21-5's rounding risk).

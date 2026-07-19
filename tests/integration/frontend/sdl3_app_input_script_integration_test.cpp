@@ -30,7 +30,7 @@
 // executables to the same final state" claim, the SDL3-configuration half).
 //
 // Runs the SAME documented input-script text (T=15/30/50 KEY=A/SPACE
-// DOWN/UP) tests/integration/machine/hbf1xv_m27_input_script_integration_test.cpp
+// DOWN/UP) tests/integration/machine/hbf1xv_input_script_integration_test.cpp
 // (the headless configuration's own test) drives, through
 // Sdl3App::run_one_frame() (NEVER run_interactive(), A-M26-8) instead of a
 // raw step_cpu_instruction() loop, asserting the SAME documented,

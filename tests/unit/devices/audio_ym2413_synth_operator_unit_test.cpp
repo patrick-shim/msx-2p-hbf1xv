@@ -11,16 +11,15 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Ym2413SynthOperator_Unit (M31-S2, backlog E1,
-// docs/m31-planner-package.md §3-S2)
+// Suite: Devices_Ym2413SynthOperator_Unit
 //
-// Oracles (license-safe, acceptance criterion 1):
+// Oracles (license-safe -- none transcribed from another emulator's output):
 //   - PITCH: f = F-Num * 2^BLOCK * MUL_eff * 49716 / 2^19 (fact-sheet §8;
 //     the period of a generated carrier-only tone is measured in native
-//     samples and compared against 2^19 / dP). D-M31-1 note: fMSX
+//     samples and compared against 2^19 / dP). Note: fMSX
 //     (YM2413.c:193-195) uses a 50000 Hz rounding of the 49716 Hz native
-//     rate -- arbitrated to the fact-sheet/openMSX 3.579545 MHz / 72 value
-//     (planner §2.8); fMSX independently corroborates the /2^19 scaling.
+//     rate -- arbitrated to the fact-sheet/openMSX 3.579545 MHz / 72 value;
+//     fMSX independently corroborates the /2^19 scaling.
 //   - VOLUME: the fact-sheet §7 andete-measured per-volume peak series
 //     {255,180,127,90,63,45,31,22,15,11,7,5,3,2,1,1} -- an INDEPENDENT
 //     hardware measurement used as a test oracle for the 3 dB/step law.

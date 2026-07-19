@@ -79,7 +79,7 @@ int main() {
     }
 
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "hbf1xv_m56_cart_insert";
+        std::filesystem::temp_directory_path() / "hbf1xv_cart_insert";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     const std::filesystem::path temp_sram = dir / "fmpac_test.sram";

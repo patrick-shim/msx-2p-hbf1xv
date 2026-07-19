@@ -17,7 +17,7 @@
 
 #include "frontend/menu_model.h"
 
-// M55 (DEC-0083): the ImGui VIEW/CONTROLLER for the in-window menu bar.
+// The ImGui VIEW/CONTROLLER for the in-window menu bar. (DEC-0083)
 //
 // Owns the Dear ImGui context lifecycle (create in ctor, shut down in dtor),
 // translates the SDL-free MenuModel (menu_model.h) into
@@ -42,7 +42,7 @@ public:
     Sdl3Menu(SDL_Window* window, SDL_Renderer* renderer);
     // ImGui_ImplSDLRenderer3_Shutdown -> ImGui_ImplSDL3_Shutdown -> DestroyContext.
     // Sdl3App::shutdown() resets the owning unique_ptr BEFORE SDL_DestroyRenderer
-    // (R7 ordering).
+    // (the backends must shut down while the renderer is still alive).
     ~Sdl3Menu();
 
     Sdl3Menu(const Sdl3Menu&) = delete;
@@ -60,17 +60,19 @@ public:
     [[nodiscard]] bool wants_keyboard() const;
     [[nodiscard]] bool wants_mouse() const;
 
-    // M57 (DEC-0085, §4.1): the live main-menu-bar height in pixels
+    // The live main-menu-bar height in pixels
     // (ImGui::GetFrameHeight() = font size + 2*FramePadding.y, DPI/font-scaled).
     // Sdl3App reserves this many pixels at the window top so the emulated picture
-    // is inset BELOW the strip (DEF-2). The constructor primes one empty ImGui
-    // frame so this is valid immediately at init() (before the first render).
+    // is inset BELOW the strip (never hidden under it). The constructor primes one
+    // empty ImGui frame so this is valid immediately at init() (before the first
+    // render). (DEC-0085)
     [[nodiscard]] int bar_height() const;
 
-    // DEC-0096: the live bottom STATUS-BAR height in pixels (same GetFrameHeight()
+    // The live bottom STATUS-BAR height in pixels (same GetFrameHeight()
     // basis as bar_height()). Sdl3App reserves this many pixels at the window
     // BOTTOM so the emulated picture insets ABOVE the strip (mirror of the top
     // bar). Valid immediately at init() (the ctor primes one empty frame).
+    // (DEC-0096)
     [[nodiscard]] int status_bar_height() const;
 
     // Per-frame, called between Sdl3VideoPresenter::blit_frame() and present():
@@ -84,16 +86,17 @@ public:
     void begin_frame();
     void build(Sdl3App& app);
     void render(SDL_Renderer* renderer);
-    // M63 diagnostic: print io.DisplaySize + io.DisplayFramebufferScale (what
+    // Diagnostic: print io.DisplaySize + io.DisplayFramebufferScale (what
     // ImGui uses to lay out/draw the bar) to stderr; interactive-only.
     void log_io_geometry(const char* tag) const;
 
 private:
     void render_menu_bar(Sdl3App& app);
     void render_help_windows();
-    // DEC-0096: the bottom system status bar (FDD activity LED + disk/slot/machine
+    // The bottom system status bar (FDD activity LED + disk/slot/machine
     // status), drawn as a fixed ImGui window pinned to the reserved bottom strip.
     // Interactive-only by construction (Sdl3Menu exists only when !hidden_window).
+    // (DEC-0096)
     void render_status_bar(Sdl3App& app);
     void dispatch(MenuAction action, int param, Sdl3App& app);
 

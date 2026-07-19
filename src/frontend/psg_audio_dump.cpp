@@ -29,18 +29,17 @@ namespace {
 // X-pattern precedent (wd2793.h/disk_drive.h/rp5c01.h/rensha_turbo.h/
 // sdl3_app.h/sdl3_audio_presenter.h all independently declare this same
 // constant): declared locally so this file stays headless-buildable with
-// zero SDL3 dependency (A-M27-7/A-M27-8) -- never pulled from an SDL3-gated
-// header.
+// zero SDL3 dependency -- never pulled from an SDL3-gated header.
 constexpr std::uint64_t kSystemClockHz = 3579545;
 
 }  // namespace
 
 std::int16_t psg_raw_sum_to_pcm16(const std::int32_t raw_sum) {
-    // A-M27-4: PsgYm2149::sample() sums two 5-bit resolved_amplitude()
-    // values (each in [0,31]) per stereo channel component, so raw_sum is in
-    // [0, 62] under normal operation (psg_ym2149.cpp, re-confirmed this
-    // cycle). Documented linear map: 0 -> -32768, 62 -> +32767. Clamped
-    // (never overflowed) for any out-of-range input.
+    // PsgYm2149::sample() sums two 5-bit resolved_amplitude() values (each
+    // in [0,31]) per stereo channel component, so raw_sum is in [0, 62]
+    // under normal operation (psg_ym2149.cpp). Documented linear map:
+    // 0 -> -32768, 62 -> +32767. Clamped (never overflowed) for any
+    // out-of-range input.
     constexpr std::int32_t kMaxRaw = 62;
     constexpr std::int32_t kPcmRange = 65535;
     constexpr std::int32_t kPcmOffset = 32768;

@@ -74,11 +74,11 @@ void ClickDac::advance_cycles(const std::uint64_t window_cycles) {
 std::int32_t ClickDac::take_integrated_sample(const std::uint64_t window_cycles) {
     if (window_cycles == 0) {
         // Idle-pump guard: no division, and DO NOT perturb the DC estimate
-        // (the M34 take-API zero-window contract). integral is already 0.
+        // (the shared take-API zero-window contract). integral is already 0.
         return 0;
     }
     // Box average of the level over the window -> [0, kUnit]. round-half-away-
-    // from-zero via the shared M34 helper (integral is non-negative).
+    // from-zero via the shared dwell_rounding.h helper (integral is non-negative).
     const std::int64_t avg =
         round_div_half_away_from_zero(level_dwell_integral_, static_cast<std::int64_t>(window_cycles));
     level_dwell_integral_ = 0;

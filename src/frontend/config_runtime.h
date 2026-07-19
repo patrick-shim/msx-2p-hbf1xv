@@ -24,15 +24,14 @@
 namespace sony_msx::frontend {
 
 // ---------------------------------------------------------------------------
-// M50-S2 (DEC-0077, docs/m50-planner-package.md §4.1/§4.6): the CLI-default
-// RESOLUTION seam that wires the externalized strict-XML config into the run
-// paths with precedence CLI > XML > built-in default, plus the determinism
-// auto-load gate.
+// The CLI-default RESOLUTION seam that wires the externalized strict-XML
+// config into the run paths with precedence CLI > XML > built-in default,
+// plus the determinism auto-load gate. (DEC-0077)
 //
 // This unit is SDL-free (it deals only in the SDL-free enums TextureFilter /
 // PhosphorMode; sdl3_main.cpp maps the resolved values onto the SDL-typed
 // Sdl3AppConfig), so it lives in sony_msx_core and is headlessly unit-testable.
-// It touches NO built-in default VALUE (the M46 anti-drift ctor/struct defaults
+// It touches NO built-in default VALUE (the anti-drift ctor/struct defaults
 // are untouched); it only chooses, per knob, which of {CLI, XML, built-in} is
 // effective.
 // ---------------------------------------------------------------------------
@@ -50,13 +49,13 @@ struct ResolvedRuntimeConfig {
 
     // --- Presentation (SDL3-only) knobs --------------------------------------
     bool border_enabled = false;
-    // M52 (DEC-0079): resolved via CLI > XML > built-in default; the built-in
-    // EmulatorConfig::disk_writable default is now TRUE, so a no-config SDL3 launch
+    // Resolved via CLI > XML > built-in default; the built-in
+    // EmulatorConfig::disk_writable default is TRUE, so a no-config SDL3 launch
     // resolves ON (headless stays OFF -- it never loads config). `--no-disk-writable`
-    // forces OFF.
+    // forces OFF. (DEC-0079)
     bool disk_writable = false;
-    // M52 (DEC-0079): resolved master-volume percent [0,100]; default 100 (unity,
-    // byte-identical to pre-M52). SDL3 presentation only.
+    // Resolved master-volume percent [0,100]; default 100 (unity -- the audio
+    // stays byte-identical). SDL3 presentation only. (DEC-0079)
     int master_volume = 100;
     int speed_level = 0;                          // 0..7 (0 == full speed)
     int scale = 3;                                // window scale (1..8); w/h = 320N x 240N
@@ -67,7 +66,7 @@ struct ResolvedRuntimeConfig {
     bool capture_enabled = false;
 };
 
-// The determinism rule (§4.6), as a named + testable predicate: whether this
+// The determinism rule, as a named + testable predicate: whether this
 // launch may consult a config file at all.
 //   * `interactive_sdl3` = a genuinely interactive SDL3 launch (the SDL3 exe
 //     run WITHOUT --hidden-window). Only THIS may AUTO-load.
@@ -79,8 +78,8 @@ struct ResolvedRuntimeConfig {
 // --hidden-window, the whole suite stays on the no-config path -> byte-identical.
 [[nodiscard]] bool config_should_load(bool interactive_sdl3, bool explicit_config_path);
 
-// Load the effective EmulatorConfig honoring the determinism search order
-// (§4.6). Precondition (caller): only invoke when config_should_load() is true.
+// Load the effective EmulatorConfig honoring the determinism search order.
+// Precondition (caller): only invoke when config_should_load() is true.
 //   * `explicit_path` set (--config): FORCE-load from that path; an unreadable /
 //     missing path emits ONE WARNING naming the path and returns built-in
 //     defaults (never throws).
@@ -93,19 +92,19 @@ struct ResolvedRuntimeConfig {
     const std::optional<std::string>& explicit_path,
     const std::vector<std::string>& auto_search_paths, std::vector<std::string>& warnings);
 
-// Apply precedence CLI > XML > built-in default across every S2-scope knob.
-// `cfg` is the loaded config (or all-built-in-defaults when nothing was loaded,
-// which makes the result byte-identical to pre-M50). `parsed` carries the CLI
+// Apply precedence CLI > XML > built-in default across every session +
+// presentation knob. `cfg` is the loaded config (or all-built-in-defaults when
+// nothing was loaded, which makes the result byte-identical to the built-in
+// defaults). `parsed` carries the CLI
 // intents + explicit-tracking. Pure, SDL-free, headlessly unit-testable.
 [[nodiscard]] ResolvedRuntimeConfig resolve_runtime_config(const machine::EmulatorConfig& cfg,
                                                            const ParsedSdl3Cli& parsed);
 
 // ---------------------------------------------------------------------------
-// M50-S3 (DEC-0077, docs/m50-planner-package.md §6-S3/§4.4): the MACHINE-sizing
-// + asset-path resolution seam. Same precedence discipline as
-// resolve_runtime_config (CLI > XML > built-in default), for the fields routed
-// into machine construction / asset loading rather than the SDL3 presentation
-// layer. Pure, SDL-free, headlessly unit-testable.
+// The MACHINE-sizing + asset-path resolution seam. Same precedence discipline
+// as resolve_runtime_config (CLI > XML > built-in default), for the fields
+// routed into machine construction / asset loading rather than the SDL3
+// presentation layer. Pure, SDL-free, headlessly unit-testable. (DEC-0077)
 // ---------------------------------------------------------------------------
 struct ResolvedMachineConfig {
     // BIOS/ROM directory + the 7 role-keyed BIOS filenames (loaded under bios_dir
@@ -117,7 +116,7 @@ struct ResolvedMachineConfig {
     // the bay and the auto-load skips; here it is XML > built-in default).
     std::string fmpac_autoload_rom = "roms/fmpac.rom";
 
-    // M64: the in-window file-dialog default directories (no CLI flag -> XML >
+    // The in-window file-dialog default directories (no CLI flag -> XML >
     // built-in "roms"/"disks"). SDL3 dialog UX only -- sdl3_main.cpp copies them
     // onto Sdl3AppConfig; they never touch emulation or determinism.
     std::string cartridge_dir = "roms";
@@ -128,11 +127,12 @@ struct ResolvedMachineConfig {
     // auto-derive beside the cart; softwaredb = kDefaultSoftwareDbPath with a
     // quiet default-unavailable message). A value is surfaced ONLY when the CLI
     // set it OR the XML set it to a NON-default value -- so with no config loaded
-    // both stay std::nullopt and the resolved result is byte-identical to pre-M50.
+    // both stay std::nullopt and the resolved result is byte-identical to the
+    // built-in behavior.
     std::optional<std::string> fmpac_sram;
     std::optional<std::string> softwaredb;
 
-    // VRAM KB: validated-to-128 by the parser (strict HB-F1XV spec, §4.4). There
+    // VRAM KB: validated-to-128 by the parser (strict HB-F1XV spec). There
     // is NO runtime VRAM-sizing seam (VdpVram::kVramBytes is constexpr), so this
     // is ALWAYS 128 after resolution; it is carried for the banner/tests and is
     // NEVER used to resize the VDP (a value != 128 already warned + clamped in the
@@ -142,8 +142,8 @@ struct ResolvedMachineConfig {
 
 // Resolve the machine-sizing/path fields with precedence CLI > XML > built-in
 // default. `cfg` is the loaded config (or all-built-in-defaults when nothing was
-// loaded -> the result is byte-identical to pre-M50). `parsed` carries the CLI
-// override intents (--bios-dir, --fmpac-sram, --softwaredb).
+// loaded -> the result is byte-identical to the built-in defaults). `parsed`
+// carries the CLI override intents (--bios-dir, --fmpac-sram, --softwaredb).
 [[nodiscard]] ResolvedMachineConfig resolve_machine_config(const machine::EmulatorConfig& cfg,
                                                            const ParsedSdl3Cli& parsed);
 

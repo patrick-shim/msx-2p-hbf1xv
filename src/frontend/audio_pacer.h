@@ -39,20 +39,20 @@ struct AudioPacingDecision {
 
 // Exact-accounting, backpressure-capped audio pacing policy (SDL-free, so
 // the whole decision procedure is headlessly ctest-provable -- mirrors the
-// PsgAudioPump SDL3-independence precedent, M26-S5).
+// PsgAudioPump SDL3-independence precedent).
 //
-// Root cause this class fixes (docs/audio-latency-investigation.md): the M26
-// frontend pushed floor(59736/81) = 737 samples per frame on a wall-clock
-// frame cadence whose 16.688 ms period was TRUNCATED to 16 ms, and
-// SDL_PutAudioStreamData queues unboundedly -- measured +1,307 samples/s of
-// unbounded host-queue growth (+29.7 ms of audio latency per second of play).
+// Root cause this class fixes: the earlier frontend pushed
+// floor(59736/81) = 737 samples per frame on a wall-clock frame cadence whose
+// 16.688 ms period was TRUNCATED to 16 ms, and SDL_PutAudioStreamData queues
+// unboundedly -- measured +1,307 samples/s of unbounded host-queue growth
+// (+29.7 ms of audio latency per second of play).
 //
 // Policy (frontend presentation policy, NOT chip behavior; bounded-queue +
 // drop-excess shape grounded in openMSX's own SDL sound driver, which sizes
 // its ring buffer at 3 fragments of the default 1024 samples ~= 69.7 ms @
 // 44.1 kHz and drops excess samples when full --
-// references/openmsx-21.0/src/sound/SDLSoundDriver.cc:43,152-155 and
-// references/openmsx-21.0/src/sound/Mixer.cc:21-23):
+// openMSX 21.0: src/sound/SDLSoundDriver.cc:43,152-155 and
+// src/sound/Mixer.cc:21-23):
 //
 //   1. EXACT ACCOUNTING -- cumulative samples due are derived from cumulative
 //      emulated cycles: total_due = floor(elapsed_cycles * rate / clock),
@@ -103,15 +103,15 @@ public:
     // repeated calls with the same cycle count pump nothing.
     [[nodiscard]] AudioPacingDecision plan(std::uint64_t total_elapsed_cycles, std::uint64_t queued_samples);
 
-    // M57 (DEC-0085): rewind the CUMULATIVE production accounting to a fresh
-    // baseline (samples_produced_/dropped_/silence back to 0), keeping the fixed
+    // Rewind the CUMULATIVE production accounting to a fresh baseline
+    // (samples_produced_/dropped_/silence back to 0), keeping the fixed
     // rate + water-mark config. plan()'s exact accounting is keyed to the machine's
     // CUMULATIVE elapsed cycles via a monotonic guard (total_due > samples_produced_
     // pumps nothing). When a runtime power-cycle (Sdl3App::reset_machine) restarts
     // elapsed_cycles at 0, a surviving (huge) samples_produced_ makes that guard
     // false for as long as it takes the machine to re-accumulate past it -> minutes
-    // of permanent post-reset silence (the M57 DEF-1 root cause). The presenter
-    // calls this so post-reset elapsed (0..) and the pacer baseline (0) realign.
+    // of permanent post-reset silence. The presenter calls this so post-reset
+    // elapsed (0..) and the pacer baseline (0) realign. (DEC-0085)
     void reset() {
         samples_produced_ = 0;
         samples_dropped_ = 0;

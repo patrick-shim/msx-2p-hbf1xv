@@ -25,9 +25,9 @@
 //
 // Links BOTH sony_msx_core AND msx_diskutil (a test is allowed to link both;
 // the shipped msx-disk binary never links the core). Mount pattern:
-// hbf1xv_m28_c5_disk_boot_investigation_system_test.cpp:104-111; CPU probe:
-// hbf1xv_m16_fdc_integration_test.cpp:94-167; temp files:
-// hbf1xv_m36_disk_save_persist_integration_test.cpp:46-65.
+// disk_boot_investigation_system_test.cpp:104-111; CPU probe:
+// hbf1xv_fdc_integration_test.cpp:94-167; temp files:
+// hbf1xv_disk_save_persist_integration_test.cpp:46-65.
 
 #include <array>
 #include <cstdint>

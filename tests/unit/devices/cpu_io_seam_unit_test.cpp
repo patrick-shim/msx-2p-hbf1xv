@@ -23,7 +23,7 @@
 
 // Suite: Devices_CpuIoSeam_Unit
 //
-// M11-S1: verifies the CPU I/O seam (IN/OUT route through core::Bus::io_read/
+// Verifies the CPU I/O seam (IN/OUT route through core::Bus::io_read/
 // io_write with the correct port formation) and the per-step M1-cycle counter
 // that the S1985 layer maps to the MSX +1-per-M1 wait. Datasheet T-states are
 // asserted unchanged.
@@ -168,7 +168,7 @@ int main() {
         }
     }
 
-    // --- M1-cycle count oracle (drives the §8 wait): prefixes each add a cycle. ---
+    // --- M1-cycle count oracle (drives the S1985 +1-per-M1 wait): prefixes each add a cycle. ---
     if (!expect_true(m1_of({0x00}) == 1, "M1Count_Nop_IsOne")) {  // NOP
         return 1;
     }

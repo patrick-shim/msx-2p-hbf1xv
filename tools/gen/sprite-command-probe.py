@@ -19,31 +19,31 @@ Produces small, flat-RAM Z80 programs under `tests/parity/`, each exercising
 ONE representative M22 A/B subject named in docs/m22-planner-package.md
 section 2.6:
 
-  m22_sprite_mode1_collision_probe.bin -- two fully-overlapping Sprite Mode 1
+  sprite_mode1_collision_probe.bin -- two fully-overlapping Sprite Mode 1
                                            sprites at (0,0) -> a genuine
                                            collision, read back via S#0/S#3-S#6.
-  m22_sprite_mode1_fifth_probe.bin     -- five overlapping Sprite Mode 1
+  sprite_mode1_fifth_probe.bin     -- five overlapping Sprite Mode 1
                                            sprites on one line -> the 5th-
                                            sprite flag + number (S#0 bits 6/4-0).
-  m22_sprite_mode2_ninth_ic_probe.bin  -- nine overlapping Sprite Mode 2
+  sprite_mode2_ninth_ic_probe.bin  -- nine overlapping Sprite Mode 2
                                            sprites (9th-sprite flag) where two
                                            of them carry IC=1 -> confirms NO
                                            collision is registered despite the
                                            overlap (A-M22-11).
-  m22_sprite_tp_color0_probe.bin       -- TP disabled (R#8 bit5 set) + two
+  sprite_tp_color0_probe.bin       -- TP disabled (R#8 bit5 set) + two
                                            overlapping color-0 sprites -> DOES
                                            collide (A-M22-12's canSpriteColor0
                                            Collide interaction).
-  m22_cmd_atomic_probe.bin             -- one program, four sequential atomic
+  cmd_atomic_probe.bin             -- one program, four sequential atomic
                                            commands: HMMV (fill), LMMM (XOR
                                            copy), LINE (Bresenham draw), SRCH
                                            (border-color search, sets BD).
-  m22_cmd_graphic6_planar_probe.bin    -- an HMMV issued in GRAPHIC6 (planar)
+  cmd_graphic6_planar_probe.bin    -- an HMMV issued in GRAPHIC6 (planar)
                                            at a byte index whose parity places
                                            it in the SECOND physical bank
                                            (0x10000+) -- cross-validates D7's
                                            closure.
-  m22_cmd_lmmc_transfer_probe.bin      -- an LMMC transfer of 4 pixels, each
+  cmd_lmmc_transfer_probe.bin      -- an LMMC transfer of 4 pixels, each
                                            fed via a SEPARATE OUT (#99) write
                                            to R#44 -- the event-driven
                                            TR/CE handshake (R-M22-9).

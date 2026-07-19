@@ -103,8 +103,8 @@ void PsgYm2149::Envelope::advance(int generator_steps) {
     // generator step advances `count` by TWO (count += duration*2, AY8910.cc:450)
     // -- NOT one. Paired with period = 2*value (set_period), the net rate is one
     // envelope step per `value` generator steps == the datasheet
-    // f_E = f_clk/(256*EP). The pre-fix `++count` (missing the *2) HALVED f_E
-    // (DEF-M41-PSGENV). EP=0 edge case (period==1): count+=2, steps = 2/1 = 2,
+    // f_E = f_clk/(256*EP). An earlier version used `++count` (missing the *2),
+    // which halved f_E. EP=0 edge case (period==1): count+=2, steps = 2/1 = 2,
     // do_steps(2) -- matching openMSX doNextEvent(period==1 ? 2 : 1) (AY8910.cc:461).
     if (holding) {
         return;
@@ -179,7 +179,7 @@ void PsgYm2149::reset() {
     address_ = 0;
     cycle_residual_ = 0;
     level_dwell_integral_.fill(0);
-    // M39-A Fix B: the sync cursor returns to 0 alongside the scheduler's own
+    // The sync cursor returns to 0 alongside the scheduler's own
     // cold-boot reset to cycle 0, so sync-before-change cycle stamps stay
     // aligned across a cold boot (audio_sync_enabled_ is a wiring config the
     // frontend owns -- preserved, like the ClickDac capture flag). Set BEFORE
@@ -197,10 +197,10 @@ void PsgYm2149::reset() {
 }
 
 void PsgYm2149::sync_to_cycle(const std::uint64_t now) {
-    // M39-A Fix B: advance the box-average integral + generator to absolute
+    // Advance the box-average integral + generator to absolute
     // machine cycle `now` using the CURRENT register state. Monotonic + inert
     // when disabled -- so the batch advance_cycles + take oracle path is
-    // byte-for-byte unchanged. Reuses the M34 advance_cycles integral.
+    // byte-for-byte unchanged. Reuses the advance_cycles box-average integral.
     if (!audio_sync_enabled_ || now <= last_sync_cycle_) {
         return;
     }
@@ -213,8 +213,8 @@ void PsgYm2149::attach_port_source(PsgPortSource* source) {
 }
 
 void PsgYm2149::write_address(const std::uint8_t reg) {
-    // Mirrored registers on the S1985-integrated PSG: mask 0x0F (A-M15-3;
-    // MSXPSG.cc mirrored_registers default true).
+    // Mirrored registers on the S1985-integrated PSG: mask 0x0F
+    // (MSXPSG.cc mirrored_registers default true).
     address_ = reg & 0x0F;
 }
 
@@ -258,7 +258,7 @@ void PsgYm2149::io_write(const core::BusAddress port, const core::BusData value)
 void PsgYm2149::write_register(const std::uint8_t reg, std::uint8_t value) {
     const std::uint8_t index = reg & 0x0F;
 
-    // M39-A Fix B (sync-before-change): BEFORE this write mutates any register/
+    // Sync-before-change: BEFORE this write mutates any register/
     // generator/volume state, advance the box-average integral up to the write
     // cycle using the CURRENT (pre-write) state -- so each sub-frame volume/tone
     // is integrated for its true duration and the software-PCM voice survives
@@ -311,7 +311,7 @@ void PsgYm2149::write_register(const std::uint8_t reg, std::uint8_t value) {
         break;
     }
 
-    // M39-A Step 1: passive register-write diagnostic (non-perturbing -- the
+    // Passive register-write diagnostic (non-perturbing -- the
     // register store + generator state above are already committed; the
     // observer only inspects reg/value). Reports the software-PCM write rate.
     if (write_observer_ != nullptr) {
@@ -359,7 +359,7 @@ std::uint8_t PsgYm2149::channel_amplitude(const int channel) const {
 }
 
 PsgYm2149::GeneratorSnapshot PsgYm2149::generator_snapshot() const {
-    // M36 Phase 3: a flat, restore-ready copy of the raw generator state. Pure
+    // Debug snapshot: a flat, restore-ready copy of the raw generator state. Pure
     // read (no advance/mutation) -- the snapshot never perturbs emulation.
     GeneratorSnapshot s;
     for (std::size_t i = 0; i < 3; ++i) {
@@ -381,14 +381,14 @@ PsgYm2149::GeneratorSnapshot PsgYm2149::generator_snapshot() const {
 }
 
 void PsgYm2149::advance_cycles(const std::uint64_t delta_cpu_cycles) {
-    // M34 dwell walk (docs/m34-planner-package.md §2.3.1): each channel's
+    // Dwell walk: each channel's
     // level is piecewise-constant between generator steps, so the exact box
     // integral is a walk over the true step boundaries -- head partial step
     // from cycle_residual_, whole 16-cycle steps, tail partial step.
-    // Generator-state evolution is IDENTICAL to the pre-M34 bulk advance
+    // Generator-state evolution is IDENTICAL to the earlier bulk advance
     // (same residual arithmetic, same per-step Tone/Noise/Envelope
     // semantics); only the Σ level×dwell bookkeeping is new. Boundary
-    // convention (§2.3.3): a step completing at cycle t changes the level
+    // convention: a step completing at cycle t changes the level
     // effective AFTER cycle t, so the completing cycle's dwell is
     // accumulated at the PRE-step level.
     std::uint64_t remaining = delta_cpu_cycles;
@@ -420,12 +420,12 @@ PsgYm2149::StereoSample PsgYm2149::take_integrated_sample(const std::uint64_t wi
     const std::uint64_t int_c = level_dwell_integral_[2];
     level_dwell_integral_.fill(0);
     if (window_cycles == 0) {
-        // §2.3.5 zero-window guard (the M26 pump idle case): silence, no
+        // Zero-window guard (the audio pump's idle case): silence, no
         // division.
         return {0, 0};
     }
     // Stereo law unchanged (fact-sheet §2: A=Center, B=Left, C=Right);
-    // rounding per the shared §2.3.4 helper.
+    // rounding per the shared dwell_rounding.h helper.
     const auto window = static_cast<std::int64_t>(window_cycles);
     const auto left = static_cast<std::int32_t>(
         round_div_half_away_from_zero(static_cast<std::int64_t>(int_a + int_b), window));

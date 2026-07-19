@@ -20,8 +20,8 @@
 
 namespace sony_msx::frontend {
 
-// Same amplitude-scale policy declared twice to keep the mixer SDL3-independent
-// (M29-S5); this assert guards against the two drifting apart.
+// Same amplitude-scale policy declared twice to keep the mixer SDL3-independent;
+// this assert guards against the two drifting apart.
 static_assert(Sdl3AudioPresenter::kAmplitudeScale == MachineAudioMixer::kPsgAmplitudeScale,
               "presenter/mixer PSG amplitude scales must match (byte-identity oracle)");
 
@@ -46,7 +46,7 @@ bool Sdl3AudioPresenter::init() {
         last_error_ = SDL_GetError();
         return false;
     }
-    // M57 (DEC-0085): start the real-sample probe at 0 so a re-init counts cleanly.
+    // Start the real-sample probe at 0 so a re-init counts cleanly (DEC-0085).
     real_sample_bytes_pushed_ = 0;
     return true;
 }
@@ -56,7 +56,7 @@ void Sdl3AudioPresenter::shutdown() {
         SDL_DestroyAudioStream(stream_);  // Also closes the bound device (SDL_audio.h:2033-2034).
         stream_ = nullptr;
     }
-    real_sample_bytes_pushed_ = 0;  // M57 (DEC-0085): clear the probe on teardown.
+    real_sample_bytes_pushed_ = 0;  // clear the probe on teardown (DEC-0085)
 }
 
 void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std::size_t sample_count) {
@@ -64,34 +64,34 @@ void Sdl3AudioPresenter::pump_and_push(devices::audio::PsgYm2149& psg, const std
         return;
     }
 
-    // Zero-SCC mix == the pre-M29 psg_raw * kAmplitudeScale arithmetic,
-    // byte-for-byte (MachineAudioMixer's hard regression oracle, M29-S5).
+    // Zero-SCC mix == the bare psg_raw * kAmplitudeScale arithmetic,
+    // byte-for-byte (MachineAudioMixer's hard regression oracle).
     std::vector<std::int16_t> pcm =
         mixer_.mix_interleaved_stereo(psg, MachineAudioMixer::SccSources{nullptr, nullptr}, sample_count);
 
-    // M52 (DEC-0079): post-mix master gain. No-op (byte-identical) at 100.
+    // Post-mix master gain. No-op (byte-identical) at 100. (DEC-0079)
     apply_master_gain(pcm, master_volume_);
 
     const auto push_bytes = static_cast<int>(pcm.size() * sizeof(std::int16_t));
     if (!SDL_PutAudioStreamData(stream_, pcm.data(), push_bytes)) {
         last_error_ = SDL_GetError();
     } else {
-        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // real samples only
     }
 }
 
 void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
                                              const std::uint64_t total_elapsed_cycles) {
-    // Pre-M29 signature preserved verbatim: zero SCC sources (byte-identical
-    // output to v1.0.29 -- the mixer's regression oracle).
+    // PSG-only signature preserved verbatim: zero SCC sources (byte-identical
+    // output -- the mixer's regression oracle).
     pump_and_push_paced(psg, MachineAudioMixer::SccSources{nullptr, nullptr}, total_elapsed_cycles);
 }
 
 void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
                                              const MachineAudioMixer::SccSources& sccs,
                                              const std::uint64_t total_elapsed_cycles) {
-    // Pre-M31 signature preserved verbatim: no FM source (byte-identical
-    // output to v1.0.31 -- the mixer's M31 hard regression oracle).
+    // FM-less signature preserved verbatim: no FM source (byte-identical
+    // output -- the mixer's FM hard regression oracle).
     pump_and_push_paced(psg, sccs, nullptr, total_elapsed_cycles);
 }
 
@@ -99,8 +99,8 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
                                              const MachineAudioMixer::SccSources& sccs,
                                              devices::audio::Ym2413Opll* const fm,
                                              const std::uint64_t total_elapsed_cycles) {
-    // Pre-M37 signature preserved verbatim: no FM-PAC source (byte-identical
-    // output to v1.0.36 -- the mixer's M37 hard regression oracle).
+    // FM-PAC-less signature preserved verbatim: no FM-PAC source (byte-identical
+    // output -- the mixer's FM-PAC hard regression oracle).
     pump_and_push_paced(psg, sccs, fm, MachineAudioMixer::FmSources{nullptr, nullptr},
                         total_elapsed_cycles);
 }
@@ -140,14 +140,15 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
 
     // Always pump the full batch: every generator (PSG, SCCs, built-in FM, FM-PAC OPLLs)
     // stays in lockstep with the machine's elapsed cycles even when backpressure trims the
-    // pushed output (M29-S5/M31-S5/M37-SliceB; DEC-0033 invariant).
+    // pushed output (the pacer lockstep invariant, DEC-0033).
     std::vector<std::int16_t> pcm = mixer_.mix_interleaved_stereo(
         psg, sccs, fm, fm_pacs, static_cast<std::size_t>(decision.samples_to_pump));
 
-    // M52 (DEC-0079): post-mix master gain on the mixed batch. No-op (byte-
+    // Post-mix master gain on the mixed batch. No-op (byte-
     // identical) at 100; the silence-prime buffer above is never scaled (0 is
     // gain-invariant). This plumbing path is not the live path (that is
     // push_produced_paced below) but honors the same gain law for parity.
+    // (DEC-0079)
     apply_master_gain(pcm, master_volume_);
 
     if (decision.samples_to_push == 0) {
@@ -155,19 +156,19 @@ void Sdl3AudioPresenter::pump_and_push_paced(devices::audio::PsgYm2149& psg,
     }
 
     // Push only the FIRST samples_to_push pairs (2 int16 values each) of the
-    // fully-pumped batch -- exactly the pre-M29 trim behaviour.
+    // fully-pumped batch -- the established trim behaviour.
     const auto push_bytes = static_cast<int>(static_cast<std::size_t>(decision.samples_to_push) * 2 *
                                              sizeof(std::int16_t));
     if (!SDL_PutAudioStreamData(stream_, pcm.data(), push_bytes)) {
         last_error_ = SDL_GetError();
     } else {
-        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // real samples only
     }
 }
 
 void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& produced,
                                              const std::uint64_t total_elapsed_cycles) {
-    // M39-A Fix B: identical pacing to pump_and_push_paced (silence-prime FIRST,
+    // Identical pacing to pump_and_push_paced (silence-prime FIRST,
     // then trim to the queue cap), but the samples were ALREADY produced sub-
     // frame-accurately by the caller (so the software-PCM voice is in `produced`)
     // -- no batch mix here, which is what would have collapsed the voice.
@@ -200,12 +201,12 @@ void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& pr
         std::min(static_cast<std::size_t>(decision.samples_to_push), available_pairs);
     const auto push_bytes = static_cast<int>(push_pairs * 2 * sizeof(std::int16_t));
 
-    // M52 (DEC-0079): post-mix master gain. At the DEFAULT 100 (unity) the
+    // Post-mix master gain. At the DEFAULT 100 (unity) the
     // ORIGINAL produced bytes are pushed unchanged (byte-identity short-circuit
-    // -- no copy, no scaling: the SDL3 PCM stream is byte-for-byte what it was
-    // pre-M52). Below 100 the pushed region is copied into a reusable member
+    // -- no copy, no scaling: the SDL3 PCM stream is byte-for-byte untouched by
+    // the gain stage). Below 100 the pushed region is copied into a reusable member
     // buffer, scaled, and pushed -- the caller's `produced` buffer (reused across
-    // frames) is NEVER mutated.
+    // frames) is NEVER mutated. (DEC-0079)
     const std::int16_t* data_to_push = produced.data();
     if (master_volume_ != 100) {
         scaled_buffer_.assign(produced.begin(),
@@ -216,7 +217,7 @@ void Sdl3AudioPresenter::push_produced_paced(const std::vector<std::int16_t>& pr
     if (!SDL_PutAudioStreamData(stream_, data_to_push, push_bytes)) {
         last_error_ = SDL_GetError();
     } else {
-        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // M57: real samples only.
+        real_sample_bytes_pushed_ += static_cast<std::uint64_t>(push_bytes);  // real samples only
     }
 }
 

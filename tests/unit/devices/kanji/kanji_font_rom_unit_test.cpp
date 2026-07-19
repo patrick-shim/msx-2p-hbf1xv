@@ -23,7 +23,7 @@
 // in references/openmsx-21.0/src/MSXKanji.cc:32-88 (A-M18-3). Uses a
 // synthetic, byte-distinguishable 256 KB image -- no bios/ file dependency
 // (the real bios/f1xvkfn.rom content check is a machine-level concern,
-// tests/integration/machine/hbf1xv_m18_peripheral_io_integration_test.cpp).
+// tests/integration/machine/hbf1xv_peripheral_io_integration_test.cpp).
 
 namespace {
 

@@ -11,17 +11,17 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_SonyFdc_Unit  (M16-S4)
+// Suite: Devices_Fdc_SonyFdc_Unit
 //
 // Sony connection-style memory decode: SonyFdc wraps the DISK-ROM RomDevice and
 // decodes 0x7FF8-0x7FFF per the AUTHORITATIVE openMSX PhilipsFDC.cc table (NOT
-// the fact-sheet's inferred convention - planner §3.2 / R-M16-1). Verifies each
+// the fact-sheet's inferred convention). Verifies each
 // bit position explicitly, including the two corrections vs the fact-sheet's
 // guess: DSKCHG lives at 0x7FFD bit2 (not 0x7FFF), and 0x7FFF bit6/bit7 are
 // ACTIVE-LOW INTRQ/DTRQ (not active-high).
 //
 // Grounding (read only, never copied - GPL isolation):
-// references/openmsx-21.0/src/fdc/PhilipsFDC.cc:24-172 (readMem/peekMem/writeMem,
+// openMSX 21.0: src/fdc/PhilipsFDC.cc:24-172 (readMem/peekMem/writeMem,
 // reset :17-22).
 
 #include <cstdint>
@@ -169,16 +169,15 @@ int main() {
                "Read0x7FFD_Bit2_RestoresWhenAcknowledged");
     }
 
-    // --- M36 Bug B: DSKCHG at 0x7FFD is a READ-AND-CLEAR one-shot. Real hardware +
+    // --- DSKCHG at 0x7FFD is a READ-AND-CLEAR one-shot. Real hardware +
     //     openMSX reset the disk-changed line on read: DiskChanger::diskChanged()
-    //     returns the flag then clears it (references/openmsx-21.0/src/fdc/
-    //     DiskChanger.cc:95-100), reached via the MUTATING readMem path
+    //     returns the flag then clears it (openMSX 21.0:
+    //     src/fdc/DiskChanger.cc:95-100), reached via the MUTATING readMem path
     //     (PhilipsFDC.cc:37). Simulate an F11 hot-swap (set_disk_changed) then
     //     prove the register read reports "changed" EXACTLY ONCE and reverts to
     //     "not changed" on the next read with no further swap -- so a swapped
     //     medium can no longer latch DSKCHG forever (the multi-disk RPG title
-//     building-entry
-    //     DI;HALT freeze can no longer occur). ---
+    //     building-entry DI;HALT freeze can no longer occur). ---
     {
         Fixture f;
         f.sony_fdc.mem_write(0x7FFD, 0x00);
@@ -200,7 +199,7 @@ int main() {
                "Dskchg_OneShot_SecondReadRevertsToNotChanged");
     }
 
-    // --- DEF-M58-DSKCHG: the /DSKCHG sense is gated by DRIVE SELECT. On the
+    // --- The /DSKCHG sense is gated by DRIVE SELECT. On the
     //     34-pin Shugart-style FDD bus every drive output (incl. /DSKCHG) is
     //     driven only while the drive's Drive Select input is active (fact-sheet
     //     "FDC for Sony HB-F1XV.md" §1 block diagram; §7 undriven bus bits read
@@ -210,13 +209,13 @@ int main() {
     //     read with drive A selected (00 or 10) reports + consumes it. openMSX
     //     effect-parity: PhilipsFDC readMem 0x3FFD -> DriveMultiplexer
     //     diskChanged() -> the SELECTED drive, B/NONE = DummyDrive (returns
-    //     false, drive A untouched) (references/openmsx-21.0/src/fdc/
-    //     DriveMultiplexer.cc:112-114 -- behaviour reference only, never
+    //     false, drive A untouched) (openMSX 21.0:
+    //     src/fdc/DriveMultiplexer.cc:112-114 -- behaviour reference only, never
     //     copied). Regression: without the gate, the Sony disk ROM's DSKCHG
     //     probe (read 0x7FFD BEFORE selecting drive A, then again after)
     //     consumed the one-shot on the unselected first read and reported
-    //     "unchanged" to DOS after a swap -> stale disk-1 FAT/DPB -> the M58
-    //     strategy-title scrambled campaign map. ---
+    //     "unchanged" to DOS after a swap -> stale disk-1 FAT/DPB -> a
+    //     strategy title's scrambled campaign map after a disk swap. ---
     {
         Fixture f;
         f.drive.set_disk_changed(true);  // hot-swap latches DSKCHG.
@@ -246,7 +245,7 @@ int main() {
                "Dskchg_DriveSelectA_SecondReadNotChanged");
     }
 
-    // --- DEF-M58-DSKCHG: the alternate drive-A select encoding (bits 10) also
+    // --- The alternate drive-A select encoding (bits 10) also
     //     reports + consumes (PhilipsFDC.cc:158-169: 00 and 10 both select A). ---
     {
         Fixture f;
@@ -257,7 +256,7 @@ int main() {
         expect(!f.drive.disk_changed(), "Dskchg_DriveSelectA_AltEncoding_Consumed");
     }
 
-    // --- M36 Bug B regression: single-disk games (NO swap) are unaffected. With
+    // --- Read-and-clear regression: single-disk games (NO swap) are unaffected. With
     //     disk_changed_ never set, the read-and-clear is a no-op: the register
     //     always reads "not changed" (bit2 == 1) across repeated reads, exactly as
     //     before the fix. ---

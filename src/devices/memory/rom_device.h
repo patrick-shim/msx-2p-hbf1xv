@@ -23,11 +23,11 @@
 
 namespace sony_msx::devices::memory {
 
-// A read-only ROM window on the CPU memory map (M13-S1).
+// A read-only ROM window on the CPU memory map.
 //
 // A RomDevice presents a byte image at a fixed placement inside its (sub)slot's
 // 64 KB view, described by the XML `<mem base=.. size=..>` for the device
-// (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml). The slot fabric
+// (openMSX 21.0: share/machines/Sony_HB-F1XV.xml). The slot fabric
 // (chipset::SlotBus) resolves which (primary, sub, page) cell answers an access
 // and hands the device the full 16-bit CPU address; the device maps that to its
 // image offset `address - base` when the address is inside [base, base + size),
@@ -39,8 +39,8 @@ namespace sony_msx::devices::memory {
 // page 1 returns 0xFF by construction, even though the fabric only routes the
 // page-1 cell to this device.
 //
-// Behaviour reference (read only, never copied — GPL isolation, guardrails):
-// references/openmsx-21.0/src/memory/Rom.cc / RomBlocks.cc — direct image
+// Behaviour reference (read only, never copied — GPL isolation):
+// openMSX 21.0: src/memory/Rom.cc / RomBlocks.cc — direct image
 // index reads, unmapped regions reading the bus, writes ignored (inherent to
 // a mask-ROM device).
 class RomDevice final : public core::MemoryDevice {

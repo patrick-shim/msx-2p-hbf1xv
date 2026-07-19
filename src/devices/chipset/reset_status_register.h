@@ -20,11 +20,11 @@
 
 namespace sony_msx::devices::chipset {
 
-// Reset-status register on I/O port #F4 (boot-logo investigation fix,
-// DEC-0026-style targeted defect cycle).
+// Reset-status register on I/O port #F4 (added to fix the boot-logo
+// cold/warm-boot distinction; a DEC-0026-style targeted defect cycle).
 //
 // The HB-F1XV carries the MSX2+ #F4 "reset status" latch: the machine XML
-// (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml,
+// (openMSX 21.0: share/machines/Sony_HB-F1XV.xml,
 // `<ResetStatusRegister id="Reset Status register"> <inverted>false</inverted>
 // <io base="0xF4" num="1"/>`) declares the NON-inverted variant. The MSX2+
 // BIOS reads #F4 at boot to distinguish cold power-up from a warm restart:
@@ -35,7 +35,7 @@ namespace sony_msx::devices::chipset {
 // has the IN A,(0F4h) / OUT (0F4h),A primitives at offsets 0x146A/0x146F.)
 //
 // Behaviour model (non-inverted variant), grounded at
-// references/openmsx-21.0/src/MSXResetStatusRegister.cc:13-35 (read for
+// openMSX 21.0: src/MSXResetStatusRegister.cc:13-35 (read for
 // understanding, never copied — GPL isolation): power-up sets status = 0x00;
 // read returns the stored byte; write stores only bits 7 and 5 — bit 5 is
 // preserved from the previous value while bit 7 (and bit 5 via the value

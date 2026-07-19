@@ -25,14 +25,14 @@ bool CartridgeKonamiScc::is_valid_image_size(const std::size_t size) {
 CartridgeKonamiScc::CartridgeKonamiScc(std::vector<std::uint8_t> image) : window_(std::move(image)) {
     // Deliberately NO set_block_mask override (plain-Konami's 256 kB rule
     // does NOT apply here -- SCC fact-sheet §10.4): the image-derived
-    // default fallback mask stands (A-M19-6).
-    // Deliberately NO reset() call here (M19 convention, class doc).
+    // default fallback mask stands.
+    // Deliberately NO reset() call here (uniform mapper convention, class doc).
 }
 
 void CartridgeKonamiScc::bank_switch(const int page, const unsigned block) {
     window_.set_bank(page, block);
     // RomKonamiSCC.cc:44-58 -- "the mirror behavior is different from
-    // RomKonami!" (R-M29-1): the OPPOSITE directions of the M19 plain
+    // RomKonami!": the OPPOSITE directions of the plain
     // Konami mapper.
     if (page == 2 || page == 3) {
         // [0x4000-0x8000) mirrored into [0xC000-0x10000).
@@ -55,7 +55,7 @@ void CartridgeKonamiScc::reset() {
 
 core::BusData CartridgeKonamiScc::mem_read(const core::BusAddress address) {
     if (scc_enabled_ && address >= 0x9800 && address < 0xA000) {
-        // The 256-byte map mirrored 8x across the window (A-M29-1). read(),
+        // The 256-byte map mirrored 8x across the window. read(),
         // not peek(): the deform-range read side effect must fire
         // (SCC fact-sheet §3).
         return scc_.read(static_cast<std::uint8_t>(address & 0xFF));
@@ -78,7 +78,7 @@ void CartridgeKonamiScc::mem_write(const core::BusAddress address, const core::B
         return;
     }
     // 3. SCC enable/disable latch: anywhere in 0x9000-0x97FF; the masked
-    //    6-bit compare (0xBF also enables -- A-M29-2, fact-sheet §9.6
+    //    6-bit compare (0xBF also enables -- fact-sheet §9.6
     //    arbitration). NO return: the same write also bank-switches
     //    (both-effects rule, RomKonamiSCC.cc:108-123).
     if ((address & 0xF800) == 0x9000) {

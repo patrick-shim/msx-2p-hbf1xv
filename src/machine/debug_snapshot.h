@@ -43,16 +43,15 @@
 namespace sony_msx::machine::debug_snapshot {
 
 // Comprehensive, RESTORE-READY, deterministic per-component debug-snapshot
-// serializers (M36 Phase 3, DEC-0051; docs/m36-phase3-planner-package.md).
-// Separate from the golden-locked debug_dump / serialize_state_dump
-// (M10/M13/M14) -- never edits those, supersets them across every machine
-// component (§2.3 inventory).
+// serializers. Separate from the golden-locked debug_dump /
+// serialize_state_dump serializers -- never edits those, supersets them
+// across every machine component. (DEC-0051)
 //
 // Deterministic by construction like debug_dump: hand-rolled ASCII output
 // (fixed field order, fixed-width uppercase hex, '\n' endings, symbolic +
 // numeric enum tokens), no wall-clock/RNG, reuses
 // debug_dump::serialize_region() for byte regions. Identical runs at the
-// same frame/cycle produce a byte-identical snapshot (S5 system test gates
+// same frame/cycle produce a byte-identical snapshot (a system test gates
 // this).
 //
 // Every accessor here is a const getter or non-perturbing seam: a snapshot
@@ -61,7 +60,7 @@ namespace sony_msx::machine::debug_snapshot {
 
 // Snapshot format version tag (mirrors debug_dump::kDumpFormatTag +
 // frame_dump::kFrameDumpFormatTag). A future load_snapshot() reader dispatches
-// on this; additive v2 fields never break a v1 reader (restore-ready, §3.3).
+// on this; additive v2 fields never break a v1 reader (restore-ready).
 inline constexpr const char* kSnapshotFormatTag = "HBF1XV-SNAPSHOT v1";
 
 // One named file within a snapshot bundle (written under

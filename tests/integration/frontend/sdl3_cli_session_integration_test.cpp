@@ -153,7 +153,7 @@ int main() {
     {
         // games/roms/scroll-shooter.rom loads mechanically as Generic8kB (openMSX's own
         // label; NOT a hardware-identification claim -- mirrors the M19
-        // hbf1xv_m19_scroll_shooter_smoke_integration_test.cpp precedent exactly).
+        // hbf1xv_scroll_shooter_smoke_integration_test.cpp precedent exactly).
         // The default --cart1-type (Mirrored, when omitted) rejects this
         // file's size, so it must be specified explicitly here.
         const std::vector<std::string> args{

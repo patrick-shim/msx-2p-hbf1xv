@@ -16,15 +16,16 @@
 #include <cstddef>
 #include <string>
 
-// M46 (DEC-0071): pure, SDL-free helpers for the enriched startup banner's
-// "This session" block. Kept OUT of sdl3_main.cpp so the deterministic label
-// text (RAM stock/modded, machine-mode tag, FM-PAC status, SRAM availability)
-// has a ctest seam (AC-14) that needs no process capture and no SDL3. The
+// Pure, SDL-free helpers for the enriched startup banner's "This session"
+// block. Kept OUT of sdl3_main.cpp so the deterministic label text (RAM
+// stock/modded, machine-mode tag, FM-PAC status, SRAM availability) has a
+// ctest seam that needs no process capture and no SDL3. The
 // FmPacAutoloadOutcome enum also lives here so both sdl3_app.h (which records
 // it) and these helpers (which render it) share it without an SDL include.
+// (DEC-0071)
 namespace sony_msx::frontend {
 
-// The outcome of the FM-PAC slot-2 auto-load attempt (planner §2.5). Recorded
+// The outcome of the FM-PAC slot-2 auto-load attempt. Recorded
 // by Sdl3App::load_configured_assets() / the headless --debug-session load path
 // and read by the banner.
 enum class FmPacAutoloadOutcome {
@@ -55,14 +56,15 @@ struct FmPacBannerInfo {
 // The machine-mode tag: "[--stock]" when stock, else "[convenience defaults]".
 [[nodiscard]] std::string format_mode_tag(bool is_stock);
 
-// The FM-PAC status line body (planner §2.6): "loaded in slot 2" /
+// The FM-PAC status line body: "loaded in slot 2" /
 // "loaded in slot 1" / "not loaded (--stock)" / "not loaded (--no-fmpac)" /
 // "auto-load skipped: <path> not found" / "auto-load skipped: <path> invalid".
 [[nodiscard]] std::string format_fmpac_line(const FmPacBannerInfo& info);
 
-// The SRAM availability line body (planner §2.6, DEC-0050): when an FM-PAC is
-// loaded + persistence on, "available -> <resolved path>"; otherwise
-// "not available (no FM-PAC; bare machine, DEC-0050)".
+// The SRAM availability line body: when an FM-PAC is loaded + persistence on,
+// "available -> <resolved path>"; otherwise
+// "not available (no FM-PAC; bare machine, DEC-0050)" -- a bare HB-F1XV has
+// no internal SRAM (DEC-0050).
 [[nodiscard]] std::string format_sram_line(bool available, const std::string& resolved_path);
 
 }  // namespace sony_msx::frontend

@@ -20,20 +20,20 @@
 
 #include "machine/hbf1xv_machine.h"
 
-// Suite: Machine_Hbf1xvSlotMap_Unit  (M13-S3/S4)
+// Suite: Machine_Hbf1xvSlotMap_Unit
 //
-// Verifies the M13 slot population + the authentic reset default, using the
+// Verifies the slot population + the authentic reset default, using the
 // non-perturbing debug bus/IO seams (route through SlotBus/IoBus exactly like
 // the CPU) so each (primary, sub, page) cell can be resolved directly:
-//   - authentic reset: #A8 == 0 (updated from the M11 bring-up #A8 == 0xFF, R-1);
-//   - BOTH primary slots 0 and 3 report expanded (A-6, corrects M11);
+//   - authentic reset: #A8 == 0 (updated from an earlier bring-up 0xFF);
+//   - BOTH primary slots 0 and 3 report expanded;
 //   - each cell resolves to the expected device against the real loaded images:
 //       BIOS 0-0 p0-1, SUB 3-1 p0, Kanji 3-1 p1-2, DISK 3-2 p1 (0xFF in p0/2/3),
 //       FM-MUSIC 3-3 p1;
 //   - the 64 KB mapper RAM at 3-0 read/writes hit DRAM via the current segments,
 //     and a segment switch reroutes the physical cell;
 //   - #FFFF sub-slot decode + 0xFF^reg readback is active in both slots 0 and 3;
-//   - cold-boot DRAM content matches the A-5 alternating 00/FF pattern.
+//   - cold-boot DRAM content matches the alternating 00/FF power-on pattern.
 //
 // The real bios directory is injected as an absolute path by CMake so the test
 // is independent of the working directory.
@@ -86,13 +86,13 @@ int main() {
         return 1;
     }
 
-    // --- Authentic reset default: #A8 == 0 (M13-S4, discharges M11 R-1). ---
+    // --- Authentic reset default: #A8 == 0. ---
     expect(machine.debug_io_read(0xA8) == 0x00, "ResetPrimarySelect_A8_IsZero_Authentic");
 
-    // --- Both primary slots 0 and 3 are expanded (A-6). ---
+    // --- Both primary slots 0 and 3 are expanded. ---
     expect(machine.slot_expanded(0) && machine.slot_expanded(3), "BothSlots0And3_Expanded");
 
-    // --- Cold-boot DRAM content is the A-5 alternating 00/FF pattern. ---
+    // --- Cold-boot DRAM content is the alternating 00/FF power-on pattern. ---
     {
         bool pattern_ok = true;
         for (std::uint32_t addr = 0; addr <= 0x0FFF; ++addr) {  // sample the first 4 KB
@@ -171,7 +171,7 @@ int main() {
     machine.debug_bus_write(0x0010, 0x77);    // page0 seg3 -> physical 0xC010
     expect(machine.read_memory(0xC010) == 0x77, "SegmentSwitch_Page0Seg3_HitsSegment3Cell");
     // Readback independence: writing 0x25 reads back 0x85 on #FC (5-bit) while the
-    // physical fold uses seg & 3 (A-3).
+    // physical fold uses seg & 3.
     machine.debug_io_write(0xFC, 0x25);
     expect(machine.debug_io_read(0xFC) == 0x85, "MapperReadback_5bit_IndependentOfPhysicalFold");
 

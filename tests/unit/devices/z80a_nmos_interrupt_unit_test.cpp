@@ -19,7 +19,7 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80ANmosInterrupt_Unit  (M12-S5, gaps #30 / #31; verifies #28)
+// Suite: Devices_Z80ANmosInterrupt_Unit
 //
 // Covers the NMOS interrupt-edge behaviors:
 //  - RETI copies IFF2 -> IFF1 exactly like RETN (fact-sheet §5; openMSX retn()
@@ -27,7 +27,7 @@
 //  - The NMOS LD A,I / LD A,R P/V interrupt bug: when a maskable interrupt will
 //    be accepted at the instruction boundary, P/V reads 0 despite IFF2 = 1
 //    (fact-sheet §5; openMSX prevWasLDAI fix-up, CPUCore.cc:2476-2496).
-//  - EI one-instruction delay edges (EI;RET, EI;EI) — gap #28 regression.
+//  - EI one-instruction delay edges (EI;RET, EI;EI) regression.
 //  - DI/EI/RETN IFF matrix, and IM/NMI acceptance bare T-states unchanged.
 
 namespace {

@@ -23,7 +23,7 @@
 namespace sony_msx::frontend {
 
 // ---------------------------------------------------------------------------
-// DEC-0095-AMENDMENT-D: make PERSISTED asset paths working-directory-proof.
+// Make PERSISTED asset paths working-directory-proof (DEC-0095-AMENDMENT-D).
 //
 // THE BUG THIS FIXES: the emulator resolves relative asset paths against the
 // WORKING DIRECTORY, but as of v1.6.0 the settings file is written beside the
@@ -54,7 +54,7 @@ namespace sony_msx::frontend {
 // the behavior is unit-testable without touching the real working directory.
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// DEC-0097: find the PROJECT ROOT from the executable's own location.
+// Find the PROJECT ROOT from the executable's own location (DEC-0097).
 //
 // The asset directories (bios/, roms/, disks/, games/) and the config file all
 // live at the project root, but the executable does NOT: it sits at
@@ -131,7 +131,7 @@ template <typename IsRootPredicate>
 }
 
 // ---------------------------------------------------------------------------
-// DEC-0098: never honour a configured asset path that does not exist, SILENTLY.
+// Never honour a configured asset path that does not exist, SILENTLY (DEC-0098).
 //
 // THE FAILURE THIS ENDS: a config written by v1.6.2 could carry an absolute
 // path that was correct only for the directory it was launched from once
@@ -169,7 +169,7 @@ template <typename ExistsPredicate>
 }
 
 // ---------------------------------------------------------------------------
-// DEC-0097: the INVERSE, applied when PERSISTING. Runtime wants absolute paths
+// The INVERSE, applied when PERSISTING (DEC-0097). Runtime wants absolute paths
 // (resolved against the project root at startup); the saved FILE wants them
 // relative, for two concrete reasons:
 //   * renaming or moving the project directory would otherwise break every

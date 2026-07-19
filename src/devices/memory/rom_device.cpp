@@ -51,7 +51,7 @@ core::BusData RomDevice::mem_read(const core::BusAddress address) {
 
 void RomDevice::mem_write(const core::BusAddress /*address*/, const core::BusData /*value*/) {
     // Read-only: mask-ROM writes are ignored on real hardware. Any bank/mapper
-    // behaviour (Halnote, FM-PAC) is a separate device and out of M13 scope.
+    // behaviour (Halnote, FM-PAC) is a separate device, not this class.
 }
 
 }  // namespace sony_msx::devices::memory

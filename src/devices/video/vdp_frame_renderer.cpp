@@ -23,7 +23,7 @@ namespace sony_msx::devices::video {
 
 namespace {
 
-// V9958 table index-mask fills (DEF-M43-FMPAC-SCREEN / DEC-0063): the high-bit
+// V9958 table index-mask fills: the high-bit
 // "unused bits set to 1" fill that openMSX's readNP index carries
 // (VDPVRAM.hh:263-269), pre-masked to the 17-bit (128 KB) VRAM space. Each is
 // `(~0u << N) & 0x1FFFF`, where N is the per-table/per-mode index width from
@@ -33,7 +33,7 @@ namespace {
 // ANDing the base register's effectiveBaseMask (pattern_table_mask()/
 // color_table_mask()) with (fill | actualIndex) reproduces readNP's
 // `data[effectiveBaseMask & index]` exactly, so the low mirror bits of R#3/R#4
-// mask the index rather than adding to it.
+// mask the index rather than adding to it. (DEC-0063)
 constexpr std::uint32_t kFill6 = 0x1FFC0u;   // ~0u<<6  (G1 color)
 constexpr std::uint32_t kFill9 = 0x1FE00u;   // ~0u<<9  (Text2 color)
 constexpr std::uint32_t kFill11 = 0x1F800u;  // ~0u<<11 (Text/G1/Multicolor pattern)
@@ -59,8 +59,8 @@ void draw8(std::uint16_t* dst, const std::uint16_t fg, const std::uint16_t bg, c
 }  // namespace
 
 PlanarRowSpans planar_row_spans(const std::uint32_t row_base, const std::size_t length) {
-    // A-M21-11: for an even logical row_base, the 17-bit rotate-right-by-1
-    // (A-M21-10, `physical = (logical >> 1) | ((logical & 1) << 16)`) applied
+    // For an even logical row_base, the 17-bit rotate-right-by-1
+    // (`physical = (logical >> 1) | ((logical & 1) << 16)`) applied
     // to every byte in [row_base, row_base+length) degenerates to two
     // contiguous half-length spans: bank0[i] = vram[(row_base>>1)+i] (even
     // bytes), bank1[i] = vram[0x10000+(row_base>>1)+i] (odd bytes).
@@ -72,9 +72,9 @@ PlanarRowSpans planar_row_spans(const std::uint32_t row_base, const std::size_t 
 VdpFrameRenderer::VdpFrameRenderer(const V9958Vdp& vdp) : vdp_(&vdp) {}
 
 int VdpFrameRenderer::width() const {
-    // Independently derived dimension table (planner package §2.2), NOT the
-    // fact-sheet's mode table alone (which conflates cell-grid and
-    // pixel-canvas resolution for MULTICOLOR, A-M21-9).
+    // Independently derived dimension table, NOT the
+    // fact sheet's mode table alone (which conflates cell-grid and
+    // pixel-canvas resolution for MULTICOLOR).
     switch (vdp_->mode().mode) {
     case VdpMode::Text1:
         return 240;  // CharacterConverter.cc:142-160: 40 chars x 6px
@@ -85,7 +85,7 @@ int VdpFrameRenderer::width() const {
         return 512;  // DisplayMode.hh:176-186 (the 512-wide list)
     default:
         return 256;  // Graphic1/2/3/Multicolor/Graphic4/Graphic7/YJK/YJKYAE/
-                      // Text1Q/MulticolorQ/Unknown (A-M21-6/A-M21-9)
+                      // Text1Q/MulticolorQ/Unknown
     }
 }
 
@@ -112,7 +112,7 @@ std::uint16_t VdpFrameRenderer::pal16(const int index) const {
 
 bool VdpFrameRenderer::color0_transparent() const {
     // VDP.hh:189-191 getTransparency(): TP bit (R#8 bit 5) CLEAR ->
-    // transparency ON (fact-sheet: "TP colour0 transparent").
+    // transparency ON (fact sheet: "TP colour0 transparent").
     return (vdp_->control_register(8) & 0x20) == 0;
 }
 
@@ -152,8 +152,8 @@ std::uint32_t VdpFrameRenderer::pattern_table_mask() const {
     // legacy TMS9918 mirror bits, NOT additive address bits: canonical SCREEN 2
     // R#4=0x03 keeps the pattern generator at 0x0000 (only the two quarter-select
     // bits 11-12 must be set to let the 3-quarter index through), whereas the old
-    // additive `R#4<<11` wrongly returned 0x1800 (the name table) -- the DEF-M43
-    // blank-screen defect.
+    // additive `R#4<<11` wrongly returned 0x1800 (the name table) -- the
+    // blank-screen defect this mask model fixed.
     return ((static_cast<std::uint32_t>(vdp_->control_register(4)) << 11) | 0x7FFu) & 0x1FFFFu;
 }
 
@@ -180,9 +180,9 @@ int VdpFrameRenderer::bitmap_coarse_shift(const int width) const {
     // displayed bitmap line LEFT in 8-dot steps -- `8 * (lineWidth/256) *
     // (R#26 & 0x1F)`, i.e. 8-dot units for 256-wide modes and 16-dot units for
     // the 512-wide G5/G6. Range [0, 248] (256-wide) / [0, 496] (512-wide),
-    // always < width, so no wrap of the shift value itself is needed. This is
-    // the ORIGINAL, correct coarse behavior (M38 Phase-A scenarios s02/s07
-    // already MATCHED); the fine component is a SEPARATE mechanism.
+    // always < width, so no wrap of the shift value itself is needed. This
+    // coarse rotation is verified correct against openMSX A/B evidence; the
+    // fine component is a SEPARATE mechanism.
     const int mult = (width >= 512) ? 2 : 1;
     return (vdp_->control_register(26) & 0x1F) * 8 * mult;
 }
@@ -193,7 +193,8 @@ int VdpFrameRenderer::bitmap_fine_shift(const int width) const {
     // SDLRasterizer.cc:464-465). Shifts the WHOLE displayed image to the RIGHT
     // by 0..7 dots (doubled for 512-wide modes) and exposes the vacated left
     // edge as BORDER/backdrop -- NOT a circular wrap, NOT the same sign as the
-    // coarse rotate (M38 Phase-A root cause, s03/s04).
+    // coarse rotate (getting this wrong was the root cause of an earlier
+    // fine-scroll rendering defect).
     const int mult = (width >= 512) ? 2 : 1;
     return (vdp_->control_register(27) & 0x07) * mult;
 }
@@ -208,7 +209,7 @@ void VdpFrameRenderer::compose_bitmap_scroll(std::span<std::uint16_t> out, const
     //      [0, width-coarse) reads page_first[x+coarse]; the wrap tail x in
     //      [width-coarse, width) reads page_wrap[x+coarse-width]. For a single
     //      page (non multi-page) page_wrap == page_first, so this degenerates to
-    //      the pre-M38 circular left rotation. For multi-page scroll (R#25 bit0
+    //      a plain circular left rotation. For multi-page scroll (R#25 bit0
     //      + R#2 bit5) page_wrap is the ADJACENT page, so the tail shows the
     //      neighbouring page instead of a self-wrap (SDLRasterizer.cc:530-537).
     //   2. FINE (R#27): the coarse-rotated line is then shifted RIGHT by `fine`
@@ -246,7 +247,7 @@ bool VdpFrameRenderer::multi_page_scrolling() const {
 }
 
 bool VdpFrameRenderer::use_alternate_page(const Field field) const {
-    // A-M21-7: deliberately-narrower model, NOT a bit-for-bit reproduction
+    // Deliberately-narrower model, NOT a bit-for-bit reproduction
     // of VDP.hh:443-459's getEvenOddMask().
     //
     // getEvenOddMask() reduces to: false when blinkState, else true when
@@ -326,7 +327,7 @@ std::uint16_t VdpFrameRenderer::border_color() const {
     if (m.base == 0x10) {
         // GRAPHIC5 (SCREEN6): real hardware alternates two border colors
         // (SDLRasterizer.cc:378-383, bits3-2 even / bits1-0 odd); since
-        // FrameBuffer.border_color is a single value (§2.2), the even-pixel
+        // FrameBuffer.border_color is a single value, the even-pixel
         // half is used as a documented simplification.
         return pal16((reg7 & 0x0C) >> 2);
     }
@@ -483,30 +484,31 @@ void VdpFrameRenderer::composite_sprites(const int line, const Field /*field*/, 
 }
 
 void VdpFrameRenderer::render_line(const int line, const Field field, std::span<std::uint16_t> out) const {
-    // M34 Defect B (DEC-0043; docs/m34-planner-package.md §3.2): R#1 bit6
+    // R#1 bit6
     // (BL, display enable) gates the ENTIRE active line. BL=0 => pure
     // backdrop -- content dispatch, sprite compositing, and the R#25 MSK
     // step are all skipped (sprites already honored this bit,
-    // sprite_engine.cpp:90-94; this closes the pre-M34 asymmetry where
+    // sprite_engine.cpp:90-94; this closes an earlier asymmetry where
     // sprites obeyed BL but the background didn't). Grounding (both
-    // references agree, §3.1):
-    //   * openMSX references/openmsx-21.0/src/video/PixelRenderer.cc:608-611
+    // references agree):
+    //   * openMSX 21.0: src/video/PixelRenderer.cc:608-611
     //     (!displayEnabled => whole line draws DRAW_BORDER) and :580-584
     //     (sprite checking only under displayEnabled); VDP.cc:435-442
     //     (displayEnabled derives from controlRegs[1] & 0x40).
-    //   * fMSX references/fmsx-60/source/MSX.h:216 (#define ScreenON
+    //   * fMSX 6.0: source/MSX.h:216 (#define ScreenON
     //     (VDP[1]&0x40)) with every per-line refresh in Common.h (:463,
     //     :497, :533, ...) starting `if(!ScreenON) ClearLine(background)`.
     // Fill color = mode-aware border_color() (VDP.hh:211-226
     // getBackgroundColor, the real border's color), NOT render_blank()'s
     // undefined-mode palette-15 fallback (different semantic,
     // CharacterConverter.cc:368-373). render_line() reads R#1 LIVE and is
-    // shared by render_frame() and the M32 scanline accumulator, so the L+1
+    // shared by render_frame() and the scanline accumulator, so the L+1
     // write-latch (hbf1xv_machine.cpp write hook) applies to BL like any
     // other register -- matching VDP.cc:1080-1082/:1260-1269 (an R#1 bit6
     // change takes effect at the NEXT line; syncAtNextLine). Mid-LINE BL
-    // precision is the pre-existing D8 remainder; BL=1-mid-frame
-    // sprite-table liveness is D9 (cross-notes in the ledger).
+    // precision (a change taking effect partway through one scanline) is not
+    // modeled; mid-frame sprite-table liveness is covered by SpriteEngine's
+    // progressive per-line check. (DEC-0043)
     if ((vdp_->control_register(1) & 0x40) == 0) {
         const std::uint16_t bc = border_color();
         const int w = width();
@@ -521,7 +523,7 @@ void VdpFrameRenderer::render_line(const int line, const Field field, std::span<
 
     // Border mask (R#25 bit1 MSK, VDP.hh:353-360): "extends the left border
     // by 8 pixels." Since border is modeled as a single color, not extra
-    // canvas columns (§2.2), this overwrites the leftmost 8 (or fewer, if
+    // canvas columns, this overwrites the leftmost 8 (or fewer, if
     // narrower) active-display pixels with the border color.
     if (vdp_->control_register(25) & 0x02) {
         const int n = std::min(8, width());
@@ -626,7 +628,7 @@ void VdpFrameRenderer::render_graphic2_or_3(const int line, std::span<std::uint1
     // (~0u<<13) | quarter8 | line7 (kFill13 in 17-bit VRAM space). The 2048-byte
     // quarter (bit 11-12) selects one of the 3 blocks per 64 raster lines; readNP
     // AND-masks the index by each table's effectiveBaseMask (pat_mask / col_mask)
-    // -- the V9958 AND-mask model (DEF-M43-FMPAC-SCREEN / DEC-0063). With
+    // -- the V9958 AND-mask model (DEC-0063). With
     // canonical SCREEN 2 registers R#4=0x03 (pat_mask=0x1FFF) and R#3=0xFF
     // (col_mask=0x3FFF) this addresses pattern @ 0x0000 and colour @ 0x2000; the
     // former additive model wrongly hit 0x1800 / 0x3FC0 and rendered blank.
@@ -649,8 +651,8 @@ void VdpFrameRenderer::render_graphic2_or_3(const int line, std::span<std::uint1
 
 void VdpFrameRenderer::render_multicolor(const int line, std::span<std::uint16_t> out) const {
     // CharacterConverter.cc:318-342 (renderMultiHelper/renderMulti). The
-    // real pixel canvas is 256x192 with 4x4-pixel color-cell granularity
-    // (A-M21-9), NOT a literal 64x48-pixel image. Pattern index mask ~0u<<11
+    // real pixel canvas is 256x192 with 4x4-pixel color-cell granularity,
+    // NOT a literal 64x48-pixel image. Pattern index mask ~0u<<11
     // (VDP.cc:1332-1335), index = charCode*8 | ((line/4)&7).
     const std::uint32_t name_base = name_table_base();
     const std::uint32_t pat_mask = pattern_table_mask();
@@ -670,7 +672,7 @@ void VdpFrameRenderer::render_multicolor(const int line, std::span<std::uint16_t
 }
 
 void VdpFrameRenderer::render_blank(std::span<std::uint16_t> out) const {
-    // A-M21-6: TEXT1Q/MULTIQ/Unknown render a flat fill of palette entry 15
+    // TEXT1Q/MULTIQ/Unknown render a flat fill of palette entry 15
     // (CharacterConverter.cc:368-373 renderBlank), never TMS9918-compatible
     // striped content -- HB-F1XV's V9958 is never isMSX1VDP().
     const std::uint16_t color = pal16(15);
@@ -686,8 +688,8 @@ void VdpFrameRenderer::render_blank(std::span<std::uint16_t> out) const {
 // only when multi-page scroll makes the wrap page distinct -- the adjacent
 // page's scanline into `wrap`, then defers the R#26/R#27 scroll composition to
 // compose_bitmap_scroll(). The single-page fast path passes `first` for both
-// buffers so behavior is byte-identical to the pre-M38 apply_bitmap_scroll()
-// for the (overwhelmingly common) non multi-page case.
+// buffers so the (overwhelmingly common) non multi-page case degenerates to a
+// plain self-wrapping rotation.
 
 void VdpFrameRenderer::decode_graphic4_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:104-133 (renderGraphic4): 4bpp packed, high nibble
@@ -742,7 +744,7 @@ void VdpFrameRenderer::render_graphic5(const int line, std::span<std::uint16_t> 
     }
 }
 
-// --- planar bitmap modes (D7 display-path piece) -------------------------
+// --- planar bitmap modes -------------------------------------------------
 
 void VdpFrameRenderer::decode_graphic6_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:149-183 (renderGraphic6, per-byte form): 4bpp
@@ -774,7 +776,7 @@ void VdpFrameRenderer::render_graphic6(const int line, const Field field, std::s
 
 void VdpFrameRenderer::decode_graphic7_row(const std::uint32_t row_base, std::span<std::uint16_t> temp) const {
     // BitmapConverter.cc:185-195 (renderGraphic7): one fixed-256-color byte
-    // per pixel (A-M21-4), banks alternate even/odd output pixels.
+    // per pixel, banks alternate even/odd output pixels.
     const PlanarRowSpans spans = planar_row_spans(row_base, 256);
     for (std::size_t i = 0; i < spans.half_length; ++i) {
         const std::uint8_t d0 = vram_read(spans.bank0_base + static_cast<std::uint32_t>(i));
@@ -804,22 +806,22 @@ namespace {
 //
 // Unlike GRAPHIC7 (each byte decodes to one pixel independently), a YJK/YAE
 // 4-pixel group cannot be resolved until ALL FOUR of its bytes are fetched:
-// the shared chroma J is packed into the group's 3rd/4th bytes (fact-sheet
-// references/fact-sheets/Yamaha V9958 VDP.md:104-105, "pixel3 = Y3 J[low],
+// the shared chroma J is packed into the group's 3rd/4th bytes
+// (Yamaha V9958 VDP fact sheet, "pixel3 = Y3 J[low],
 // pixel4 = Y4 J[high]"), so the group's first displayable pixel trails the G7
 // base position by one whole group -- four dots. The vacated left edge shows
 // backdrop and the last (clipped) group falls off the right. This four-dot
-// rightward registration is corroborated three ways (DEF-M41-YJKOFFSET, an
-// M41 production-QA finding): (1) openMSX 19.1 A/B -- YJK content lands 4 dots
+// rightward registration is corroborated three
+// ways: (1) openMSX 19.1 A/B -- YJK content lands 4 dots
 // right of the IDENTICAL-base GRAPHIC7 control (which has zero offset); (2)
-// fMSX 6.0 models it EXPLICITLY -- references/fmsx-60/source/fMSX/Common.h:
+// fMSX 6.0 models it EXPLICITLY -- fMSX 6.0: source/fMSX/Common.h:
 // 732-737 (RefreshLine10/YAE) and :778-783 (RefreshLine12/YJK) draw the first
 // four pixels as backdrop (BPal[VDP[7]]) before the YJK groups; (3) the
-// fact-sheet's YJK packing above. GRAPHIC7 keeps content_lead == 0. (openMSX
+// fact sheet's YJK packing above. GRAPHIC7 keeps content_lead == 0. (openMSX
 // 21.0's BitmapConverter -- the read-only source reference -- does not model
 // this latency; the 19.1 RUNTIME used for the A/B and fMSX both do, and the
-// hardware packing corroborates it, so the corroborated interpretation wins
-// per the two-reference-disagreement guardrail.)
+// hardware packing corroborates it, so the corroborated interpretation is
+// followed over the single silent reference.)
 constexpr int kYjkDisplayLead = 4;
 
 // Shared J/K unpack for the YJK family (BitmapConverter.cc:217-249), per
@@ -865,7 +867,7 @@ void VdpFrameRenderer::render_yjk(const int line, const Field field, std::span<s
     std::array<std::uint16_t, 256> first{};
     decode_yjk_row(page_first * 0x10000u + stride, first);
     // kYjkDisplayLead: register the decoded page 4 dots right of the G7 base
-    // (DEF-M41-YJKOFFSET). The R#26/R#27 scroll model is unchanged.
+    // (see the constant's doc comment). The R#26/R#27 scroll model is unchanged.
     if (page_first != page_wrap) {
         std::array<std::uint16_t, 256> wrap{};
         decode_yjk_row(page_wrap * 0x10000u + stride, wrap);

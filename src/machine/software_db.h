@@ -29,25 +29,25 @@ namespace sony_msx::machine {
 // pre-mapped to this project's mapper enum: the identifier layer
 // (cartridge_identifier.h) decides supported-vs-unsupported, so composed/
 // unknown names route to the loud "identified but unsupported" outcome
-// instead of being silently truncated (planner §2.2.1).
+// instead of being silently truncated.
 struct SoftwareDbEntry {
     std::string title;
     std::string type_name;
 };
 
 // Minimal, tolerant, runtime parser for the SUBSET of the openMSX
-// `softwaredb.xml` schema this project needs (M30-S2, backlog G2, planner
-// §2.2): <softwaredb>/<software>/<title>/<dump>/<rom>|<megarom>/<type>/
+// `softwaredb.xml` schema this project needs:
+// <softwaredb>/<software>/<title>/<dump>/<rom>|<megarom>/<type>/
 // <hash>/<start>. This is NOT a general XML parser -- it is a tolerant
 // scanner for exactly this schema.
 //
-// Semantics grounded in the file's own producer/consumer (verified in
-// references/, never copied -- the DB file itself stays in references/,
-// untouched; this class only PARSES a locally-present copy at runtime, the
-// same posture as reading the user's own bios/ ROMs; nothing from the file
-// ships in src/ or tests/, planner §2.2.4):
+// Semantics grounded in the file's own producer/consumer (verified against
+// the openMSX sources, never copied -- the DB file itself is never shipped
+// with this project; this class only PARSES a locally-present copy at
+// runtime, the same posture as reading the user's own bios/ ROMs; nothing
+// from the file ships in src/ or tests/):
 //   - <rom> WITHOUT <type> defaults to "Mirrored"
-//     (references/openmsx-21.0/src/memory/RomDatabase.cc:201-208);
+//     (openMSX 21.0: src/memory/RomDatabase.cc:201-208);
 //   - <megarom> has NO default -- a missing <type> stays "" and later routes
 //     to the loud unsupported outcome (RomDatabase.cc:193-199);
 //   - a <dump> with no <hash> is dropped (RomDatabase.cc:490-494);
@@ -60,8 +60,8 @@ struct SoftwareDbEntry {
 //     the next <software> with a collected diagnostic -- never a crash.
 class SoftwareDb {
 public:
-    // std::nullopt when the file is absent/unreadable (graceful degradation,
-    // planner §2.4.2 -- the emulator never DEPENDS on the DB file to
+    // std::nullopt when the file is absent/unreadable (graceful degradation
+    // -- the emulator never DEPENDS on the DB file to
     // function). `diagnostics` collects per-entry skip notes (never fatal).
     static std::optional<SoftwareDb> load_from_file(const std::string& path,
                                                     std::vector<std::string>& diagnostics);

@@ -11,13 +11,13 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Diskutils_CreateFormatRoundtrip_Unit  (M53-S3, planner package §6.3)
+// Suite: Diskutils_CreateFormatRoundtrip_Unit
 //
 // Round-trip determinism through the REAL --create / --format CLI code paths:
 //   - --format over a 737,280-byte garbage-filled file yields the blank image.
 //   - --create then --format on the same path is idempotent (bytes unchanged).
 //   - two --create runs produce byte-identical files.
-// Temp-file discipline mirrors hbf1xv_m36_disk_save_persist_integration_test.
+// Temp-file discipline mirrors hbf1xv_disk_save_persist_integration_test.
 // Links ONLY msx_diskutil.
 
 #include <cstdint>

@@ -27,7 +27,7 @@ bool file_readable(const std::string& path) {
 }  // namespace
 
 bool config_should_load(const bool interactive_sdl3, const bool explicit_config_path) {
-    // The whole determinism rule (§4.6) in one line: AUTO-load only for a
+    // The whole determinism rule in one line: AUTO-load only for a
     // genuinely interactive SDL3 launch; --config forces a load in any mode.
     // Everything else (headless, --debug-session, parity, SDL3 --hidden-window)
     // stays on the no-config path.
@@ -43,14 +43,14 @@ machine::EmulatorConfig load_config_with_search(const std::optional<std::string>
         return machine::EmulatorConfig::load_from_file(*explicit_path, warnings);
     }
 
-    // Auto-search order (§4.6): first existing wins.
+    // Auto-search order: first existing wins.
     for (const std::string& candidate : auto_search_paths) {
         if (file_readable(candidate)) {
             return machine::EmulatorConfig::load_from_file(candidate, warnings);
         }
     }
 
-    // None found -> the expected zero-config first-run behavior (§4.2): ONE
+    // None found -> the expected zero-config first-run behavior: ONE
     // WARNING that names what was searched, then built-in defaults.
     std::string searched;
     for (std::size_t i = 0; i < auto_search_paths.size(); ++i) {
@@ -101,8 +101,8 @@ ResolvedRuntimeConfig resolve_runtime_config(const machine::EmulatorConfig& cfg,
     r.speed_level = parsed.speed_level.has_value() ? *parsed.speed_level : cfg.speed_level;
     r.scale = parsed.scale.has_value() ? *parsed.scale : cfg.video_scale;
     r.persistence = parsed.persistence.has_value() ? *parsed.persistence : cfg.persistence_percent;
-    // M52 (DEC-0079): master volume, CLI > XML > built-in default (the --persistence
-    // template). has_value() == CLI-specified; else the XML/base default 100.
+    // Master volume: CLI > XML > built-in default (the --persistence template).
+    // has_value() == CLI-specified; else the XML/base default 100. (DEC-0079)
     r.master_volume = parsed.volume.has_value() ? *parsed.volume : cfg.master_volume;
 
     // enum knobs (explicit-tracking bool). The XML string maps to the enum.
@@ -127,14 +127,14 @@ ResolvedMachineConfig resolve_machine_config(const machine::EmulatorConfig& cfg,
 
     // --- The 7 role-keyed BIOS filenames: no per-file CLI flag -> XML > built-in.
     //     cfg carries either the XML-specified names or the built-in spec set, so
-    //     with no config loaded this is byte-identical to the pre-M50 literals. ---
+    //     with no config loaded this is byte-identical to the built-in literals. ---
     r.bios_roms = cfg.bios_roms;
 
     // --- FM-PAC auto-load ROM path: no dedicated CLI flag (an explicit --slot2
     //     occupies the bay and the auto-load skips) -> XML > built-in. ---
     r.fmpac_autoload_rom = cfg.fmpac_rom;
 
-    // --- M64: file-dialog default directories: no CLI flag -> XML > built-in
+    // --- File-dialog default directories: no CLI flag -> XML > built-in
     //     ("roms"/"disks"). cfg carries either the XML values or the built-in
     //     defaults, so the no-config path is byte-identical to the defaults. ---
     r.cartridge_dir = cfg.cartridge_dir;
@@ -159,7 +159,7 @@ ResolvedMachineConfig resolve_machine_config(const machine::EmulatorConfig& cfg,
         r.softwaredb = cfg.softwaredb_path;
     }
 
-    // --- VRAM: validated-to-128 in the parser; no runtime sizing seam (§4.4).
+    // --- VRAM: validated-to-128 in the parser; no runtime sizing seam.
     //     cfg.vram_kb is always 128 here; carry it, never resize the VDP. ---
     r.vram_kb = cfg.vram_kb;
     return r;

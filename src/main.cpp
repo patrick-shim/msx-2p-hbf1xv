@@ -23,22 +23,22 @@
 
 #include "devices/audio/psg_ym2149.h"
 #include "devices/fdc/disk_image.h"
-#include "frontend/machine_audio_mixer.h"  // M39-A: full-machine audio mix for --audio-dump
+#include "frontend/machine_audio_mixer.h"  // full-machine audio mix for --audio-dump
 #include "frontend/psg_audio_dump.h"
-#include "frontend/sdl3_cli.h"  // M37/M46: shared parse_speed_level/parse_ram_kb/resolve_session_defaults
-#include "frontend/session_summary.h"  // M46 (DEC-0071): compact headless "This session" banner
+#include "frontend/sdl3_cli.h"  // shared parse_speed_level/parse_ram_kb/resolve_session_defaults
+#include "frontend/session_summary.h"  // compact headless "This session" banner (DEC-0071)
 #include "machine/cartridge_cli.h"
 #include "machine/cartridge_identifier.h"
 #include "machine/cpm_bdos_harness.h"
 #include "machine/debug_format.h"
-#include "machine/emulator_config.h"  // M50-S2 (DEC-0077): --config strict-XML session defaults
+#include "machine/emulator_config.h"  // --config strict-XML session defaults (DEC-0077)
 #include "machine/hbf1xv_machine.h"
 #include "machine/input_script.h"
 
 namespace {
 
-// M19-S5 cartridge loading (backlog B7). Shared by both the default run path
-// and --parity-trace (planner §2.4/§2.7) to avoid duplicated parser/loader
+// Cartridge loading. Shared by both the default run path
+// and --parity-trace to avoid duplicated parser/loader
 // logic. Deliberately STRICTER than RomAssetLoader's BIOS/Kanji-font/disk-
 // image policy (non-fatal 0xFF-fill + diagnostic, rom_asset_loader.h:14-22):
 // a user-specified --cartN is explicit and one-off, so any failure prints a
@@ -60,13 +60,14 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
         return 2;
     }
 
-    // M30 (backlog G2): auto-identifies type-less --cartN requests via the
+    // Auto-identifies type-less --cartN requests via the
     // shared resolver (cartridge_identifier.h, also used by the SDL3
     // frontend). Explicit --cartN-type specs pass through untouched.
     // Identified-but-unsupported -> loud message + exit 2.
-    // M50-S3 (DEC-0077): softwaredb path precedence CLI --softwaredb > XML
+    // softwaredb path precedence: CLI --softwaredb > XML
     // override > default. softwaredb_override is std::nullopt unless a loaded
-    // config set a NON-default path (byte-identical to pre-M50 otherwise).
+    // config set a NON-default path (byte-identical to the no-config
+    // behavior otherwise). (DEC-0077)
     const std::optional<std::string> softwaredb_path =
         parsed.softwaredb_path.has_value() ? parsed.softwaredb_path : softwaredb_override;
     sony_msx::machine::CartridgeIdentificationSession ident_session(softwaredb_path);
@@ -117,23 +118,23 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
     return load_one(2, parsed.slot2);
 }
 
-// M10-S4 parity-trace mode. Loads a flat RAM-only Z80 program at a fixed base,
+// Parity-trace mode. Loads a flat RAM-only Z80 program at a fixed base,
 // forces cold_boot's reset vector, sets PC to base, enables the
-// per-instruction trace-export (M10-S1), and single-steps until HALT (or a
+// per-instruction trace-export, and single-steps until HALT (or a
 // step ceiling). The trace is written in CpuTraceSink text format for a
-// line-for-line diff against the openMSX-side trace
-// (tools/openmsx/trace-parity.ps1).
+// line-for-line diff against the openMSX-side trace captured by the
+// local A/B harness.
 //
-// `cli_args` (M19-S6): when it carries --cart1/--cart1-type (and/or --cart2/
+// `cli_args`: when it carries --cart1/--cart1-type (and/or --cart2/
 // --cart2-type), load_cartridges_from_args mounts the cartridge(s) right
 // after cold_boot, before the driver program runs -- letting the Z80 program
-// page a real mapper in via #A8. Absent --cartN this is a no-op (pre-M19
-// behavior unchanged).
-// `halt_idle_extra_steps` (M23-S3, backlog C2): OPTIONAL, defaults to 0
-// (byte-identical pre-M23 behavior -- the loop still stops exactly at halt,
+// page a real mapper in via #A8. Absent --cartN this is a no-op (cartridge-
+// free behavior unchanged).
+// `halt_idle_extra_steps`: OPTIONAL, defaults to 0
+// (the loop still stops exactly at halt,
 // tests/CLAUDE.md's "stop at halt" convention). When > 0 and the CPU is
 // halted after that loop, steps this many MORE times while halted -- the
-// only way to observe the M23-S1 HALT-R phantom-M1-refetch behavior (R
+// only way to observe the HALT-R phantom-M1-refetch behavior (R
 // increments once per halted idle step) through the trace export.
 int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
                      const std::string& out_path, const std::vector<std::string>& cli_args,
@@ -155,7 +156,7 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
     if (const int rc = load_cartridges_from_args(machine, cli_args); rc != 0) {
         return rc;
     }
-    // Authentic reset boots slot-0 BIOS (M13-S4 #A8=0). The parity harness runs a
+    // Authentic reset boots slot-0 BIOS (#A8=0). The parity harness runs a
     // flat RAM-only program, so page the 64 KB mapper RAM into all four pages.
     machine.map_flat_ram();
     machine.load_memory(base, program.data(), static_cast<std::uint32_t>(program.size()));
@@ -168,7 +169,7 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
         ++steps;
     }
 
-    // M23-S3 (see halt_idle_extra_steps doc above): only engages when the
+    // See the halt_idle_extra_steps doc above: only engages when the
     // caller asks for it AND the CPU is halted; otherwise a no-op.
     if (halt_idle_extra_steps > 0 && machine.cpu().state().halted()) {
         for (std::uint32_t i = 0; i < halt_idle_extra_steps; ++i) {
@@ -195,13 +196,13 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
     return 0;
 }
 
-// M14-S6 VDP parity mode. Runs a flat RAM-only Z80 program (a CPU->VDP driver
+// VDP parity mode. Runs a flat RAM-only Z80 program (a CPU->VDP driver
 // exercising control registers, #98 VRAM auto-increment fill, palette, #9B
 // indirect, and the read-ahead path) like parity-trace, then dumps the
 // comparable VDP state: physical VRAM, 14-bit VRAM pointer, R#14, and the
 // control-register file. The same program runs on openMSX's V9958
-// (tools/openmsx/vdp-parity.ps1) for a diff. VRAM is now comparable (it was
-// excluded from M13's diff).
+// via the local A/B harness for a diff. VRAM is included in the
+// comparison.
 int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
                    std::uint32_t vram_bytes, const std::string& out_path) {
     std::ifstream in(bin_path, std::ios::binary);
@@ -276,8 +277,8 @@ int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_
     return 0;
 }
 
-// M21-S7 VDP RENDER parity mode (backlog D1/D5/D6/D7-display-path). Runs a
-// flat RAM-only Z80 program (tools/gen/vdp-render-probe.py) that writes
+// VDP RENDER parity mode. Runs a
+// flat RAM-only Z80 program (a generated render-probe driver) that writes
 // VRAM/registers/palette via the same #98/#99/#9A ports as run_vdp_parity,
 // then emits: R#0-R#27, the 16-entry palette (raw 9-bit GRB, matching
 // openMSX's "VDP palette" SimpleDebuggable byte layout: 2 bytes/entry,
@@ -286,8 +287,7 @@ int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_
 // the first <pixel_count> pixels of display line 0 (whatever mode the
 // program left active). The pixel dump is this engine's own derived output,
 // not a cross-engine probe -- openMSX exposes no computed-pixel-color
-// debuggable (`debug list` confirms none exists; see
-// docs/m21-parity-trace-diff.md for the full disposition).
+// debuggable (`debug list` confirms none exists).
 int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
                           std::uint32_t vram_bytes, std::uint32_t pixel_count, const std::string& out_path) {
     std::ifstream in(bin_path, std::ios::binary);
@@ -349,8 +349,8 @@ int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::
         out += "\n";
     }
     // Fixed extra 16-byte window at physical 0x10000 (the G6/G7 planar
-    // "bank1" region, A-M21-10), always emitted regardless of vram_bytes,
-    // so the D7 planar-transform probe's odd-logical-address writes are
+    // "bank1" region), always emitted regardless of vram_bytes,
+    // so the planar-transform probe's odd-logical-address writes are
     // visible without an enormous dump from address 0.
     out += "VRAM_BANK1\n";
     out += "10000";
@@ -378,8 +378,8 @@ int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::
     return 0;
 }
 
-// M22-S8 sprite/command-engine A/B parity mode (backlog D2/D3, closes D7).
-// Runs a flat RAM-only Z80 program (tools/gen/sprite-command-probe.py, using
+// Sprite/command-engine A/B parity mode.
+// Runs a flat RAM-only Z80 program (a generated probe using
 // the same OUT (#98)/(#99)/(#9B) port sequence a real CPU uses for sprites
 // and the R#32-46 command engine) like run_vdp_render_parity, then emits:
 // the full R#0-R#46 control + command-engine register file (openMSX's "VDP
@@ -420,9 +420,9 @@ int run_sprite_cmd_parity(const std::string& bin_path, std::uint16_t base, std::
     // Explicitly trigger the sprite-check recompute (S#0/S#3-S#6): this
     // engine's SpriteEngine is driven ONLY by the on_vsync() frame-boundary
     // hook (no CPU-visible port triggers it, deliberately -- no new clock
-    // consumer, planner package §1.4 Resolution 1), unlike openMSX's
+    // consumer), unlike openMSX's
     // raster-time-driven SpriteChecker::checkUntil(), which advances "for
-    // free" as real emulated time elapses. The companion PS1 script
+    // free" as real emulated time elapses. The companion openMSX-side harness
     // correspondingly waits real emulated time (`after time`) after the CPU
     // program's writes for openMSX's own check to complete naturally --
     // this call is this engine's architectural equivalent, not a workaround.
@@ -484,13 +484,13 @@ int run_sprite_cmd_parity(const std::string& bin_path, std::uint16_t base, std::
     return 0;
 }
 
-// M17-S5 YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
-// (tools/gen/ym2413-probe.py, using `OUT (#7C),reg ; OUT (#7D),value`)
+// YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
+// (a generated probe using `OUT (#7C),reg ; OUT (#7D),value`)
 // like run_parity_trace, then dumps the YM2413 register file (all 64 bytes,
-// $00-$3F) via the debug-only `register_value(addr)` accessor (A-M17-6). The
-// same program runs on openMSX's YM2413 (tools/openmsx/ym2413-parity.ps1),
+// $00-$3F) via the debug-only `register_value(addr)` accessor. The
+// same program runs on openMSX's YM2413 via the local A/B harness,
 // read via its "MSX Music regs" SimpleDebuggable
-// (references/openmsx-21.0/src/sound/YM2413.hh:40-44), for a per-address
+// (openMSX 21.0: src/sound/YM2413.hh:40-44), for a per-address
 // diff.
 int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
                       const std::string& out_path) {
@@ -545,16 +545,15 @@ int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint
     return 0;
 }
 
-// M26-S4 decoded-FrameBuffer-dump evidence generator (backlog C9,
-// docs/m26-planner-package.md §2.5 point 3). Drives a colorful, deterministic
+// Decoded-FrameBuffer-dump evidence generator. Drives a colorful, deterministic
 // GRAPHIC4 (SCREEN5) test scene through the real #98/#99/#9A VDP port
-// protocol via the non-perturbing debug_io_write() seam (M13) -- no CPU
-// driver program needed (same port-write sequences as
-// tools/gen/vdp-render-probe.py, re-expressed here in C++). Vertical
+// protocol via the non-perturbing debug_io_write() seam -- no CPU
+// driver program needed (the same port-write sequences as the
+// generated render probe, re-expressed here in C++). Vertical
 // color bars spanning all 16 palette entries, with a vivid hand-chosen
 // palette -- a recognizable picture, not a blank boot screen.
-// machine.write_frame_dump() produces the raw dump; tools/convert/frame-to-png.py
-// converts it to the committed PNG.
+// machine.write_frame_dump() produces the raw dump; a local converter
+// script turns it into a PNG.
 int run_frame_dump_demo(const std::string& out_path) {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
@@ -577,10 +576,11 @@ int run_frame_dump_demo(const std::string& out_path) {
     // M1=M2=0) -> mode base 0x0C, VdpMode::Graphic4 (devices/video/
     // vdp_mode.h base-byte formula).
     set_register(0, 0x06);
-    // M34 (DEC-0043 Defect B): R#1 bit6 BL=1 -- the render gate blanks BL=0
+    // R#1 bit6 BL=1 -- the render gate blanks BL=0
     // lines (real hardware behavior), so a demo scene modelling a DISPLAYED
     // screen must enable the display like a real program would. Renders
-    // byte-identical to the pre-M34 output (bit6 previously had no effect).
+    // byte-identical to the earlier output in which bit6 had no
+    // effect. (DEC-0043 Defect B)
     set_register(1, 0x40);
 
     // A vivid, hand-chosen 16-entry palette (3-bit R/G/B each), entry 0 kept
@@ -615,14 +615,14 @@ int run_frame_dump_demo(const std::string& out_path) {
     return 0;
 }
 
-// M20-S4 Halnote/MSX-JE firmware openMSX A/B parity mode (backlog B4+B6).
+// Halnote/MSX-JE firmware openMSX A/B parity mode.
 // Cold-boots with real ROM assets from <bios_dir> (bios/f1xvfirm.rom,
 // unmodified -- this local file's SHA1 was independently confirmed
-// byte-identical to the installed WSL openMSX system ROM, planner
-// §2.6/A-M20, tools/openmsx/halnote-parity.ps1), routes the entire
+// byte-identical to the installed WSL openMSX system
+// ROM), routes the entire
 // Halnote 64 KB window into view via the debug-harness technique (no CPU
 // driver program needed -- Halnote's mem_read/mem_write are pure functions
-// of the raw 16-bit address, planner §2.5), then runs the same write/read
+// of the raw 16-bit address), then runs the same write/read
 // protocol sequence as the openMSX-side Tcl script, dumping each read-back
 // as a "LABEL=name VALUE=hex" line for cross-emulator diffing.
 int run_halnote_parity(const std::string& bios_dir, const std::string& out_path) {
@@ -711,75 +711,77 @@ int run_halnote_parity(const std::string& bios_dir, const std::string& out_path)
     return 0;
 }
 
-// M27-S1..S3/S7 "--debug-session" mode (docs/m27-planner-package.md §2.2,
-// items 1/3/4). A wholly additive new mode -- never touches the pre-existing
+// "--debug-session" mode.
+// A wholly additive mode -- never touches the pre-existing
 // default run path below main()'s "headless scaffold" block, unchanged
-// byte-for-byte (R-M27-1). Resolves A-M27-1/A-M27-2 (the default path never
-// drives the CPU nor loads real BIOS assets): this mode loads real ROM
+// byte-for-byte. Unlike the default path (which never
+// drives the CPU nor loads real BIOS assets), this mode loads real ROM
 // assets from <bios_dir> and drives the CPU with a bounded, halt-respecting
 // step_cpu_instruction() loop -- the same "stop exactly at halt" shape as
 // run_bios_boot_trace (tests/CLAUDE.md's convention), no new CPU-stepping
 // semantics invented.
 struct DebugSessionOptions {
-    // M35-S1: repeatable --disk list (AC-8: same mechanism as SDL3 frontend).
+    // Repeatable --disk list (same mechanism as the SDL3 frontend).
     std::vector<std::string> disk_paths;
     std::optional<std::string> debug_root;
     std::optional<std::string> dump_state_name;
     std::optional<std::string> trace_cpu_name;
     std::optional<std::string> event_log_name;
     std::optional<std::string> input_script_path;
-    // M32 closure additions (QA condition, docs/m32-qa-signoff.md: committed
-    // evidence needs RECORDED, re-runnable recipes; consumed by
-    // tools/capture/cartridge-evidence.ps1). Both additive; absent flags
-    // leave every pre-M32 invocation byte-identical.
+    // Frame-driving additions (committed evidence
+    // needs RECORDED, re-runnable recipes; consumed by
+    // local capture tooling). Both additive; absent flags
+    // leave every prior invocation byte-identical.
     //   --frames <N>: drive N frames via the real frame-loop shape
     //     (step_cpu_instruction() to each frame boundary, then
-    //     on_vsync_boundary() -- Sdl3App::run_one_frame()'s C5-closure
+    //     on_vsync_boundary() -- Sdl3App::run_one_frame()'s loop
     //     shape) instead of the step-only loop. <max_steps> is ignored in
     //     this mode (frame count is the budget); the loop deliberately does
     //     NOT stop on HALT -- real titles HALT-wait for the VBlank interrupt
-    //     every frame (the DEC-0034 loop-shape finding).
+    //     every frame (DEC-0034).
     //   --dump-frame <name>: write_frame_dump(<name>) after the run
     //     (to <debug_root>/frames/<name>).
     std::optional<std::uint32_t> frames;
     std::optional<std::string> dump_frame_name;
-    // M36-S-c: opt-in host-file disk-save persistence. Default false =
-    // in-memory-only (byte-for-byte the pre-M36 behavior; never clobbers a
+    // Opt-in host-file disk-save persistence. Default false =
+    // in-memory-only (never clobbers a
     // real .dsk). When set, each mounted disk gets its host path bound and a
     // dirty image is flushed at end-of-run (and before a scripted swap).
     bool disk_writable = false;
-    // Fast-disk (FDC turbo) QoL mode. M46 (DEC-0071) makes this TRI-STATE so the
+    // Fast-disk (FDC turbo) QoL mode. TRI-STATE so the
     // DEFAULT lives in resolve_session_defaults() (headless/SDL3 parity), NOT the
     // field: convenience default ON, --no-fast-disk/--stock force OFF, explicit
-    // --fast-disk forces ON. Applied once after cold_boot() via set_fast_disk().
+    // --fast-disk forces ON. Applied once after cold_boot() via
+    // set_fast_disk(). (DEC-0071)
     std::optional<bool> fast_disk_opt;
-    // M46 (DEC-0071): --ram <64|128|256|512> (tri-state; nullopt = unspecified),
+    // --ram <64|128|256|512> (tri-state; nullopt = unspecified),
     // --no-fmpac (opt out of the slot-2 FM-PAC auto-load), and --stock (one-shot
     // bare machine: RAM 64 + accurate disk + no FM-PAC). Resolved through the
     // shared resolve_session_defaults() so the headless --debug-session game path
-    // gets the same flipped convenience defaults as the SDL3 exe.
+    // gets the same flipped convenience defaults as the SDL3 exe. (DEC-0071)
     std::optional<int> ram_kb;
     bool no_fmpac = false;
     bool stock = false;
-    // M50-S2 (DEC-0077, docs/m50-planner-package.md §4.6): --config <path>
+    // --config <path>
     // FORCE-loads an externalized strict-XML config even headless (the opt-in
     // that overrides the determinism gate). std::nullopt (default, every ctest
     // invocation) = the headless path NEVER auto-loads a config -> the resolved
-    // session defaults stay byte-identical to pre-M50. Only the session/machine
+    // session defaults stay byte-identical to the no-config behavior. Only the
+    // session/machine
     // knobs (RAM / fast-disk / FM-PAC auto-load) apply headless; the presentation
-    // knobs are SDL3-only and ignored here.
+    // knobs are SDL3-only and ignored here. (DEC-0077)
     std::optional<std::string> config_path;
-    // M36 deterministic repro/testing enabler: swap to the next disk in the
+    // Deterministic repro/testing enabler: swap to the next disk in the
     // repeatable --disk list at this frame (frame-loop mode only). Reuses
-    // M35's multi-disk cache + swap semantics headlessly so a two-disk game
+    // the multi-disk cache + swap semantics headlessly so a two-disk game
     // (e.g. a multi-disk RPG title's "INSERT DATADISK" prompt) can be driven
     // deterministically without the SDL3 window / F11.
     std::optional<std::uint32_t> swap_disk_frame;
-    // M36-S-d: FM-PAC peripheral cartridge battery-SRAM .sram persistence.
+    // FM-PAC peripheral cartridge battery-SRAM .sram persistence.
     // When set, the machine loads this .sram on FM-PAC insertion (absent file
     // -> deterministic zero state) and flushes it back at end-of-run.
     std::optional<std::string> fmpac_sram_path;
-    // M36 Phase 3 (DEC-0051): comprehensive debug snapshot. --snapshot <dir>
+    // Comprehensive debug snapshot (DEC-0051). --snapshot <dir>
     // enables the capture and sets the output root (<dir>/snapshot/<id>/);
     // --snapshot-frame <N> (frame-loop mode) captures at that specific frame
     // for a deterministic mid-run capture (default: once at end-of-run).
@@ -787,15 +789,16 @@ struct DebugSessionOptions {
     // byte-for-byte unchanged (no snapshot dir created, no file written).
     std::optional<std::string> snapshot_dir;
     std::optional<std::uint32_t> snapshot_frame;
-    // DEC-0052 stream-light (M36 Bug B long-session upstream hunt):
+    // Lightweight live stream capture for long-session diagnosis:
     // --stream-light arms the machine-level live stream-capture in the
     // LIGHTWEIGHT mode for the whole run (per-frame snapshot bundles
     // suppressed -> coarse anchors + the per-event watchlog
     // stream_<id>_watch.log). Default OFF = no stream capture (byte-for-byte
-    // the pre-DEC-0052 behavior). Headless analogue of the SDL3 F10 toggle,
-    // for a deterministic, reproducible light capture without a window.
+    // the prior behavior). Headless analogue of the SDL3 F10 toggle,
+    // for a deterministic, reproducible light capture without a
+    // window. (DEC-0052)
     bool stream_light = false;
-    // M39-A Step 1 confirmation diagnostic. --io-observe <out.csv> writes a
+    // Digitized-voice confirmation diagnostic. --io-observe <out.csv> writes a
     // per-frame CSV of the PPI port-C bit-7 (1-bit-DAC) EDGE rate and the PSG
     // R8/R9/R10 (software-PCM volume) write rate, over the --frames run --
     // distinguishing the 1-bit-DAC voice hypothesis (Fix A: bit-7 edges >> 60/
@@ -803,11 +806,11 @@ struct DebugSessionOptions {
     // only (O(1) memory/frame), so it does not OOM like --trace-cpu. Enables
     // click-DAC capture for the run.
     std::optional<std::string> io_observe_name;
-    // M39-A Step 3 validation. --audio-dump <name> mixes the FULL machine audio
-    // (PSG + SCC + built-in FM + FM-PAC + the M39 1-bit-DAC click) every frame
+    // Audio-dump validation. --audio-dump <name> mixes the FULL machine audio
+    // (PSG + SCC + built-in FM + FM-PAC + the 1-bit-DAC click) every frame
     // via MachineAudioMixer -- the same law the SDL3 frontend uses -- and writes
     // the voice-window PCM to <debug_root>/sounds/<name> ("HBF1XV-AUDIO-DUMP
-    // v1", -> WAV via tools/convert/audio-dump-to-wav.py). --frames mode only. Enables
+    // v1", convertible to WAV by a local script). --frames mode only. Enables
     // click-DAC capture unless --audio-no-click (the BEFORE/no-click A/B leg,
     // click term forced 0). --audio-from/--audio-to bound the appended frame
     // window (all generators still advance every frame to stay in lockstep).
@@ -815,19 +818,19 @@ struct DebugSessionOptions {
     bool audio_no_click = false;
     std::optional<std::uint32_t> audio_from;
     std::optional<std::uint32_t> audio_to;
-    // M39-A Fix B: --audio-sync switches --audio-dump from the once-per-frame
+    // Fix B: --audio-sync switches --audio-dump from the once-per-frame
     // BATCH mix (the pre-fix behavior -- the BEFORE leg, sub-frame PSG volume
     // writes collapse, voice silent) to the INTERLEAVED sync-before-change
     // production (the AFTER leg -- samples produced during CPU stepping over
     // machine-cycle windows, so the software-PCM voice survives). One build, one
     // A/B: BEFORE = --audio-dump, AFTER = --audio-dump --audio-sync.
     bool audio_sync = false;
-    // M39-A: isolate the PSG in the --audio-dump (drop SCC/FM/FM-PAC/click), so
+    // Isolate the PSG in the --audio-dump (drop SCC/FM/FM-PAC/click), so
     // the BEFORE(batch)/AFTER(sync) A/B differs ONLY in the PSG production
     // method -- cleanly exposing the software-PCM voice without the SCC music
     // (which a scrolling-shooter title plays loudly) masking it.
     bool audio_psg_only = false;
-    // DEC-0072 replay-fidelity diagnostic (M47-followup, this run). The default
+    // Replay-fidelity diagnostic (DEC-0072). The default
     // --input-script replay applies key edges AFTER the frame's first instruction
     // (script_player.apply_due() sits inside the CPU step sub-loop). The LIVE SDL3
     // recorder instead applied the very same edges via poll_and_dispatch_events()
@@ -842,34 +845,36 @@ struct DebugSessionOptions {
     // sampled at each frame boundary (after on_vsync_boundary()). Used to diff two
     // drivers (headless vs SDL3 hidden-window) and name the first divergence frame.
     std::optional<std::string> fingerprint_name;
-    // DEC-0072 watchpoint (Step 2): watch writes to a physical-DRAM window and log
+    // Save-corruption watchpoint: watch writes to a physical-DRAM window and log
     // any byte whose value != the SRAM-correct reference at the matching in-sector
     // index. --watch-save <out.log> enables; the window/reference are wired in the
-    // frames loop. Opt-in, off by default.
+    // frames loop. Opt-in, off by default. (DEC-0072)
     std::optional<std::string> watch_save_name;
-    // DEC-0072 physical-DRAM memory-write WATCHPOINT (M47 kill-step). --watch-mem
+    // Physical-DRAM memory-write WATCHPOINT. --watch-mem
     // <LO> <HI> <out.csv> traps every CPU write whose folded PHYSICAL DRAM address
     // is in [LO, HI) (both hex, e.g. E000 E200 -- a multi-disk RPG title's
     // save-build buffer) and
     // logs the writing instruction's PC + live A/BC/DE/HL/IX/IY/SP + cycle to the
     // CSV. --watch-from/--watch-to bound the logged FRAME window (default: whole
-    // run). Opt-in, off by default; byte-identical when absent.
+    // run). Opt-in, off by default; byte-identical when absent. (DEC-0072)
     std::optional<std::string> watch_mem_name;
     std::size_t watch_mem_lo = 0;
     std::size_t watch_mem_hi = 0;
     std::uint32_t watch_mem_from = 0;
     std::uint32_t watch_mem_to = 0xFFFFFFFFu;
-    // DEC-0072 causal probe: signed T-state bias added to the VDP command-engine
+    // Causal probe: signed T-state bias added to the VDP command-engine
     // CE busy-window duration (V9958Vdp::set_cmd_busy_bias). Sweeping this tests
     // whether the save-build corruption is gated by the command-engine finish
-    // timing (the openMSX calcFinishTime approximation). 0 (default) = unchanged.
+    // timing (the openMSX calcFinishTime approximation). 0 (default) =
+    // unchanged. (DEC-0072)
     std::int64_t vdp_cmd_bias = 0;
-    // DEC-0072 raster-phase sweep: add a constant T-state offset to EVERY input
+    // Raster-phase sweep: add a constant T-state offset to EVERY input
     // event, delaying the whole (relative-timing-preserved) input timeline so the
     // save-build runs at a shifted raster/VBlank phase. The live corruption is
     // phase-sensitive (a corrupting session saved at a different frame than the
     // clean owner script), so sweeping this probes for the "bad" phase that
-    // reproduces the -0x8A save corruption deterministically. 0 = unchanged.
+    // reproduces the -0x8A save corruption deterministically. 0 =
+    // unchanged. (DEC-0072)
     std::uint64_t input_shift = 0;
 };
 
@@ -894,7 +899,7 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
         const std::string& arg = args[i];
         if (arg == "--disk") {
             if (auto v = take_debug_session_value(args, i, "--disk", errors)) {
-                opts.disk_paths.push_back(*v);  // M35-S1: accumulate, not overwrite
+                opts.disk_paths.push_back(*v);  // accumulate, not overwrite
                 ++i;
             }
         } else if (arg == "--debug-root") {
@@ -935,22 +940,22 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
         } else if (arg == "--disk-writable") {
             opts.disk_writable = true;  // boolean flag, no value
         } else if (arg == "--fast-disk") {
-            opts.fast_disk_opt = true;  // M46: explicit ON (overrides --stock / the default)
+            opts.fast_disk_opt = true;  // explicit ON (overrides --stock / the default)
         } else if (arg == "--no-fast-disk") {
-            opts.fast_disk_opt = false;  // M46: explicit OFF (accurate FDC timing)
+            opts.fast_disk_opt = false;  // explicit OFF (accurate FDC timing)
         } else if (arg == "--no-fmpac") {
-            opts.no_fmpac = true;  // M46: opt out of the FM-PAC slot-2 auto-load
+            opts.no_fmpac = true;  // opt out of the FM-PAC slot-2 auto-load
         } else if (arg == "--stock") {
-            opts.stock = true;  // M46: one-shot authentic bare machine preset
+            opts.stock = true;  // one-shot authentic bare machine preset
         } else if (arg == "--config") {
-            // M50-S2 (DEC-0077): force-load a strict-XML config even headless.
+            // Force-load a strict-XML config even headless (DEC-0077).
             if (auto v = take_debug_session_value(args, i, "--config", errors)) {
                 opts.config_path = *v;
                 ++i;
             }
         } else if (arg == "--ram") {
-            // M46 (DEC-0071): shared {64,128,256,512} enum validator (headless/
-            // SDL3 parity). A bad/missing value is a loud parse error.
+            // Shared {64,128,256,512} enum validator (headless/
+            // SDL3 parity). A bad/missing value is a loud parse error. (DEC-0071)
             if (auto v = take_debug_session_value(args, i, "--ram", errors)) {
                 ++i;
                 int kb = 0;
@@ -979,25 +984,25 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
                 ++i;
             }
         } else if (arg == "--stream-light") {
-            opts.stream_light = true;  // DEC-0052: arm lightweight stream capture (boolean flag)
+            opts.stream_light = true;  // arm lightweight stream capture (boolean flag, DEC-0052)
         } else if (arg == "--io-observe") {
             if (auto v = take_debug_session_value(args, i, "--io-observe", errors)) {
-                opts.io_observe_name = *v;  // M39-A Step 1 diagnostic CSV path
+                opts.io_observe_name = *v;  // voice-diagnostic CSV path
                 ++i;
             }
         } else if (arg == "--audio-dump") {
             if (auto v = take_debug_session_value(args, i, "--audio-dump", errors)) {
-                opts.audio_dump_name = *v;  // M39-A Step 3 voice-window PCM dump
+                opts.audio_dump_name = *v;  // voice-window PCM dump
                 ++i;
             }
         } else if (arg == "--audio-no-click") {
-            opts.audio_no_click = true;  // M39-A: BEFORE leg -- click term forced 0
+            opts.audio_no_click = true;  // BEFORE leg -- click term forced 0
         } else if (arg == "--audio-sync") {
-            opts.audio_sync = true;  // M39-A Fix B: interleaved sync-before-change (AFTER leg)
+            opts.audio_sync = true;  // Fix B: interleaved sync-before-change (AFTER leg)
         } else if (arg == "--audio-psg-only") {
-            opts.audio_psg_only = true;  // M39-A: isolate the PSG voice for a clean A/B
+            opts.audio_psg_only = true;  // isolate the PSG voice for a clean A/B
         } else if (arg == "--input-frame-start") {
-            opts.input_frame_start = true;  // DEC-0072: apply script edges at frame-start (live-faithful)
+            opts.input_frame_start = true;  // apply script edges at frame-start (live-faithful, DEC-0072)
         } else if (arg == "--fingerprint") {
             if (auto v = take_debug_session_value(args, i, "--fingerprint", errors)) {
                 opts.fingerprint_name = *v;  // per-frame CPU fingerprint CSV
@@ -1005,7 +1010,7 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
             }
         } else if (arg == "--watch-save") {
             if (auto v = take_debug_session_value(args, i, "--watch-save", errors)) {
-                opts.watch_save_name = *v;  // DEC-0072 Step 2 memory-write watchpoint log
+                opts.watch_save_name = *v;  // memory-write watchpoint log (DEC-0072)
                 ++i;
             }
         } else if (arg == "--watch-mem") {
@@ -1055,7 +1060,7 @@ DebugSessionOptions parse_debug_session_options(const std::vector<std::string>& 
     return opts;
 }
 
-// M39-A Step 1: passive PSG register-write counter. Counts writes to the
+// Passive PSG register-write counter. Counts writes to the
 // channel-volume registers R8/R9/R10 (the software-PCM path a Fix-B voice would
 // hammer) and total register writes -- read per-frame by --io-observe to report
 // the write RATE. Non-perturbing (inspection only).
@@ -1081,11 +1086,12 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         return 2;
     }
 
-    // M50-S2 (DEC-0077, §4.6): the headless path NEVER auto-loads a config; only
+    // The headless path NEVER auto-loads a config; only
     // an explicit --config <path> force-loads one (no ctest invocation passes it,
     // so the resolved defaults stay byte-identical). The loaded config supplies
     // the BASE session defaults (RAM / fast-disk / FM-PAC) that resolve_session_
-    // defaults() falls back to -- precedence CLI > XML > convenience default.
+    // defaults() falls back to -- precedence CLI > XML > convenience
+    // default. (DEC-0077)
     sony_msx::machine::EmulatorConfig cfg;  // built-in defaults
     if (opts.config_path.has_value()) {
         std::vector<std::string> config_warnings;
@@ -1095,12 +1101,14 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // M50-S3 (DEC-0077, docs/m50-planner-package.md §6-S3): resolve the machine-
+    // Resolve the machine-
     // sizing/path fields with precedence CLI > XML > built-in default. Each XML
     // value is surfaced ONLY when it differs from the built-in default, so with no
-    // --config (every ctest invocation) these stay byte-identical to pre-M50. The
+    // --config (every ctest invocation) these stay byte-identical to the
+    // no-config behavior. The
     // headless <bios_dir> is a mandatory positional CLI arg, so it always wins the
-    // BIOS-dir precedence (CLI > XML) and no XML bios-dir applies here by design.
+    // BIOS-dir precedence (CLI > XML) and no XML bios-dir applies here by
+    // design. (DEC-0077)
     const sony_msx::machine::EmulatorConfig config_defaults;  // for "XML differs from default"
     const std::string fmpac_autoload_rom = cfg.fmpac_rom;     // XML > "roms/fmpac.rom"
     std::optional<std::string> resolved_fmpac_sram = opts.fmpac_sram_path;  // CLI > XML > derive
@@ -1112,9 +1120,10 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         resolved_softwaredb = cfg.softwaredb_path;
     }
 
-    // M46 (DEC-0071): resolve the flipped convenience-vs-stock defaults in the
-    // CLI layer (headless/SDL3 parity, the anti-drift seam of planner §2.7 -- the
-    // Hbf1xvMachine ctor default STAYS 64 KB; this is the only place it flips).
+    // Resolve the flipped convenience-vs-stock defaults in the
+    // CLI layer (headless/SDL3 parity, the anti-drift seam -- the
+    // Hbf1xvMachine ctor default STAYS 64 KB; this is the only place it
+    // flips). (DEC-0071)
     // Empty CLI + no config -> {512 KB RAM, fast-disk ON, FM-PAC slot-2 auto-load
     // ON}; --stock/--ram 64/--no-fast-disk/--no-fmpac peel it back (order-
     // independent); a loaded config replaces the convenience base default.
@@ -1133,21 +1142,21 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (opts.debug_root.has_value()) {
         machine.set_debug_root(*opts.debug_root);
     }
-    // M36 Phase 3: --snapshot <dir> sets the snapshot output root; the
+    // --snapshot <dir> sets the snapshot output root; the
     // capture lands under <dir>/snapshot/<id>/. Takes precedence over
     // --debug-root for a dedicated snapshot run.
     if (opts.snapshot_dir.has_value()) {
         machine.set_debug_root(*opts.snapshot_dir);
     }
-    // R-M27-2: event logging MUST be enabled BEFORE cold_boot() to capture
+    // Event logging MUST be enabled BEFORE cold_boot() to capture
     // the Reset event (hbf1xv_machine.h:306-309's documented ordering
     // requirement).
     if (opts.event_log_name.has_value()) {
         machine.set_event_logging_enabled(true);
     }
-    // M50-S3 (DEC-0077): apply the config-resolved role-keyed BIOS filenames
+    // Apply the config-resolved role-keyed BIOS filenames
     // BEFORE cold_boot (which drives load_rom_assets). A bare/no-config cfg keeps
-    // the strict spec filenames, byte-identical to before.
+    // the strict spec filenames, byte-identical to before. (DEC-0077)
     machine.set_bios_filenames(cfg.bios_roms);
     machine.set_asset_root(bios_dir);
     machine.cold_boot();
@@ -1161,36 +1170,37 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     machine.set_fast_disk(resolved.fast_disk);
     if (resolved.fast_disk) {
         std::cerr << "debug-session: fast-disk (FDC turbo) ENABLED -- disk timing collapsed "
-                     "(M46 convenience default; --no-fast-disk / --stock for accurate timing)\n";
+                     "(convenience default; --no-fast-disk / --stock for accurate timing)\n";
     }
 
-    // DEC-0072 causal probe: apply the VDP command-engine CE busy-window bias.
+    // Causal probe: apply the VDP command-engine CE busy-window bias. (DEC-0072)
     if (opts.vdp_cmd_bias != 0) {
         machine.vdp().set_cmd_busy_bias(opts.vdp_cmd_bias);
         std::cerr << "debug-session: VDP command-engine CE busy-window bias = " << opts.vdp_cmd_bias
                   << " T-states (DEC-0072 diagnostic)\n";
     }
 
-    // M36-S-d: bind the FM-PAC .sram path BEFORE loading cartridges, so a
-    // freshly-inserted FM-PAC loads its battery SRAM on insertion. M50-S3: the
+    // Bind the FM-PAC .sram path BEFORE loading cartridges, so a
+    // freshly-inserted FM-PAC loads its battery SRAM on insertion. The
     // resolved path honors CLI --fmpac-sram > XML > auto-derive.
     if (resolved_fmpac_sram.has_value()) {
         machine.set_fmpac_sram_path(*resolved_fmpac_sram);
     }
 
-    // M50-S3: pass the XML softwaredb override (CLI --softwaredb still wins inside
+    // Pass the XML softwaredb override (CLI --softwaredb still wins inside
     // the loader); std::nullopt when no config set a non-default path.
     if (const int rc = load_cartridges_from_args(machine, cli_args, resolved_softwaredb); rc != 0) {
         return rc;
     }
 
-    // M46 (DEC-0071): FM-PAC slot-2 auto-load (planner §2.5), the headless
+    // FM-PAC slot-2 auto-load, the headless
     // analogue of Sdl3App::load_configured_assets(). Runs AFTER the explicit
     // --slotN carts so the occupancy / already-present checks see the final
     // state. Gated by resolved.fmpac_autoload. Every skip is a graceful note --
-    // NEVER a boot failure; DEC-0050 "NO S-RAM AVAILABLE" stays correct on skip.
-    // M50-S3 (DEC-0077): the auto-load ROM path is config-resolved (XML > the
-    // built-in "roms/fmpac.rom"); byte-identical to pre-M50 with no config.
+    // NEVER a boot failure; "NO S-RAM AVAILABLE" stays correct on skip
+    // (DEC-0050). The auto-load ROM path is config-resolved (XML > the
+    // built-in "roms/fmpac.rom"); byte-identical with no
+    // config. (DEC-0071, DEC-0077)
     sony_msx::frontend::FmPacAutoloadOutcome fmpac_outcome =
         sony_msx::frontend::FmPacAutoloadOutcome::NotAttempted;
     if (resolved.fmpac_autoload) {
@@ -1210,7 +1220,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                                                        std::istreambuf_iterator<char>());
                 // Bind the .sram BEFORE the insert (restores on load). Default:
                 // beside the ROM; a resolved --fmpac-sram/XML path (bound above)
-                // overrides (M50-S3: resolved_fmpac_sram already incorporates it).
+                // overrides (resolved_fmpac_sram already incorporates it).
                 if (!resolved_fmpac_sram.has_value()) {
                     machine.set_fmpac_sram_path(fmpac_autoload_rom + ".sram");
                 }
@@ -1230,12 +1240,12 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     }
     (void)fmpac_outcome;  // consumed by the compact session banner below
 
-    // A-M27-3 (headless previously had no --disk flag; SDL3 has one, M26).
-    // M35-S2: mirrors Sdl3App::load_configured_assets() with a repeatable
-    // disk list. M36: caches ALL disks in memory (deterministic, no runtime
+    // Headless --disk support,
+    // mirroring Sdl3App::load_configured_assets() with a repeatable
+    // disk list. Caches ALL disks in memory (deterministic, no runtime
     // I/O) so a scripted --swap-disk-frame can rotate them like the SDL3 F11
-    // path. Loads the first disk at boot (AC-S2-1); none if the list is
-    // empty (AC-S2-3).
+    // path. Loads the first disk at boot; none if the list is
+    // empty.
     std::vector<std::vector<std::uint8_t>> disk_cache;
     std::size_t current_disk_index = 0;
     for (const std::string& disk_path : opts.disk_paths) {
@@ -1248,22 +1258,22 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     }
     if (!disk_cache.empty()) {
         machine.disk_image() = sony_msx::devices::fdc::DiskImage(disk_cache[0]);
-        // M36-S-c: opt-in host-file write-back (default false -> no host path,
-        // flush() a no-op, byte-for-byte pre-M36 behavior).
+        // Opt-in host-file write-back (default false -> no host path,
+        // flush() a no-op).
         if (opts.disk_writable) {
             machine.disk_image().set_host_path(opts.disk_paths[0]);
         }
         machine.disk_drive().attach_image(&machine.disk_image());
     } else {
-        // M35-S2: explicitly detach when no disk in list (safety/clarity)
+        // Explicitly detach when no disk in list (safety/clarity)
         machine.disk_drive().attach_image(nullptr);
     }
 
-    // M46 (DEC-0071): compact headless "This session" banner (planner §2.6,
-    // secondary) so the playtest agent / human see the RESOLVED config, and so
+    // Compact headless "This session" banner
+    // so the playtest agent / human see the RESOLVED config, and so
     // the two exes are consistent. SDL3's banner is the human-facing artifact;
     // this is the same content in one line block, built from the pure
-    // frontend/session_summary.h helpers.
+    // frontend/session_summary.h helpers. (DEC-0071)
     {
         namespace fe = sony_msx::frontend;
         const int fmpac_slot =
@@ -1314,7 +1324,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
         try {
             std::vector<sony_msx::machine::InputScriptEvent> ev = sony_msx::machine::parse_input_script(text);
-            // DEC-0072 raster-phase sweep: delay the whole timeline by a constant.
+            // Raster-phase sweep: delay the whole timeline by a constant. (DEC-0072)
             if (opts.input_shift != 0) {
                 for (auto& e : ev) {
                     e.at_tstate += opts.input_shift;
@@ -1328,15 +1338,15 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
             return 2;
         }
     }
-    // M41-S1: give the player the machine's joystick so JOY= events drive
+    // Give the player the machine's joystick so JOY= events drive
     // STICK/STRIG. Harmless for KEY-only scripts (never touched) -> the KEY
-    // path stays byte-for-byte the pre-M41 behavior.
+    // path stays byte-for-byte unchanged.
     script_player.attach_joystick(&machine.joystick());
 
-    // M36 Phase 3: deterministic comprehensive debug-snapshot capture.
+    // Deterministic comprehensive debug-snapshot capture.
     // Default OFF -- only fires when --snapshot <dir> is present, so a run
     // without the flag is byte-for-byte identical to before. The manifest
-    // carries the multi-disk index (frontend/headless concept, planner A4)
+    // carries the multi-disk index (a frontend/headless concept)
     // as a caller note.
     bool snapshot_taken = false;
     auto capture_snapshot = [&]() {
@@ -1354,18 +1364,19 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         snapshot_taken = true;
     };
 
-    // DEC-0052 stream-light: arm the lightweight live stream-capture for the
+    // Stream-light: arm the lightweight live stream-capture for the
     // whole run (headless analogue of the SDL3 F10 toggle). Armed AFTER
     // debug_root/disk/cart setup so the watchlog + coarse anchors land under
     // the configured root. Default OFF -> no arming, byte-for-byte the
-    // pre-DEC-0052 behavior. A step-mode run auto-finalizes on HALT/SP-
-    // underflow; a frames-mode run is finalized manually at end-of-run below.
+    // prior behavior. A step-mode run auto-finalizes on HALT/SP-
+    // underflow; a frames-mode run is finalized manually at end-of-run
+    // below. (DEC-0052)
     if (opts.stream_light) {
         machine.set_stream_capture_enabled(true, std::string{}, /*light=*/true);
         std::cerr << "debug-session: stream-light armed: stream_" << machine.stream_capture_id() << "\n";
     }
 
-    // --- M39-A digitized-voice diagnostic (Step 1) + validation (Step 3) ---
+    // --- Digitized-voice diagnostic (--io-observe) + validation (--audio-dump) ---
     // Both need the port-C bit-7 (1-bit-DAC) edge capture ON; the BEFORE leg
     // (--audio-no-click) keeps it OFF so the click term is exactly 0.
     const bool click_capture =
@@ -1388,21 +1399,22 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     if (opts.io_observe_name.has_value()) {
         io_observe_csv = "frame,click_bit7_edges,psg_vol_writes,psg_total_writes\n";
     }
-    // DEC-0072 per-frame CPU fingerprint buffer (opt-in --fingerprint).
+    // Per-frame CPU fingerprint buffer (opt-in --fingerprint, DEC-0072).
     std::string fingerprint_csv;
     if (opts.fingerprint_name.has_value()) {
         fingerprint_csv = "frame,cycles,pc,sp,af,bc,de,hl,ix,iy,r\n";
     }
-    // DEC-0072 save-frame detector (--watch-save): per-frame diff of the disk
+    // Save-frame detector (--watch-save): per-frame diff of the disk
     // save-slot region (LBA 9..16 = offsets 0x1200..0x2200) to find WHICH frame
-    // each slot save lands at (and its first 16 bytes), for bounding the trace.
+    // each slot save lands at (and its first 16 bytes), for bounding the
+    // trace. (DEC-0072)
     std::string watch_save_csv;
     std::vector<std::uint8_t> watch_prev_slots;
     if (opts.watch_save_name.has_value()) {
         watch_save_csv = "frame,cycles,slot,lba,first16,ndiff_vs_prev\n";
     }
-    // DEC-0072 physical-DRAM watchpoint: arm BEFORE the frame loop so every
-    // in-window write is captured. Off unless --watch-mem was supplied.
+    // Physical-DRAM watchpoint: arm BEFORE the frame loop so every
+    // in-window write is captured. Off unless --watch-mem was supplied. (DEC-0072)
     if (opts.watch_mem_name.has_value()) {
         machine.set_mem_watch(opts.watch_mem_lo, opts.watch_mem_hi, opts.watch_mem_from,
                               opts.watch_mem_to);
@@ -1415,7 +1427,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                   << ") frames[" << opts.watch_mem_from << "," << opts.watch_mem_to << "]\n";
     }
 
-    // Step 3: a MachineAudioMixer mixing the FULL machine audio (the same law +
+    // Audio dump: a MachineAudioMixer mixing the FULL machine audio (the same law +
     // 81-cycle step the SDL3 frontend uses). BATCH mode (BEFORE) mixes once per
     // frame with exact-accounting sample count; --audio-sync (AFTER) produces
     // samples INTERLEAVED with CPU stepping over machine-cycle windows so the
@@ -1440,7 +1452,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         machine.psg().set_audio_sync_enabled(true);
         machine.psg().reset_audio_sync(machine.elapsed_cycles());
     }
-    // M39-A Fix B interleaved production: emit every audio sample whose absolute
+    // Fix B interleaved production: emit every audio sample whose absolute
     // machine-cycle boundary has been reached, weaving per-sample takes into the
     // CPU-step loop so the PSG sync-before-change writes land at their true
     // sub-frame position. Called after each instruction.
@@ -1474,13 +1486,13 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
 
     std::uint32_t steps = 0;
     if (opts.frames.has_value()) {
-        // M32 frame-loop mode: the real production drive shape
-        // (Sdl3App::run_one_frame() / the DEC-0034 C5-closure loop) -- VBlank
+        // Frame-loop mode: the real production drive shape
+        // (Sdl3App::run_one_frame()'s loop shape, DEC-0034) -- VBlank
         // interrupts delivered at every boundary, no halt-stop (titles
         // HALT-wait for VBlank). Deterministic: a pure function of the frame
         // count and the input script's cycle stamps.
         const std::uint64_t target = machine.frame_cycles_per_frame();
-        // DEC-0072 DIAGNOSTIC (env-gated; default off => unchanged): stop AT the
+        // DIAGNOSTIC (env-gated; default off => unchanged; DEC-0072): stop AT the
         // terminal crash-halt (HALT with interrupts disabled => can never wake)
         // instead of stepping idle for the remaining frames, so a bounded
         // --trace-cpu ring retains the DERAILMENT rather than the post-halt spin.
@@ -1490,7 +1502,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }();
         bool terminal_halt = false;
         for (std::uint32_t frame = 0; frame < *opts.frames && !terminal_halt; ++frame) {
-            // M36: deterministic scripted disk swap at a frame boundary (the
+            // Deterministic scripted disk swap at a frame boundary (the
             // headless analogue of the SDL3 F11 swap), for driving a two-disk
             // game past its "insert data disk" prompt reproducibly.
             if (opts.swap_disk_frame.has_value() && frame == *opts.swap_disk_frame &&
@@ -1510,7 +1522,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                           << opts.disk_paths[current_disk_index] << "\") at frame " << frame << "\n";
             }
             const std::uint64_t start = machine.elapsed_cycles();
-            // DEC-0072 replay fidelity: in --input-frame-start mode, apply every
+            // Replay fidelity (DEC-0072): in --input-frame-start mode, apply every
             // due key edge at FRAME-START (before the first instruction), exactly
             // as the live SDL3 poll_and_dispatch_events() did (it ran before the
             // frame's CPU loop and stamped this same frame-start cycle as T). The
@@ -1527,7 +1539,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                     script_player.apply_due(machine.elapsed_cycles(), machine.keyboard());
                 }
                 ++steps;
-                // M39-A Fix B: interleaved sub-frame-accurate audio production.
+                // Fix B: interleaved sub-frame-accurate audio production.
                 if (audio_sync_dump) {
                     emit_synced_audio(frame);
                 }
@@ -1538,8 +1550,8 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                 }
             }
             machine.on_vsync_boundary();
-            // DEC-0072 save-frame detector: compare the disk save-slot region to
-            // the previous frame; log any slot whose bytes changed this frame.
+            // Save-frame detector: compare the disk save-slot region to
+            // the previous frame; log any slot whose bytes changed this frame. (DEC-0072)
             if (opts.watch_save_name.has_value()) {
                 const std::vector<std::uint8_t>& disk = machine.disk_image().data();
                 constexpr std::size_t kBase = 9u * 512u;   // LBA 9
@@ -1568,8 +1580,9 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                                             disk.begin() + static_cast<std::ptrdiff_t>(kBase + kSpan));
                 }
             }
-            // DEC-0072 per-frame CPU-state fingerprint (post-boundary), for the
-            // headless-vs-SDL3 determinism cross-check and first-divergence hunt.
+            // Per-frame CPU-state fingerprint (post-boundary), for the
+            // headless-vs-SDL3 determinism cross-check and first-divergence
+            // hunt. (DEC-0072)
             if (opts.fingerprint_name.has_value()) {
                 const auto& r = machine.cpu().state().regs();
                 fingerprint_csv += std::to_string(frame) + "," +
@@ -1584,7 +1597,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                                    sony_msx::machine::debug_format::to_hex(r.iy, 4) + "," +
                                    sony_msx::machine::debug_format::to_hex(r.r, 2) + "\n";
             }
-            // M39-A Step 1: per-frame edge/write-rate diagnostic row (deltas).
+            // --io-observe: per-frame edge/write-rate diagnostic row (deltas).
             if (opts.io_observe_name.has_value()) {
                 const std::uint64_t edges = machine.click_dac().edge_count();
                 io_observe_csv += std::to_string(frame) + "," +
@@ -1595,7 +1608,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                 prev_psg_vol = psg_write_counter.vol_writes;
                 prev_psg_total = psg_write_counter.total_writes;
             }
-            // M39-A Step 3 (BATCH / BEFORE leg only -- the interleaved AFTER leg
+            // Audio dump (BATCH / BEFORE leg only -- the interleaved AFTER leg
             // produces samples inside the step loop above): mix this frame's
             // audio (exact-accounting count) to keep every generator -- incl. the
             // 1-bit DAC -- in lockstep; append only within the frame window.
@@ -1620,7 +1633,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                     audio_pcm.insert(audio_pcm.end(), frame_pcm.begin(), frame_pcm.end());
                 }
             }
-            // M36 Phase 3: deterministic mid-run capture at the requested frame
+            // Deterministic mid-run capture at the requested frame
             // boundary (the same post-on_vsync_boundary() point --dump-frame /
             // --swap-disk-frame already use).
             if (opts.snapshot_dir.has_value() && opts.snapshot_frame.has_value() &&
@@ -1636,16 +1649,17 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // DEC-0052 stream-light: finalize a still-armed capture (a frames-mode run
+    // Stream-light: finalize a still-armed capture (a frames-mode run
     // that never HALTed / underflowed the stack). Dumps the trace ring + a final
-    // MANUAL_ snapshot; the watch.log was appended incrementally during the run.
+    // MANUAL_ snapshot; the watch.log was appended incrementally during the
+    // run. (DEC-0052)
     if (opts.stream_light && machine.stream_capture_active()) {
         machine.set_stream_capture_enabled(false);
         std::cerr << "debug-session: stream-light finalized: stream_" << machine.stream_capture_id()
                   << " (watch.log under " << machine.debug_root().string() << "/traces)\n";
     }
 
-    // M36-S-c: persist any pending writable-disk writes back to the host .dsk
+    // Persist any pending writable-disk writes back to the host .dsk
     // (opt-in only; no-op when --disk-writable was absent -> no host path).
     if (opts.disk_writable && !disk_cache.empty()) {
         if (machine.disk_image().flush()) {
@@ -1654,8 +1668,8 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // M36-S-d / M46: persist the FM-PAC battery SRAM back to its .sram file --
-    // whether the FM-PAC came from an explicit --slotN cart or the M46 slot-2
+    // Persist the FM-PAC battery SRAM back to its .sram file --
+    // whether the FM-PAC came from an explicit --slotN cart or the slot-2
     // auto-load. flush_fmpac_sram() is a no-op (returns false) unless an FM-PAC
     // is inserted AND a path was bound, so a bare/--stock/--no-fmpac run never
     // writes anything (DEC-0050).
@@ -1664,7 +1678,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                   << "\"\n";
     }
 
-    // M39-A Step 1: write the per-frame edge/write-rate diagnostic CSV.
+    // Write the per-frame edge/write-rate diagnostic CSV.
     if (opts.io_observe_name.has_value()) {
         std::ofstream csv(*opts.io_observe_name, std::ios::binary | std::ios::trunc);
         if (!csv) {
@@ -1678,7 +1692,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                   << " total_psg_writes=" << prev_psg_total << "\n";
     }
 
-    // DEC-0072 per-frame CPU fingerprint dump.
+    // Per-frame CPU fingerprint dump. (DEC-0072)
     if (opts.fingerprint_name.has_value()) {
         std::ofstream fp(*opts.fingerprint_name, std::ios::binary | std::ios::trunc);
         if (!fp) {
@@ -1689,7 +1703,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         std::cerr << "debug-session: wrote fingerprint CSV " << *opts.fingerprint_name << "\n";
     }
 
-    // DEC-0072 save-frame detector dump.
+    // Save-frame detector dump. (DEC-0072)
     if (opts.watch_save_name.has_value()) {
         std::ofstream ws(*opts.watch_save_name, std::ios::binary | std::ios::trunc);
         if (ws) {
@@ -1698,7 +1712,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // DEC-0072 physical-DRAM watchpoint dump.
+    // Physical-DRAM watchpoint dump. (DEC-0072)
     if (opts.watch_mem_name.has_value()) {
         const std::string& log = machine.mem_watch_log();
         std::ofstream wm(*opts.watch_mem_name, std::ios::binary | std::ios::trunc);
@@ -1709,7 +1723,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
         }
     }
 
-    // M39-A Step 3: write the voice-window full-machine audio dump.
+    // Write the voice-window full-machine audio dump.
     if (audio_dump) {
         if (!sony_msx::frontend::write_pcm_audio_dump(machine.debug_root(), *opts.audio_dump_name,
                                                       audio_pcm, kAudioRateHz)) {
@@ -1721,7 +1735,7 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
                   << (opts.audio_no_click ? " (no-click/BEFORE)" : " (click on/AFTER)") << "\n";
     }
 
-    // M36 Phase 3: end-of-run comprehensive snapshot (unless a mid-run
+    // End-of-run comprehensive snapshot (unless a mid-run
     // --snapshot-frame capture already fired).
     if (opts.snapshot_dir.has_value() && !snapshot_taken) {
         capture_snapshot();
@@ -1747,20 +1761,20 @@ int run_debug_session(const std::string& bios_dir, const std::uint32_t max_steps
     std::cerr << "debug-session: steps=" << steps << " halted=" << (machine.cpu().state().halted() ? 1 : 0)
               << " final_pc=" << std::hex << machine.cpu().state().regs().pc << std::dec
               << " elapsed_cycles=" << machine.elapsed_cycles() << "\n";
-    // DEC-0072 diagnostic: did the run exercise the VDP command-engine color/LMCM path?
+    // Diagnostic: did the run exercise the VDP command-engine color/LMCM path? (DEC-0072)
     std::cerr << "debug-session: vdp S#7-color-reads=" << machine.vdp().cmd_engine().color_read_count()
               << " LMCM-issues=" << machine.vdp().cmd_engine().lmcm_start_count() << "\n";
     return 0;
 }
 
-// M27-S5 headless PSG audio-dump demo (docs/m27-planner-package.md §2.3
-// point 3, mirrors --frame-dump-demo's precedent). Programs a fixed tone on
+// Headless PSG audio-dump demo
+// (mirrors --frame-dump-demo's precedent). Programs a fixed tone on
 // PSG channel A via the real public register-write API
 // (write_address()/write_data() -- #A0/#A1, the same ports the CPU/IoBus
 // itself uses; PsgYm2149::write_register() is a private implementation
 // detail, psg_ym2149.h, not directly callable here), then dumps a fixed
 // sample count via write_psg_audio_dump() (genuine PsgAudioPump/PsgYm2149
-// reuse, §2.3).
+// reuse).
 int run_audio_dump_demo(const std::string& out_path) {
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
@@ -1778,11 +1792,11 @@ int run_audio_dump_demo(const std::string& out_path) {
     psg.write_address(7);
     psg.write_data(0x3E);
     // R8: channel A volume -- fixed level 15 (max), resolved_amplitude() ==
-    // 2*15+1 == 31 (A-M27-4's documented maximum).
+    // 2*15+1 == 31 (the documented maximum).
     psg.write_address(8);
     psg.write_data(15);
 
-    constexpr std::uint64_t kSampleRateHz = 44100;  // A-M27-5.
+    constexpr std::uint64_t kSampleRateHz = 44100;  // standard CD-quality rate.
     constexpr std::size_t kSampleCount = 44100;     // 1 second, an audibly non-trivial length.
     const bool ok = sony_msx::frontend::write_psg_audio_dump(machine.debug_root(), out_path, psg, kSampleRateHz,
                                                              kSampleCount);
@@ -1796,7 +1810,7 @@ int run_audio_dump_demo(const std::string& out_path) {
 
 }  // namespace
 
-// M13-S5 BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
+// BIOS-boot trace mode. Cold-boots from the authentic reset (#A8 = 0,
 // PC = 0x0000, slot-0 BIOS) with the ROM assets loaded from <bios_dir>, then
 // single-steps up to <max_steps> instructions, exporting the per-instruction
 // trace for a diff against openMSX's reset-step trace. No map_flat_ram: this
@@ -1829,7 +1843,7 @@ int run_bios_boot_trace(const std::string& bios_dir, std::uint32_t max_steps,
     return 0;
 }
 
-// M24-S2 generic CP/M ".com" runner (backlog C3, ZEXDOC/ZEXALL full parity
+// Generic CP/M ".com" runner (used for the ZEXDOC/ZEXALL full parity
 // sweep). Reads a flat CP/M-style ".com" file from disk, cold-boots a fresh
 // machine, loads it via the generic CpmBdosHarness (src/machine/
 // cpm_bdos_harness.h -- zero zexall/zexdoc-specific knowledge), runs it to
@@ -1884,7 +1898,7 @@ int run_cpm(const std::string& com_path, std::uint64_t max_instructions, const s
 }
 
 int main(int argc, char** argv) {
-    // Full argv (minus argv[0]) for the M19 cartridge CLI (--cart1/
+    // Full argv (minus argv[0]) for the cartridge CLI (--cart1/
     // --cart1-type/--cart2/--cart2-type), parsed order-independently in
     // either the default run or --parity-trace mode.
     const std::vector<std::string> args(argv + 1, argv + argc);
@@ -1984,7 +1998,7 @@ int main(int argc, char** argv) {
                          " [--no-fmpac] [--disk-writable] [--swap-disk-frame <N>] [--fmpac-sram <path>]"
                          " [--snapshot <dir>] [--snapshot-frame <N>]\n"
                          "  (--cart1/--cart2/--cartN-type are accepted as silent aliases for --slotN.)\n"
-                         "  M46 (DEC-0071) convenience defaults: RAM 512 KB, fast-disk ON, and an\n"
+                         "  Convenience defaults: RAM 512 KB, fast-disk ON, and an\n"
                          "  FM-PAC auto-loaded into slot 2 from roms/fmpac.rom (SRAM roms/fmpac.rom.sram,\n"
                          "  skipped gracefully if absent). --stock = the authentic bare machine\n"
                          "  (RAM 64 + accurate disk + no FM-PAC); --no-fast-disk / --no-fmpac / --ram\n"
@@ -2000,11 +2014,11 @@ int main(int argc, char** argv) {
                          "  <path> loads/saves an inserted FM-PAC cartridge's 8 KB battery SRAM.\n"
                          "  --frames drives N frames via the real frame loop (VBlank delivered;\n"
                          "  <max_steps> ignored, HALT does not stop the run); --dump-frame writes\n"
-                         "  the decoded frame to <debug_root>/frames/<name> after the run (M32).\n"
+                         "  the decoded frame to <debug_root>/frames/<name> after the run.\n"
                          "  --cartN-type is optional: when omitted (or 'auto') the mapper type is\n"
-                         "  auto-identified via softwaredb SHA1 match, then a bank-write heuristic\n"
-                         "  (M30, --softwaredb overrides the default references/openmsx-21.0/share/"
-                         "softwaredb.xml).\n";
+                         "  auto-identified via softwaredb SHA1 match, then a bank-write heuristic.\n"
+                         "  Point --softwaredb at an openMSX share/softwaredb.xml to enable the SHA1\n"
+                         "  match; without it the bank-write heuristic is used on its own.\n";
             return 2;
         }
         const std::string bios_dir = argv[2];
@@ -2047,14 +2061,14 @@ int main(int argc, char** argv) {
         const auto base = static_cast<std::uint16_t>(std::strtoul(argv[3], nullptr, 16));
         const auto max_steps = static_cast<std::uint32_t>(std::strtoul(argv[4], nullptr, 10));
         const std::string out_path = argv[5];
-        // Optional 6th positional arg (M23-S3, backlog C2 A/B evidence); absent
-        // -> 0, the exact pre-M23 behavior (see run_parity_trace's doc comment).
+        // Optional 6th positional arg; absent
+        // -> 0, no extra halted-idle steps (see run_parity_trace's doc comment).
         const auto halt_idle_extra_steps =
             (argc >= 7) ? static_cast<std::uint32_t>(std::strtoul(argv[6], nullptr, 10)) : 0U;
         return run_parity_trace(bin_path, base, max_steps, out_path, args, halt_idle_extra_steps);
     }
 
-    // M42 (DEC-0061): optional --ram <64|128|256|512> main-RAM size (KB) --
+    // Optional --ram <64|128|256|512> main-RAM size (KB, DEC-0061) --
     // headless parity with the SDL3 frontend's --ram. Parsed BEFORE the machine
     // is constructed (its DRAM is sized at construction). Absent -> the stock
     // 64 KB spec (kDramBytes), byte-identical to before. Uses the SHARED
@@ -2097,8 +2111,8 @@ int main(int argc, char** argv) {
         return rc;
     }
 
-    // M37 Slice D (DEC-0056): optional --speed <0..7> launch-time initial Sony
-    // Speed Controller level -- headless parity with the SDL3 frontend. Uses
+    // Optional --speed <0..7> launch-time initial Sony
+    // Speed Controller level (DEC-0056) -- headless parity with the SDL3 frontend. Uses
     // the same shared validator (parse_speed_level, one range policy) and is
     // applied AFTER cold_boot() (which resets the controller to level 0),
     // before the run loop below. Absent --speed leaves the controller

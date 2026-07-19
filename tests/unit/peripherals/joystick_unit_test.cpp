@@ -17,11 +17,12 @@
 #include "devices/audio/psg_ym2149.h"
 #include "peripherals/joystick.h"
 
-// Suite: Peripherals_Joystick_Unit  (M15-S2, backlog C6)
+// Suite: Peripherals_Joystick_Unit
 //
 // Two joystick ports read through PSG port A (R14) and selected through PSG port
-// B (R15). Grounding: fact-sheet §2 "Joystick ports". Also exercises the port
-// through a real PsgYm2149 to prove the R14/R15 wiring (X5: peripheral -> PSG).
+// B (R15). Grounding: the "Joystick ports" hardware fact-sheet section. Also
+// exercises the port through a real PsgYm2149 to prove the R14/R15 wiring
+// (peripheral -> PSG).
 
 namespace {
 
@@ -118,14 +119,14 @@ int main() {
         }
     }
 
-    // --- M18-S3 (A-M18-10) cassette-input injection: REGRESSION GUARD. The
+    // --- Cassette-input injection: REGRESSION GUARD. The
     // unattached path (cassette_source_ == nullptr, the default) must be
-    // byte-for-byte IDENTICAL to the pre-M18 behavior -- bit7 unconditionally
-    // 1, regardless of any joystick/direction state. ---
+    // byte-for-byte IDENTICAL to the pre-injection behavior -- bit7
+    // unconditionally 1, regardless of any joystick/direction state. ---
     {
         JoystickPorts joy;
         joy.reset();
-        // Idle: bit7 still 1 exactly as before M18.
+        // Idle: bit7 still 1 exactly as without the injection hook.
         if (!expect_true(joy.read_port_a() == 0xFF, "Unattached_Idle_Bit7StillOne")) {
             return 1;
         }
@@ -145,7 +146,7 @@ int main() {
     }
 
     // --- Attached cassette source: bit7 reflects the injected source's live
-    // value (M18-S3, A-M18-10). ---
+    // value. ---
     {
         class FakeCassetteSource final : public sony_msx::peripherals::CassetteInputSource {
         public:

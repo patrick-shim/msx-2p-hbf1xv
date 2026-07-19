@@ -37,7 +37,7 @@ copyright notices.
 ## Required files (all seven)
 
 The machine loader (`src/machine/hbf1xv_machine.cpp`, `load_rom_assets()`) expects exactly
-these filenames and sizes; `tools/validate-assets.ps1` gates on all seven being present:
+these filenames and sizes; `tools/gates/validate-assets.ps1` gates on all seven being present:
 
 | File           | Size    | Role (slot mapping per the machine composition)        |
 | -------------- | ------- | ------------------------------------------------------ |
@@ -59,6 +59,6 @@ these filenames and sizes; `tools/validate-assets.ps1` gates on all seven being 
   `machine.set_asset_root(SONY_MSX_BIOS_DIR)` before `cold_boot()` (DEC-0016), or they
   silently run against 0xFF fill under ctest.
 - Checksums are captured reproducibly via
-  `./tools/checksum-assets.ps1 -OutFile docs/asset-checksums.txt`.
+  `./tools/gates/checksum-assets.ps1 -OutFile docs/asset-checksums.txt`.
 - Keep files legally sourced; treat as local development assets only; reference explicit
   file paths in tests/scripts — never invent missing assets.

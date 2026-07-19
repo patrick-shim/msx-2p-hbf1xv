@@ -20,8 +20,7 @@
 #include "peripherals/joystick.h"
 #include "peripherals/keyboard_matrix.h"
 
-// Suite: Machine_InputScript_Unit (M27-S6, "Production Hardening +
-// Debug/Test Tooling" item 3, docs/m27-planner-package.md §2.4).
+// Suite: Machine_InputScript_Unit
 //
 // Proves the deterministic timed key-event script format's parser/
 // serializer round-trips exactly, rejects EVERY named malformed-input class
@@ -185,10 +184,10 @@ int main() {
         expect(player.cursor() == 4, "Player_PastEnd_RemainsAtEventCount_NoOp");
     }
 
-    // --- Case 5 (M41-S1): KEY-only byte-identity REGRESSION GUARD. A script
+    // --- Case 5: KEY-only byte-identity REGRESSION GUARD. A script
     // with zero JOY= lines must parse to KEY events and serialize back
-    // byte-for-byte identically to the pre-M41 output -- the additive JOY verb
-    // must not perturb the KEY path in any way. ---
+    // byte-for-byte identically to the output before the JOY verb existed --
+    // the additive JOY verb must not perturb the KEY path in any way. ---
     {
         const std::string key_only =
             "HBF1XV-INPUT-SCRIPT v1\n"
@@ -208,7 +207,7 @@ int main() {
         expect(serialize_input_script(events) == key_only, "KeyOnly_SerializeByteIdenticalToPreM41");
     }
 
-    // --- Case 6 (M41-S1): JOY= parse/serialize round-trip, interleaved with
+    // --- Case 6: JOY= parse/serialize round-trip, interleaved with
     // KEY= events (both line kinds coexist in one script). ---
     {
         const std::string text =
@@ -255,7 +254,7 @@ int main() {
         expect(all_match, "JoyMixed_Reparse_EventsByteIdentical");
     }
 
-    // --- Case 7 (M41-S1): every named malformed JOY class throws
+    // --- Case 7: every named malformed JOY class throws
     // std::runtime_error (mirrors Case 2's KEY discipline). ---
     expect(throws_runtime_error("HBF1XV-INPUT-SCRIPT v1\nT=0 JOY=0 LEFT DOWN\n[END]\n"),
            "MalformedJoy_PortZero_Throws");
@@ -271,7 +270,7 @@ int main() {
     expect(throws_runtime_error("HBF1XV-INPUT-SCRIPT v1\nT=0 PAD=1 LEFT DOWN\n[END]\n"),
            "MalformedJoy_UnknownLineKind_Throws");
 
-    // --- Case 8 (M41-S1): the player drives JoystickPorts for JOY= events,
+    // --- Case 8: the player drives JoystickPorts for JOY= events,
     // accumulating into a per-port PortState (distinct controls coexist);
     // an unattached player treats JOY= as a cursor-advancing no-op. ---
     {

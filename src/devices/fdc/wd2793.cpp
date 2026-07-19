@@ -20,7 +20,8 @@ namespace sony_msx::devices::fdc {
 
 namespace {
 
-// DEC-0072 DIAGNOSTIC (env-gated; default OFF => this whole path is skipped and
+// Write-commit DIAGNOSTIC (DEC-0072; env-gated, default OFF => this whole path
+// is skipped and
 // emulation is byte-identical). Set SONY_MSX_FDCWLOG=<path> to stream every
 // committed Write-Sector byte (genuine vs 0x00-substituted) for offline audit of
 // whether our FDC lays the game's bytes down faithfully. Opened once, lazily.
@@ -126,7 +127,8 @@ void Wd2793::sync(std::uint64_t t) {
         status_ |= kLostData;
         end_command(t);
     }
-    // Mid-transfer abandoned Write Sector (DEF-M47-DISKWRITE; PRESERVES M45). This
+    // Mid-transfer abandoned Write Sector (DEF-M47-DISKWRITE; preserves the
+    // DEF-M45-WRITEDRQ first-byte abort). This
     // is DISTINCT from the first-byte CHECK_WRITE gate above (which aborts an
     // ABSENT first byte, data_index_ == 0). Once the FIRST byte has landed
     // (data_index_ > 0), the WD2793 lays down a FULL 512-byte sector regardless of
@@ -317,9 +319,10 @@ void Wd2793::write_sector(const std::uint8_t value) {
 void Wd2793::write_data(const std::uint8_t value) {
     const std::uint64_t t = now();
     sync(t);
-    // DEF-M47-DISKWRITE: LATCH the CPU byte, then COMMIT it in-order at the
-    // current sector position -- ALWAYS, never dropped. The byte-POSITION is
-    // DECOUPLED from the CPU-write TIMING. The M45 model gated the commit on
+    // LATCH the CPU byte, then COMMIT it in-order at the
+    // current sector position -- ALWAYS, never dropped (DEF-M47-DISKWRITE). The
+    // byte-POSITION is
+    // DECOUPLED from the CPU-write TIMING. The earlier model gated the commit on
     // transfer_drq(t) and SILENTLY DROPPED (data_reg_ updated, but buffer_/
     // data_index_/data_available_ NOT advanced) any byte that did not land
     // exactly inside the DRQ window -- an early / 2-bytes-per-DRQ-burst /
@@ -380,7 +383,7 @@ void Wd2793::commit_write_sector_byte(const std::uint64_t t, const std::uint8_t 
     if (sector_write_observer_ != nullptr) {
         // Non-perturbing trace: log the committed byte (genuine vs 0x00-
         // substituted), its in-sector index, and the target LBA at the LATCHED
-        // CHS (H4). Default null => this whole path is skipped => byte-identical.
+        // CHS. Default null => this whole path is skipped => byte-identical.
         sector_write_observer_->on_write_byte(
             command_reg_, write_track_num_, write_side_, write_sector_num_,
             DiskImage::chs_to_lba(write_track_num_, write_side_, write_sector_num_), data_index_,
@@ -543,7 +546,7 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
         end_command(t);
         return;
     }
-    // DEC-0052 stream-capture: notify the (non-perturbing) observer of the
+    // Stream-capture (DEC-0052): notify the (non-perturbing) observer of the
     // COMPLETED sector read -- the 512 bytes are now in buffer_ and no DRQ
     // transfer has begun. Default null => skipped => byte-for-byte identical FDC
     // behaviour + timing (nothing below reads the observer's result). track/side
@@ -555,7 +558,7 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
     }
     data_index_ = 0;
     data_available_ = static_cast<int>(DiskImage::kSectorSize);
-    // Index-pulse-relative first DRQ (DEC-0055 slice C / DEC-0053 residual R-A).
+    // Index-pulse-relative first DRQ (DEC-0055 / DEC-0053).
     // Real hardware/openMSX must wait for the requested sector to rotate under
     // the head before the data stream begins, so the first-DRQ latency is
     // VARIABLE (0..~1 rotation) -- NOT the old fixed 2-byte kReadStartCycles
@@ -575,7 +578,7 @@ void Wd2793::begin_read_sector(const std::uint64_t t) {
 
 void Wd2793::begin_write_sector(const std::uint64_t t) {
     write_sector_num_ = sector_reg_;
-    // H4 (DEF-M47-DISKWRITE): LATCH the target (track, side) at command START, the
+    // LATCH the target (track, side) at command START (DEF-M47-DISKWRITE) -- the
     // moment the sector's address mark is under the head. The head cannot move
     // and the side cannot be re-selected to a DIFFERENT physical sector while the
     // command is BUSY, so finish_write_sector commits to THESE latched
@@ -597,9 +600,9 @@ void Wd2793::begin_write_sector(const std::uint64_t t) {
     // the SAME variable latency the read path uses (begin_read_sector). On a real
     // WD2793 / openMSX the write DRQ + CHECK_WRITE are scheduled from the moment
     // the sector's address mark rotates under the head (startWriteSector,
-    // references/openmsx-21.0/src/fdc/WD2793.cc:646-672, reached via
+    // openMSX 21.0: src/fdc/WD2793.cc:646-672, reached via
     // type2Search/getNextSector's post-search time), NOT a fixed offset from
-    // command issue. The M45 fix wrongly used the fixed 2-byte read_start_cycles()
+    // command issue. An earlier fix wrongly used the fixed 2-byte read_start_cycles()
     // here (zero rotational latency), so DRQ + the CHECK_WRITE window fired ~1140
     // cycles after the command -- ABORTING a valid game (e.g. a multi-disk RPG
     // title) whose in-game
@@ -643,16 +646,16 @@ void Wd2793::finish_read_sector(const std::uint64_t t) {
     }
     if ((status_ & (kCrcError | kRecordNotFound | kLostData)) == 0) {
         // Genuine end of the (possibly multi-record) Read Sector command, no
-        // error bits set (planner §6.3 boot-checkpoint signal (c)).
+        // error bits set (the boot-checkpoint acceptance signal).
         ++read_sector_completions_ok_;
     }
     end_command(t);
 }
 
 void Wd2793::finish_write_sector(const std::uint64_t t) {
-    // H4 (DEF-M47-DISKWRITE): commit to the LATCHED (track, side) captured at
+    // Commit to the LATCHED (track, side) captured at
     // begin_write_sector, NOT the live drive position -- so a mid-transfer side/
-    // track change cannot land the sector on the wrong CHS.
+    // track change cannot land the sector on the wrong CHS. (DEF-M47-DISKWRITE)
     drive_->write_sector_at(write_track_num_, write_side_, write_sector_num_, buffer_.data());
     if (sector_write_observer_ != nullptr) {
         // Non-perturbing finish trace: the assembled sector + its CRC at the
@@ -702,7 +705,7 @@ void Wd2793::start_type3(const std::uint8_t cmd, const std::uint64_t t) {
             end_command(t);
             return;
         }
-        // H4 (DEF-M47-DISKWRITE): latch (track, side) at command START, as Write
+        // Latch (track, side) at command START (DEF-M47-DISKWRITE), as Write
         // Sector does -- the formatted sectors commit to these coordinates via
         // write_sector_at (parse_write_track_byte), so a mid-format side/track
         // change cannot redirect them. The head stays on the physical track for
@@ -781,7 +784,7 @@ void Wd2793::parse_write_track_byte(const std::uint8_t value) {
     // Parse the streamed track template to reformat a standard 9-sector track
     // (fact-sheet §5 "How the WD2793 constructs this"). 0xF5 -> A1 sync mark;
     // 0xFE after A1 = IDAM (C,H,R,N follow); 0xFB/0xF8 after A1 = DAM (512 data +
-    // 0xF7 CRC follow). Arbitrary flux fidelity is deferred (backlog B10).
+    // 0xF7 CRC follow). Arbitrary flux fidelity is deliberately not modelled.
     if (value == 0xF5) {
         ++wt_a1_run_;
         return;
@@ -807,8 +810,8 @@ void Wd2793::parse_write_track_byte(const std::uint8_t value) {
     } else if (wt_in_data_) {
         if (value == 0xF7 && wt_data_count_ >= static_cast<int>(DiskImage::kSectorSize)) {
             if (drive_ != nullptr) {
-                // H4 (DEF-M47-DISKWRITE): commit to the LATCHED (track, side)
-                // captured at start_type3, not the live drive position.
+                // Commit to the LATCHED (track, side) captured at
+                // start_type3, not the live drive position. (DEF-M47-DISKWRITE)
                 drive_->write_sector_at(write_track_num_, write_side_, wt_sector_num_,
                                         wt_data_.data());
             }

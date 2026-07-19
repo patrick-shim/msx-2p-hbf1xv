@@ -212,7 +212,7 @@ int main() {
     //     full bundle. ---
     {
         const std::filesystem::path root =
-            std::filesystem::temp_directory_path() / "hbf1xv_m36_snap_core_unit";
+            std::filesystem::temp_directory_path() / "hbf1xv_snap_core_unit";
         std::error_code ec;
         std::filesystem::remove_all(root, ec);
 

@@ -20,7 +20,7 @@ namespace sony_msx::frontend {
 const std::array<ScancodeBinding, 72>& Sdl3InputMapper::scancode_map() {
     // Standard MSX international 11x8 keyboard matrix, rows 0-8 (see the
     // header doc comment for the row8/SPACE cross-check against
-    // peripherals::RenshaTurbo's M25 fact). Row 2 column 0 is the MSX
+    // peripherals::RenshaTurbo's documented fact). Row 2 column 0 is the MSX
     // ":"/"*" key; no PC key carries that legend, so it's bound to
     // Right-Ctrl (SDL_SCANCODE_RCTRL) -- a physical key free of any host
     // hotkey (unlike Right-Alt, which collides with the Alt+Enter/Alt+D
@@ -129,8 +129,8 @@ bool Sdl3InputMapper::dispatch_key_event(const SDL_Event& event, peripherals::Ke
 
     // PAUSE/Speed-Controller/Ren-Sha-Turbo bindings: act ONLY on a genuine
     // fresh key-down (never on key-up, never on OS key-repeat) -- toggle/step
-    // semantics, matching the M25 API's own "one press = one toggle/step"
-    // contract.
+    // semantics, matching the peripheral API's own "one press = one
+    // toggle/step" contract.
     if (scancode == kPauseButtonScancode) {
         if (pressed && !event.key.repeat) {
             pause_controller.press_pause_button();
@@ -163,7 +163,7 @@ bool Sdl3InputMapper::dispatch_key_event(const SDL_Event& event, peripherals::Ke
         return true;
     }
     if (scancode == kDiskSwapScancode) {
-        // M35-S3: F11 is CONSUMED here (returns true for every down/up/
+        // F11 is CONSUMED here (returns true for every down/up/
         // repeat) so it never reaches the MSX keyboard matrix. The actual
         // drive-A disk cycle happens in Sdl3App::on_disk_swap_hotkey() from
         // the app event loop on a fresh key-down (sdl3_app.cpp) -- the

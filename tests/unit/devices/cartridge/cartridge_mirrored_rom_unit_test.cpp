@@ -17,12 +17,12 @@
 
 #include "devices/cartridge/cartridge_mirrored_rom.h"
 
-// Suite: Devices_CartridgeMirroredRom_Unit (M19-S2, backlog B7)
+// Suite: Devices_CartridgeMirroredRom_Unit
 //
-// Grounds references/openmsx-21.0/src/memory/RomPlain.cc (MIRRORED case,
+// Grounds openMSX 21.0: src/memory/RomPlain.cc (MIRRORED case,
 // behaviour reference only, never copied -- GPL isolation): load-time size
-// validation (A-M19-7, RomPlain.cc:39-43), full mirror placement with no
-// bank-switch registers (A-M19-8).
+// validation (RomPlain.cc:39-43), full mirror placement with no
+// bank-switch registers.
 
 namespace {
 
@@ -52,7 +52,7 @@ std::vector<std::uint8_t> make_marker_image(const unsigned num_banks) {
 }  // namespace
 
 int main() {
-    // --- Load-time validation (A-M19-7): positive multiple of 0x2000, <= 0x10000. ---
+    // --- Load-time validation: positive multiple of 0x2000, <= 0x10000. ---
     expect(CartridgeMirroredRom::is_valid_image_size(0x2000), "IsValid_OneBank_8KB_Accepted");
     expect(CartridgeMirroredRom::is_valid_image_size(0x4000), "IsValid_TwoBanks_16KB_Accepted");
     expect(CartridgeMirroredRom::is_valid_image_size(0x10000), "IsValid_EightBanks_64KB_Accepted");
@@ -61,7 +61,7 @@ int main() {
     expect(!CartridgeMirroredRom::is_valid_image_size(0x2001), "IsValid_OneByteOver_Rejected");
     expect(!CartridgeMirroredRom::is_valid_image_size(0x12000), "IsValid_LargerThan64KB_Rejected");
 
-    // --- A-M19-8 worked example: 16 KB image (nrBlocks=2) mirrors 4x across
+    // --- Worked example: 16 KB image (nrBlocks=2) mirrors 4x across
     //     the 64 KB window: window-slots {0,2,4,6} -> bank0, {1,3,5,7} -> bank1. ---
     {
         CartridgeMirroredRom rom(make_marker_image(2));
@@ -76,7 +76,7 @@ int main() {
         expect(ok, "SixteenKbImage_MirrorsFourTimes_AcrossSixtyFourKB");
     }
 
-    // --- Bank 0 at 0x0000 (no placement ambiguity, A-M19-8). ---
+    // --- Bank 0 at 0x0000 (no placement ambiguity). ---
     {
         CartridgeMirroredRom rom(make_marker_image(4));
         expect(rom.mem_read(0x0000) == 0, "Bank0_AtAddressZero");

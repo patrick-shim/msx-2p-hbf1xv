@@ -1,9 +1,9 @@
 # `src/devices/memory/` — CPU-addressable memory devices
 
-Device logic for the HB-F1XV CPU memory map (M13). These are `core::MemoryDevice`
-implementations attached to the M11 `chipset::SlotBus` by the machine wiring
-(`src/machine/hbf1xv_machine.cpp`). Composition (which device sits in which
-slot/sub-slot/page, and asset loading) stays in `src/machine/` per `src/CLAUDE.md`.
+Device logic for the HB-F1XV CPU memory map. These are `core::MemoryDevice`
+implementations attached to the `chipset::SlotBus` by the machine wiring
+(`src/machine/hbf1xv_machine.cpp`). Composition — which device sits in which
+slot/sub-slot/page, and asset loading — stays in `src/machine/`.
 
 ## Files
 
@@ -15,7 +15,7 @@ slot/sub-slot/page, and asset loading) stays in `src/machine/` per `src/CLAUDE.m
   ROM presence (3-2 p1, `rom_visibility` page 1 only) and the FM-MUSIC ROM
   presence (3-3 p1).
 - `memory_mapper_ram.{h,cpp}` — `MemoryMapperRam`: 64 KB RAM at slot 3-0 whose
-  per-page 16 KB segment is selected by the M11 `#FC-#FF` registers. It is a pure
+  per-page 16 KB segment is selected by the `#FC-#FF` mapper registers. It is a pure
   CONSUMER of `chipset::MapperIo::segment(page)` — MapperIo remains the sole owner
   of the segment registers and the `100xxxxx` readback. The physical fold uses
   `segment & 3` (2-bit, 4 segments); the readback uses `0x80 | seg & 0x1F` (5-bit).
@@ -23,17 +23,17 @@ slot/sub-slot/page, and asset loading) stays in `src/machine/` per `src/CLAUDE.m
 
 ## Grounding (read only; never copy into `src/` — GPL isolation, guardrails)
 
-- Slot / page / device placement: `references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml`.
+- Slot / page / device placement: openMSX 21.0: `share/machines/Sony_HB-F1XV.xml`.
 - Mapper cold-boot segment defaults (all 0) + unpopulated-segment wrap:
-  `references/openmsx-21.0/src/memory/MSXMemoryMapperBase.cc:47-83`.
+  openMSX 21.0: `src/memory/MSXMemoryMapperBase.cc`.
 - RAM power-on `initialContent` (alternating `00/FF`) decode + repeat-fill:
-  `references/openmsx-21.0/src/memory/Ram.cc:37-78` and Sony_HB-F1XV.xml:129.
-- Mapper readback (5-bit S1985): `references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md` §4.
+  openMSX 21.0: `src/memory/Ram.cc` and `Sony_HB-F1XV.xml`.
+- Mapper readback (5-bit S1985): Yamaha S1985 MSX-ENGINE Chipset fact sheet §4.
 
 ## Boundary rules
 
 - No filesystem / asset-path knowledge here — that is `machine/rom_asset_loader`.
 - No segment-register ownership here — that is `chipset/mapper_io`.
 - No FM-PAC / FDC / Halnote / Kanji-font device internals — those are implemented, but own
-  folders elsewhere: `devices/cartridge/` (FM-PAC peripheral cartridge, M17/M36),
-  `devices/fdc/` (M16), `devices/halnote/` (M20), `devices/kanji/` (M18).
+  folders elsewhere: `devices/cartridge/` (FM-PAC peripheral cartridge),
+  `devices/fdc/`, `devices/halnote/`, `devices/kanji/`.

@@ -25,17 +25,16 @@
 
 namespace sony_msx::machine {
 
-// M30 (backlog G2): universal cartridge mapper auto-identification --
+// Universal cartridge mapper auto-identification --
 // explicit flag > softwaredb SHA1 match > bank-write heuristic (with the
 // small-image plain-ROM rule inside the heuristic). This is machine/CLI-layer
 // POLICY layered ABOVE the cartridge devices: it produces the `type` argument
 // for the existing, unchanged Hbf1xvMachine::load_cartridge(slot, type,
-// image) API and never touches anything under src/devices/
-// (docs/m30-planner-package.md §2.3/§2.4).
+// image) API and never touches anything under src/devices/.
 
 // Default softwaredb location when --softwaredb is absent: CWD-relative,
-// the same working-directory convention as the default `bios/` asset root
-// (planner §2.2.3; degradation is loud -- message E -- and non-fatal).
+// the same working-directory convention as the default `bios/` asset root.
+// When the file is absent, degradation is loud (message E) and non-fatal.
 inline constexpr const char* kDefaultSoftwareDbPath = "references/openmsx-21.0/share/softwaredb.xml";
 
 enum class CartridgeIdentificationMethod {
@@ -43,7 +42,7 @@ enum class CartridgeIdentificationMethod {
     SoftwareDbSha1,       // exact SHA1 match in the softwaredb
     HeuristicBankScan,    // bank-select-write scan (>= 64 KB images)
     SmallImagePlainRule,  // < 64 KB, or == 64 KB without an "AB" header
-    SignatureFmPac        // M36: FM-PAC BIOS signature ("PAC2OPLL"@0x18) match
+    SignatureFmPac        // FM-PAC BIOS signature ("PAC2OPLL"@0x18) match
 };
 
 struct CartridgeIdentification {
@@ -60,25 +59,25 @@ struct CartridgeIdentification {
                                // small-image rule's reason text (message D)
 };
 
-// THE one shared resolution function (planner §2.4.1), consumed -- via
+// THE one shared resolution function, consumed -- via
 // CartridgeIdentificationSession below -- by BOTH src/main.cpp
 // (load_cartridges_from_args) and src/frontend/sdl3_app.cpp
 // (load_configured_assets). Pure function of (spec, image bytes, db):
-// no wall clock, no host state, no randomness (planner §2.4.2).
+// no wall clock, no host state, no randomness.
 //
 // Heuristic semantics: an independent RE-DERIVATION of the BEHAVIOR of
 // openMSX's RomFactory::guessRomType
-// (references/openmsx-21.0/src/memory/RomFactory.cc:82-169), cross-checked
-// against fMSX's GuessROM (references/fmsx-60/source/fMSX/MSX.c:2784-2878).
-// The four openMSX-vs-fMSX disagreements are recorded (per DEC-0030) in
+// (openMSX 21.0: src/memory/RomFactory.cc:82-169), cross-checked
+// against fMSX's GuessROM (fMSX 6.0: source/fMSX/MSX.c:2784-2878).
+// The four openMSX-vs-fMSX disagreements are recorded in
 // cartridge_identifier.cpp next to the code they affect; all four are
 // software-policy divergences with no real-hardware truth, arbitrated to the
-// primary reference (openMSX) per the planner's §2.3 ruling.
+// primary reference (openMSX). (DEC-0030)
 [[nodiscard]] CartridgeIdentification resolve_cartridge_type(const ParsedCartridgeSlotCli& spec,
                                                              std::span<const std::uint8_t> image,
                                                              const SoftwareDb* db);
 
-// The shared stderr report formatter (messages A-D, planner §2.4.4; tests
+// The shared stderr report formatter (messages A-D; tests
 // assert these verbatim). Returns "" for ExplicitFlag (the explicit path
 // produces NO new output -- byte-for-byte today's behavior). `db_path` is
 // the softwaredb path actually consulted (embedded in message A).
@@ -87,7 +86,7 @@ struct CartridgeIdentification {
                                                                   const CartridgeIdentification& ident,
                                                                   const std::string& db_path);
 
-// Message E (planner §2.4.4): the once-per-process DB-unavailable line.
+// Message E: the once-per-process DB-unavailable line.
 // `was_explicit` selects the louder WARNING wording used when an explicit
 // --softwaredb path could not be read.
 [[nodiscard]] std::string format_softwaredb_unavailable_message(const std::string& db_path,
@@ -95,7 +94,7 @@ struct CartridgeIdentification {
 
 // Lazy per-run identification session shared by BOTH executables: loads the
 // softwaredb at most ONCE per process, and only when at least one slot
-// actually needs auto-identification (planner §2.2.1); emits message E at
+// actually needs auto-identification; emits message E at
 // most once. The executables keep only I/O + printing glue.
 class CartridgeIdentificationSession {
 public:
@@ -108,7 +107,7 @@ public:
             devices::cartridge::CartridgeMapperType::Mirrored;
         // false => identified-but-unsupported: the caller must print
         // `messages`, NOT load the cartridge, and fail loudly (non-zero
-        // exit / startup abort -- planner §2.4.3). When false, the LAST
+        // exit / startup abort). When false, the LAST
         // entry of `messages` is the message-B line.
         bool ok = true;
         // stderr lines in emit order (message E first when applicable, then
@@ -120,7 +119,7 @@ public:
     // Explicit specs (`spec.type_was_explicit == true`) pass through with
     // zero messages and no DB access. An EMPTY image also passes through
     // unchanged (identification skipped): the existing loud load-failure
-    // path owns that case (planner §2.3 preamble).
+    // path owns that case.
     [[nodiscard]] Resolution resolve(int slot_number, const ParsedCartridgeSlotCli& spec,
                                      std::span<const std::uint8_t> image);
 

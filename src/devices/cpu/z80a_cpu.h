@@ -30,7 +30,7 @@ public:
     void reset();
     std::uint32_t step();
 
-    // Nullable per-instruction trace observer (M10-S1). Off by default: when
+    // Nullable per-instruction trace observer. Off by default: when
     // no observer is attached the step path builds no record and has zero
     // behavioral/state/cycle effect. Passing nullptr detaches.
     void set_trace_observer(Z80aTraceObserver* observer);
@@ -40,7 +40,7 @@ public:
     // Acknowledge hook: the interrupting device supplies a byte on the data bus.
     // IM0 executes it as an opcode; IM2 uses it as the vector-table low byte.
     void request_maskable_interrupt(std::uint8_t bus_vector);
-    // Release a level-held maskable-interrupt request (M14-S4). Thin pass-through
+    // Release a level-held maskable-interrupt request. Thin pass-through
     // for a device that owns the /INT line (e.g. the V9958); no accept logic.
     void clear_maskable_interrupt();
     void request_nmi();
@@ -50,8 +50,8 @@ public:
     [[nodiscard]] const Z80aState& state() const;
     Z80aState& state();
 
-    // M1 opcode-fetch cycle count for the most recently completed step()
-    // (M11-S1). One M1 cycle per opcode-fetch byte (each ED/CB/DD/FD prefix is
+    // M1 opcode-fetch cycle count for the most recently completed step().
+    // One M1 cycle per opcode-fetch byte (each ED/CB/DD/FD prefix is
     // its own M1). It EXCLUDES the interrupt/NMI-acknowledge M1: that special M1
     // asserts /M1 + /IORQ (not the opcode-fetch /M1 + /MREQ the S1985 gates its
     // +1 wait on) and already carries the Z80's own 2 automatic ack wait-states,
@@ -59,11 +59,11 @@ public:
     // IM2=19 / NMI=11 bare; live openMSX A/B confirmed a 13T IM1 accept). The
     // count is a pure CPU signal: datasheet T-state returns are UNCHANGED. The
     // S1985 layer maps this to the MSX +1-per-M1 wait, applied by the machine to
-    // the scheduler (S1985 fact-sheet §8; A-4). Reset at each step() entry.
+    // the scheduler (S1985 fact-sheet §8). Reset at each step() entry.
     [[nodiscard]] std::uint32_t m1_cycles_last_step() const;
 
 private:
-    // Trace helpers (M10-S1). Snapshot the pre-execution register file and
+    // Trace helpers. Snapshot the pre-execution register file and
     // record M1 opcode-fetch bytes only while an observer is attached.
     void trace_begin_instruction();
     void trace_capture_opcode_byte(std::uint8_t value);
@@ -110,7 +110,7 @@ private:
     std::uint8_t alu_shift_rotate(int op, std::uint8_t value);
     void alu_bit(int bit, std::uint8_t value, std::uint8_t undoc_source);
 
-    // ED-prefixed helpers (M9-S3).
+    // ED-prefixed helpers.
     std::uint16_t alu_adc16(std::uint16_t addend);
     std::uint16_t alu_sbc16(std::uint16_t subtrahend);
     void alu_neg();
@@ -127,7 +127,7 @@ private:
     std::uint32_t execute_cb_prefixed();
     std::uint32_t execute_ed_prefixed();
 
-    // DD/FD indexed prefixes and DDCB/FDCB indexed-bit family (M9-S4).
+    // DD/FD indexed prefixes and DDCB/FDCB indexed-bit family.
     // execute_indexed handles prefix chaining/fallthrough; the returned cost
     // EXCLUDES the 4T of the prefix that led into it (the caller adds that).
     std::uint32_t execute_indexed(bool use_iy);
@@ -156,21 +156,21 @@ private:
     CpuBusClient& bus_;
     Z80aState state_{};
 
-    // Trace-export state (M10-S1). Non-owning observer pointer; the pending
+    // Trace-export state. Non-owning observer pointer; the pending
     // record accumulates the pre-execution snapshot and opcode bytes for the
     // in-flight instruction and is emitted when the step completes.
     Z80aTraceObserver* trace_observer_ = nullptr;
     Z80aTraceRecord trace_pending_{};
     std::uint64_t trace_sequence_ = 0;
 
-    // M1 opcode-fetch cycle counter (M11-S1). Reset at step() entry and
+    // M1 opcode-fetch cycle counter. Reset at step() entry and
     // incremented once per opcode-fetch M1 inside increment_refresh_register()
     // (fetch_opcode() per opcode/prefix byte, plus the halted-idle phantom-M1
     // refetch). The interrupt/NMI-acknowledge M1 ticks R via tick_refresh_only()
     // but deliberately does NOT increment this counter (see m1_cycles_last_step()).
     std::uint32_t m1_cycle_count_ = 0;
 
-    // Q latch snapshot (M12-S4, gap #20/#21). Captured at the top of each step()
+    // Q latch snapshot. Captured at the top of each step()
     // as the Q value produced by the PREVIOUS instruction, then regs().q is
     // cleared so this instruction re-latches it via set_f(). alu_scf()/alu_ccf()
     // read q_prev_ to form the genuine-Zilog X/Y = ((Q ^ F) | A) result. After a

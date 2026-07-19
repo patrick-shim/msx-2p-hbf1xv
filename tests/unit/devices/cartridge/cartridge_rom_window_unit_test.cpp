@@ -17,14 +17,14 @@
 
 #include "devices/cartridge/cartridge_rom_window.h"
 
-// Suite: Devices_CartridgeRomWindow_Unit (M19-S1, backlog B7)
+// Suite: Devices_CartridgeRomWindow_Unit
 //
-// Byte-exact RomBlocks<BANK_SIZE>::setRom resolution (A-M19-6, behaviour
-// reference references/openmsx-21.0/src/memory/RomBlocks.cc:107-118, never
+// Byte-exact RomBlocks<BANK_SIZE>::setRom resolution (behaviour
+// reference openMSX 21.0: src/memory/RomBlocks.cc:107-118, never
 // copied -- GPL isolation):
 //   block = (block < nrBlocks) ? block : block & blockMask;
 //   if (block < nrBlocks) { real bank } else { unmapped }
-// CRITICAL SUBTLETY under test (R-M19-1): the mask is a FALLBACK consulted
+// CRITICAL SUBTLETY under test: the mask is a FALLBACK consulted
 // ONLY when the requested block is already out of range -- never an
 // unconditional AND-mask. Covers both the default mask (nrBlocks-1, "wraps at
 // end of ROM image") and an overridden (Konami-style, mask=31) mask,
@@ -118,7 +118,7 @@ int main() {
         expect(!window.slot_mapped(0), "KonamiMask_SmallImage_OutOfRangeAfterWrap_Unmapped");
     }
 
-    // --- CRITICAL SUBTLETY (A-M19-6/R-M19-1): a Konami-typed image LARGER
+    // --- CRITICAL SUBTLETY: a Konami-typed image LARGER
     //     than 256 KB (e.g. 320 KB = 40 banks) is NOT capped to 32 reachable
     //     banks -- every byte-value bank request 0..255 satisfies
     //     block < nrBlocks(40) directly for values < 40 and is used UNMASKED;

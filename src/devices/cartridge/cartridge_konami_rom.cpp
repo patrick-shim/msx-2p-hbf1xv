@@ -52,7 +52,7 @@ void CartridgeKonamiRom::mem_write(const core::BusAddress address, const core::B
     // RomKonami.cc:61-67: [0x4000..0x6000) is fixed at bank 0 -- writes only
     // trigger at addr >= 0x6000, so slot 2 (and its mirror, slot 0) never
     // changes after reset(), while slot 1 tracks slot 3's live value via the
-    // page-3 mirror branch (R-M19-3). Full derivation: class doc in
+    // page-3 mirror branch. Full derivation: class doc in
     // cartridge_konami_rom.h.
     if (address >= 0x6000 && address < 0xC000) {
         bank_switch((address >> 13) & 0x07, value);

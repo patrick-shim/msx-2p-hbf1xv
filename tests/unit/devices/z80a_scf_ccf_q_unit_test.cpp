@@ -19,15 +19,15 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80AScfCcfQ_Unit  (M12-S4, gaps #20 / #21)
+// Suite: Devices_Z80AScfCcfQ_Unit
 //
 // Proves the genuine-Zilog NMOS SCF/CCF undocumented X/Y rule with the Q latch:
 //   X = bit 3, Y = bit 5 of ((Q ^ F) | A)
 // where Q is the flag byte latched by the PREVIOUS instruction, or 0 if that
 // instruction did not modify flags (incl. EX AF,AF', POP AF, and interrupt
 // acceptance). Fact-sheet §8 (Patrik-Rak). Deliberately diverges from openMSX's
-// (F | A) OR-form in the "previous instruction modified flags" case (planner
-// A-4/R-2): after a flag op, Q == F so (Q ^ F) == 0 and X/Y are MOVED from A;
+// (F | A) OR-form in the "previous instruction modified flags"
+// case: after a flag op, Q == F so (Q ^ F) == 0 and X/Y are MOVED from A;
 // after a non-flag op, Q == 0 so X/Y are OR'd from F into A.
 
 namespace {

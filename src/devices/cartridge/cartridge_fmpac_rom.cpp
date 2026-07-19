@@ -29,7 +29,7 @@ namespace sony_msx::devices::cartridge {
 namespace {
 
 // The openMSX FM-PAC `.sram` wrapper header, byte-for-byte
-// (references/openmsx-21.0/src/sound/MSXFmPac.cc:7
+// (openMSX 21.0: src/sound/MSXFmPac.cc:7
 //   `static constexpr const char* const PAC_Header = "PAC2 BACKUP DATA";`).
 // Kept as an explicit char array (NOT a NUL-terminated literal) so exactly the
 // 16 payload bytes are written -- matching SRAM.cc:121-124 `strlen(header)`.
@@ -49,8 +49,8 @@ CartridgeFmPacRom::CartridgeFmPacRom(std::vector<std::uint8_t> image) : rom_(std
     if (num_banks_ == 0) {
         num_banks_ = 1;
     }
-    // Deliberately NO reset() here (M19 convention): CartridgeSlot::load()
-    // resets once before installing.
+    // Deliberately NO reset() here (uniform mapper convention):
+    // CartridgeSlot::load() resets once before installing.
 }
 
 void CartridgeFmPacRom::reset() {
@@ -68,7 +68,7 @@ void CartridgeFmPacRom::reset() {
 
 std::uint8_t CartridgeFmPacRom::rom_read(const std::uint16_t rel) const {
     // Bank masked against the ACTUAL bank count so a bank>available never reads
-    // past a small image (planner §2.1). rel is already < 0x4000.
+    // past a small image. rel is already < 0x4000.
     const std::size_t index = (static_cast<std::size_t>(bank_ % num_banks_) * kBankSize) + rel;
     if (index >= rom_.size()) {
         return 0xFF;
@@ -79,7 +79,7 @@ std::uint8_t CartridgeFmPacRom::rom_read(const std::uint16_t rel) const {
 core::BusData CartridgeFmPacRom::mem_read(const core::BusAddress address) {
     // PAGE-1 device only: open bus on pages 0/2/3 (a bare FM-PAC answers only
     // 0x4000-0x7FFF). This is what keeps the slot-3-0 memory-mapper reachable
-    // on the other pages and coexists with #A8 primary-slot decode (AC-d4).
+    // on the other pages and coexists with #A8 primary-slot decode.
     if (address < 0x4000 || address >= 0x8000) {
         return 0xFF;
     }
@@ -192,7 +192,7 @@ bool CartridgeFmPacRom::load_sram(const std::filesystem::path& path) {
         return true;
     }
 
-    // LEGACY raw-8192 format (our pre-M43 headerless save): migrate LOSSLESSLY.
+    // LEGACY raw-8192 format (our earlier headerless save): migrate LOSSLESSLY.
     // Carry the 8190 addressable bytes (rel 0x0000..0x1FFD) forward; the 2
     // trailing bytes (0x1FFE/0x1FFF) are the magic-register shadows, NOT real
     // SRAM, so dropping them loses nothing (MSXFmPac.cc:11,46-49). The new-format

@@ -49,7 +49,7 @@ MenuItem radio(const MenuAction action, const int param, std::string label, cons
     return it;
 }
 
-// M60 (DEC-0089): the last path component of a directory string, tolerant of a
+// The last path component of a directory string, tolerant of a
 // trailing separator ("C:/foo/bios/" -> "bios"). Plain string handling keeps the
 // model SDL-free AND <filesystem>-free (this TU compiles into sony_msx_core).
 std::string dir_basename(const std::string& dir) {
@@ -99,9 +99,10 @@ std::string hotkey_label_for(const MenuAction action) {
 }
 
 const std::vector<MenuAction>& v1_grayed_star_actions() {
-    // M56 (DEC-0084) + M57 (DEC-0085-AMENDMENT-A): SetRam is now LIVE (Machine>RAM
+    // SetRam is LIVE (Machine>RAM
     // triggers a power-cycle rebuild at the chosen size), so only ToggleBorder
     // remains unconditionally grayed (no runtime border setter exists).
+    // (DEC-0084, DEC-0085-AMENDMENT-A)
     static const std::vector<MenuAction> kAlwaysGrayed = {
         MenuAction::ToggleBorder,
     };
@@ -115,17 +116,17 @@ MenuModel build_menu_model(const MenuState& state) {
     {
         Menu file;
         file.label = "File";
-        // M56 (F2): runtime cartridge insert (implies reset) -- always available.
+        // Runtime cartridge insert (implies reset) -- always available.
         MenuItem open_cart;
         open_cart.label = "Open Cartridge";
         open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot1, "Slot 1..."));
         open_cart.children.push_back(item(MenuAction::OpenCartridgeSlot2, "Slot 2..."));
         file.items.push_back(std::move(open_cart));
-        // M56 (F1): multi-select open (REPLACE the F11 cycle) -- always available.
+        // Multi-select open (REPLACE the F11 cycle) -- always available.
         file.items.push_back(item(MenuAction::OpenDisk, "Open Disk(s)..."));
         file.items.push_back(
             item(MenuAction::SwapDisk, "Swap Disk", /*enabled=*/state.disk_count > 1));
-        // M56 (F3): Eject submenu with per-state enablement.
+        // Eject submenu with per-state enablement.
         MenuItem eject;
         eject.label = "Eject";
         eject.children.push_back(
@@ -135,10 +136,10 @@ MenuModel build_menu_model(const MenuState& state) {
         eject.children.push_back(
             item(MenuAction::EjectCartridgeSlot2, "Cartridge Slot 2", /*enabled=*/state.slot2_loaded));
         file.items.push_back(std::move(eject));
-        // DEC-0095: Recent submenu -- one OpenRecent child per MRU path (param =
+        // Recent submenu -- one OpenRecent child per MRU path (param =
         // its index in state.recent; label = the path basename). Empty list =>
         // a single disabled "(none)" info item. The whole subtree is inert when
-        // recent persistence is off (state.recent stays empty).
+        // recent persistence is off (state.recent stays empty). (DEC-0095)
         MenuItem recent;
         recent.label = "Recent";
         if (state.recent.empty()) {
@@ -161,7 +162,7 @@ MenuModel build_menu_model(const MenuState& state) {
         Menu machine;
         machine.label = "Machine";
         machine.items.push_back(item(MenuAction::Pause, "Pause", true, state.paused));
-        // M56 (F4): reset (mounted disks + inserted carts persist) -- always available.
+        // Reset (mounted disks + inserted carts persist) -- always available.
         machine.items.push_back(item(MenuAction::Reset, "Reset"));
         machine.items.push_back(separator());
 
@@ -188,21 +189,21 @@ MenuModel build_menu_model(const MenuState& state) {
         ram.label = "RAM (power cycle)";
         const int cur_kb = static_cast<int>(state.dram_kb);
         for (const int kb : {64, 128, 256, 512}) {
-            // M57 (DEC-0085-AMENDMENT-A): LIVE radio -- the bullet shows the CURRENT
+            // LIVE radio -- the bullet shows the CURRENT
             // size (state.dram_kb) and selecting a different size power-cycles the
             // machine to it (rebuilds at the new RAM size, media surviving). The
             // dispatch guards on size-change so re-selecting the current size is
-            // inert.
+            // inert. (DEC-0085-AMENDMENT-A)
             ram.children.push_back(radio(MenuAction::SetRam, kb, std::to_string(kb) + " KB", cur_kb));
         }
         machine.items.push_back(std::move(ram));
 
-        // M60 (DEC-0089): runtime BIOS-directory selector. Opens a folder
+        // Runtime BIOS-directory selector. Opens a folder
         // dialog; a selection is TRANSACTIONALLY validated (all 7 configured
         // BIOS ROM files readable) and then power-cycles the machine into the
         // chosen directory (same RAM, media surviving). Always ENABLED (not
         // part of the grayed set); the label surfaces the CURRENT directory
-        // basename so the active BIOS set is visible at a glance.
+        // basename so the active BIOS set is visible at a glance. (DEC-0089)
         {
             const std::string base = dir_basename(state.bios_dir);
             const std::string label =
@@ -297,7 +298,7 @@ MenuModel build_menu_model(const MenuState& state) {
         disk.items.push_back(
             item(MenuAction::ToggleDiskWritable, "Disk Writable", true, state.disk_writable));
         disk.items.push_back(separator());
-        // M56 (F5): write a fresh blank 720 KB MSX-DOS disk -- always available.
+        // Write a fresh blank 720 KB MSX-DOS disk -- always available.
         disk.items.push_back(item(MenuAction::NewBlankDisk, "New Blank Disk..."));
         model.menus.push_back(std::move(disk));
     }

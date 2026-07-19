@@ -23,7 +23,7 @@
 namespace sony_msx::devices::audio {
 
 // Deterministic emulated-cycle clock source for the YM2413 register-write
-// timing gate (E2, M28-S1/§2.1b). Same X-pattern as
+// timing gate. Same read-only clock-source pattern as
 // rtc::RtcClockSource/fdc::FdcClockSource/peripherals::CassetteClockSource/
 // peripherals::RenshaTurboClockSource (src/devices/rtc/rp5c01.h:14-18,
 // src/devices/fdc/fdc_clock_source.h): the gate advances READ-ONLY off the
@@ -31,22 +31,22 @@ namespace sony_msx::devices::audio {
 // cycles), never the host wall clock. Pulled only from
 // write_address()/write_data()/io_write() -- never wired into
 // step_cpu_instruction()/run_cycles()/run_frame(), so it cannot perturb the
-// M9/M12/M23 zero-tolerance CPU-timing oracles.
+// zero-tolerance CPU-timing oracles.
 class Ym2413ClockSource {
 public:
     virtual ~Ym2413ClockSource() = default;
     [[nodiscard]] virtual std::uint64_t cpu_cycles() const = 0;
 };
 
-// YM2413 (OPLL) register-accurate model (M17-S1/S2, backlog B3).
+// YM2413 (OPLL) register-accurate model.
 //
-// CRITICAL DEVICE-IDENTITY GROUNDING (A-M17-1/A-M17-2, DEC-0012): the HB-F1XV's
+// CRITICAL DEVICE-IDENTITY GROUNDING: the HB-F1XV's
 // slot-3-3 sound device is openMSX class `MSXMusic` -- a FIXED 16 KB ROM +
 // YM2413 with I/O-PORT-ONLY register access at #7C/#7D
-// (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:180-196,
+// (openMSX 21.0: share/machines/Sony_HB-F1XV.xml:180-196,
 // `<MSX-MUSIC id="MSX Music">` ... `<io base="0x7C" num="2" type="O"/>`, NO
 // `<sramname>` tag), with NO SRAM / bank register / memory-mapped register
-// overlay (references/openmsx-21.0/src/sound/MSXMusic.hh:11-32,
+// overlay (openMSX 21.0: src/sound/MSXMusic.hh:11-32,
 // MSXMusic.cc:9-50 `MSXMusicBase`: only `writeIO`/`peekMem` over a plain
 // masked ROM image; no bank register, no SRAM member). NOT the external
 // Panasonic FM-PAC cartridge (`MSXFmPac.hh/.cc`, 4-bank ROM + 8 KB SRAM
@@ -55,20 +55,20 @@ public:
 // file, the two-port write protocol, per-channel/rhythm decode, and the ROM
 // instrument-patch table; it carries NO bank-register / SRAM-handshake /
 // ID-string-detection logic (that would fabricate hardware this machine
-// does not have).
+// does not have). (DEC-0012)
 //
-// M31 (backlog E1, DEC-0035): the device additionally owns a Ym2413Synth --
+// The device additionally owns a Ym2413Synth --
 // the formula-grounded FM waveform-synthesis engine (see ym2413_synth.h's
-// grounding + mandatory approximation-disclosure block). The M17 register
+// grounding + mandatory approximation-disclosure block). The register
 // contract above is unchanged: synthesis adds zero CPU-visible state
 // (io_read stays open-bus 0xFF; the chip remains write-only, fact-sheet §8),
-// so the M17 A/B evidence remains the standing CPU-visible parity proof
-// (planner §2.7). Accepted (post-E2-gate, post-mask) data writes also notify
-// the synth's key-edge detector (§2.6); everything else is read live from
-// this register file via the M17 decode accessors at synthesis time.
+// so the openMSX A/B evidence remains the standing CPU-visible parity proof.
+// Accepted (post-timing-gate, post-mask) data writes also notify
+// the synth's key-edge detector; everything else is read live from
+// this register file via the decode accessors at synthesis time. (DEC-0035)
 //
-// Two-port write protocol (A-M17-3), grounded in
-// references/openmsx-21.0/src/sound/YM2413Okazaki.cc:1368-1374 (`writePort`:
+// Two-port write protocol, grounded in
+// openMSX 21.0: src/sound/YM2413Okazaki.cc:1368-1374 (`writePort`:
 // `port==0` -> `registerLatch = value` unmasked; `port==1` ->
 // `writeReg(registerLatch & 0x3f, value)`): port #7C (address, port&1==0)
 // latches the written value unmasked; port #7D (data, port&1==1) writes
@@ -76,12 +76,12 @@ public:
 // data write), not at latch time, so a latch value > 0x3F still resolves
 // correctly on the following data write (e.g. latch 0xFF -> register 0x3F).
 //
-// Reset (A-M17-4): `references/openmsx-21.0/src/sound/YM2413Okazaki.cc:696`
+// Reset: `openMSX 21.0: src/sound/YM2413Okazaki.cc:696`
 // (`std::ranges::fill(reg, 0)` at construction) and `:707-720` (`reset()`
 // calls `writeReg(i, 0)` for every register plus `registerLatch = 0`) --
 // reset() here zeroes all 64 registers and the address latch.
 //
-// Read behaviour (A-M17-5): the XML declares #7C/#7D write-only (`type="O"`,
+// Read behaviour: the XML declares #7C/#7D write-only (`type="O"`,
 // no `type="I"` entry) and `MSXMusicBase` overrides only `writeIO`
 // (MSXMusic.hh:14-15) -- the real chip has no status/busy register or
 // readback (YM2413 fact-sheet §8, "No busy flag / no readback"). `io_read`
@@ -89,26 +89,26 @@ public:
 // default (src/devices/chipset/io_bus.h), so `IN A,(#7C)`/`IN A,(#7D)` reads
 // as if the port were unattached.
 //
-// Debug-only introspection (A-M17-6): `register_value(addr)` is NOT
+// Debug-only introspection: `register_value(addr)` is NOT
 // CPU-bus-reachable; it mirrors the `PsgYm2149::register_value` precedent
 // (src/devices/audio/psg_ym2149.h) and openMSX's
 // `YM2413::peekRegs()`/"<id> regs" `SimpleDebuggable`
-// (references/openmsx-21.0/src/sound/YM2413.hh:26,40-44, size 0x40), used by
+// (openMSX 21.0: src/sound/YM2413.hh:26,40-44, size 0x40), used by
 // unit tests and the A/B harness.
 class Ym2413Opll final : public core::IoDevice {
 public:
     static constexpr std::size_t kRegisterCount = 0x40;  // 64 registers, $00-$3F
     static constexpr int kChannelCount = 9;               // channels 0-8
 
-    // E2 (M28-S1, backlog E2) register-write minimum-spacing constants,
-    // grounded in references/fact-sheets/Yamaha YM2413 FM Chip.md §8
+    // Register-write minimum-spacing constants,
+    // grounded in the Yamaha YM2413 FM Chip fact sheet §8
     // ("Register write timing (real hardware constraint): after an address
     // write, wait >=12 master cycles (~3.36 us); after a data write, wait
     // >=84 master cycles (~23.52 us) before the next write ... Violating the
     // 84-cycle rule causes dropped/wrong register writes on real hardware.")
     // -- sourced from the Yamaha Application Manual + andete's hardware
     // measurements (fact-sheet §2), not transcribed from any openMSX table
-    // (just two scalar constants; see docs/m28-planner-package.md §2.1b).
+    // (just two scalar constants).
     static constexpr std::uint32_t kAddressWriteMinCycles = 12;
     static constexpr std::uint32_t kDataWriteMinCycles = 84;
 
@@ -118,61 +118,59 @@ public:
     void write_address(std::uint8_t value);  // #7C: latch (unmasked at write time)
     void write_data(std::uint8_t value);      // #7D: regs_[latch & 0x3F] = value
 
-    // E2 write-timing gate (M28-S1). attach_clock_source() supplies the
+    // Write-timing gate. attach_clock_source() supplies the
     // read-only cycle source (mirrors Rp5c01::attach_clock_source,
     // src/devices/rtc/rp5c01.h:58); set_write_timing_enforced() toggles the
     // gate. DEFAULT OFF: matches openMSX's documented default-disabled stance
     // (fact-sheet §8, "openMSX (Nuked-OPLL core) currently has the
-    // too-fast-access-timing emulation disabled") and the M28-S1 regression
-    // pre-check finding -- the existing M17 tests
+    // too-fast-access-timing emulation disabled") and keeps the pre-existing
+    // tests valid -- the existing tests
     // (tests/unit/devices/audio_ym2413_opll_unit_test.cpp,
     // tests/integration/machine/hbf1xv_m17_ym2413_integration_test.cpp) issue
     // back-to-back register writes with zero/near-zero cycle spacing (the
     // unit test never attaches a clock source, so it's unaffected either way;
     // the integration test's Hbf1xvMachine::debug_io_write() helper is a
     // zero-cycle-advance raw bus poke that would spuriously drop writes if
-    // this gate defaulted on -- see docs/m28-implementation-report.md for the
-    // full trace). A caller must opt in explicitly.
+    // this gate defaulted on). A caller must opt in explicitly.
     void attach_clock_source(Ym2413ClockSource* source);
     void set_write_timing_enforced(bool enforced);
     [[nodiscard]] bool write_timing_enforced() const;
 
     // core::IoDevice on #7C/#7D (keyed on port & 1: 0 = address, 1 = data).
-    // io_read always returns open-bus 0xFF (A-M17-5) regardless of prior writes.
+    // io_read always returns open-bus 0xFF regardless of prior writes.
     core::BusData io_read(core::BusAddress port) override;
     void io_write(core::BusAddress port, core::BusData value) override;
 
-    // Debug-only register readback (A-M17-6), NOT CPU-bus-reachable.
+    // Debug-only register readback, NOT CPU-bus-reachable.
     [[nodiscard]] std::uint8_t register_value(std::uint8_t addr) const;
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
-    //     address latch + E2 write-timing gate state; const returns of
-    //     existing members, zero behavior change
-    //     (docs/m36-phase3-planner-package.md §2.4 item 6). ---
+    // --- Debug snapshot: additive read-only introspection of the
+    //     address latch + write-timing gate state; const returns of
+    //     existing members, zero behavior change. ---
     [[nodiscard]] std::uint8_t address_latch() const { return latch_; }
     [[nodiscard]] bool has_last_write() const { return has_last_write_; }
     [[nodiscard]] bool last_write_was_address() const { return last_write_was_address_; }
     [[nodiscard]] std::uint64_t last_write_cycle() const { return last_write_cycle_; }
 
-    // --- M31 (backlog E1): FM synthesis surface, wholly additive. ---
+    // --- FM synthesis surface, wholly additive. ---
     // Deterministic advance in 3.58 MHz MASTER cycles: the owned synth
     // executes one native FM sample tick per 72 cycles (3.579545 MHz / 72 =
     // exactly 49716 Hz, fact-sheet §7) and holds the latest native sample
     // (zero-order hold). NEVER wired into the machine's CPU stepping -- the
     // frontend mixer (or a test) advances it by the shared
-    // cycles-per-output-sample convention (planner §2.5: 8 output samples x
+    // cycles-per-output-sample convention (8 output samples x
     // 81 cycles = 648 = 9 x 72, an exact repeating 9:8 decimation pattern).
     void advance_cycles(std::uint64_t delta_cycles);
     // The held native sample. Exactly 0 while every operator is idle (the
-    // S5 zero-YM2413 byte-identity oracle's guarantee).
+    // zero-YM2413 byte-identity oracle's guarantee).
     [[nodiscard]] std::int32_t fm_sample() const { return synth_.sample(); }
     // Debug/test introspection of the synthesis engine (side-effect free;
-    // the A-M17-6 register_value precedent).
+    // the register_value precedent above).
     [[nodiscard]] const Ym2413Synth& synth() const { return synth_; }
 
     // Decoded 2-operator parameter set (modulator/carrier), the resolved
     // per-channel patch shape whether derived live from the user patch
-    // ($00-$07) or a fixed ROM instrument entry (planner package §2.2).
+    // ($00-$07) or a fixed ROM instrument entry.
     struct OperatorPatch {
         bool am = false;               // AM (tremolo enable), reg bit7
         bool vib = false;              // VIB (vibrato enable), reg bit6
@@ -221,8 +219,8 @@ public:
     [[nodiscard]] std::uint8_t cym_volume() const;  // $38 & 0xF
 
     // ROM instrument patch table (15 melody entries, 1-indexed, + 3 rhythm
-    // patches), reproduced verbatim from the YM2413 fact-sheet §4 / planner
-    // package §2.2 (A-M17-7: "community-standard... ~99% but not
+    // patches), reproduced verbatim from the YM2413 fact-sheet §4
+    // (which flags the set as "community-standard... ~99% but not
     // datasheet-certain" -- see the caveat comment at the table definition in
     // the .cpp). number is clamped to [1,15] for determinism.
     [[nodiscard]] static Patch rom_patch(int number);
@@ -233,14 +231,14 @@ public:
 private:
     // Decodes a raw 8-byte $00-$07-shaped patch row (byte i = register $0i)
     // into the modulator/carrier field split. Grounded in the ACTUAL register
-    // bit layout per references/openmsx-21.0/src/sound/YM2413Okazaki.cc:
+    // bit layout per openMSX 21.0: src/sound/YM2413Okazaki.cc:
     // 1388-1500 (writeReg cases 0x00-0x07) -- more precise than the fact-
     // sheet's simplified per-register text for register $03's shared
     // modulator/carrier bit-packing (carrier KSL bits7-6, carrier waveform
     // bit4, modulator waveform bit3, modulator feedback bits2-0).
     [[nodiscard]] static Patch decode_patch(const std::array<std::uint8_t, 8>& raw);
 
-    // E2 gate check (M28-S1): returns true (and records this write as the
+    // Write-timing gate check: returns true (and records this write as the
     // new "last write") when the write is allowed to land; returns false
     // (state left untouched, mirroring real-hardware "busy window ignores
     // the write" behaviour -- the drop does NOT reset the timing reference)
@@ -251,7 +249,7 @@ private:
     std::array<std::uint8_t, kRegisterCount> regs_{};
     std::uint8_t latch_ = 0;
 
-    // M31 (backlog E1): the owned FM synthesis engine. Pure register-file
+    // The owned FM synthesis engine. Pure register-file
     // consumer -- it never feeds back into any CPU-visible state.
     Ym2413Synth synth_;
 

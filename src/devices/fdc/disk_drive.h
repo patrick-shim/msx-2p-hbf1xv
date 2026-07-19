@@ -19,11 +19,11 @@
 
 namespace sony_msx::devices::fdc {
 
-// Built-in 3.5" 720 KB drive mechanism abstraction (M16-S4). Models head
+// Built-in 3.5" 720 KB drive mechanism abstraction. Models head
 // position (track), side select, motor on/off with the ~4 s delayed motor-off
 // timer, ready / write-protect / track-00 / index-pulse / disk-changed sense,
 // and sector access over the mounted DiskImage. Behaviour reference (read only,
-// never copied, GPL isolation): references/openmsx-21.0/src/fdc/DiskDrive.cc,
+// never copied, GPL isolation): openMSX 21.0: src/fdc/DiskDrive.cc,
 // RealDrive.cc (delayed motor-off RealDrive.cc:263-321), DriveMultiplexer.cc.
 //
 // Single physical drive (<drives>1</drives>, Sony_HB-F1XV.xml). The Sony glue
@@ -84,7 +84,7 @@ public:
     // Cycles remaining until the next index-pulse window begins (0 when `now`
     // is already inside one). Grounds WD2793 Type IV i2 (index-pulse IRQ)
     // scheduling: openMSX schedules INTRQ at the drive's next index pulse
-    // rather than asserting it immediately (references/openmsx-21.0/src/fdc/
+    // rather than asserting it immediately (openMSX 21.0: src/fdc/
     // WD2793.cc:1049-1050 `irqTime = drive.getTimeTillIndexPulse(time)`).
     [[nodiscard]] std::uint64_t cycles_until_index_pulse(std::uint64_t now) const;
 
@@ -93,18 +93,18 @@ public:
     // Sector first-DRQ ROTATIONAL latency: real hardware/openMSX must wait for
     // the requested sector to come around, so the first-DRQ delay is VARIABLE, a
     // function of rotational angle at command start
-    // (references/openmsx-21.0/src/fdc/RealDrive.cc:453 getNextSector -- finds the
+    // (openMSX 21.0: src/fdc/RealDrive.cc:453 getNextSector -- finds the
     // next matching sector's addrIdx and returns the EmuTime it rotates under the
     // head; WD2793.cc:557 type2Search schedules from it).
     //
-    // APPROXIMATION (documented, DEC-0055 slice C): our CHS image has no
+    // APPROXIMATION (documented): our CHS image has no
     // per-sector byte-angular positions or real interleave, so the 9 sectors are
     // modelled as evenly spaced and sequential -- sector `sector_index` (0-based)
     // sits at angle sector_index/9 of the 715909-cycle rotation. Not
     // byte-identical to openMSX's raw-track model (which locks onto real addrIdx
     // positions with real interleave), but the most faithful model our flat
     // sector geometry supports. Fully DETERMINISTIC: a pure function of `now`
-    // and the fixed sector geometry -- no wall clock, no randomness.
+    // and the fixed sector geometry -- no wall clock, no randomness. (DEC-0055)
     [[nodiscard]] std::uint64_t cycles_until_sector_id(std::uint32_t sector_index,
                                                        std::uint64_t now) const;
 
@@ -113,28 +113,28 @@ public:
     //
     // disk_changed() is the NON-clearing const PEEK for snapshot/debug/inspection
     // paths (debug_snapshot.cpp fdc_section) -- it MUST NOT perturb the latch, so a
-    // state dump never consumes the one-shot (Phase-3 determinism guarantee).
+    // state dump never consumes the one-shot (determinism guarantee).
     [[nodiscard]] bool disk_changed() const { return disk_changed_; }
     void set_disk_changed(bool changed) { disk_changed_ = changed; }
 
     // Read-and-CLEAR DSKCHG one-shot: returns the latch, then clears it. Models
     // real hardware + openMSX, where READING the disk-changed line resets it
-    // (references/openmsx-21.0/src/fdc/DiskChanger.cc:95-100 -- diskChanged()
+    // (openMSX 21.0: src/fdc/DiskChanger.cc:95-100 -- diskChanged()
     // returns the flag then sets diskChangedFlag=false). This is the MUTATING
     // accessor the FDC register read at 0x7FFD uses (mirrors the mutating
     // readMem path PhilipsFDC.cc:37, vs. the const peekMem :90). Without it a
     // swapped medium keeps DSKCHG asserted forever, so a game that re-checks the
     // disk after a swap (e.g. a multi-disk RPG title's building-interior loader) sees a
     // perpetually-"changed" medium, retries/aborts (Force Interrupt) and drops
-    // into DI;HALT -- the universal media-change freeze (M36 Bug B).
+    // into DI;HALT -- the universal media-change freeze.
     [[nodiscard]] bool take_disk_changed() {
         const bool changed = disk_changed_;
         disk_changed_ = false;
         return changed;
     }
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
-    //     raw motor latch + delayed motor-off timer (planner §2.4 item 10).
+    // --- Debug-snapshot seams: additive read-only introspection of the
+    //     raw motor latch + delayed motor-off timer.
     //     motor_on(now) stays the EFFECTIVE accessor; these expose the raw
     //     underlying state so the snapshot is restore-ready. const, ZERO
     //     behavior change. ---
@@ -147,7 +147,7 @@ public:
     bool write_sector(std::uint8_t sector, const std::uint8_t* in);
 
     // Write a sector to an EXPLICIT (track, side) instead of the live head
-    // position + side latch (DEF-M47-DISKWRITE H4). The WD2793 latches its
+    // position + side latch (DEF-M47-DISKWRITE). The WD2793 latches its
     // target CHS when the address mark rotates under the head at command START;
     // the head cannot move while BUSY, so a mid-transfer glue-register write
     // (e.g. the Sony 0x7FFC side latch, or a seek) must NOT redirect the sector

@@ -22,8 +22,8 @@
 namespace sony_msx::machine::debug_format {
 
 // Shared, deterministic, locale-independent ASCII formatting primitives used
-// by the M10 debug/trace serializers (S1 CPU trace sink, S3 full-state dump
-// and execution-event log). Hand-rolled so output is byte-identical across
+// by the debug/trace serializers (CPU trace sink, full-state dump, and
+// execution-event log). Hand-rolled so output is byte-identical across
 // runs and environments: fixed field order, fixed-width uppercase hex,
 // base-10 decimals, no locale/stream state, no floating point, no wall-clock.
 

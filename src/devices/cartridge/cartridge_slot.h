@@ -21,8 +21,8 @@
 
 namespace sony_msx::devices::cartridge {
 
-// Outcome of a cartridge load request. Never silently swallowed (planner
-// §2.3): a failed load leaves the slot's PRIOR state completely untouched.
+// Outcome of a cartridge load request. Never silently swallowed:
+// a failed load leaves the slot's PRIOR state completely untouched.
 enum class CartridgeLoadResult {
     Ok,
     // Hbf1xvMachine::load_cartridge only -- CartridgeSlot itself never
@@ -33,14 +33,14 @@ enum class CartridgeLoadResult {
     ImageSizeInvalidForMapperType,
 };
 
-// The ONE device actually attached to slot_bus_ for an external cartridge bay
-// (M19-S3, backlog B7). Wraps `std::unique_ptr<CartridgeMapperDevice>`:
-// nullptr = empty slot = byte-for-byte identical to the M13-M18 "reserved
+// The ONE device actually attached to slot_bus_ for an external cartridge bay.
+// Wraps `std::unique_ptr<CartridgeMapperDevice>`:
+// nullptr = empty slot = byte-for-byte identical to the original "reserved
 // open-bus" default (a strong, built-in regression guard for anyone not using
-// --cart1/--cart2, A-M19-9) -- mem_read returns 0xFF, mem_write is a no-op.
+// --cart1/--cart2) -- mem_read returns 0xFF, mem_write is a no-op.
 //
 // `load()` validates the image size against `type`'s documented requirement
-// (A-M19-7) BEFORE constructing anything; on success it constructs the
+// BEFORE constructing anything; on success it constructs the
 // concrete mapper, calls ITS reset() once (establishing a well-defined
 // power-up bank layout for every type uniformly -- including Konami, whose
 // own constructor deliberately does not self-reset, RomKonami.cc:33-35), and
@@ -49,11 +49,11 @@ enum class CartridgeLoadResult {
 //
 // `reset()` calls the active mapper's reset() (if loaded) and is a no-op when
 // empty; it NEVER unloads -- matches real hardware power-cycle-with-
-// cartridge-still-inserted semantics (A-M19-9).
+// cartridge-still-inserted semantics.
 class CartridgeSlot final : public core::MemoryDevice {
 public:
     // `primary_slot_number` (1 or 2 for this machine) is a diagnostic-only
-    // label; routing itself is entirely slot_bus_'s job (A-M19-1) and this
+    // label; routing itself is entirely slot_bus_'s job and this
     // class carries zero slot-bus-attachment knowledge of its own.
     explicit CartridgeSlot(int primary_slot_number);
 

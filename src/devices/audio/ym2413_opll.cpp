@@ -19,22 +19,21 @@ namespace sony_msx::devices::audio {
 
 namespace {
 
-// ROM instrument patch table (fact-sheet §4, planner package §2.2), REPRODUCED
+// ROM instrument patch table (fact-sheet §4), REPRODUCED
 // VERBATIM (never re-derived). Each row is the raw $00-$07 byte sequence
 // (byte i = register $0i): mod $00/$02/$04/$06, car $01/$03/$05/$07.
 //
-// A-M17-7 caveat (preserved per the planner's explicit instruction): the
+// Caveat (deliberately preserved): the
 // fact-sheet itself notes this is "the community-standard set (originally
 // by-ear, later confirmed via the FHB013 die shot / NukeYKT debug-mode
 // dump)... treat exact patch bytes as ~99% but not datasheet-certain." The
 // HB-F1XV machine XML selects `<ym2413-core>NukeYKT</ym2413-core>`
-// (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:193) -- the
+// (openMSX 21.0: share/machines/Sony_HB-F1XV.xml:193) -- the
 // die-shot-derived core openMSX adopted for accuracy
-// (references/openmsx-21.0/src/sound/YM2413NukeYKT.hh, "close to how the real
+// (openMSX 21.0: src/sound/YM2413NukeYKT.hh, "close to how the real
 // hardware is implemented"). Reconciling this table against NukeYKT's exact
-// decoded per-field patches is deferred to whichever milestone implements DSP
-// depth (backlog E1) -- only real audio synthesis makes the byte-exact
-// difference observable (M17 is register/channel/rhythm contract only).
+// decoded per-field patches remains deferred future work -- only byte-exact
+// audio synthesis would make any patch-byte difference observable.
 constexpr std::array<std::array<std::uint8_t, 8>, 15> kMelodyPatches{{
     {0x71, 0x61, 0x1E, 0x17, 0xD0, 0x78, 0x00, 0x17},  //  1 Violin
     {0x13, 0x41, 0x1A, 0x0D, 0xD8, 0xF7, 0x23, 0x13},  //  2 Guitar
@@ -60,11 +59,11 @@ constexpr std::array<std::uint8_t, 8> kRhythmTomCym{0x05, 0x01, 0x00, 0x00, 0xF8
 }  // namespace
 
 void Ym2413Opll::reset() {
-    // A-M17-4: references/openmsx-21.0/src/sound/YM2413Okazaki.cc:707-720
+    // openMSX 21.0: src/sound/YM2413Okazaki.cc:707-720
     // zeroes every register ($00-$3F) and the address latch on reset().
     regs_.fill(0);
     latch_ = 0;
-    // E2 (M28-S1): reset the write-timing tracker's device state (the
+    // Reset the write-timing tracker's device state (the
     // last-write bookkeeping), but not the clock_source_ pointer or the
     // write_timing_enforced_ toggle -- those are wiring/config, mirroring
     // Rp5c01::reset() leaving clock_source_/clock_gate_ untouched
@@ -72,8 +71,8 @@ void Ym2413Opll::reset() {
     has_last_write_ = false;
     last_write_was_address_ = false;
     last_write_cycle_ = 0;
-    // M31 (backlog E1): also restores the synth's documented power-on state
-    // (planner §2.2/§2.3); the M17 register contract above is unchanged.
+    // Also restores the synth's documented power-on state;
+    // the register contract above is unchanged.
     synth_.reset();
 }
 
@@ -116,25 +115,25 @@ bool Ym2413Opll::gate_allows_write(const bool is_address_write) {
 }
 
 void Ym2413Opll::write_address(const std::uint8_t value) {
-    // A-M17-3: the latch stores the value unmasked (YM2413Okazaki.cc:1370-1371).
-    // D-M31-2 (DEC-0030 cross-reference, planner M31 §2.8): fMSX masks at
+    // The latch stores the value unmasked (YM2413Okazaki.cc:1370-1371).
+    // fMSX masks at
     // latch time instead (YM2413.c:134-137, `Latch = V&0x3F`) --
-    // observationally equivalent for all write sequences; M17 settled on
-    // mask-at-USE-time (below); recorded, no change.
+    // observationally equivalent for all write sequences; this core masks at
+    // USE time (below); recorded, no change. (DEC-0030)
     if (!gate_allows_write(/*is_address_write=*/true)) {
-        return;  // E2: dropped, insufficient spacing since the prior write.
+        return;  // Dropped: insufficient spacing since the prior write.
     }
     latch_ = value;
 }
 
 void Ym2413Opll::write_data(const std::uint8_t value) {
-    // A-M17-3: the 0x3F mask applies at USE time, on the data write
+    // The 0x3F mask applies at USE time, on the data write
     // (YM2413Okazaki.cc:1372-1373: `writeReg(registerLatch & 0x3f, value)`).
     if (!gate_allows_write(/*is_address_write=*/false)) {
-        return;  // E2: dropped, insufficient spacing since the prior write.
+        return;  // Dropped: insufficient spacing since the prior write.
     }
     regs_[latch_ & 0x3F] = value;
-    // M31 (planner §2.6): every ACCEPTED data write notifies the synth's
+    // Every ACCEPTED data write notifies the synth's
     // key-edge detector (key-on/off per channel from $20-$28 bit4, per drum
     // from $0E bits 0-4 gated by bit5). All other synthesis parameters are
     // read live from regs_ at tick time -- no duplicated decode.
@@ -146,7 +145,7 @@ void Ym2413Opll::advance_cycles(const std::uint64_t delta_cycles) {
 }
 
 core::BusData Ym2413Opll::io_read(const core::BusAddress /*port*/) {
-    // A-M17-5: open-bus 0xFF -- the real chip has no status/busy register and
+    // Open-bus 0xFF -- the real chip has no status/busy register and
     // no readback; the XML declares #7C/#7D write-only (type="O").
     return 0xFF;
 }

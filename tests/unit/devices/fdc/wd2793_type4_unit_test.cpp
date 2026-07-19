@@ -11,7 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793Type4_Unit  (M16-S6 completion of M16-S3 Type IV)
+// Suite: Devices_Fdc_Wd2793Type4_Unit
 //
 // WD2793 core Type IV (Force Interrupt) i3 (immediate INTRQ) and i2
 // (index-pulse-scheduled INTRQ) semantics, isolated from the Type II
@@ -19,14 +19,14 @@
 // tests/unit/devices/fdc/wd2793_type3_unit_test.cpp.
 //
 // Grounding (read only, never copied - GPL isolation):
-// references/openmsx-21.0/src/fdc/WD2793.cc:1035-1060 startType4Cmd —
+// openMSX 21.0: src/fdc/WD2793.cc:1035-1060 startType4Cmd —
 //   flags==0x00            -> immediateIRQ = false (no forced INTRQ)
 //   flags & IDX_IRQ (i2)   -> irqTime = drive.getTimeTillIndexPulse(time), i.e.
 //                             INTRQ is armed to fire at the NEXT index pulse,
 //                             NOT immediately (:1049-1050)
 //   flags & IMM_IRQ (i3)   -> immediateIRQ = true (INTRQ true right away, :1054-1055)
 //   unconditionally        -> DRQ cleared, Busy cleared (:1058-1059)
-// references/fact-sheets/FDC for Sony HB-F1XV.md §3 Type IV row, §3 "Force
+// FDC for Sony HB-F1XV fact sheet §3 Type IV row, §3 "Force
 // Interrupt" notes, §8 "Force Interrupt / status-after-FI".
 
 #include <cstdint>

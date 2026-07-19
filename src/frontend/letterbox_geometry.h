@@ -16,16 +16,16 @@
 namespace sony_msx::frontend::geometry {
 
 // ---------------------------------------------------------------------------
-// M57 (DEC-0085, docs/m57-planner-package.md §4.3): the SDL-free inset-letterbox
-// geometry helper for DEF-2 (the ImGui menu strip must not obscure the top of
-// the emulated picture). Header-only + SDL-independent (the master_volume.h /
-// phosphor_blend.h precedent), so the WHOLE fit math is ctest-provable with NO
-// SDL renderer -- it compiles in BOTH configs (SDL3=ON and SDL3=OFF) and the
-// geometry oracle targets this pure function directly.
+// The SDL-free inset-letterbox geometry helper: the ImGui menu strip must not
+// obscure the top of the emulated picture. Header-only + SDL-independent (the
+// master_volume.h / phosphor_blend.h precedent), so the WHOLE fit math is
+// ctest-provable with NO SDL renderer -- it compiles in BOTH configs (SDL3=ON
+// and SDL3=OFF) and the geometry oracle targets this pure function directly.
+// (DEC-0085)
 //
 // The menu bar owns a `top_inset`-pixel-tall strip along the window top, and
-// (DEC-0096) an optional status bar owns a `bottom_inset`-pixel-tall strip along
-// the window bottom. This function fits a cw:ch (default 320x240 = MSX 4:3)
+// an optional status bar owns a `bottom_inset`-pixel-tall strip along the
+// window bottom (DEC-0096). This function fits a cw:ch (default 320x240 = MSX 4:3)
 // rectangle into the BAND BETWEEN the two strips --
 // band = {x:0, y:top_inset, w:win_w, h:win_h - top_inset - bottom_inset} --
 // aspect-preserved and CENTERED in the band. The returned rect never overlaps

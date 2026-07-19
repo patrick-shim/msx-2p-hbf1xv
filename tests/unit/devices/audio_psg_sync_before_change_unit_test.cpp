@@ -11,14 +11,14 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Audio_PsgSyncBeforeChange_Unit (M39-A Fix B, the CONFIRMED
+// Suite: Devices_Audio_PsgSyncBeforeChange_Unit (the CONFIRMED
 // digitized-voice fix).
 //
 // The scroll-shooter / split-screen-title voice is PSG SOFTWARE-PCM: a channel-volume register is
-// hammered sub-frame so the volume sequence IS the PCM waveform. The M34 box-
+// hammered sub-frame so the volume sequence IS the PCM waveform. The box-
 // average is produced once per frame in a batch using END-OF-FRAME register
-// state, so every sub-frame volume change collapses (voice silent). Fix B is a
-// sync-before-change seam: before each register write mutates state, advance
+// state, so every sub-frame volume change collapses (voice silent). The fix is
+// a sync-before-change seam: before each register write mutates state, advance
 // the box-average integral to the write's cycle using the PRE-write state.
 //
 // Setup uses tone+noise DISABLED on channel A (R7 bits 0+3), so the channel is

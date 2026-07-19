@@ -12,7 +12,7 @@
 # ============================================================================
 
 param(
-    [string]$ProgramBin = "tests/parity/m11_bus_probe.bin",
+    [string]$ProgramBin = "tests/parity/bus_probe.bin",
     [string]$BaseHex = "C000",
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$TraceA = "build/m11_parity_trace_A.txt",
@@ -34,7 +34,7 @@ param(
 #       over the SAME probe program at the SAME base with the SAME forced initial
 #       CPU vector.
 #
-# The probe (tests/parity/m11_bus_probe.bin) is deliberately slot-safe and
+# The probe (tests/parity/bus_probe.bin) is deliberately slot-safe and
 # BIOS-independent: it exercises only S1985 I/O whose result lands in a CPU
 # register and does NOT remap the running code's page:
 #   - mapper readback: OUT (#FC),#25 ; IN A,(#FC) -> #85 (0x80|(seg&0x1F), §4)

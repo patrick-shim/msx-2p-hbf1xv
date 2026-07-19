@@ -18,10 +18,10 @@
 namespace sony_msx::frontend::geometry {
 
 // ---------------------------------------------------------------------------
-// M61 (DEC-0090): the pure, SDL-free display-fit function for the interactive
-// window. Header-only + SDL-independent (the letterbox_geometry.h precedent),
-// so the WHOLE fit math is ctest-provable with NO SDL and compiles in BOTH
-// configs (SDL3=ON and SDL3=OFF).
+// The pure, SDL-free display-fit function for the interactive window.
+// Header-only + SDL-independent (the letterbox_geometry.h precedent), so the
+// WHOLE fit math is ctest-provable with NO SDL and compiles in BOTH configs
+// (SDL3=ON and SDL3=OFF). (DEC-0090)
 //
 // Problem it solves (owner Raspberry Pi 4B + the official 7" 800x480 panel):
 // the interactive window used to open at the requested 320N x (240N + bar_h)
@@ -32,10 +32,10 @@ namespace sony_msx::frontend::geometry {
 //   1. If the requested window (picture + bar) already fits -> keep it as-is.
 //   2. Otherwise pick the LARGEST integer scale n (never above the requested
 //      scale) whose (cw*n) x (ch*n + bar_h) fits the usable bounds -- the
-//      picture band stays an exact-4:3 320n x 240n, so the M57 letterbox fills
-//      it edge to edge (no bars).
+//      picture band stays an exact-4:3 320n x 240n, so the inset-letterbox
+//      presenter fills it edge to edge (no bars).
 //   3. If even n == 1 overflows, CLAMP the window to min(requested, usable):
-//      it fills the screen without exceeding it, and the EXISTING M57
+//      it fills the screen without exceeding it, and the EXISTING
 //      letterbox presenter (set_top_inset + letterbox_into_band) fits the 4:3
 //      picture aspect-correct + fully visible into whatever band remains below
 //      the bar. This function deliberately adds NO second letterbox path.
@@ -104,7 +104,7 @@ struct WindowFit {
         return out;
     }
 
-    // 3) Even scale 1 overflows: clamp to min(requested window, usable). The M57
+    // 3) Even scale 1 overflows: clamp to min(requested window, usable). The
     //    letterbox presenter fits the 4:3 picture into the band below the bar.
     out.w = std::min(req_w, usable_w);
     out.h = std::min(req_h + bar_h, usable_h);

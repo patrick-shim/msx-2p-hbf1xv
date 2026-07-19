@@ -21,14 +21,14 @@
 
 namespace sony_msx::machine {
 
-// Per-slot cartridge CLI request (M19-S5, backlog B7).
+// Per-slot cartridge CLI request.
 struct ParsedCartridgeSlotCli {
     std::optional<std::string> path;
-    // Defaults to Mirrored when --cartN-type is OMITTED (A-M19-5, matching
+    // Defaults to Mirrored when --cartN-type is OMITTED (matching
     // openMSX's own default, RomFactory.cc:178-179). An unrecognized VALUE is
     // always a parse error (see `errors` below), never silently defaulted.
     //
-    // M30 (backlog G2): the load layer consults `type_was_explicit` before
+    // The load layer consults `type_was_explicit` before
     // trusting this default -- an omitted type (or the explicit value
     // `auto`, below) triggers auto-identification one layer up
     // (cartridge_identifier.h). The parser's own default is unchanged.
@@ -39,29 +39,28 @@ struct ParsedCartridgeSlotCli {
 struct ParsedCartridgeCli {
     ParsedCartridgeSlotCli slot1;
     ParsedCartridgeSlotCli slot2;
-    // M30 (backlog G2): `--softwaredb <path>` override for the cartridge-
+    // `--softwaredb <path>` override for the cartridge-
     // identification database. std::nullopt (flag absent) selects the
     // CWD-relative default (cartridge_identifier.h's kDefaultSoftwareDbPath).
     // Recognized in the SHARED parser so all consumers (headless default
-    // run, --parity-trace, --debug-session, SDL3) get it for free (planner
-    // §2.2.3).
+    // run, --parity-trace, --debug-session, SDL3) get it for free.
     std::optional<std::string> softwaredb_path;
     // Non-empty means at least one flag could not be parsed (missing value
     // argument, or an unrecognized --cartN-type name). Never silently
-    // swallowed by the caller (planner §2.4).
+    // swallowed by the caller.
     std::vector<std::string> errors;
 };
 
-// Pure argv parser (A-M19-4): recognizes `--cart1 <path>`, `--cart1-type
-// <name>`, `--cart2 <path>`, `--cart2-type <name>`, and (M30) `--softwaredb
+// Pure argv parser: recognizes `--cart1 <path>`, `--cart1-type
+// <name>`, `--cart2 <path>`, `--cart2-type <name>`, and `--softwaredb
 // <path>` anywhere in `args` (order-independent).
 //
-// M46 (DEC-0071): `--slot1`/`--slot2`/`--slot1-type`/`--slot2-type` are the
+// `--slot1`/`--slot2`/`--slot1-type`/`--slot2-type` are the
 // official-MSX-term RENAMES and parse to the byte-identical slot fields;
 // `--cartN`/`--cartN-type` are KEPT as accepted silent backward-compat aliases
 // (existing scripts unbroken). Because both spellings write the same field on
 // the linear scan, a `--slotN`/`--cartN` collision for one slot resolves to the
-// LAST occurrence (the parser's standing repeated-flag rule).
+// LAST occurrence (the parser's standing repeated-flag rule). (DEC-0071)
 //
 // Does no file I/O and has
 // no Hbf1xvMachine dependency (mirrors RomAssetLoader's separation of
@@ -69,7 +68,7 @@ struct ParsedCartridgeCli {
 // unit-testable without argv/process plumbing. Omitting --cart1/--cart2
 // yields a `path == std::nullopt` request for that slot.
 //
-// M30: `--cartN-type auto` is an explicit request for auto-identification
+// `--cartN-type auto` is an explicit request for auto-identification
 // (openMSX's own vocabulary, RomFactory.cc:180): it behaves exactly as if
 // the flag were omitted (`type_was_explicit = false`, type left at the
 // Mirrored struct default). `auto` is recognized only at this CLI layer --

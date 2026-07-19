@@ -11,18 +11,18 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_SpriteEngineCheckUntilEquivalence_Unit  (M49-S1, backlog D9)
+// Suite: Devices_SpriteEngineCheckUntilEquivalence_Unit
 //
-// AC-S1 byte-identity oracle: with NO mid-frame sprite-relevant write, driving
+// Byte-identity oracle: with NO mid-frame sprite-relevant write, driving
 // the new progressive SpriteEngine::check_until() watermark pass line-by-line
 // (or in arbitrary chunks) to `height` MUST produce byte-identical per-line
 // visible-sprite buffers + S#0 5S/number + S#3-S#6 collision X/Y + the whole
-// collision-event re-latch queue as the single-shot recompute_frame() sweep the
-// pre-M49 code used. The single-shot path (recompute_frame -> begin_frame +
-// check_until(height-1)) is itself pinned to the OLD algorithm's exact values by
-// the existing sprite unit tests (video_sprite_engine_mode1/mode2/
+// collision-event re-latch queue as the single-shot recompute_frame() sweep
+// used before the progressive pass existed. The single-shot path (recompute_frame
+// -> begin_frame + check_until(height-1)) is itself pinned to the OLD algorithm's
+// exact values by the existing sprite unit tests (video_sprite_engine_mode1/mode2/
 // mode2_attribute_masking/collision_relatch), so proving incremental ==
-// single-shot here transitively proves incremental == pre-M49 behavior.
+// single-shot here transitively proves incremental == the old behavior.
 //
 // Non-tautology: the SAME frame is checked two ways -- one big call vs many
 // small (and irregular-chunk) calls. Any incremental bug (a segment double-

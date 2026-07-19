@@ -113,7 +113,7 @@ if [ "$RUN_TESTS" -eq 1 ]; then
         ctest --test-dir build --output-on-failure
     else
         echo "[bootstrap] running fast-subset ctest -- ZEXALL excluded per standing cadence"
-        ctest --test-dir build --output-on-failure -LE m24_slow_full_sweep
+        ctest --test-dir build --output-on-failure -LE slow_cpu_sweep
     fi
 fi
 

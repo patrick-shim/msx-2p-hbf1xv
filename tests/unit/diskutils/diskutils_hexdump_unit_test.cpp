@@ -11,9 +11,9 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Diskutils_HexDump_Unit  (M53-S4, planner package §6.4)
+// Suite: Diskutils_HexDump_Unit
 //
-// Deterministic hex-dump formatter oracle: the exact §2.3 golden string for a
+// Deterministic hex-dump formatter oracle: the exact golden string for a
 // full 16-byte line, the base_offset column, short-line padding (gutter stays
 // aligned), determinism (two dumps byte-identical), and the --read --sector /
 // --range slice math against a synthetic full image via the real CLI path.
@@ -55,7 +55,7 @@ int main() {
     using sony_msx::utils::build_blank_image;
     using sony_msx::utils::DiskFormat;
 
-    // --- Exact §2.3 golden line for the 16-byte boot-sector prefix. ---
+    // --- Exact golden line for the 16-byte boot-sector prefix. ---
     const std::vector<std::uint8_t> boot16 = {
         0xEB, 0xFE, 0x90, 'S', 'O', 'N', 'Y', 'M', 'S', 'X', ' ', 0x00, 0x02, 0x02, 0x01, 0x00};
     const std::string golden =

@@ -25,9 +25,8 @@
 
 namespace sony_msx::machine {
 
-// Deterministic, timed key-event scripting format + parser + player (M27-S6,
-// "Production Hardening + Debug/Test Tooling" item 3,
-// docs/m27-planner-package.md §2.4). Enables keystroke-sequencing/
+// Deterministic, timed key-event scripting format + parser + player.
+// Enables keystroke-sequencing/
 // scripted-input automation against either executable, driven through the
 // same CPU sub-loop each already runs.
 //
@@ -44,8 +43,8 @@ namespace sony_msx::machine {
 // uses, debug_event_log.h:23). Events must be strictly non-decreasing in `T`
 // in the file; `KEY` names are resolved via peripherals::key_name_to_row_col().
 //
-// M41-S1 (docs/m41-production-qa-plan.md §5.1) adds an ADDITIVE second line
-// kind, `JOY=`, so the same deterministic script format can inject joystick
+// A second, ADDITIVE line
+// kind, `JOY=`, lets the same deterministic script format inject joystick
 // direction/trigger state for the A/B production-QA suite's STICK/STRIG
 // scenarios:
 //   T=<tstate-dec> JOY=<port> <UP|DOWN|LEFT|RIGHT|A|B> DOWN
@@ -53,13 +52,13 @@ namespace sony_msx::machine {
 // where <port> is 1 or 2 (mapped to peripherals::JoystickPorts index port-1)
 // and the trailing DOWN/UP is the press-state (DOWN = pressed). The KEY= line
 // kind and its parse/serialize output are byte-identical to before -- a script
-// with no JOY= line behaves exactly as it did pre-M41 (hard regression guard,
-// input_script_unit_test.cpp). `A`/`B` name trigger A/B; `UP/DOWN/LEFT/RIGHT`
-// name the four directions.
+// with no JOY= line behaves exactly as it did before JOY= was added (hard
+// regression guard, input_script_unit_test.cpp). `A`/`B` name trigger A/B;
+// `UP/DOWN/LEFT/RIGHT` name the four directions.
 inline constexpr const char* kInputScriptFormatTag = "HBF1XV-INPUT-SCRIPT v1";
 
 // Discriminates the two line kinds. `Key` is the default so a value-initialized
-// or aggregate-initialized {tstate, key_name, pressed} event (the pre-M41
+// or aggregate-initialized {tstate, key_name, pressed} event (the original
 // construction form used by existing tests) is a keyboard event unchanged.
 enum class InputEventKind : std::uint8_t { Key, Joy };
 
@@ -74,7 +73,7 @@ struct InputScriptEvent {
     std::string key_name;
     // Shared press-state: DOWN = true, UP = false (both line kinds).
     bool pressed = false;
-    // M41-S1 additive fields; default (Key) keeps pre-M41 aggregate-init
+    // Additive JOY-support fields; the default (Key) keeps aggregate-init
     // {tstate, key_name, pressed} events keyboard events.
     InputEventKind kind = InputEventKind::Key;
     // JOY events only: 1 or 2 (port index = joy_port - 1).
@@ -153,9 +152,9 @@ private:
     std::size_t disk_swap_count_ = 0;
 };
 
-// A monotonic-cursor player (M27-S6/S7, mirrors this project's established
-// event-driven, monotonic-cursor architectural precedent -- the M16 FDC
-// DRQ/INTRQ state machine, the M22 VDP command engine's LMCM/LMMC/HMMC
+// A monotonic-cursor player (mirrors this project's established
+// event-driven, monotonic-cursor architectural precedent -- the FDC
+// DRQ/INTRQ state machine, the VDP command engine's LMCM/LMMC/HMMC
 // event-driven commands -- an architectural pattern citation, not identical
 // code). Applies every event with at_tstate <= current_tstate not yet
 // applied, in file order, via peripherals::key_name_to_row_col() +
@@ -166,10 +165,11 @@ class InputScriptPlayer {
 public:
     explicit InputScriptPlayer(std::vector<InputScriptEvent> events = {});
 
-    // M41-S1: optional joystick sink for JOY= events (default null). When null,
+    // Optional joystick sink for JOY= events (default null). When null,
     // JOY= events are applied as safe no-ops (the monotonic cursor still
     // advances so no KEY= event is ever skipped) -- so the keyboard-only
-    // apply_due() path is byte-for-byte the pre-M41 behavior. Attaching a
+    // apply_due() path is byte-for-byte unchanged from before JOY= support.
+    // Attaching a
     // JoystickPorts lets apply_due() drive JoystickPorts::set_port() per event.
     void attach_joystick(peripherals::JoystickPorts* joystick);
 
@@ -182,7 +182,7 @@ public:
 private:
     std::vector<InputScriptEvent> events_;
     std::size_t cursor_ = 0;
-    // M41-S1: optional joystick target + a shadow per-port PortState the JOY=
+    // Optional joystick target + a shadow per-port PortState the JOY=
     // events accumulate into (so setting LEFT does not clear a held trigger).
     peripherals::JoystickPorts* joystick_ = nullptr;
     std::array<peripherals::JoystickPorts::PortState, 2> joy_state_{};

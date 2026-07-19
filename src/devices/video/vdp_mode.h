@@ -17,22 +17,22 @@
 
 namespace sony_msx::devices::video {
 
-// V9958 display-mode identity (M14-S3, bit-level decode ONLY — no pixels).
+// V9958 display-mode identity (bit-level decode ONLY — no pixels).
 //
 // The V9958 display mode is selected by M1..M5 (R#1 b4,b3 and R#0 b3,b2,b1)
 // plus the V9958 YJK/YAE bits (R#25 b3/b4). LN (R#9 b7) and IL (R#9 b3) only
 // change vertical resolution/interlace, not mode identity, so they are not
 // part of this enum. This decode reproduces the canonical MSX mode-bit
-// encoding grounded in references/openmsx-21.0/src/video/DisplayMode.hh
+// encoding grounded in openMSX 21.0: src/video/DisplayMode.hh
 // (behavior reference only — never copied; the numeric layout below is the
-// public MSX2 register encoding from the fact-sheet §3 lines 45-64,
+// public MSX2 register encoding from the V9958 fact sheet §3,
 // independently expressed here).
 //
 // Base byte layout (M5..M1), bit0=M1 .. bit4=M5:
 //   base = ((reg0 & 0x0E) << 1) | ((reg1 & 0x08) >> 2) | ((reg1 & 0x10) >> 4)
 //
-// M14 stores this identity + the raw V9958 feature bits; it computes no
-// output pixels or colors (rendering deferred, backlog D1/D5/D6).
+// The VDP stores this identity + the raw V9958 feature bits; it computes no
+// output pixels or colors (rendering is the frame renderer's job).
 
 enum class VdpMode : std::uint8_t {
     Graphic1,     // SCREEN 1        (base 0x00)
@@ -72,14 +72,14 @@ struct VdpModeState {
 // True iff this base mode is a V9938-and-later mode (M4 or M5 set) — the modes
 // in which the CPU-port VRAM auto-increment carries into R#14 (full 128 KB
 // counting). The legacy TMS9918 modes (G1/G2/MC/T1: M4=M5=0) do NOT carry
-// (fact-sheet §2 line 40; openMSX executeCpuVramAccess VDP.cc:884 isV9938Mode).
+// (V9958 fact sheet §2; openMSX executeCpuVramAccess VDP.cc:884 isV9938Mode).
 [[nodiscard]] constexpr bool vdp_base_is_v9938_mode(std::uint8_t base) {
     return (base & 0x18) != 0;
 }
 
-// True iff this base mode uses the G6/G7 planar VRAM interleave (M21-S4,
-// backlog D7). Independently re-derived from
-// references/openmsx-21.0/src/video/DisplayMode.hh:140-143 (`isPlanar`):
+// True iff this base mode uses the G6/G7 planar VRAM interleave.
+// Independently re-derived from
+// openMSX 21.0: src/video/DisplayMode.hh:140-143 (`isPlanar`):
 // `(base & 0x14) == 0x14`. Correctly identifies GRAPHIC6 (0x14) and
 // GRAPHIC7 (0x1C), and -- since YJK/YAE only set bits 5/6 of the full mode
 // byte, never touching base bits 2/4 -- both V9958 YJK overlay modes too
@@ -88,8 +88,8 @@ struct VdpModeState {
     return (base & 0x14) == 0x14;
 }
 
-// Sprite mode for this base (M22-S1, backlog D2; independently re-derived
-// from references/openmsx-21.0/src/video/DisplayMode.hh:158-174
+// Sprite mode for this base (independently re-derived
+// from openMSX 21.0: src/video/DisplayMode.hh:158-174
 // `getSpriteMode()`, restricted to the V9958 case since this project's VDP
 // is never `isMSX1VDP()`): 0 = no sprites, 1 = sprite mode 1 (TMS9918-
 // compatible, max 4/line), 2 = sprite mode 2 (MSX2+, max 8/line). Shared by

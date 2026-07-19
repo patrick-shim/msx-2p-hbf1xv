@@ -19,12 +19,11 @@
 
 #include "peripherals/msx_key_names.h"
 
-// Suite: Peripherals_MsxKeyNames_Unit (M27-S6, "Production Hardening +
-// Debug/Test Tooling" item 3, docs/m27-planner-package.md §2.4).
+// Suite: Peripherals_MsxKeyNames_Unit
 //
 // Every entry asserted here was copied verbatim from
-// src/frontend/sdl3_input_mapper.cpp's own `kMap` array literal this cycle
-// (R-M27-4) -- this file re-confirms the SAME 72 (name -> (row, column))
+// src/frontend/sdl3_input_mapper.cpp's own `kMap` array literal
+// -- this file re-confirms the SAME 72 (name -> (row, column))
 // facts, independently re-expressed by name. The SDL3-gated cross-
 // consistency test (tests/integration/frontend/
 // sdl3_input_mapper_key_names_consistency_integration_test.cpp) is the HARD
@@ -56,7 +55,7 @@ struct Expected {
 int main() {
     // --- Case 1: every one of the 72 documented entries resolves to its
     // documented (row, column) -- the SAME facts src/frontend/
-    // sdl3_input_mapper.cpp's kMap array literal records (R-M27-4). ---
+    // sdl3_input_mapper.cpp's kMap array literal records. ---
     static constexpr std::array<Expected, 72> kExpected{{
         {"0", 0, 0},        {"1", 0, 1},        {"2", 0, 2},        {"3", 0, 3},
         {"4", 0, 4},        {"5", 0, 5},        {"6", 0, 6},        {"7", 0, 7},
@@ -106,8 +105,8 @@ int main() {
     }
     // Case-sensitive: lowercase never matches (names are always uppercase).
     expect(!key_name_to_row_col("a").has_value(), "LowercaseName_CaseSensitive_ReturnsNullopt");
-    // Numeric-keypad rows 9-10 are out of scope this cycle (inherited
-    // boundary from Sdl3InputMapper::scancode_map(), §1.2).
+    // Numeric-keypad rows 9-10 are unmapped (an inherited boundary
+    // from Sdl3InputMapper::scancode_map()).
     expect(!key_name_to_row_col("KP_0").has_value(), "NumericKeypadRow_OutOfScope_ReturnsNullopt");
 
     if (g_failures != 0) {

@@ -20,7 +20,7 @@
 
 namespace sony_msx::machine {
 
-// Execution-event categories captured by the debug event log (M10-S3).
+// Execution-event categories captured by the debug event log.
 enum class DebugEventType : std::uint8_t {
     Reset = 0,             // Machine cold_boot / CPU reset.
     InstructionRetire = 1, // A single CPU instruction retired.
@@ -38,7 +38,7 @@ struct DebugEvent {
     std::string detail;
 };
 
-// Deterministic collector + serializer for execution events (M10-S3).
+// Deterministic collector + serializer for execution events.
 //
 // The event stream is byte-stable across identical runs: sequence indices
 // are a monotonic counter, `tstate` comes from the deterministic scheduler

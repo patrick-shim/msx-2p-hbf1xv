@@ -24,11 +24,11 @@ namespace sony_msx::devices::audio {
 // Source of the PSG I/O ports — R14 (port A, read) and R15 (port B, write).
 //
 // On the HB-F1XV the joystick pins, keyboard-layout line and cassette input are
-// wired to the S1985 but are READ THROUGH the PSG (fact-sheet
-// references/fact-sheets/Yamaha S1985 MSX-ENGINE Chipset.md §2, "Joystick
-// ports"; openMSX references/openmsx-21.0/src/sound/AY8910.cc:542-560 delegates
+// wired to the S1985 but are READ THROUGH the PSG (Yamaha S1985 MSX-ENGINE
+// Chipset fact sheet §2, "Joystick
+// ports"; openMSX 21.0: src/sound/AY8910.cc:542-560 delegates
 // port A/B to an AY8910Periphery). The PSG owns R14/R15; the concrete joystick/
-// keyboard-layout/cassette state is injected via this contract (X5 ownership:
+// keyboard-layout/cassette state is injected via this contract (ownership:
 // peripheral -> PSG, never PSG -> S1985Engine).
 class PsgPortSource {
 public:
@@ -42,13 +42,13 @@ public:
     virtual void write_port_b(std::uint8_t value) = 0;
 };
 
-// Passive observer of PSG register writes (M39-A Step 1 diagnostic tooling).
+// Passive observer of PSG register writes (diagnostic tooling).
 // Fires on every write to a selected register (the #A1 data path). PURELY
 // PASSIVE: it inspects (reg, value) only and must never mutate PSG state, so
 // determinism is preserved. Used to measure the R8/R9/R10 (channel-volume)
 // software-PCM write RATE at the scroll-shooter / split-screen titles' voice
 // window, to distinguish
-// the 1-bit-DAC voice hypothesis (Fix A) from a PSG software-PCM one (Fix B).
+// the 1-bit-DAC voice hypothesis from a PSG software-PCM one.
 // Nullable + default-unattached -> zero behaviour change.
 class PsgWriteObserver {
 public:
@@ -56,8 +56,9 @@ public:
     virtual void on_register_write(std::uint8_t reg, std::uint8_t value) = 0;
 };
 
-// Deterministic emulated-cycle source for the M39-A Fix-B sync-before-change
-// seam (X-pattern of the machine's RtcClock/FdcClock adapters). Returns the
+// Deterministic emulated-cycle source for the sync-before-change seam (the
+// same read-only adapter pattern as the machine's RtcClock/FdcClock
+// adapters). Returns the
 // scheduler's total cycles READ-ONLY; never perturbs CPU T-state accounting.
 class PsgCycleSource {
 public:
@@ -65,20 +66,20 @@ public:
     [[nodiscard]] virtual std::uint64_t current_cycle() const = 0;
 };
 
-// YM2149 PSG numeric/register-accurate sample model (M15-S1, backlog B1).
+// YM2149 PSG numeric/register-accurate sample model.
 //
-// Ports (fact-sheet §2; openMSX references/openmsx-21.0/src/sound/MSXPSG.cc):
+// Ports (fact-sheet §2; openMSX 21.0: src/sound/MSXPSG.cc):
 //   #A0 write -> register-address latch (mirrored-register mask 0x0F)
 //   #A1 write -> data to the selected register
 //   #A2 read  -> data from the selected register
 // Dispatch is on port & 0x03 (0=address, 1=data-write, 2=data-read).
 //
-// This is the DETERMINISTIC NUMERIC model only (DEC-0009 Q4): it produces the
+// This is the DETERMINISTIC NUMERIC model only: it produces the
 // register file, tone/noise/envelope generator state and a numeric stereo mix.
-// It carries NO audio device / output / presentation (deferred to the SDL3
-// frontend milestone). Grounding for the generator/envelope semantics:
-// references/openmsx-21.0/src/sound/AY8910.cc (behaviour reference; never copied
-// — GPL isolation, guardrails).
+// It carries NO audio device / output / presentation (that lives in the SDL3
+// frontend). Grounding for the generator/envelope semantics:
+// openMSX 21.0: src/sound/AY8910.cc (behaviour reference; never copied
+// — GPL isolation). (DEC-0009)
 //
 // YM2149 specifics vs AY-3-8910 (fact-sheet §2, "YM2149 vs AY-3-8910"):
 //   - 5-bit / 32-step envelope counter.
@@ -98,23 +99,23 @@ public:
     // Inject the joystick/keyboard-layout/cassette source that backs R14/R15.
     void attach_port_source(PsgPortSource* source);
 
-    // M39-A Step 1: attach a passive register-write observer (nullable,
+    // Attach a passive register-write observer (nullable,
     // default-unattached). Fires on every write_register(); non-perturbing.
     void attach_write_observer(PsgWriteObserver* observer) { write_observer_ = observer; }
 
     // ------------------------------------------------------------------
-    // M39-A Fix B: sync-before-change seam (the digitized-voice fix). The
+    // Sync-before-change seam (the digitized-voice fix). The
     // CONFIRMED voice mechanism (a scrolling-shooter title's copyright voice
     // line, a split-screen title's
     // speech) is PSG SOFTWARE-PCM: the game hammers a channel-volume register
     // (R8/R9/R10) hundreds of times per frame (~312/frame measured) so the
-    // volume sequence IS the PCM waveform. The M34 box-average is produced ONCE
+    // volume sequence IS the PCM waveform. The box-average is produced ONCE
     // PER FRAME in a batch (frontend mixer, advance_cycles + take at end-of-
     // frame using END-OF-FRAME register state), so every SUB-FRAME volume
     // change collapses to the final value and the voice is silent.
     //
-    // sync-before-change (the audio analogue of the M32 VDP render-sync seam,
-    // references/openmsx-21.0/src/video/PixelRenderer.cc:549-571): BEFORE a
+    // sync-before-change (the audio analogue of the VDP render-sync seam;
+    // openMSX 21.0: src/video/PixelRenderer.cc:549-571): BEFORE a
     // register write mutates any generator/volume state, advance the box-average
     // integral up to the write's cycle using the CURRENT (pre-write) state -- so
     // each sub-frame volume is integrated for its true sub-frame duration. The
@@ -126,7 +127,7 @@ public:
     // every existing PSG/mixer oracle (which drives the batch advance_cycles +
     // take path directly) is byte-for-byte unchanged. The frontend enables it
     // ONLY on the interleaved production path (SDL3 audio + the headless
-    // --audio-sync dump). GROUNDED in the same M34 integral this class already
+    // --audio-sync dump). GROUNDED in the same box-average integral this class already
     // owns (reuses advance_cycles()).
     void attach_audio_cycle_source(PsgCycleSource* source) { audio_cycle_source_ = source; }
     void set_audio_sync_enabled(bool enabled) { audio_sync_enabled_ = enabled; }
@@ -155,7 +156,7 @@ public:
     core::BusData io_read(core::BusAddress port) override;
     void io_write(core::BusAddress port, core::BusData value) override;
 
-    // Deterministic generator advance, read-only off the machine clock (X4:
+    // Deterministic generator advance, read-only off the machine clock (it
     // never perturbs CPU T-state accounting). delta_cpu_cycles = 3.58 MHz
     // system cycles elapsed since the last advance.
     void advance_cycles(std::uint64_t delta_cpu_cycles);
@@ -167,16 +168,16 @@ public:
     // Numeric stereo mix (fact-sheet §2: A=Center, B=Left, C=Right). Each channel
     // contributes its resolved 5-bit amplitude when audible.
     //
-    // POINT-SAMPLE API, byte-kept by M34 (docs/m34-planner-package.md §2.3):
+    // POINT-SAMPLE API, deliberately kept byte-identical for existing oracles:
     // returns the instantaneous level at the current generator state. The
     // PRODUCTION sample path uses take_integrated_sample() below instead --
     // point-sampling a 3.58 MHz-grain square at the ~44.2 kHz host rate
-    // aliases >Nyquist content into the audible band (DEC-0043 Defect A).
+    // aliases >Nyquist content into the audible band (DEC-0043).
     [[nodiscard]] StereoSample sample() const;
 
     // ------------------------------------------------------------------
-    // M34 box-average integration API (DEC-0043 Defect A;
-    // docs/m34-planner-package.md §2.3 contract).
+    // Box-average integration API -- the anti-aliasing production sample
+    // path (DEC-0043).
     //
     // During advance_cycles(), the chip accumulates per-channel
     //   Σ level_ch(t) × dwell_cycles
@@ -186,7 +187,7 @@ public:
     // partial step from cycle_residual_, whole kCyclesPerGeneratorStep(16)-
     // cycle steps, and a tail partial step.
     //
-    // BOUNDARY CONVENTION (§2.3.3, load-bearing for every hand oracle): a
+    // BOUNDARY CONVENTION (load-bearing for every hand oracle): a
     // generator step completing at cycle t changes the level effective AFTER
     // cycle t -- the completing cycle's dwell belongs to the PRE-step level.
     // Consequence: with window_cycles == 16 and a period-1 tone from reset,
@@ -197,17 +198,17 @@ public:
     // accumulated window: left = round(intA+intB, W), right =
     // round(intA+intC, W) (stereo law unchanged, fact-sheet §2), where
     // round is the shared round-half-away-from-zero helper
-    // (dwell_rounding.h, §2.3.4), then resets the integrals. W == 0 returns
-    // {0, 0} (§2.3.5, the M26 pump idle case). PRECONDITION (§2.3.7): the
+    // (dwell_rounding.h), then resets the integrals. W == 0 returns
+    // {0, 0} (the audio pump's idle case). PRECONDITION: the
     // caller advances exactly window_cycles between takes -- PsgAudioPump
     // guarantees this by construction.
     //
     // FIXED-POINT PROPERTY: a constant summed level L over the whole window
     // integrates to exactly L (dwell_rounding.h) -- silent stays exactly
-    // silent, constant stays exactly constant (the §2.5 oracle re-baseline
-    // rests on this).
+    // silent, constant stays exactly constant (the audio-oracle baselines
+    // rest on this).
     //
-    // WHAT THE BOX FILTER HONESTLY IS (§2.4, disclosed simplification): the
+    // WHAT THE BOX FILTER HONESTLY IS (a disclosed simplification): the
     // exact integer zero-order model of the analog output reconstruction;
     // its frequency response is |sin(pi f T)/(pi f T)| (T = W/3,579,545 s),
     // NOT a brickwall. Exact worst-case AC bounds of the box average for a
@@ -227,17 +228,17 @@ public:
     // Passband droop: -0.0004 dB @440 Hz, -0.007 dB @1 kHz, -0.18 dB @5 kHz,
     // -0.74 dB @10 kHz, -1.72 dB @15 kHz.
     //
-    // HONEST STATEMENT (package §2.4, verbatim-in-spirit): the box filter
+    // HONEST STATEMENT: the box filter
     // fully resolves the actual defect (the p=0/1 ~112 kHz silence idiom:
     // >=18 dB down AND the residual parked at ~20.7 kHz), but periods 2-4
     // receive only PARTIAL suppression (audible-band aliases at up to
     // ~19%/46% of channel amplitude per the table), and the audible band has
     // sinc rolloff. This is a disclosed simplification vs openMSX's true
-    // band-limited resampling (references/openmsx-21.0/src/sound/
+    // band-limited resampling (openMSX 21.0: src/sound/
     // AY8910.cc:38-39,482 native-rate generation + ResampledSoundDevice.hh:
     // 23,29,46-48 / BlipBuffer.hh:1-28 band-limited resampling -- behaviour
-    // reference only, never copied); genuine band-limited depth is the named
-    // E-series backlog row (agent-protocol/state/deferred-backlog.md).
+    // reference only, never copied); genuine band-limited resampling remains
+    // deferred future work.
     // ------------------------------------------------------------------
     [[nodiscard]] StereoSample take_integrated_sample(std::uint64_t window_cycles);
 
@@ -249,12 +250,12 @@ public:
     [[nodiscard]] std::uint8_t channel_amplitude(int channel) const;  // resolved 0..31
     [[nodiscard]] bool channel_audible(int channel) const;
 
-    // --- M36 Phase 3 debug snapshot: additive read-only view of the RAW
+    // --- Debug snapshot: additive read-only view of the RAW
     //     generator state (tone/noise/envelope counters, LFSR, sub-step
     //     residual, box-average integrals) for a restore-ready snapshot. ONE
     //     struct-returning accessor keeps the header additive-but-compact and
-    //     leaves the private Tone/Noise/Envelope structs encapsulated
-    //     (docs/m36-phase3-planner-package.md §2.4 item 5). Non-perturbing. ---
+    //     leaves the private Tone/Noise/Envelope structs encapsulated.
+    //     Non-perturbing. ---
     struct GeneratorSnapshot {
         std::array<int, 3> tone_count{};
         std::array<int, 3> tone_output{};
@@ -324,13 +325,13 @@ private:
     Noise noise_{};
     Envelope envelope_{};
     std::uint64_t cycle_residual_ = 0;
-    // M34: per-channel Σ level×dwell accumulators for take_integrated_sample()
-    // (§2.3 contract above). Levels are 0..31, so the integral stays far from
+    // Per-channel Σ level×dwell accumulators for take_integrated_sample()
+    // (contract above). Levels are 0..31, so the integral stays far from
     // uint64 overflow for any realistic window.
     std::array<std::uint64_t, 3> level_dwell_integral_{};
     PsgPortSource* port_source_ = nullptr;
-    PsgWriteObserver* write_observer_ = nullptr;  // M39-A Step 1 diagnostic
-    // M39-A Fix B sync-before-change (default DISABLED -> byte-identical).
+    PsgWriteObserver* write_observer_ = nullptr;  // passive write-rate diagnostic
+    // Sync-before-change wiring (default DISABLED -> byte-identical).
     PsgCycleSource* audio_cycle_source_ = nullptr;
     bool audio_sync_enabled_ = false;
     std::uint64_t last_sync_cycle_ = 0;  // absolute machine cycle of last sync

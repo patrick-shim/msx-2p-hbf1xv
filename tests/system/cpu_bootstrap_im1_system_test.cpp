@@ -34,7 +34,7 @@ int main() {
     // Suite: System_CpuBootstrapIm1_System
     sony_msx::machine::Hbf1xvMachine machine;
     machine.cold_boot();
-    machine.map_flat_ram();  // bootstrap program runs from RAM page 0 (M13-S4)
+    machine.map_flat_ram();  // bootstrap program runs from RAM page 0
 
     if (!expect_true(machine.cpu().state().interrupt_mode() == sony_msx::devices::cpu::InterruptMode::Im1,
             "ColdBoot_InitialState_DefaultsToIm1")) {
@@ -54,8 +54,8 @@ int main() {
     };
     machine.load_memory(0x0000, program.data(), static_cast<std::uint32_t>(program.size()));
 
-    // MSX-accurate machine T-states = datasheet + S1985 +1-per-M1 wait (M11,
-    // fact-sheet §8). EI = 4+1, NOP = 4+1. IM1 acknowledge = 13 with NO M1 wait:
+    // MSX-accurate machine T-states = Z80 datasheet + the S1985's +1 wait per
+    // M1 cycle. EI = 4+1, NOP = 4+1. IM1 acknowledge = 13 with NO M1 wait:
     // the ack special M1 is /M1 + /IORQ, which the S1985's opcode-fetch-gated
     // (/M1 + /MREQ) wait generator does not stretch (openMSX CC_IRQ1 = 7+3+3 = 13;
     // live openMSX A/B: 11T JP + 13T accept = 24T).

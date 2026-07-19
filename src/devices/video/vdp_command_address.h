@@ -17,23 +17,21 @@
 
 namespace sony_msx::devices::video {
 
-// VDP command-engine coordinate-to-VRAM-address resolution (M22-S3, the
-// D7-closing piece, backlog D3/D7). Five NEW, dedicated, pure functions --
-// separate from V9958Vdp::effective_address(), which has no X/Y parameters
-// at all (it operates on a linear 17-bit CPU-port pointer, a different
-// domain). The command engine addresses VRAM directly in X/Y pixel-
-// coordinate space, so it needs its own formulas.
+// VDP command-engine coordinate-to-VRAM-address resolution. Five dedicated,
+// pure functions -- separate from V9958Vdp::effective_address(), which has
+// no X/Y parameters at all (it operates on a linear 17-bit CPU-port pointer,
+// a different domain). The command engine addresses VRAM directly in X/Y
+// pixel-coordinate space, so it needs its own formulas.
 //
 // Grounding (behavior reference only, GPL isolation -- never copied):
-// references/openmsx-21.0/src/video/VDPCmdEngine.cc:175-410 (the
+// openMSX 21.0: src/video/VDPCmdEngine.cc:175-410 (the
 // Graphic4Mode/Graphic5Mode/Graphic6Mode/Graphic7Mode/NonBitmapMode structs'
 // `addressOf(x, y, extVRAM)` static functions), `!extVRAM` branch only --
-// HB-F1XV has no expansion socket (128 KB VRAM, fixed, matching the
-// established M14/M21 scope boundary; A-M22-8). MXS/MXD/R#45-bit6 are
-// therefore not modeled: these five functions take only (x, y).
+// HB-F1XV has no expansion socket (128 KB VRAM, fixed). MXS/MXD/R#45-bit6
+// are therefore not modeled: these five functions take only (x, y).
 //
-// CRITICAL (independently hand-verified, docs/m22-planner-package.md §1.5):
-// none of these formulas reference R#2. Commands address BOTH pages of a
+// CRITICAL (independently hand-verified): none of these formulas reference
+// R#2. Commands address BOTH pages of a
 // bitmap mode directly through the Y-coordinate's own range (`y & 511` spans
 // both G6/G7 pages since each page is 256 lines; `y & 1023` spans all 4
 // G4/G5 pages), bypassing R#2's display-page-select bits entirely -- those

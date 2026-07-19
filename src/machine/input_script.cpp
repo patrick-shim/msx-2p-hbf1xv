@@ -113,7 +113,7 @@ std::vector<InputScriptEvent> parse_input_script(const std::string& text) {
         event.at_tstate = t_value;
 
         if (kind_token.rfind("KEY=", 0) == 0) {
-            // KEY= line (pre-M41, unchanged): T=<t> KEY=<name> DOWN|UP.
+            // KEY= line (the original kind, unchanged): T=<t> KEY=<name> DOWN|UP.
             std::string state_token;
             iss >> state_token;
             if (state_token != "DOWN" && state_token != "UP") {
@@ -127,7 +127,7 @@ std::vector<InputScriptEvent> parse_input_script(const std::string& text) {
             event.key_name = key_name;
             event.pressed = (state_token == "DOWN");
         } else if (kind_token.rfind("JOY=", 0) == 0) {
-            // M41-S1 JOY= line: T=<t> JOY=<port> <control> DOWN|UP.
+            // JOY= line: T=<t> JOY=<port> <control> DOWN|UP.
             std::string control_token;
             std::string state_token;
             iss >> control_token >> state_token;
@@ -172,7 +172,7 @@ std::string serialize_input_script_line(const InputScriptEvent& event) {
                debug_format::to_dec(static_cast<std::uint64_t>(event.joy_port)) + " " +
                joy_control_to_token(event.joy_control) + " " + state;
     }
-    // KEY= line -- byte-identical to the pre-M41 serializer output.
+    // KEY= line -- byte-identical to the original serializer output.
     return "T=" + debug_format::to_dec(event.at_tstate) + " KEY=" + event.key_name + " " + state;
 }
 
@@ -244,7 +244,7 @@ void InputScriptPlayer::apply_due(const std::uint64_t current_tstate, peripheral
     while (cursor_ < events_.size() && events_[cursor_].at_tstate <= current_tstate) {
         const InputScriptEvent& event = events_[cursor_];
         if (event.kind == InputEventKind::Joy) {
-            // M41-S1: accumulate into the shadow PortState so distinct controls
+            // Accumulate into the shadow PortState so distinct controls
             // coexist (LEFT does not clear a held trigger). A null joystick_
             // (keyboard-only path) makes this a safe no-op; the cursor still
             // advances so no later KEY= event is ever skipped.

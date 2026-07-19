@@ -304,7 +304,7 @@ if ($mismatches.Count -eq 0 -and -not $lengthMismatch) {
                    "claim is independently, deterministically proven by direct citation of the SAME openMSX " +
                    "21.0 source (``Z80.hh:19-21``, ``CPUCore.cc:2508-2511``) and by this project's own deterministic " +
                    "unit/integration tests (``tests/unit/devices/z80a_halt_r_unit_test.cpp``, " +
-                   "``tests/integration/machine/hbf1xv_m23_halt_r_integration_test.cpp``), neither of which " +
+                   "``tests/integration/machine/hbf1xv_halt_r_integration_test.cpp``), neither of which " +
                    "depends on this live session's real-time scheduling behavior. This probe's seq 0..$($firstRMismatchSeq - 1) " +
                    "match is ADDITIONAL, genuine (not fabricated) live-engine corroboration; the divergence " +
                    "beyond that point is a property of how the LIVE openMSX Tcl debug session's own scheduler " +

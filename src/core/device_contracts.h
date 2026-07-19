@@ -33,8 +33,8 @@
 //                      by an 8-bit device ID (S1985 backup RAM is ID 0xFE).
 //
 // Grounding: S1985 fact-sheet §3/§4/§6/§10; openMSX device model
-// (references/openmsx-21.0/src/MSXDevice.hh, MSXSwitchedDevice.hh) — read for
-// understanding only; never copied here (GPL isolation, guardrails).
+// (openMSX 21.0: src/MSXDevice.hh, MSXSwitchedDevice.hh) — read for
+// understanding only; never copied here (GPL license isolation).
 
 namespace sony_msx::core {
 

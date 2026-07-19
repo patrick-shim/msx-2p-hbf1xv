@@ -21,12 +21,12 @@
 
 namespace sony_msx::devices::chipset {
 
-// Primary/secondary slot-decode fabric for the MSX memory map (M11-S2).
+// Primary/secondary slot-decode fabric for the MSX memory map.
 //
 // Resolves a CPU memory access to the MemoryDevice occupying the selected
 // (primary slot, sub-slot, page) and forwards it, or returns open-bus 0xFF when
 // no device is attached. Two orthogonal selection mechanisms, per the S1985
-// fact-sheet §3 and openMSX references/openmsx-21.0/src/cpu/MSXCPUInterface.cc
+// fact-sheet §3 and openMSX 21.0: src/cpu/MSXCPUInterface.cc
 // (behaviour reference — read only, never copied here):
 //
 //   - Primary select: PPI port #A8, 2 bits per 16 KB page (bits 0-1 page0 ...
@@ -38,7 +38,8 @@ namespace sony_msx::devices::chipset {
 //     expanded, #FFFF is ordinary memory in the mapped device.
 //
 // HB-F1XV: only primary slot 3 is expanded; main RAM is the MemoryDevice at
-// slot 3-0, pages 0-3 (fact-sheet §9). ROM/mapper population arrives in M12.
+// slot 3-0, pages 0-3 (fact-sheet §9). ROM/mapper cells are populated by the
+// machine wiring.
 class SlotBus {
 public:
     static constexpr int kSlots = 4;

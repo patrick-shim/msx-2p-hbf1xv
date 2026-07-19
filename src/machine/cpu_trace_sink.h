@@ -21,12 +21,12 @@
 
 namespace sony_msx::machine {
 
-// Machine-layer collector/serializer for CPU per-instruction trace records
-// (M10-S1). Implements the CPU-side observer interface, retains records in a
+// Machine-layer collector/serializer for CPU per-instruction trace records.
+// Implements the CPU-side observer interface, retains records in a
 // stable in-memory vector, and produces a deterministic, diffable text form.
 //
-// This record store and serialization are the reusable substrate for later
-// M10 slices (S3 full-state debug dump, S4 openMSX parity harness). Output is
+// This record store and serialization are the reusable substrate for the
+// full-state debug dump and the openMSX parity harness. Output is
 // ASCII-only, fixed field order, fixed hex width, '\n'-terminated -- byte-
 // stable across runs and environments.
 class CpuTraceSink final : public devices::cpu::Z80aTraceObserver {

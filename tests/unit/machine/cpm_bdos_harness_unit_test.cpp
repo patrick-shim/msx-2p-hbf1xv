@@ -29,7 +29,7 @@
 // to exercise the harness's own CP/M-loading-convention mechanics (the load
 // base, the top-of-memory word, the CALL-5/JP-0 traps, and the RET
 // synthesis) before the real binaries are ever loaded (see
-// tests/system/hbf1xv_m24_zexall_system_test.cpp for that later step).
+// tests/system/zexall_system_test.cpp for that later step).
 //
 // Every fixture is documented byte-by-byte below. Standard, well-known Z80
 // opcodes used: 0x11 = LD DE,nn; 0x0E = LD C,n; 0xCD = CALL nn; 0x1E = LD E,n;

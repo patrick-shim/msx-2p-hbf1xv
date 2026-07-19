@@ -15,7 +15,7 @@
 """M18-S5 openMSX A/B peripheral-I/O probe assembler (Kanji font ROM + printer
 + cassette interface, Sony HB-F1XV).
 
-Produces `tests/parity/m18_peripheral_io_probe.bin`: ONE combined Z80 program
+Produces `tests/parity/peripheral_io_probe.bin`: ONE combined Z80 program
 (mirrors the M15 "one combined multi-device A/B trace" precedent) exercising
 all three M18-S5 subjects (docs/m18-planner-package.md §2.6) back-to-back:
 
@@ -44,7 +44,7 @@ needed since every read here lands in a CPU register already captured by the
 architectural per-instruction trace).
 
 Usage:
-  python tools/gen/peripheral-io-probe.py [-o tests/parity/m18_peripheral_io_probe.bin]
+  python tools/gen/peripheral-io-probe.py [-o tests/parity/peripheral_io_probe.bin]
   python tools/gen/peripheral-io-probe.py --self-check
 """
 import argparse
@@ -86,7 +86,7 @@ def _select_adr2(addr):
 # Representative addresses (block-aligned; the low 5 bits are cleared by
 # either write per A-M18-3, so any value works -- these are chosen to span
 # both halves including near-boundary offsets, matching the integration test
-# tests/integration/machine/hbf1xv_m18_peripheral_io_integration_test.cpp).
+# tests/integration/machine/hbf1xv_peripheral_io_integration_test.cpp).
 KANJI_JIS1_ADDRESSES = (0x00020, 0x1FFE0)
 KANJI_JIS2_ADDRESSES = (0x20020, 0x2FFE0)
 KANJI_READS_PER_ADDRESS = 4
@@ -131,8 +131,8 @@ def build_probe():
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-o", "--output", default="tests/parity/m18_peripheral_io_probe.bin",
-                        help="output path (default tests/parity/m18_peripheral_io_probe.bin)")
+    parser.add_argument("-o", "--output", default="tests/parity/peripheral_io_probe.bin",
+                        help="output path (default tests/parity/peripheral_io_probe.bin)")
     parser.add_argument("--self-check", action="store_true",
                         help="verify determinism (two assemblies byte-identical) and exit")
     args = parser.parse_args(argv[1:])

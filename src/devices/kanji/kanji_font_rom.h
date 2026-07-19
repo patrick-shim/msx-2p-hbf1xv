@@ -22,23 +22,23 @@
 
 namespace sony_msx::devices::kanji {
 
-// Kanji font ROM I/O device on ports #D8-#DB (M18-S1, backlog B5).
+// Kanji font ROM I/O device on ports #D8-#DB.
 //
-// DEVICE-IDENTITY GROUNDING (A-M18-1/docs/m18-planner-package.md §2.7): the
+// DEVICE-IDENTITY GROUNDING: the
 // HB-F1XV's Kanji font device is openMSX class `Kanji` (`MSXKanji`,
-// references/openmsx-21.0/src/MSXKanji.hh/.cc) -- a DIRECTLY port-mapped
+// openMSX 21.0: src/MSXKanji.hh/.cc) -- a DIRECTLY port-mapped
 // device (`switch (port & 0x03)` dispatch, MSXKanji.cc:34,53,72) -- NOT
-// `MSXKanji12` (references/openmsx-21.0/src/MSXKanji12.hh/.cc), a
+// `MSXKanji12` (openMSX 21.0: src/MSXKanji12.hh/.cc), a
 // switched/expanded-I/O device (MSXSwitchedDevice, device ID 0xF7, ports
 // #40-#4F) used by other MSX machines (Hangul/Lascom variants). Confirmed via
-// the machine XML: references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:
+// the machine XML: openMSX 21.0: share/machines/Sony_HB-F1XV.xml:
 // 29-38 declares `<Kanji id="Kanji ROM">` with four explicit direct
 // `<io base=.. num=.. type=..>` entries at #D8/#D9/#DA/#DB -- no `<Kanji12>`
 // element, no `<type>` child anywhere in this machine's XML. This class
 // therefore implements ONLY the direct-port two-counter address-latch
 // protocol; it carries no switched-I/O dispatch mechanism.
 //
-// ROM-size code path (A-M18-2): `MSXKanji`'s constructor (MSXKanji.cc:9-24)
+// ROM-size code path: `MSXKanji`'s constructor (MSXKanji.cc:9-24)
 // selects `highAddressMask = 0x3F` and `isLascom = false` unless a
 // `<type>hangul</type>` / `<type>lascom</type>` XML child is present (absent
 // here). The local asset (docs/asset-checksums.txt, 262,144 bytes = 0x40000)
@@ -47,10 +47,9 @@ namespace sony_msx::devices::kanji {
 // Two independent address counters address ONE 256 KB ROM image: adr1_
 // addresses the JIS1 half [0x00000, 0x1FFFF]; adr2_ addresses the JIS2 half
 // [0x20000, 0x3FFFF] -- bit 17 (0x20000) is preserved by every #DB write
-// mask, so adr2_ never leaves the JIS2 half through the normal write path
-// (A-M18-3).
+// mask, so adr2_ never leaves the JIS2 half through the normal write path.
 //
-// Six behaviors, byte-exact per MSXKanji.cc:32-88 (A-M18-3; re-expressed,
+// Six behaviors, byte-exact per MSXKanji.cc:32-88 (re-expressed,
 // never copied -- GPL isolation):
 //   #D8 write (port&3==0) : adr1_ = (adr1_ & 0x1F800) | ((value & 0x3F) << 5)
 //   #D9 write (port&3==1) : adr1_ = (adr1_ & 0x007E0) | ((value & 0x3F) << 11)
@@ -69,13 +68,13 @@ namespace sony_msx::devices::kanji {
 //
 // reset() restores adr1_=0x00000, adr2_=0x20000 (MSXKanji.cc:28-29).
 //
-// Pure combinational device (A-M18-4): no clock dependency, identical to the
-// M13 RomDevice / M17 Ym2413Opll no-clock-consumer classification. The image
+// Pure combinational device: no clock dependency, the same
+// no-clock-consumer classification as RomDevice / Ym2413Opll. The image
 // is a fixed 256 KB (0x40000) byte store, loaded by the machine via the
-// existing M13 RomAssetLoader (bios/f1xvkfn.rom).
+// existing RomAssetLoader (bios/f1xvkfn.rom).
 class KanjiFontRom final : public core::IoDevice {
 public:
-    static constexpr std::size_t kImageSize = 0x40000;  // 256 KB (A-M18-2)
+    static constexpr std::size_t kImageSize = 0x40000;  // 256 KB
     static constexpr std::uint32_t kResetAdr1 = 0x00000;
     static constexpr std::uint32_t kResetAdr2 = 0x20000;
 

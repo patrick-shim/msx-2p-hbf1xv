@@ -21,10 +21,12 @@
 #include "devices/cpu/cpu_bus_client.h"
 #include "devices/cpu/z80a_cpu.h"
 
-// Suite: Devices_Z80ABlockFlags_Unit  (M12-S1, PRESENT-item regression floor for
-// gaps #6 LDI/LDD, #7 CPI/CPD, #8 INI/IND, #9 OUTI/OUTD incl. the NMOS
-// OUTI-affects-carry edge). Asserts the FULL flag byte, closing the M9-S3
-// unasserted-flag gap. Grounding: fact-sheet §4; openMSX BLOCK_* CPUCore.cc.
+// Suite: Devices_Z80ABlockFlags_Unit
+//
+// Regression floor for the block instructions' flag behavior: LDI/LDD,
+// CPI/CPD, INI/IND, OUTI/OUTD incl. the NMOS OUTI-affects-carry edge. Asserts
+// the FULL flag byte, closing an earlier coverage gap where flags went
+// unasserted. Grounding: fact-sheet §4; openMSX BLOCK_* CPUCore.cc.
 
 namespace {
 

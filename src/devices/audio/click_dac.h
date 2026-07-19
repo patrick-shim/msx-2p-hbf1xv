@@ -18,7 +18,7 @@
 
 namespace sony_msx::devices::audio {
 
-// MSX 1-bit "key-click" DAC on PPI port-C bit 7 (M39-A, the digitized-voice
+// MSX 1-bit "key-click" DAC on PPI port-C bit 7 (the digitized-voice
 // fix). This is the ONLY audio source on a bare HB-F1XV that games can drive
 // at a SUB-FRAME rate to synthesize sampled speech: a game bit-bangs port-C
 // bit 7 (0xFF <-> 0x80 on the analog output) hundreds/thousands of times per
@@ -26,31 +26,31 @@ namespace sony_msx::devices::audio {
 // waveform (a scrolling-shooter title's Japanese copyright voice line, a
 // split-screen title's speech). The
 // PSG plays MUSIC (envelope/tone) during the voice, so by elimination the
-// voice IS this 1-bit DAC -- which had no mixer consumer before M39.
+// voice IS this 1-bit DAC -- which previously had no mixer consumer.
 //
 // GROUNDING (openMSX, behaviour reference only -- never copied, GPL isolation):
-//   - references/openmsx-21.0/src/MSXPPI.cc:117-131 writeC1: an EDGE-triggered
+//   - openMSX 21.0: src/MSXPPI.cc:117-131 writeC1: an EDGE-triggered
 //     `(prevBits ^ value) & 8` on port-C bit 7 calls KeyClick::setClick.
-//   - references/openmsx-21.0/src/sound/KeyClick.cc:15-21 setClick: on a level
+//   - openMSX 21.0: src/sound/KeyClick.cc:15-21 setClick: on a level
 //     CHANGE, dac.writeDAC(status ? 0xFF : 0x80) -- a DACSound8U.
-//   - references/openmsx-21.0/src/sound/DACSound8U.cc:17-20 writeDAC(value):
+//   - openMSX 21.0: src/sound/DACSound8U.cc:17-20 writeDAC(value):
 //     forwards DACSound16S::writeDAC(value - 0x80) -- so idle 0x80 -> 0
 //     (silent), click 0xFF -> +0x7F.
-//   - references/openmsx-21.0/src/sound/DACSound16S.cc:34-43 writeDAC: a pure
+//   - openMSX 21.0: src/sound/DACSound16S.cc:34-43 writeDAC: a pure
 //     DELTA into a band-limited blip buffer (`blip.addDelta(t, value -
 //     lastWrittenValue)`); a held level, once its transient settles, is
 //     AC-coupled to zero downstream. openMSX's blip is a true band-limited
 //     step; this project has no blip buffer, so this class instead reuses the
-//     M34 box-average (sinc) reconstruction the PSG/SCC already use, plus an
+//     same box-average (sinc) reconstruction the PSG/SCC already use, plus an
 //     integer DC-blocker to reproduce the "held level -> 0" AC coupling.
 //
-// SEAM SHAPE (mirrors SccWavetable exactly -- the M29/M34 additive-source
+// SEAM SHAPE (mirrors SccWavetable exactly -- the shared additive-source
 // contract): the machine records cycle-timestamped bit-7 EDGES here via
 // record_edge(); the frontend audio mixer then advance_cycles(W) +
 // take_integrated_sample(W) once per output sample, box-averaging the edge
 // timeline over each ~81-cycle window. The edge stamp is the deterministic
 // scheduler cycle at the writing instruction's start (instruction-granular,
-// the same precision class as the M32 VDP render-sync seam) -- NEVER a
+// the same precision class as the VDP render-sync seam) -- NEVER a
 // wall-clock, so replays are byte-identical.
 //
 // AC-COUPLED OUTPUT (the openMSX delta/DAC analogue): take_integrated_sample()
@@ -60,16 +60,16 @@ namespace sony_msx::devices::audio {
 // contribution of ~0; only TRANSITIONS (the voice) survive. Signed output in
 // roughly [-kUnit, +kUnit].
 //
-// IDLE BYTE-IDENTITY (mandatory, M39): after reset() bit 7 is 0. With bit 7
+// IDLE BYTE-IDENTITY (mandatory): after reset() bit 7 is 0. With bit 7
 // never toggled the level is a constant 0, so every integral is 0, the DC
 // estimate stays exactly 0, and take_integrated_sample() returns EXACTLY 0 --
 // the click term the mixer adds is exactly 0, so every existing audio oracle
-// is byte-identical (the M29/M31/M34/M37 null-source pattern). Even with
+// is byte-identical (the null-source pattern every audio source follows). Even with
 // capture disabled (the default), record_edge() is a no-op, so headless /
 // non-audio runs never allocate an edge and never advance the DC estimate.
 //
-// DETERMINISM: all integer arithmetic (no floats in the sample path, matching
-// the M34 DEC-0043 risk-note-3 discipline); the DC-blocker uses truncating
+// DETERMINISM: all integer arithmetic (no floats in the sample path, so
+// results never vary by compiler or platform; DEC-0043); the DC-blocker uses truncating
 // integer division (well-defined on every compiler) so a replay is
 // byte-identical across runs and platforms.
 class ClickDac {
@@ -121,7 +121,7 @@ public:
     // delta), integrating the piecewise-constant bit-7 level over
     // [consumed_cycle_, consumed_cycle_ + window_cycles) -- a dwell walk over
     // the recorded edges exactly like PsgYm2149/SccWavetable::advance_cycles().
-    // Boundary convention (matching the M34 sources): an edge at cycle t takes
+    // Boundary convention (matching the PSG/SCC sources): an edge at cycle t takes
     // effect AT t (the dwell before t belongs to the pre-edge level).
     void advance_cycles(std::uint64_t window_cycles);
 
@@ -129,12 +129,12 @@ public:
     // through the DC-blocker, as a signed fixed-point sample in roughly
     // [-kUnit, +kUnit] (kUnit == "full scale"), then reset the window
     // integral. window_cycles == 0 returns 0 and does NOT perturb the DC
-    // estimate (the idle-pump guard, mirroring the M34 take-APIs). PRECONDITION
-    // (as for the M34 sources): the caller advanced exactly window_cycles since
+    // estimate (the idle-pump guard, mirroring the PSG/SCC take-APIs). PRECONDITION
+    // (as for the PSG/SCC sources): the caller advanced exactly window_cycles since
     // the previous take.
     [[nodiscard]] std::int32_t take_integrated_sample(std::uint64_t window_cycles);
 
-    // Diagnostic introspection (M39 Step 1 confirmation, and tests): cumulative
+    // Diagnostic introspection (voice-investigation tooling, and tests): cumulative
     // count of recorded bit-7 edges since the last reset(). The machine reads
     // this per-frame to report the voice-window edge RATE.
     [[nodiscard]] std::uint64_t edge_count() const { return edge_count_; }

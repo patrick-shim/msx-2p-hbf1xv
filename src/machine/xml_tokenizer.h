@@ -20,17 +20,16 @@
 namespace sony_msx::machine {
 
 // ---------------------------------------------------------------------------
-// Shared tolerant XML tag tokenizer (M50-S1 extraction, docs/m50-planner-
-// package.md §5). This is the exact scanner that lived file-local in
-// software_db.cpp (the openMSX softwaredb subset reader); it is hoisted here
-// VERBATIM so BOTH software_db.cpp and the new emulator_config.cpp share one
-// implementation with no third-party XML dependency.
+// Shared tolerant XML tag tokenizer. This is the exact scanner that lived
+// file-local in software_db.cpp (the openMSX softwaredb subset reader); it is
+// hoisted here VERBATIM so BOTH software_db.cpp and emulator_config.cpp share
+// one implementation with no third-party XML dependency.
 //
 // It produces open/close/self-close tags and accumulates intervening character
 // data (incl. CDATA content); comments, DOCTYPE and processing instructions are
 // skipped wholesale. Never throws. Element names are lowercased.
 //
-// M50-S1 addition: OPT-IN attribute extraction (`capture_attributes`). The
+// Attribute extraction is OPT-IN (`capture_attributes`). The
 // softwaredb schema is element-TEXT based and never read attributes, so it
 // constructs the scanner with capture_attributes=false -> the pos_/name/kind
 // tokenization is byte-for-byte identical to the pre-extraction code (the

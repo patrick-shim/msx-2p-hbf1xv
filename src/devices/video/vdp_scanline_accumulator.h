@@ -22,20 +22,21 @@
 
 namespace sony_msx::devices::video {
 
-// Scanline-accumulation frame store (M32-S1, Defect A of DEC-0039;
-// docs/m32-planner-package.md §2.2).
+// Scanline-accumulation frame store: makes a mid-frame register/VRAM write
+// affect only the lines the beam has not yet passed, instead of retroactively
+// repainting the whole frame. (DEC-0039)
 //
 // Real V9958 output is produced as the beam advances: a register/VRAM write
 // between lines takes effect on the FOLLOWING line. openMSX models this with
 // a sync-before-change protocol -- every VDP state-change notification
 // renders up to the current beam position before the change applies
-// (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394 register/
+// (openMSX 21.0: src/video/PixelRenderer.cc:253-394 register/
 // palette updates, :510-517 VRAM writes, :527-547 sync(), :219-228
 // frameEnd()); its first-class Accuracy::LINE mode uses a whole line index
 // as the beam limit (PixelRenderer.cc:549-571). fMSX independently
 // corroborates the per-scanline architecture: its display pipeline runs one
 // RefreshLine per scanline as the scan advances
-// (references/fmsx-60/source/fMSX/MSX.c:209-224, 2149-2155). This class is
+// (fMSX 6.0: source/fMSX/MSX.c:209-224, 2149-2155). This class is
 // the line-granular accumulation store both references imply: the machine
 // commits display lines [0, watermark_) as the raster passes them (via the
 // V9958Vdp render-sync seam); the rest of the frame renders from live
@@ -43,16 +44,16 @@ namespace sony_msx::devices::video {
 //
 // The existing per-line workhorse is reused as-is: every committed row comes
 // from VdpFrameRenderer::render_line() against the LIVE V9958Vdp it
-// references (M21). The legacy VdpFrameRenderer::render_frame() snapshot
+// references. The legacy VdpFrameRenderer::render_frame() snapshot
 // path is deliberately untouched -- it remains the in-test static-frame
-// equivalence oracle (§2.2: "NOT modified and NOT removed").
+// equivalence oracle.
 //
 // Determinism: every output is a pure function of the machine's cycle
 // history and sync-point sequence (themselves cycle-derived). No wall
 // clock, no host state, no allocation churn (row buffers are reused across
-// frames -- R-M32-3 mitigation).
+// frames).
 //
-// Field note (documented design choice, §2.4 consumers audit): accumulation
+// Field note (documented design choice): accumulation
 // always renders Field::Progressive -- the only field any production caller
 // uses (Sdl3App::run_one_frame(), write_frame_dump() defaults, main.cpp
 // evidence mode). Interlace Even/Odd stay frame-snapshot semantics at the
@@ -73,18 +74,17 @@ public:
     // 0 (a caller passing raster_line+1 for raster_line < 0 commits nothing
     // -- writes during vblank/border affect the whole next frame).
     //
-    // Wrap safety (§2.2): if 0 < end < watermark_, the observed raster
+    // Wrap safety: if 0 < end < watermark_, the observed raster
     // position is behind the accumulation point within the same frame -- a
     // step-only caller that never calls on_vsync_boundary() let the
-    // 262-line arithmetic wrap (the DEC-0034 loop-shape class), or a
-    // mid-frame LN/mode change moved the active-window origin (the §2.4/D10
-    // geometry-adaptation class). The accumulator then finalizes-to-bottom
-    // and resets deterministically before committing [0, end). No crash, no
-    // host-state dependence.
+    // 262-line arithmetic wrap, or a mid-frame LN/mode change moved the
+    // active-window origin (the geometry-adaptation class). The accumulator
+    // then finalizes-to-bottom and resets deterministically before
+    // committing [0, end). No crash, no host-state dependence. (DEC-0034)
     void sync_to_line(int exclusive_end_line);
 
     // Seal the current frame: sync_to_line(height), materialize under the
-    // end-of-frame geometry policy (§2.4: width/height/border from the live
+    // end-of-frame geometry policy (width/height/border from the live
     // end-of-frame register state, matching what the legacy snapshot
     // renderer reports; rows accumulated under a different width adapt
     // deterministically -- 256->512 pixel-double, 512->256 even-sample,
@@ -131,7 +131,7 @@ private:
     };
 
     // Write one output row of `out_width` pixels from a committed row,
-    // applying the deterministic width-adaptation policy (§2.4 / D10).
+    // applying the deterministic width-adaptation policy (see finalize()).
     void emit_adapted_row(const Row& row, std::uint16_t* out, int out_width,
                           std::uint16_t border) const;
 

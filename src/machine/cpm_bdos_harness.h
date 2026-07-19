@@ -20,8 +20,8 @@
 
 namespace sony_msx::machine {
 
-// Generic, reusable CP/M-style ".com" loader + BDOS-trap harness (M24-S1,
-// backlog C3 -- ZEXDOC/ZEXALL full parity sweep).
+// Generic, reusable CP/M-style ".com" loader + BDOS-trap harness, used to
+// run the ZEXDOC/ZEXALL CPU-exerciser parity sweeps.
 //
 // Implements ONLY the standard, third-party Digital Research CP/M "TPA"
 // loading convention -- predating and external to any one CP/M-hosted
@@ -42,10 +42,10 @@ namespace sony_msx::machine {
 // message strings, no CRC tables, no test/group names or counts, nothing
 // transcribed from any one exerciser's assembly source -- a small,
 // independently-designed primitive that could load and run any small CP/M
-// `.com` binary needing only BDOS functions 2 and 9. See
-// docs/m24-planner-package.md SS1.5/SS2.1 for the full license-isolation
-// reasoning (this class must never be extended with anything specific to
-// zexall.z80/zexdoc.z80 or any other single CP/M program).
+// `.com` binary needing only BDOS functions 2 and 9. This is a deliberate
+// license-isolation boundary: the exercisers it runs are third-party
+// (GPL v2) fixtures, so this class must never be extended with anything
+// specific to zexall.z80/zexdoc.z80 or any other single CP/M program.
 class CpmBdosHarness {
 public:
     enum class LoadResult {

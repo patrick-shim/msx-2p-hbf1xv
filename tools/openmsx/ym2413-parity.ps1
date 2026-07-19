@@ -12,8 +12,8 @@
 # ============================================================================
 
 param(
-    [string]$ProgramBin = "tests/parity/m17_ym2413_probe.bin",
-    [string]$RegsList = "tests/parity/m17_ym2413_probe_regs.txt",
+    [string]$ProgramBin = "tests/parity/ym2413_probe.bin",
+    [string]$RegsList = "tests/parity/ym2413_probe_regs.txt",
     [string]$BaseHex = "C000",
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$WorkDir = "build",

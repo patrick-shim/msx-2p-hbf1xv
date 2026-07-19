@@ -43,12 +43,12 @@ core::BusData SonyFdc::mem_read(const core::BusAddress address) {
             // READING clears the DSKCHG one-shot (openMSX's readMem calls the
             // MUTATING diskChanged(), PhilipsFDC.cc:37 -> DiskChanger.cc:95-100);
             // take_disk_changed() mirrors that -- required so a swapped medium
-            // doesn't stay "changed" forever and drive a game into DI;HALT (M36
-            // Bug B; full derivation: DiskDrive::take_disk_changed). The
+            // doesn't stay "changed" forever and drive a game into DI;HALT
+            // (full derivation: DiskDrive::take_disk_changed). The
             // debug/snapshot peek path stays on the const, non-clearing
             // drive_.disk_changed() (mirrors const peekMem :90).
             //
-            // DEF-M58-DSKCHG (drive-select gating): the /DSKCHG sense is a
+            // Drive-select gating (DEF-M58-DSKCHG): the /DSKCHG sense is a
             // per-drive output on the 34-pin Shugart-style FDD bus (fact-sheet
             // "FDC for Sony HB-F1XV.md" §1 block diagram), and Shugart-bus drive
             // outputs are gated by the drive's Drive Select input -- an
@@ -61,14 +61,14 @@ core::BusData SonyFdc::mem_read(const core::BusAddress address) {
             // same effect: readMem 0x3FFD -> multiplexer.diskChanged() -> the
             // SELECTED drive's flag, where B/NONE resolve to a DummyDrive that
             // returns false without touching drive A
-            // (references/openmsx-21.0/src/fdc/DriveMultiplexer.cc:112-114,
+            // (openMSX 21.0: src/fdc/DriveMultiplexer.cc:112-114,
             // PhilipsFDC.cc:35-41 -- behaviour reference only, never copied).
             // Without this gate, the Sony disk ROM's DSKCHG probe -- which reads
             // 0x7FFD once BEFORE selecting drive A and again after -- consumed
             // the one-shot on the unselected first read and reported "unchanged"
             // to DOS after a disk swap, so DOS kept the previous disk's FAT/DPB
-            // and every post-swap file load resolved through a stale FAT (the
-            // M58 multi-disk-strategy-title scrambled map screen). drive_.available() is true
+            // and every post-swap file load resolved through a stale FAT (a
+            // multi-disk strategy title's scrambled map screen). drive_.available() is true
             // exactly when a PRESENT physical drive (A) is selected
             // (write_drive_register below).
             std::uint8_t res = static_cast<std::uint8_t>(drive_reg_ | 0x04);

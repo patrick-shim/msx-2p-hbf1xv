@@ -20,19 +20,18 @@
 namespace sony_msx::frontend {
 
 // ---------------------------------------------------------------------------
-// M52 (DEC-0079, docs/m52-planner-package.md §2.1): the SDL-free master-volume
-// gain + step helper. Header-only and SDL3-independent (the
-// machine_audio_mixer.h precedent), so the WHOLE gain law is headlessly
-// ctest-provable with NO audio device -- the unit tests target these pure
-// functions directly.
+// The SDL-free master-volume gain + step helper. Header-only and
+// SDL3-independent (the machine_audio_mixer.h precedent), so the WHOLE gain
+// law is headlessly ctest-provable with NO audio device -- the unit tests
+// target these pure functions directly. (DEC-0079)
 //
-// PLACEMENT (planner §2.1): the master gain is a PURE POST-MIX SCALAR applied
-// strictly AFTER the DEC-0039 machine mix, entirely inside Sdl3AudioPresenter
-// (which the headless build never instantiates). It is NOT in MachineAudioMixer
-// and is NOT a change to kAmplitudeScale/any mixer amplitude constant -- the
-// DEC-0039 PSG:FM:keyclick balance stays byte-identical at full volume.
+// PLACEMENT: the master gain is a PURE POST-MIX SCALAR applied strictly AFTER
+// the machine mix, entirely inside Sdl3AudioPresenter (which the headless
+// build never instantiates). It is NOT in MachineAudioMixer and is NOT a
+// change to kAmplitudeScale/any mixer amplitude constant -- the established
+// PSG:FM:keyclick balance stays byte-identical at full volume. (DEC-0039)
 //
-// GAIN LAW (planner DECISION -- linear integer percent):
+// GAIN LAW (linear integer percent):
 //     scaled = clamp_int16( (int32)sample * volume_percent / 100 )
 //   * volume_percent in [0,100]; 100 = unity (full), 0 = silence.
 //   * At volume_percent == 100: sample*100/100 == sample EXACTLY for every
@@ -48,7 +47,7 @@ namespace sony_msx::frontend {
 // ---------------------------------------------------------------------------
 
 // Clamp a raw volume request into the valid [0,100] percent domain. Attenuation
-// only -- there is NO amplification (max is 100 = unity, planner §1.2).
+// only -- there is NO amplification (max is 100 = unity).
 [[nodiscard]] inline int clamp_master_volume(const int volume_percent) {
     return std::clamp(volume_percent, 0, 100);
 }
@@ -81,18 +80,18 @@ inline void apply_master_gain(std::vector<std::int16_t>& pcm, const int volume_p
 // Step the master volume by one grid increment in the direction `dir`
 // (dir > 0 = up, dir < 0 = down, 0 = no change), landing on the {0,step,...,100}
 // grid and CLAMPING at both ends -- it MUST NOT wrap (turning volume down past 0
-// must never jump to 100; a dangerous loudness surprise -- planner §2.3, the
-// explicit divergence from the persistence stepper which wraps).
+// must never jump to 100; a dangerous loudness surprise -- the explicit
+// divergence from the persistence stepper, which wraps).
 //
 // A non-grid launch value (e.g. --volume 55) snaps to the adjacent grid point in
 // the direction of travel: up from 55 -> 60 (next grid up), down from 55 -> 50
 // (next grid down). For an on-grid value this is a plain +/-step (e.g. 70 down ->
-// 60), matching the persistence stepper's on-grid feel without its wrap. This
-// direction-aware snap satisfies every acceptance value in planner §4.1 S2-1
-// (step(70,-1)=60, step(0,-1)=0, step(100,+1)=100, step(55,-1)=50, step(55,+1)=60);
-// the planner's prose "round_to_grid + dir*step" would have yielded 70 for the
-// off-grid +1 case, inconsistent with its own S2-1 example -- the concrete S2-1
-// acceptance values are the oracle followed here.
+// 60), matching the persistence stepper's on-grid feel without its wrap. The
+// concrete acceptance values this direction-aware snap satisfies: step(70,-1)=60,
+// step(0,-1)=0, step(100,+1)=100, step(55,-1)=50, step(55,+1)=60. (A plain
+// "round_to_grid + dir*step" would have yielded 70 for the off-grid +1 case,
+// inconsistent with the step(55,+1)=60 requirement -- the concrete acceptance
+// values are the oracle followed here.)
 [[nodiscard]] inline int step_master_volume(const int current, const int dir, const int step) {
     const int cur = clamp_master_volume(current);
     const int s = step > 0 ? step : 1;  // defensive: a non-positive step falls back to 1

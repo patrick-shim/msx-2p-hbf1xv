@@ -25,16 +25,16 @@
 
 namespace sony_msx::frontend {
 
-// Deterministic, SDL3-independent machine audio mixer (M29-S5, docs/m29-
-// planner-package.md §2.4): PSG + 0..2 attached Konami SCC wavetable chips
+// Deterministic, SDL3-independent machine audio mixer:
+// PSG + 0..2 attached Konami SCC wavetable chips
 // (one per external cartridge bay -- real hardware mixes both slots'
 // sound-in lines) into interleaved signed-16-bit stereo PCM.
 //
 // Placement/testability: lives in src/frontend/ (presentation-layer sample
 // production, src/CLAUDE.md boundary) but is intentionally SDL3-independent
-// so the whole mixing law is headlessly ctest-provable -- the exact M26-S5
+// so the whole mixing law is headlessly ctest-provable -- the exact
 // PsgAudioPump precedent. Sdl3AudioPresenter delegates its per-sample
-// production here; DEC-0033's AudioPacer exact-accounting is UNTOUCHED (the
+// production here; the AudioPacer exact-accounting (DEC-0033) is UNTOUCHED (the
 // pacer decides HOW MANY samples to pump; this class only produces them).
 //
 // Per planned sample: advance the PSG by cycles_per_sample via the wrapped,
@@ -48,38 +48,38 @@ namespace sony_msx::frontend {
 // where scc_sum is the sum of every attached chip's mono AC contribution
 // (SCC is mono: the same contribution lands on both channels).
 //
-// M34 (DEC-0043 Defect A, docs/m34-planner-package.md §2.3.6): psg_raw and
+// psg_raw and
 // each SCC contribution are the chips' EXACT box averages over the advanced
 // window (PsgYm2149/SccWavetable::take_integrated_sample()), replacing the
-// aliasing point samples; §2.3.4's fixed-point property keeps every
-// constant/silent source byte-identical to before (the M29/M31 zero-source
+// aliasing point samples; the fixed-point property keeps every
+// constant/silent source byte-identical to before (the zero-source
 // oracles survive in meaning and, for constant signals, in bytes). Sample
 // COUNT accounting (AudioPacer, DEC-0033) is untouched -- this changes only
-// how each sample's VALUE is produced.
+// how each sample's VALUE is produced. (DEC-0043)
 //
 // Amplitude constants (documented presentation policy, the same disclosed-
-// simplification class as M26's kAmplitudeScale itself):
-//   - kPsgAmplitudeScale = 400: UNCHANGED from M26 (sdl3_audio_presenter.h);
-//     PSG raw range 0..62 -> 0..24,800.
+// simplification class as kAmplitudeScale itself):
+//   - kPsgAmplitudeScale = 400: matches Sdl3AudioPresenter's kAmplitudeScale
+//     (sdl3_audio_presenter.h); PSG raw range 0..62 -> 0..24,800.
 //   - kSccAmplitudeScale = 12: SCC mono AC ~ +-600 (SCC fact-sheet §5)
 //     -> +-7,200 per chip. Worst case 62*400 + 7,200*2 = 39,200 > 32,767,
-//     so the int16 clamp is REQUIRED with two SCCs (risk R-M29-4) -- it is
+//     so the int16 clamp is REQUIRED with two SCCs -- it is
 //     unit-tested at a constructed saturation input. One SCC stays inside
 //     int16 (24,800 + 7,200 = 32,000).
 //
-// HARD REGRESSION ORACLE (M29 §2.4, re-grounded by M34 §2.5 row 3): with
+// HARD REGRESSION ORACLE: with
 // zero SCC sources attached, the output is byte-identical to the bare-pump
 // presenter arithmetic (psg pump sample * 400 per channel, clamped) for ANY
 // input sequence -- proven by a dedicated unit test, and structurally
 // evident below (a null-only source array contributes an scc_sum of exactly
-// 0 to every sample). Since M34, both sides of that oracle compute through
+// 0 to every sample). Both sides of that oracle compute through
 // the integrated-sample pump, so the meaning -- absent/silent sources
 // contribute exactly 0 -- is unchanged.
 //
-// M31 (backlog E1, docs/m31-planner-package.md §2.2): a THIRD source -- the
-// YM2413 (OPLL) FM synthesis engine -- is added ADDITIVELY via a new
+// A THIRD source -- the
+// YM2413 (OPLL) FM synthesis engine -- is mixed ADDITIVELY via an
 // overload taking a `Ym2413Opll* fm`. The mixing law extends the documented
-// M29 pattern:
+// pattern above:
 //
 //   pcm = clamp_int16(psg_raw * kPsgAmplitudeScale
 //                     + scc_sum * kSccAmplitudeScale
@@ -88,27 +88,27 @@ namespace sony_msx::frontend {
 // FM is mono (one summed OPLL output), so like SCC the same term lands on
 // both channels. The FM device is advanced by the SAME cycles_per_sample as
 // every other source (generator time always tracks machine time); with the
-// standard 81-cycle step this is the planner's exact 9:8 decimation --
+// standard 81-cycle step this is an exact 9:8 decimation --
 // 8 output samples x 81 cycles = 648 = 9 x 72-cycle native FM ticks, an
 // exact repeating pattern (zero-order hold drops one native sample in nine;
-// a disclosed simplification, §2.5 -- no band-limited resampling).
+// a disclosed simplification -- no band-limited resampling).
 //
-// M31 HARD REGRESSION ORACLE (§ S5): with `fm == nullptr` -- and separately
+// FM HARD REGRESSION ORACLE: with `fm == nullptr` -- and separately
 // with a real but never-keyed (silent) Ym2413Opll attached, whose
 // fm_sample() is exactly 0 by the synth's idle-operator guarantee -- the
-// output is byte-identical to the v1.0.31 3-arg arithmetic for ANY input
-// sequence (the M29 zero-SCC oracle pattern). The 3-arg overload below
+// output is byte-identical to the 3-arg arithmetic for ANY input
+// sequence (the zero-SCC oracle pattern). The 3-arg overload below
 // delegates with fm = nullptr and stays byte-behaviour identical.
 //
-// M37 Slice B (DEC-0055, R-D): a FOURTH+ source class -- the OPLL(s) of any
+// A FOURTH+ source class -- the OPLL(s) of any
 // inserted external Panasonic FM-PAC CARTRIDGE (a SECOND, independent YM2413
 // per external cartridge bay; the real HB-F1XV's built-in MSX-MUSIC OPLL is
 // the `fm` term above, and an inserted FM-PAC adds ANOTHER whole OPLL). These
 // are mixed ADDITIVELY through an `FmSources` array (one slot per external
 // bay, exactly the SccSources shape -- real hardware sums both bays' sound-
 // out lines), reusing the SAME kFmAmplitudeScale and the SAME per-sample
-// advance cadence as the built-in `fm` (no new scaling, no new DSP -- the
-// planner's "wholly-additive follow-on", cartridge_fmpac_rom.h:61-62). The
+// advance cadence as the built-in `fm` (no new scaling, no new DSP -- a
+// wholly-additive follow-on, cartridge_fmpac_rom.h:61-62; DEC-0055). The
 // mixing law extends to:
 //
 //   pcm = clamp_int16(psg_raw * kPsgAmplitudeScale
@@ -121,15 +121,15 @@ namespace sony_msx::frontend {
 // non-null FM-PAC OPLL is advanced by the same cycles_per_sample as every
 // other generator (generator time always tracks machine time).
 //
-// M37 HARD REGRESSION ORACLE (§ Deliverable): with NO FM-PAC inserted -- an
+// FM-PAC HARD REGRESSION ORACLE: with NO FM-PAC inserted -- an
 // all-null FmSources -- fm_pac_sum is exactly 0, so the output is byte-for-
-// byte identical to the pre-M37 (v1.0.36) built-in-OPLL + PSG + SCC mix for
-// ANY input sequence. The pre-M37 overloads (2/3/4-arg) delegate with an
-// all-null FmSources and stay byte-behaviour identical (the M29/M31/M34
+// byte identical to the built-in-OPLL + PSG + SCC mix for
+// ANY input sequence. The earlier overloads (2/3/4-arg) delegate with an
+// all-null FmSources and stay byte-behaviour identical (the earlier
 // oracles survive unchanged). CLAMP MATH: adding up to two more full-scale
 // OPLLs only pushes the already-saturating worst case higher (27 aligned
 // carriers max: 9 built-in + 9 + 9) -- the int16 clamp was already REQUIRED
-// (R-M29-4/R-M31-4) and remains correct; realistic FM+FM-PAC music sits far
+// and remains correct; realistic FM+FM-PAC music sits far
 // below it.
 class MachineAudioMixer {
 public:
@@ -137,30 +137,29 @@ public:
     // sdl3_audio_presenter.cpp under the SDL3 build).
     static constexpr int kPsgAmplitudeScale = 400;
     static constexpr int kSccAmplitudeScale = 12;
-    // M32 (Defect B of DEC-0039, D-2 ratified in RESP-M32-001; docs/
-    // m32-planner-package.md §2.8): the honestly-derived FM presentation
-    // scale, replacing M31's k=5 (which left the fully-functional YM2413
-    // ~29 dB under the PSG -- coordinator-measured from the committed
-    // M31 fmON/fmOFF WAV capture pair under debug/sounds/: FM peak 900 on the
-    // +-32,767 scale vs PSG effects at 24,800).
+    // The honestly-derived FM presentation
+    // scale, replacing an earlier k=5 (which left the fully-functional YM2413
+    // ~29 dB under the PSG -- measured from an
+    // fmON/fmOFF WAV capture pair: FM peak 900 on the
+    // +-32,767 scale vs PSG effects at 24,800). (DEC-0039)
     //
     // Reference ratio: openMSX's own machine definition balances this
     // exact machine's PSG:MSX-MUSIC at 21000:9000 = 7:3 (~-7.36 dB FM
-    // under PSG) -- references/openmsx-21.0/share/machines/
+    // under PSG) -- openMSX 21.0: share/machines/
     // Sony_HB-F1XV.xml:63 (<volume>21000</volume>) and :191
     // (<volume>9000</volume>).
     //
     // What the ratio applies to (source-verified): openMSX normalizes BOTH
     // chips to the same PER-CHANNEL unit before the XML volumes apply --
     // AY8910 per-channel volume table peaks at exactly 1.0 with device
-    // amplification 1.0 (references/openmsx-21.0/src/sound/AY8910.cc:64-93,
+    // amplification 1.0 (openMSX 21.0: src/sound/AY8910.cc:64-93,
     // :977-980); YM2413 per-slot linear peak is (1<<DB2LIN_AMP_BITS)-1 =
-    // 255 with device amplification 1/256 (references/openmsx-21.0/src/
+    // 255 with device amplification 1/256 (openMSX 21.0: src/
     // sound/YM2413Okazaki.cc:48, :154-165, :1051-1054) -> per-channel peak
     // ~= 1.0. So 21000:9000 is a PER-CHANNEL loudness ratio. (The
     // alternative worst-case-SUM normalization is rejected: it yields
     // k ~= 4.6 (melody) / 2.6 (rhythm) -- "no change or quieter",
-    // reproducing exactly the flawed M31 arithmetic that caused the
+    // reproducing exactly the flawed earlier arithmetic that caused the
     // defect. Worst-case sums belong in the CLAMP analysis below.)
     //
     // Our units: one full-volume PSG channel = 31 (psg_ym2149.h resolved
@@ -168,7 +167,7 @@ public:
     // +-256 (ym2413_synth.h: +-2048 operator width through the documented
     // >>3 presentation scale, anchored to the fact-sheet §7 measured
     // per-volume peak series "255, 180, 127, ..." --
-    // references/fact-sheets/Yamaha YM2413 FM Chip.md:184; §7's "blend
+    // Yamaha YM2413 FM Chip fact sheet, line 184; §7's "blend
     // ratio varies by machine" note at :186 is why an external reference
     // ratio is the right calibrator). Therefore:
     //
@@ -176,13 +175,13 @@ public:
     //                     = round(12,400 * 0.42857 / 256)
     //                     = round(20.76) = 21
     //
-    // Cross-check against DEC-0039's own full-scale form: the charter's
-    // "24,800 * 9000/21000 ~= 10,600" -- 24,800 is TWO PSG channel-units
+    // Cross-check against the full-scale form quoted in the decision record
+    // (DEC-0039): "24,800 * 9000/21000 ~= 10,600" -- 24,800 is TWO PSG channel-units
     // per stereo side, so the FM equivalent is two FM channel-units:
     // 2 * 256 * 21 = 10,752, within 1.2% (integer rounding of k).
     // Resulting single-channel ratio (256*21)/12,400 = 0.4335 vs reference
     // 0.42857 -> -7.26 dB vs -7.36 dB. FM rises 21/5 = 4.2x (+12.5 dB)
-    // over v1.0.32.
+    // over the earlier k = 5 scale.
     //
     // CLAMP MATH (redone honestly at k = 21): worst theoretical alignments
     // -- melody 9 * 256 * 21 = 48,384 (FM ALONE exceeds int16); rhythm
@@ -197,8 +196,8 @@ public:
     // ~3,780 at k = 21).
     static constexpr int kFmAmplitudeScale = 21;
 
-    // M39-A (digitized-voice fix): the MSX 1-bit key-click DAC on PPI port-C
-    // bit 7 -- a FIFTH additive source, the ONLY sub-frame audio path on a bare
+    // The MSX 1-bit key-click DAC on PPI port-C bit 7 (the digitized-voice
+    // fix) -- a FIFTH additive source, the ONLY sub-frame audio path on a bare
     // HB-F1XV (games bit-bang bit 7 as PWM/PDM to synthesize sampled speech;
     // a scrolling-shooter title's copyright voice line, a split-screen title's
     // speech). See ClickDac for the
@@ -206,7 +205,7 @@ public:
     //
     // AMPLITUDE (same PER-CHANNEL-loudness method as kFmAmplitudeScale). The
     // machine XML balances this exact machine's PSG:keyclick at 21000:16000
-    // (references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml:63
+    // (openMSX 21.0: share/machines/Sony_HB-F1XV.xml:63
     // <volume>21000</volume>; MSXPPI/KeyClick registers its DACSound8U with the
     // default 16000 -- KeyClick.cc:5-8 / the machine's <PPI> has no explicit
     // <volume>, so the SoundDevice default 16000 applies). Our full-scale PSG
@@ -230,7 +229,7 @@ public:
     // loaded" regression null, Hbf1xvMachine::scc_chip()'s own contract).
     using SccSources = std::array<devices::audio::SccWavetable*, 2>;
 
-    // M37 Slice B: 0..2 inserted FM-PAC cartridge OPLLs (one per external
+    // 0..2 inserted FM-PAC cartridge OPLLs (one per external
     // cartridge bay); nullptr entries are skipped (the "no FM-PAC cart in this
     // bay" regression null, Hbf1xvMachine::fmpac()'s own contract). Distinct
     // from the built-in MSX-MUSIC OPLL passed as `fm` -- these are the SECOND,
@@ -240,46 +239,46 @@ public:
     // cycles_per_sample: the 3.58 MHz system-cycle delta advanced per sample
     // (the caller computes it; kCyclesPerSample = 81 inherits the disclosed
     // -3.6 cent integer simplification documented in sdl3_audio_presenter.h
-    // -- NOT "fixed" here, DEC-0033 accounting untouched).
+    // -- NOT "fixed" here; the exact-accounting pacer (DEC-0033) is untouched).
     explicit MachineAudioMixer(std::uint64_t cycles_per_sample);
 
     // Produces sample_count interleaved stereo pairs (2 * sample_count
     // int16 values), advancing psg and every non-null scc by
-    // cycles_per_sample per pair. Byte-behaviour identical to pre-M31:
-    // delegates below with fm = nullptr (M29's unit tests untouched).
+    // cycles_per_sample per pair. Byte-behaviour identical to the FM-less mix:
+    // delegates below with fm = nullptr (the original unit tests untouched).
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, std::size_t sample_count) const;
 
-    // M31: the three-source overload. A nullptr fm contributes exactly 0 to
+    // The three-source overload. A nullptr fm contributes exactly 0 to
     // every sample (the hard regression oracle); a non-null fm is advanced
     // by cycles_per_sample per pair, exactly like the SCC sources.
-    // Byte-behaviour identical to pre-M37: delegates below with an all-null
-    // FmSources (no inserted FM-PAC -> fm_pac_sum == 0).
+    // Byte-behaviour identical to the FM-PAC-less mix: delegates below with an
+    // all-null FmSources (no inserted FM-PAC -> fm_pac_sum == 0).
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
         std::size_t sample_count) const;
 
-    // M37 Slice B: the FM-PAC overload. Adds 0..2 inserted FM-PAC cartridge
+    // The FM-PAC overload. Adds 0..2 inserted FM-PAC cartridge
     // OPLLs as ADDITIVE sources, mixed with the SAME kFmAmplitudeScale and the
     // SAME per-sample advance cadence as the built-in `fm`. An all-null
-    // fm_pacs contributes exactly 0 to every sample (the M37 hard regression
+    // fm_pacs contributes exactly 0 to every sample (the hard regression
     // oracle -- byte-identical to the 4-arg overload); each non-null entry is
     // advanced by cycles_per_sample per pair, exactly like `fm` and the SCCs.
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
         const FmSources& fm_pacs, std::size_t sample_count) const;
 
-    // M39-A: the FIVE-source overload adding the 1-bit key-click DAC. A nullptr
-    // click contributes exactly 0 to every sample (the pre-M39 4-source overload
+    // The FIVE-source overload adding the 1-bit key-click DAC. A nullptr
+    // click contributes exactly 0 to every sample (the 4-source overload
     // delegates here with click = nullptr and stays byte-behaviour identical);
     // an attached-but-idle ClickDac (no bit-7 toggles) ALSO contributes exactly
     // 0 (idle byte-identity). A non-null click is advanced by cycles_per_sample
-    // per pair, exactly like every other generator (DEC-0033 lockstep).
+    // per pair, exactly like every other generator (pacer lockstep, DEC-0033).
     [[nodiscard]] std::vector<std::int16_t> mix_interleaved_stereo(
         devices::audio::PsgYm2149& psg, const SccSources& sccs, devices::audio::Ym2413Opll* fm,
         const FmSources& fm_pacs, devices::audio::ClickDac* click, std::size_t sample_count) const;
 
-    // M39-A Fix B (the digitized-voice fix): produce ONE mixed stereo sample on
+    // The digitized-voice fix: produce ONE mixed stereo sample on
     // the INTERLEAVED production path, using the SAME mixing law as the batch
     // overloads but driven by MACHINE cycles instead of the fixed 81-cycle step.
     // The caller (SDL3 run_one_frame / the headless --audio-sync dump) weaves

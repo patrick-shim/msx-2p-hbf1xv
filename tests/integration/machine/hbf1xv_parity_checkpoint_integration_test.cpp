@@ -29,7 +29,7 @@
 // serialized trace is asserted byte-for-byte against a committed golden so the
 // emulator side of the parity diff cannot silently drift, independent of the
 // WSL/openMSX environment. The openMSX side and the actual empty architectural
-// diff are captured by tools/openmsx-trace-parity.ps1 into
+// diff are captured by tools/openmsx/trace-parity.ps1 into
 // docs/m10-parity-trace-diff.md.
 
 namespace {

@@ -11,17 +11,16 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Ym2413SynthTables_Unit (M31-S1, backlog E1,
-// docs/m31-planner-package.md §3-S1)
+// Suite: Devices_Ym2413SynthTables_Unit
 //
-// License-safe oracle discipline (acceptance criterion 1): every expected
+// License-safe oracle discipline: every expected
 // value below is recomputed INDEPENDENTLY inside this test via
 // double-precision math + rounding -- never a golden array copied from
 // anywhere. The production tables themselves are computed from the same
 // closed forms (fact-sheet §4's structural description of the classic
 // Yamaha logarithmic operator); identical numeric OUTPUT from an
-// independently-grounded closed form is expected and acceptable (the M28
-// §2.3(a) finding, ratified by DEC-0035).
+// independently-grounded closed form is expected and acceptable
+// (DEC-0035).
 
 #include <cmath>
 #include <cstdint>

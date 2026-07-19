@@ -16,7 +16,7 @@
 
 Emits the openMSX-side Z80 program for tools/openmsx/split-screen-ab.ps1: the
 SAME synthetic split-screen protocol as
-tests/system/hbf1xv_m32_split_screen_system_test.cpp (GRAPHIC4, IE0+IE1,
+tests/system/split_screen_system_test.cpp (GRAPHIC4, IE0+IE1,
 R#19=80/R#23=0, IM1 handler dispatching on S#1 FH: line path rewrites
 R#23=128, VBlank path re-arms R#23=0 + R#19=80), adapted for injection into
 a live MSX-BASIC environment at 0xC000 (page-0-to-RAM slot dance + IM1 hook

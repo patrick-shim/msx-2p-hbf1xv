@@ -11,8 +11,7 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Ym2413SynthEnvelope_Unit (M31-S3, backlog E1,
-// docs/m31-planner-package.md §3-S3)
+// Suite: Devices_Ym2413SynthEnvelope_Unit
 //
 // Decay/release oracles are EXACT (fact-sheet §5's own formula): the
 // expected native-sample counts are recomputed independently in-test by
@@ -20,12 +19,12 @@
 // measured duration is additionally tied to §5's closed form
 // `cycles = (rate<60) ? (1<<(14-(rate/4)))*s[rate&3] : 63`,
 // s = {127,102,85,73}, at event-period resolution. The select tables and
-// s-values below are §5's own printed values (permitted literals,
-// acceptance criterion 2).
+// s-values below are §5's own printed values (literals transcribed from
+// the fact sheet, not from another emulator's output).
 //
 // Attack assertions are QUALITATIVE ONLY (monotonicity, termination, rate
 // ordering, the 0-3/60-63 endpoint behaviours §5 itself states) -- the
-// attack curve is the §2.4 DISCLOSED APPROXIMATION (see ym2413_synth.h's
+// attack curve is a DISCLOSED APPROXIMATION (see ym2413_synth.h's
 // mandatory disclosure block); no hardware-exact attack duration is claimed
 // or asserted anywhere.
 
@@ -233,7 +232,7 @@ int main() {
         expect(offset == run_with_prelude(100), "GlobalCounterPhase_Deterministic_TwoRuns");
     }
 
-    // --- 5. ATTACK (the §2.4 disclosed approximation -- qualitative
+    // --- 5. ATTACK (the disclosed approximation -- qualitative
     //     assertions ONLY, per the header's non-cycle-exact disclosure). ---
     {
         // (a) AR=15 (rates 60-63): instant -- already at level 0 / Decay

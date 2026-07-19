@@ -48,7 +48,7 @@ void expect(const bool condition, const char* name) {
 
 std::string write_fixture(const std::string& filename, const std::string& content) {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "sony_msx_m30_softwaredb_fixtures";
+        std::filesystem::temp_directory_path() / "sony_msx_softwaredb_fixtures";
     std::filesystem::create_directories(dir);
     const std::filesystem::path path = dir / filename;
     std::ofstream out(path, std::ios::binary | std::ios::trunc);

@@ -12,8 +12,8 @@
 # ============================================================================
 
 param(
-    [string]$ProgramBin = "tests/parity/m19_cartridge_probe.bin",
-    [string]$CartridgeRom = "tests/parity/m19_cartridge.rom",
+    [string]$ProgramBin = "tests/parity/cartridge_probe.bin",
+    [string]$CartridgeRom = "tests/parity/cartridge.rom",
     [string]$BaseHex = "C000",
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$WorkDir = "build",

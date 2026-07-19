@@ -299,14 +299,14 @@ int main() {
             "--max-frames", "10",  "--disk",  "d.dsk", "--border",
         };
         const auto p = parse_sdl3_cli(args);
-        expect(p.errors.empty(), "M37Combined_NoErrors");
-        expect(p.scale.has_value() && *p.scale == 4, "M37Combined_Scale");
-        expect(p.speed_level.has_value() && *p.speed_level == 3, "M37Combined_Speed");
-        expect(p.filter == sony_msx::frontend::TextureFilter::Nearest, "M37Combined_Filter");
-        expect(p.fullscreen, "M37Combined_Fullscreen");
+        expect(p.errors.empty(), "Combined_NoErrors");
+        expect(p.scale.has_value() && *p.scale == 4, "Combined_Scale");
+        expect(p.speed_level.has_value() && *p.speed_level == 3, "Combined_Speed");
+        expect(p.filter == sony_msx::frontend::TextureFilter::Nearest, "Combined_Filter");
+        expect(p.fullscreen, "Combined_Fullscreen");
         expect(p.max_frames.has_value() && *p.max_frames == 10 && p.disk_paths.size() == 1 &&
                    p.disk_paths[0] == "d.dsk" && p.border_enabled,
-               "M37Combined_PreExistingFlagsIntact_AdditiveRegressionGuard");
+               "Combined_PreExistingFlagsIntact_AdditiveRegressionGuard");
     }
 
     // --- Case 15 (M37 Slice F): --capture <on|off> gates the F10 stream-capture

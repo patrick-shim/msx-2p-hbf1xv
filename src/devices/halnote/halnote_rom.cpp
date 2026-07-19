@@ -49,7 +49,7 @@ void HalnoteRom::reset_bank_state() {
 
 void HalnoteRom::reset() {
     reset_bank_state();
-    // A-M20-12: mirrors S1985Engine::reset()'s disclosed, deterministic
+    // Mirrors S1985Engine::reset()'s disclosed, deterministic
     // cold-boot zeroing exactly -- persistence lives entirely in the file
     // load/save the owning machine performs around this call.
     sram_.clear();
@@ -59,13 +59,13 @@ void HalnoteRom::set_image(std::vector<std::uint8_t> image) {
     image.resize(kImageBytes, kOpenBus);
     window_ = devices::cartridge::CartridgeRomWindow(std::move(image));
     // Re-apply the bank/flag layout only -- sram_ is independent of the ROM
-    // image content (A-M20-6/A-M20-12) and must NOT be touched here.
+    // image content and must NOT be touched here.
     reset_bank_state();
 }
 
 core::BusData HalnoteRom::mem_read(const core::BusAddress address) {
     if (address < kSramLimit) {
-        // A-M20-6: direct address-range branch, proven behaviourally
+        // Direct address-range branch, proven behaviourally
         // identical to openMSX's pointer-indirection into window-slots 0/1.
         return sram_enabled_ ? sram_.read(address) : kOpenBus;
     }
@@ -80,31 +80,31 @@ core::BusData HalnoteRom::mem_read(const core::BusAddress address) {
         return window_.image()[offset];
     }
     // Banks 2-5 span 0x4000-0xBFFF; window-slots 6/7 (0xC000-0xFFFF) are
-    // permanently unmapped (0xFF reads) by construction (A-M20-9).
+    // permanently unmapped (0xFF reads) by construction.
     return window_.read(address);
 }
 
 void HalnoteRom::mem_write(const core::BusAddress address, const core::BusData value) {
     if (address < kSramLimit) {
-        // A-M20-6: writes silently ignored while disabled (RomHalnote.cc:82-86).
+        // Writes silently ignored while disabled (RomHalnote.cc:82-86).
         if (sram_enabled_) {
             sram_.write(address, value);
         }
         return;
     }
     if (address >= kBankSwitchLimit) {
-        return;  // A-M20-9: 0xC000-0xFFFF is never a trigger target.
+        return;  // 0xC000-0xFFFF is never a trigger target.
     }
     if (address == kSubBankLow || address == kSubBankHigh) {
-        // A-M20-7: sub-bank register writes ALWAYS take effect, regardless of
+        // Sub-bank register writes ALWAYS take effect, regardless of
         // sub_mapper_enabled_ -- only READS are gated (RomHalnote.cc:88-97).
         sub_banks_[address == kSubBankLow ? 0 : 1] = value;
         return;
     }
     if ((address & 0x1FFF) == 0x0FFF) {
-        // A-M20-3/A-M20-4: normal bank-switch region, bank in {2,3,4,5}.
+        // Normal bank-switch region, bank in {2,3,4,5}.
         const int bank = address >> 13;
-        // A-M20-5: pass the RAW byte (including bit 0x80) to set_bank FIRST,
+        // Pass the RAW byte (including bit 0x80) to set_bank FIRST,
         // unconditionally -- do NOT mask it out. A single write can both
         // resolve a ROM bank AND (for bank 2/3) toggle an enable flag.
         window_.set_bank(bank, value);

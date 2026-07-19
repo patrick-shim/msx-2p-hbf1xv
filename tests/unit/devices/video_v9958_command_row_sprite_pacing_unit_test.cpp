@@ -126,7 +126,7 @@ int main() {
         expect(vdp.sprite_engine().watermark() == 20,
                "SplitOpen_Target20_WatermarkAt20");
         expect(vdp.sprite_engine().visible_sprites(105).empty(),
-               "M51Mechanism_LazyOpenClear_Line105PastWatermark_Empty");
+               "LazyOpenClear_Line105PastWatermark_Empty");
 
         // THE FIX: the command sink paces the sprite pass to its destination
         // boundary before committing -> line 105 reads the hardware-expected
@@ -135,10 +135,10 @@ int main() {
         expect(vdp.sprite_engine().watermark() == 150,
                "CommitSpriteRows_Target150_WatermarkAt150");
         expect(vdp.sprite_engine().visible_sprites(105).size() == 1,
-               "M51Fix_CommitSpriteRows_Line105Repopulated");
+               "CommitSpriteRows_Line105Repopulated");
         expect(!vdp.sprite_engine().visible_sprites(105).empty() &&
                    vdp.sprite_engine().visible_sprites(105)[0].x == 100,
-               "M51Fix_RepopulatedSprite_CorrectX");
+               "RepopulatedSprite_CorrectX");
 
         // Case 4: advance-only -- a lower target never rewinds the watermark.
         vdp.commit_sprite_rows(50);

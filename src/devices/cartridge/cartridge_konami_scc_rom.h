@@ -22,11 +22,11 @@
 
 namespace sony_msx::devices::cartridge {
 
-// `KonamiSCC` mapper -- the SCC-chip-bearing sibling of M19's plain Konami
-// mapper (M29-S3, backlog G1; spec docs/m29-planner-package.md §2.1).
-// Grounds references/openmsx-21.0/src/memory/RomKonamiSCC.cc (behaviour
-// reference only, never copied -- GPL isolation) and references/fact-sheets/
-// "Konami SCC.md" §2 ("SCC fact-sheet"). Used by the real Konami SCC
+// `KonamiSCC` mapper -- the SCC-chip-bearing sibling of the plain Konami
+// mapper.
+// Grounded in openMSX 21.0: src/memory/RomKonamiSCC.cc (behaviour
+// reference only, never copied -- GPL isolation) and the
+// Konami SCC fact sheet §2 ("SCC fact-sheet"). Used by the real Konami SCC
 // MegaROM carts (the later SCC-equipped Konami titles, including an SCC
 // cartridge title and a split-screen HUD title). Owns a real SccWavetable member (the openMSX "RomKonamiSCC
 // owns a real `SCC scc;`" shape).
@@ -39,11 +39,11 @@ namespace sony_msx::devices::cartridge {
 // plain Konami's 0x6000 lower bound).
 //
 // MIRRORING IS THE OPPOSITE OF PLAIN KONAMI (RomKonamiSCC.cc:44-58, "the
-// mirror behavior is different from RomKonami!"; risk R-M29-1): pages 2/3
+// mirror behavior is different from RomKonami!"): pages 2/3
 // (0x4000-0x7FFF) mirror into window-slots 6/7 (0xC000-0xFFFF); pages 4/5
 // (0x8000-0xBFFF) mirror into window-slots 0/1 (0x0000-0x3FFF).
 //
-// SCC enable latch (SCC fact-sheet §2, A-M29-2/§9.6 arbitration): a write
+// SCC enable latch (SCC fact-sheet §2, §9.6 arbitration): a write
 // anywhere in 0x9000-0x97FF with (value & 0x3F) == 0x3F enables the SCC
 // (0xBF enables too, since the bank latch is only 6 bits wide -- the same
 // 512 kB/64-bank hardware ceiling); any other value disables. THE SAME WRITE
@@ -52,7 +52,7 @@ namespace sony_msx::devices::cartridge {
 //
 // SCC register window: when enabled, reads AND writes in 0x9800-0x9FFF go
 // to the sound generator, addressed as (addr & 0xFF) -- the 256-byte map
-// mirrored 8x across the 2 kB window (A-M29-1; fMSX decodes only
+// mirrored 8x across the 2 kB window (fMSX decodes only
 // 0x9800-0x98FF, arbitrated to openMSX, SCC fact-sheet §9.5). Reads use
 // SccWavetable::read() (NOT peek -- the deform-range read side effect must
 // fire). The ROM MIRROR pages never expose the SCC window: the override is
@@ -60,16 +60,16 @@ namespace sony_msx::devices::cartridge {
 // mirror of that region) serves mirrored ROM (SCC fact-sheet §2).
 //
 // Block mask: KonamiSCC keeps CartridgeRomWindow's image-derived default
-// mask (mask-as-fallback-only, A-M19-6) -- deliberately NO set_block_mask(31)
+// mask (mask-as-fallback-only) -- deliberately NO set_block_mask(31)
 // (that is plain-Konami's 256 kB rule; SCC fact-sheet §10.4). Images larger
 // than the real chips' 512 kB/64-bank ceiling are ACCEPTED (openMSX warns
 // non-fatally, RomKonamiSCC.cc:28-34) -- documented, never rejected.
 //
-// Constructor deliberately does NOT self-reset (M19 convention;
+// Constructor deliberately does NOT self-reset (uniform mapper convention;
 // CartridgeSlot::load() resets once before installing). reset():
 // bank_switch(2,0)/(3,1)/(4,2)/(5,3), scc_enabled_ = false, scc_.reset()
 // (RomKonamiSCC.cc:60-68; the powerUp-vs-reset collapse is SccWavetable's
-// disclosed A-M29-5 simplification).
+// disclosed simplification).
 class CartridgeKonamiScc final : public CartridgeMapperDevice {
 public:
     [[nodiscard]] static bool is_valid_image_size(std::size_t size);
@@ -87,9 +87,9 @@ public:
     core::BusData mem_read(core::BusAddress address) override;
     void mem_write(core::BusAddress address, core::BusData value) override;
 
-    // Debug/test seams (mirror the M19 window() seam).
+    // Debug/test seams (mirror the other mappers' window() seam).
     [[nodiscard]] const CartridgeRomWindow& window() const { return window_; }
-    // M36 Phase 3 snapshot: generic bank-state dump seam (planner §2.4 item 13).
+    // Debug-snapshot seam: exposes the bank window for generic bank-state dumps.
     [[nodiscard]] const CartridgeRomWindow* rom_window() const override { return &window_; }
     [[nodiscard]] const audio::SccWavetable& scc() const { return scc_; }
     [[nodiscard]] audio::SccWavetable& scc() { return scc_; }

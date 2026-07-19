@@ -31,9 +31,10 @@ Sdl3VideoPresenter::Sdl3VideoPresenter(SDL_Renderer* renderer, const bool border
       persistence_mode_(persistence_mode) {}
 
 void Sdl3VideoPresenter::set_scale_mode(const SDL_ScaleMode mode) {
-    // M55 (DEC-0083): live filter swap. Update the stored mode (so any later
+    // Live filter swap. Update the stored mode (so any later
     // texture recreation honors it) and re-apply to the current texture now.
     // A failure only records last_error_ -- the next blit still presents.
+    // (DEC-0083)
     scale_mode_ = mode;
     if (texture_ != nullptr) {
         if (!SDL_SetTextureScaleMode(texture_, scale_mode_)) {
@@ -70,7 +71,7 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
         SDL_DestroyTexture(texture_);
         texture_ = nullptr;
     }
-    // A-M26-3: SDL_PIXELFORMAT_XRGB1555 is bit-for-bit identical to FrameBuffer's RGB555
+    // SDL_PIXELFORMAT_XRGB1555 is bit-for-bit identical to FrameBuffer's RGB555
     // layout. STREAMING access matches SDL_UpdateTexture's intended per-frame full-buffer
     // upload pattern (SDL_render.h:1406-1414).
     texture_ = SDL_CreateTexture(renderer_, SDL_PIXELFORMAT_XRGB1555, SDL_TEXTUREACCESS_STREAMING, width, height);
@@ -78,10 +79,10 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
         last_error_ = SDL_GetError();
         return false;
     }
-    // M37 Slice E (DEC-0056): apply the configured filter (--filter) to the freshly-created
-    // texture via SDL_SetTextureScaleMode (references/sdl3/include/SDL3/SDL_render.h:1275).
+    // Apply the configured filter (--filter) to the freshly-created
+    // texture via SDL_SetTextureScaleMode (src/external/sdl3/include/SDL3/SDL_render.h:1275).
     // Default LINEAR matches the renderer's own default (SDL_render.h:1260), so an
-    // unspecified filter is byte-identical to the pre-M37 presentation.
+    // unspecified filter leaves the presentation byte-identical. (DEC-0056)
     if (!SDL_SetTextureScaleMode(texture_, scale_mode_)) {
         last_error_ = SDL_GetError();
         SDL_DestroyTexture(texture_);
@@ -94,7 +95,7 @@ bool Sdl3VideoPresenter::ensure_texture(const int width, const int height) {
 }
 
 bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
-    // border_enabled_ (app default ON, M39-B): compose into the border-colored
+    // border_enabled_: compose into the border-colored
     // 320x240 / 640x240 canvas so the active area sits at its raster-true,
     // openMSX-matching position (border_composer.h documents the geometry; border
     // color is live per frame) -- the only present correct for BOTH 192- and
@@ -110,7 +111,7 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
         return false;
     }
 
-    // Zero per-pixel conversion (A-M26-3): pixels are handed to SDL3 as-is (raw uint16_t
+    // Zero per-pixel conversion: pixels are handed to SDL3 as-is (raw uint16_t
     // buffer, pitch = width * sizeof(uint16_t)); composition copies pixels but never
     // converts them.
     const int pitch = source->width * static_cast<int>(sizeof(std::uint16_t));
@@ -168,11 +169,11 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
         return false;
     }
 
-    // M57 (DEC-0085, §4.2): DEF-2 inset. top_inset_px_ == 0 (hidden-window / no
+    // Menu-strip inset. top_inset_px_ == 0 (hidden-window / no
     // menu / the pixel-integration test) keeps the LEGACY path VERBATIM -- the
     // 320x240 LETTERBOX logical presentation (init sdl3_app.cpp) fills+letterboxes
     // the whole output via a nullptr dst. This branch is byte-identical to the
-    // pre-M57 present.
+    // inset-free present. (DEC-0085)
     if (top_inset_px_ <= 0 && bottom_inset_px_ <= 0) {
         if (!SDL_RenderTexture(renderer_, texture_, nullptr, nullptr)) {
             last_error_ = SDL_GetError();
@@ -186,7 +187,7 @@ bool Sdl3VideoPresenter::blit_frame(const devices::video::FrameBuffer& frame) {
     // MSX pixel hides behind the menu. Explicit dst is in RAW OUTPUT PIXELS, so we
     // temporarily disable the logical presentation (save + restore, self-contained
     // -- the menu render bracket then behaves as before). SDL_GetRenderOutputSize
-    // is the pixel output size (A4, references/sdl3/include/SDL3/SDL_render.h).
+    // is the pixel output size (src/external/sdl3/include/SDL3/SDL_render.h).
     int lw = 0;
     int lh = 0;
     SDL_RendererLogicalPresentation lmode = SDL_LOGICAL_PRESENTATION_DISABLED;

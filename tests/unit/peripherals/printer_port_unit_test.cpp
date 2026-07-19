@@ -17,11 +17,11 @@
 
 #include "peripherals/printer_port.h"
 
-// Suite: Peripherals_PrinterPort_Unit  (M18-S2, part of backlog C7)
+// Suite: Peripherals_PrinterPort_Unit
 //
 // Centronics-style strobe/data write protocol + falling-edge byte capture
-// over the real 8-port claim #90-#97 (A-M18-5/A-M18-6), grounded in
-// references/openmsx-21.0/src/MSXPrinterPort.cc:46-62 and Printer.cc:59-66.
+// over the real 8-port claim #90-#97, grounded in
+// openMSX 21.0: src/MSXPrinterPort.cc:46-62 and Printer.cc:59-66.
 
 namespace {
 
@@ -86,8 +86,8 @@ int main() {
         expect(port.captured_bytes() == bytes, "MultiplePulses_CaptureInOrder");
     }
 
-    // --- Status read (#90/#94) is ALWAYS 0x00 (ready) by default in this
-    //     milestone, matching unused_bits=0x00 (A-M18-7). ---
+    // --- Status read (#90/#94) is ALWAYS 0x00 (printer ready),
+    //     matching unused_bits=0x00. ---
     {
         PrinterPort port;
         port.reset();
@@ -106,7 +106,7 @@ int main() {
         expect(port.io_read(0x91) == 0xFF, "DataRead_Port91_OpenBus");
     }
 
-    // --- mod-4 cases 2/3 (#92/#93) are inert/open-bus (A-M18-6: #93 PDIR is
+    // --- mod-4 cases 2/3 (#92/#93) are inert/open-bus (#93 PDIR is
     //     explicitly not implemented, matching openMSX's own scope limit). ---
     {
         PrinterPort port;

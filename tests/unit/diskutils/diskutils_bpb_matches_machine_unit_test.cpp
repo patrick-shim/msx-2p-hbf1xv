@@ -11,9 +11,9 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Diskutils_BpbMatchesMachine_Unit  (M53-S2, planner package §6.2)
+// Suite: Diskutils_BpbMatchesMachine_Unit
 //
-// Belt-and-suspenders machine-parity proof (planner §3): the ONLY test that
+// Belt-and-suspenders machine-parity proof: the ONLY test that
 // links BOTH msx_diskutil AND sony_msx_core. Asserts the tool's boot-sector/BPB
 // region (offsets 0..29 + {510,511}) and FAT-seed bytes (offsets 512..514 and
 // 2048..2050) are byte-identical to the emulator's OWN DiskImage::synthesize()
@@ -21,9 +21,9 @@
 // (synthesize() fills the data area with a NON-zero test pattern, so only the
 // boot/BPB/FAT-seed regions are compared, never the whole image.)
 //
-// OPTIONAL geometry cross-check vs the real disks/msxdos23.dsk (A2): skip-when-
+// OPTIONAL geometry cross-check vs the real disks/msxdos23.dsk: skip-when-
 // absent (untracked asset) -- pattern from
-// hbf1xv_m28_c5_disk_boot_investigation_system_test.cpp:150-156.
+// disk_boot_investigation_system_test.cpp:150-156.
 
 #include <cstdint>
 #include <fstream>
@@ -93,7 +93,7 @@ int main() {
 
     // The tool's data area is ZERO where synthesize()'s is a test pattern -- this
     // divergence is INTENTIONAL (an empty filesystem vs an FDC read/write test
-    // medium, planner §2.1). Confirm they genuinely differ there so this test is
+    // medium). Confirm they genuinely differ there so this test is
     // not silently comparing identical images.
     expect(tool != mach, "ToolAndMachine_DifferInDataArea_AsExpected");
 
@@ -108,7 +108,7 @@ int main() {
         // Geometry subset only (bytes/sector, media, total sectors, sectors/FAT,
         // sectors/track, heads). OEM string, boot-code region, DOS2 volume-id and
         // the 0x1FE/0x1FF boot-signature LEGITIMATELY differ on a DOS system disk
-        // (A2/A3) and are deliberately NOT compared.
+        // and are deliberately NOT compared.
         const std::size_t geom[] = {0x0B, 0x0C, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A, 0x1B};
         bool geom_match = true;
         for (const std::size_t off : geom) {

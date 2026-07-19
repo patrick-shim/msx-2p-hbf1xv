@@ -21,13 +21,13 @@
 
 #include "devices/memory/battery_backed_sram.h"
 
-// Suite: Devices_MemoryBatteryBackedSram_Unit  (M17-S4, backlog B4)
+// Suite: Devices_MemoryBatteryBackedSram_Unit
 //
 // Reusable, parametric-size, deterministic battery-backed byte store,
 // generalizing S1985Engine::load_backup_ram/save_backup_ram. Unit-tested
 // standalone at 16 KB (0x4000), matching RomHalnote.cc's SRAM size exactly.
-// NOT wired to any slot in M17 (§3.3, DEC-0012) -- no machine-level test here
-// by design; see the implementation report.
+// Deliberately NOT wired to any slot -- no machine-level test here by design
+// (DEC-0012).
 
 namespace {
 
@@ -47,7 +47,7 @@ bool expect_true(const bool ok, const char* name) {
 
 int main() {
     const std::filesystem::path path =
-        std::filesystem::temp_directory_path() / "sony_msx_m17_battery_backed_sram_test.bin";
+        std::filesystem::temp_directory_path() / "sony_msx_battery_backed_sram_test.bin";
     std::error_code ec;
     std::filesystem::remove(path, ec);
 
@@ -113,7 +113,7 @@ int main() {
     // --- Determinism across two independent round-trips. ---
     {
         const std::filesystem::path path_b =
-            std::filesystem::temp_directory_path() / "sony_msx_m17_battery_backed_sram_test_b.bin";
+            std::filesystem::temp_directory_path() / "sony_msx_battery_backed_sram_test_b.bin";
         std::error_code ec_b;
         std::filesystem::remove(path_b, ec_b);
 
@@ -145,7 +145,7 @@ int main() {
     // --- Too-short/corrupt file behaves like "absent" (untouched, load() false). ---
     {
         const std::filesystem::path short_path =
-            std::filesystem::temp_directory_path() / "sony_msx_m17_battery_backed_sram_short.bin";
+            std::filesystem::temp_directory_path() / "sony_msx_battery_backed_sram_short.bin";
         std::error_code ec_short;
         std::filesystem::remove(short_path, ec_short);
         {

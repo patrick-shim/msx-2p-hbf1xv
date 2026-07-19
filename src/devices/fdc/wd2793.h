@@ -22,7 +22,8 @@
 
 namespace sony_msx::devices::fdc {
 
-// DEC-0052 stream-capture: a lightweight, NON-PERTURBING observer of completed
+// Read-path stream-capture (DEC-0052): a lightweight, NON-PERTURBING observer of
+// completed
 // sector reads. The machine installs one ONLY while live stream-capture is armed
 // (default null => the whole notify path is skipped => byte-for-byte identical
 // FDC behaviour AND timing). It is called synchronously from begin_read_sector
@@ -42,7 +43,8 @@ public:
                                 std::size_t size) = 0;
 };
 
-// DEF-M47-DISKWRITE stream-capture: a lightweight, NON-PERTURBING observer of
+// Write-path stream-capture (DEF-M47-DISKWRITE): a lightweight, NON-PERTURBING
+// observer of
 // the Write Sector byte stream, mirroring FdcSectorReadObserver. The machine
 // installs one ONLY while live stream-capture is armed (default null => the
 // whole notify path is skipped => byte-for-byte identical FDC behaviour AND
@@ -59,7 +61,7 @@ class FdcSectorWriteObserver {
 public:
     virtual ~FdcSectorWriteObserver() = default;
     // command = the WD2793 command register driving this write (Type II Write
-    // Sector); track/side/sector = the LATCHED target CHS (H4); lba = its LBA;
+    // Sector); track/side/sector = the LATCHED target CHS; lba = its LBA;
     // data_index = 0-based byte position within the sector; value = the byte
     // committed; substituted = true when it is a 0x00 un-serviced-slot fill (CPU
     // missed the DRQ window) rather than a genuine CPU byte; drq_deadline = the
@@ -75,15 +77,15 @@ public:
                                  std::size_t size, std::uint16_t crc) = 0;
 };
 
-// WD2793 floppy-disk controller core (M16-S2/S3). The HB-F1XV physical chip is
+// WD2793 floppy-disk controller core. The HB-F1XV physical chip is
 // the Fujitsu MB89311, register- and command-compatible with the Western Digital
-// WD2793 (fact-sheet "FDC for Sony HB-F1XV.md" §1). This models the five
+// WD2793 (the "FDC for Sony HB-F1XV" fact sheet §1). This models the five
 // programmer-visible registers, the Type I/II/III/IV command set, the context-
 // sensitive status-bit layouts, INTRQ/DRQ handshake, and deterministic
 // Busy/DRQ/step/settle/index/motor timing computed in emulated cycles.
 //
-// Behaviour reference (read only, never copied, GPL isolation — guardrails):
-// references/openmsx-21.0/src/fdc/WD2793.cc (status constants :15-26; command
+// Behaviour reference (read only, never copied, GPL isolation):
+// openMSX 21.0: src/fdc/WD2793.cc (status constants :15-26; command
 // dispatch setCommandReg :111-157; getStatusReg layout :159-197; Type I
 // startType1Cmd/seek/step :420-519; Type II startType2Cmd/read/write :522-817;
 // Type III read-address/read-track/write-track :820-1033; Type IV force
@@ -91,7 +93,7 @@ public:
 //
 // Determinism: every deadline is an ABSOLUTE emulated-cycle count from the
 // attached FdcClockSource; each public accessor first sync()s the FSM to `now`.
-// No wall clock, no host-disk dependency (planner §5.2 / A-M16-2).
+// No wall clock, no host-disk dependency.
 class Wd2793 {
 public:
     // Status register bits (WD2793.cc:15-26). Bit meanings are context-sensitive:
@@ -125,7 +127,7 @@ public:
     // Gap2 + sync + A1A1A1 + DAM) has gapLength = 45, so 45 + 2 = 47 byte
     // periods. The rotational wait for the mark to ARRIVE is added separately
     // (DiskDrive::cycles_until_sector_id; see begin_read_sector). Shared by
-    // WRITE Sector too (begin_write_sector, DEF-M45-WRITEDRQ-FIX): the write
+    // WRITE Sector too (begin_write_sector, DEF-M45-WRITEDRQ): the write
     // first-byte DRQ is likewise rotational-search-relative, so read and write
     // use the SAME rotational-wait + header model. DISTINCT from kReadStartCycles,
     // which read-address/read-track/write-track keep unchanged.
@@ -141,9 +143,9 @@ public:
     // latches the first byte only while DRQ is up, WD2793.cc:235-247). Our model
     // can present a small (unlucky sector angle) or --fast-disk-collapsed
     // rotational wait while the CPU still runs real-time, so an 8-byte tail would
-    // wrongly abort a valid slow-first-byte write (the DEF-M45 multi-disk-RPG
+    // wrongly abort a valid slow-first-byte write (the multi-disk-RPG
     // in-game-save
-    // hang). We therefore allow a FULL further disk revolution after the DRQ --
+    // hang, DEF-M45-WRITEDRQ). We therefore allow a FULL further disk revolution after the DRQ --
     // the natural disk timescale, far beyond any real save-buffer setup, so a
     // valid write is NEVER aborted while a genuinely-absent first byte still
     // aborts deterministically. Deliberately NOT fast-scaled: the CPU runs
@@ -184,7 +186,7 @@ public:
     void set_fast_disk(bool on) { fast_disk_ = on; }
     [[nodiscard]] bool fast_disk() const { return fast_disk_; }
 
-    // DEC-0052 stream-capture: install (non-null) / remove (nullptr) the
+    // Read stream-capture (DEC-0052): install (non-null) / remove (nullptr) the
     // non-perturbing sector-read observer. Default null => zero behaviour change;
     // reset() deliberately does NOT clear it (it is an externally-owned lifecycle
     // pointer, like clock_/drive_ above, managed by the installing machine).
@@ -192,7 +194,7 @@ public:
         sector_read_observer_ = observer;
     }
 
-    // DEF-M47-DISKWRITE stream-capture: install (non-null) / remove (nullptr) the
+    // Write stream-capture (DEF-M47-DISKWRITE): install (non-null) / remove (nullptr) the
     // non-perturbing Write Sector trace observer. Default null => zero behaviour
     // change; reset() deliberately does NOT clear it (externally-owned lifecycle
     // pointer, like clock_/drive_/sector_read_observer_ above).
@@ -225,8 +227,8 @@ public:
     [[nodiscard]] std::uint8_t sector_register() const { return sector_reg_; }
     [[nodiscard]] std::uint8_t command_register() const { return command_reg_; }
 
-    // Cumulative, non-perturbing diagnostic counters (M16-S6): back the boot-
-    // checkpoint acceptance signal (planner §6.3) — "a Read Sector command was
+    // Cumulative, non-perturbing diagnostic counters: back the boot-
+    // checkpoint acceptance signal — "a Read Sector command was
     // accepted", "512 DRQ byte-transfers occurred", "command completed with
     // INTRQ set and no error bits" — without guessing a disk-ROM disassembly.
     // Cleared by reset(); pure bookkeeping, no effect on emulated behaviour.
@@ -240,11 +242,11 @@ public:
         return read_sector_completions_ok_;
     }
 
-    // --- M36 Phase 3 debug snapshot: additive read-only introspection of the
+    // --- Debug-snapshot seams: additive read-only introspection of the
     //     FSM (phase / direction / INTRQ-DRQ pending / index-IRQ arm / HLD /
     //     timing deadlines / transfer-buffer cursor / write-track parser).
-    //     const returns of existing members, ZERO behavior change (planner
-    //     §2.4 item 9). Deliberately plain member reads -- they do NOT sync()
+    //     const returns of existing members, ZERO behavior change.
+    //     Deliberately plain member reads -- they do NOT sync()
     //     the FSM, so they cannot mutate/advance controller state (unlike the
     //     public register reads); the snapshot stays non-perturbing. The enum
     //     phase returns a numeric code (self-describing snapshot). ---
@@ -317,12 +319,12 @@ private:
     void finish_read_sector(std::uint64_t t);
     void finish_write_sector(std::uint64_t t);
 
-    // DEF-M47-DISKWRITE: commit ONE Write Sector byte in-order at data_index_ and
+    // Commit ONE Write Sector byte in-order at data_index_ and
     // advance the position (never drop). `substituted` distinguishes a genuine
     // CPU byte (re-bases the next DRQ on the actual service time `t`) from a
     // 0x00 un-serviced-slot fill (advances on the fixed disk cadence + sets
     // LOST_DATA). Fires the write observer and, at data_available_ == 0, flushes
-    // via finish_write_sector.
+    // via finish_write_sector. (DEF-M47-DISKWRITE)
     void commit_write_sector_byte(std::uint64_t t, std::uint8_t value, bool substituted);
 
     [[nodiscard]] bool is_type1_status() const;
@@ -337,10 +339,10 @@ private:
     // Fast-disk (turbo) mode. Default false => accurate timing (byte-identical).
     // Not touched by reset() (see set_fast_disk).
     bool fast_disk_ = false;
-    // DEC-0052 stream-capture sink (default null => never notified). Externally
+    // Stream-capture sink (DEC-0052; default null => never notified). Externally
     // owned; see set_sector_read_observer.
     FdcSectorReadObserver* sector_read_observer_ = nullptr;
-    // DEF-M47-DISKWRITE Write Sector trace sink (default null => never notified).
+    // Write Sector trace sink (DEF-M47-DISKWRITE; default null => never notified).
     // Externally owned; see set_sector_write_observer.
     FdcSectorWriteObserver* sector_write_observer_ = nullptr;
 
@@ -379,7 +381,7 @@ private:
     // closes, so a later mid-transfer stall never aborts (the one-byte pipeline
     // waits for each byte -- see write_data). Set to the rotational first-byte
     // DRQ + kWriteFirstByteWindowCycles (one revolution), so a valid slow-first-
-    // byte write is never aborted. DEF-M45-WRITEDRQ (window fix).
+    // byte write is never aborted (DEF-M45-WRITEDRQ window fix).
     std::uint64_t write_check_deadline_ = 0;
     std::uint64_t last_sync_ = 0;
 
@@ -387,14 +389,15 @@ private:
     int data_index_ = 0;
     int data_available_ = 0;
 
-    // DEF-M47-DISKWRITE: a CPU data-register write is LATCHED here (fresh == a
+    // A CPU data-register write is LATCHED here (fresh == a
     // byte is pending to be laid to disk). write_data commits it in-order at the
     // current position regardless of DRQ timing (never dropped -- decoupling the
     // byte-POSITION from the CPU-write TIMING); the flag distinguishes a genuine
     // CPU byte from a substituted 0x00 for the un-serviced-slot path.
+    // (DEF-M47-DISKWRITE)
     bool data_reg_fresh_ = false;
 
-    // Write staging: the LATCHED target coordinates (H4 -- captured at
+    // Write staging: the LATCHED target coordinates (captured at
     // begin_write_sector / Write Track start, committed by finish_write_sector /
     // parse_write_track_byte, so a mid-transfer side/track change cannot redirect
     // the sector) + the assembled data (buffer_).

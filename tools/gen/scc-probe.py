@@ -17,10 +17,10 @@
 Produces TWO deterministic artifacts (the M19 tools/gen/cartridge-probe.py
 pattern, synthetic fixtures only -- A-M29-4):
 
-  1. `tests/parity/m29_scc.rom` -- a SYNTHETIC KonamiSCC cartridge image:
+  1. `tests/parity/scc.rom` -- a SYNTHETIC KonamiSCC cartridge image:
      8 banks of 8 KB; bank N's every byte equals N.
 
-  2. `tests/parity/m29_scc_probe.bin` -- a real Z80 driver program run at
+  2. `tests/parity/scc_probe.bin` -- a real Z80 driver program run at
      0xC000 on BOTH sides. Every `LD A,(addr)` readback lands in AF, so the
      per-instruction trace diff (tools/analyze/trace-diff.py) is simultaneously the
      architectural AND the content-bearing parity proof (M19 mechanism).
@@ -79,8 +79,8 @@ pattern, synthetic fixtures only -- A-M29-4):
                                 ;        sides)
        HALT
 
-Run side A via `--parity-trace tests/parity/m29_scc_probe.bin C000 400 <out>
---cart1 tests/parity/m29_scc.rom --cart1-type KonamiSCC`; side B via
+Run side A via `--parity-trace tests/parity/scc_probe.bin C000 400 <out>
+--cart1 tests/parity/scc.rom --cart1-type KonamiSCC`; side B via
 tools/openmsx/scc-parity.ps1 (`-carta <rom> -romtype KonamiSCC`, the
 A-M29-3-verified forcing syntax).
 
@@ -169,8 +169,8 @@ def build_driver_program():
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__,
                                      formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--cart-output", default="tests/parity/m29_scc.rom")
-    parser.add_argument("--probe-output", default="tests/parity/m29_scc_probe.bin")
+    parser.add_argument("--cart-output", default="tests/parity/scc.rom")
+    parser.add_argument("--probe-output", default="tests/parity/scc_probe.bin")
     parser.add_argument("--self-check", action="store_true")
     args = parser.parse_args(argv[1:])
 

@@ -17,7 +17,7 @@
 #include "devices/chipset/system_control.h"
 #include "devices/rtc/rp5c01.h"
 
-// Suite: Devices_RtcRp5c01_Unit  (M15-S3, backlog B2)
+// Suite: Devices_RtcRp5c01_Unit
 //
 // RP5C01 RTC: address latch mask, block select, #B5 upper-nibble float, Block-2
 // valid-CMOS marker, unreadable regs 14/15, deterministic epoch advance, and the

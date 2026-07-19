@@ -12,7 +12,7 @@
 # ============================================================================
 
 param(
-    [string]$ProgramBin = "tests/parity/m18_peripheral_io_probe.bin",
+    [string]$ProgramBin = "tests/parity/peripheral_io_probe.bin",
     [string]$BaseHex = "C000",
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$WorkDir = "build",

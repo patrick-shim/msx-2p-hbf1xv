@@ -24,12 +24,12 @@
 
 namespace sony_msx::devices::fdc {
 
-// Sony connection-style memory decode for the HB-F1XV FDC (M16-S4). A
+// Sony connection-style memory decode for the HB-F1XV FDC. A
 // core::MemoryDevice attached at slot 3-2 page 1 that WRAPS the DISK-ROM
 // RomDevice and decodes the top eight bytes 0x7FF8-0x7FFF to the WD2793 core +
 // Sony glue latches; every other page-1 address reads the DISK ROM.
 //
-// AUTHORITATIVE decode source: references/openmsx-21.0/src/fdc/PhilipsFDC.cc
+// AUTHORITATIVE decode source: openMSX 21.0: src/fdc/PhilipsFDC.cc
 // (NOT the fact-sheet's inferred glue table, which the fact-sheet itself flags as
 // "verify against PhilipsFDC.cc", Recommendation 4). openMSX decodes address &
 // 0x3FFF (ROM based at 0x4000), so CPU 0x7FF8-0x7FFF map to offsets 0x3FF8-0x3FFF:

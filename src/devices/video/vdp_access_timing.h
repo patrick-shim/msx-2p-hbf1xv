@@ -15,50 +15,49 @@
 
 #include <cstdint>
 
-// M23-S2: a strictly non-gating, additive VDP access-timing FOUNDATION for
-// backlog C1/D4 (docs/m23-planner-package.md §2/§3). Pure functions/
-// constants over explicit parameters -- no VDP device/bus/slot knowledge of
-// its own, and consulted by NOTHING in the CPU-stepping path this milestone
-// (A-M23-6; verified by `git diff` showing step_cpu_instruction()/
-// run_cycles()/run_until_cycle() unchanged).
+// A strictly non-gating, additive VDP access-timing FOUNDATION. Pure
+// functions/constants over explicit parameters -- no VDP device/bus/slot
+// knowledge of its own, and it never delays or gates the CPU-stepping path
+// (step_cpu_instruction()/run_cycles()/run_until_cycle() take no wait states
+// from it).
 //
-// What ships this cycle:
+// What this header provides:
 //   - the 15 named VdpAccessDelta VDP-cycle offsets openMSX's own access-
 //     slot calculator is keyed on (independently re-derived from the enum's
 //     own labels -- NOT the ~340-entry numeric slot tables,
-//     references/openmsx-21.0/src/video/VDPAccessSlots.cc:14-141, which
-//     stay explicitly out of scope this cycle, R-M23-4);
+//     openMSX 21.0: src/video/VDPAccessSlots.cc:14-141, which
+//     stay deliberately un-transcribed);
 //   - a raster-position derivation (CPU T-states since the last VSync ->
-//     position within the current 1368-VDP-cycle scanline, per §3.2);
-//   - two deliberately separate, cited latency facts (A-M23-8): the V9938+/
+//     position within the current 1368-VDP-cycle scanline);
+//   - two deliberately separate, cited latency facts: the V9938+/
 //     V9958 CPU-VRAM-access scheduler's FLOOR delta (minimum_request_
-//     latency_tstates), and the fact-sheet's independently-documented
+//     latency_tstates), and the fact sheet's independently-documented
 //     "~29 Z80-cycle safe access" software convention
 //     (kDocumentedSafeAccessGapTStates). These are non-interchangeable
 //     hardware facts and must never be combined/derived from one another
 //     anywhere in this codebase (a dedicated unit test enforces this).
 //
-// WARNING (R-M23-3, read before touching a CPU-execution-gating path): this
-// calculator is purely informational/queryable this cycle. Wiring it into
-// step_cpu_instruction()/run_cycles()/run_until_cycle() to actually delay or
-// drop CPU-initiated VDP port accesses requires FIRST re-validating the
-// M21/M22 system-test CPU-program fixtures --
+// WARNING (read before touching a CPU-execution-gating path): this
+// calculator is purely informational/queryable for the CPU path. Wiring it
+// into step_cpu_instruction()/run_cycles()/run_until_cycle() to actually
+// delay or drop CPU-initiated VDP port accesses requires FIRST re-validating
+// the system-test CPU-program fixtures --
 // tests/system/hbf1xv_m21_vdp_render_system_test.cpp:56-62 (three
 // consecutive LD A,n / OUT (#98),A pairs, zero spacer instructions) and
 // tests/system/hbf1xv_m22_sprites_command_engine_system_test.cpp:58-78
 // (five consecutive pairs, same pattern) -- against real gating/drop
-// behavior (V9958 fact-sheet §2: "Too-fast access drops requests"). Do not
+// behavior (V9958 fact sheet §2: "Too-fast access drops requests"). Do not
 // assume this header is safe to gate CPU timing on without that
-// re-validation; a same-cycle regression test
+// re-validation; a regression test
 // (tests/integration/machine/hbf1xv_m23_vdp_access_timing_non_gating_
 // integration_test.cpp) proves those exact fixtures are byte-identical,
-// pre- and post-this-header, to their pre-M23 (v1.0.22) T-state totals.
+// with and without this header, to their prior T-state totals.
 //
-// Grounding: references/openmsx-21.0/src/video/VDPAccessSlots.hh:15-34
+// Grounding: openMSX 21.0: src/video/VDPAccessSlots.hh:15-34
 // (Delta enum labels/values); VDP.hh:76 (TICKS_PER_LINE = 1368); VDP.cc:
 // 842-844 (Delta::D16 CPU-VRAM-access-scheduler floor for V99x8, D28 for
 // MSX1-class TMS99x8 VDPs -- not applicable to this V9958-equipped
-// machine); references/fact-sheets/Yamaha V9958 VDP.md §2/§7.
+// machine); Yamaha V9958 VDP fact sheet §2/§7.
 
 namespace sony_msx::devices::video::vdp_access_timing {
 
@@ -90,30 +89,29 @@ enum class VdpAccessDelta : int {
 // VDP cycles per scanline (VDP.hh:76, TICKS_PER_LINE = 1368).
 constexpr int kVdpCyclesPerLine = 1368;
 
-// Fixed CPU:VDP clock ratio (Z80A fact-sheet §1 / V9958 fact-sheet §1:
+// Fixed CPU:VDP clock ratio (Z80A fact sheet §1 / V9958 fact sheet §1:
 // 21.477270 MHz VDP clock / 6 = 3.579545 MHz CPU clock).
 constexpr int kCpuTstatesPerVdpCycleRatio = 6;
 
-// CPU T-states per scanline: 1368 / 6 = 228 exactly (no remainder). A-M23-7
-// cross-check: this is the same 228 factor already silently encoded in the
-// existing `kFrameCycles = 228 * 262` constant at hbf1xv_machine.cpp:14
-// (never previously documented as a per-line quantity before M23). A unit
-// test asserts `kCpuTstatesPerLine * 262 == kFrameCycles` via that shared
-// constant.
+// CPU T-states per scanline: 1368 / 6 = 228 exactly (no remainder).
+// Cross-check: this is the same 228 factor already encoded in the
+// existing `kFrameCycles = 228 * 262` constant at hbf1xv_machine.cpp:14. A
+// unit test asserts `kCpuTstatesPerLine * 262 == kFrameCycles` via that
+// shared constant.
 constexpr int kCpuTstatesPerLine = kVdpCyclesPerLine / kCpuTstatesPerVdpCycleRatio;
 
 // ---------------------------------------------------------------------------
-// M48 Slice 1 (DEC-0075; backlog C1/D4 CONTENTION-model remainder): the three
-// tier-1 per-line CPU/command VRAM ACCESS-SLOT COUNTS. These three integers
-// (plus kVdpCyclesPerLine=1368 and kCpuTstatesPerVdpCycleRatio=6 above) are the
-// ENTIRE numeric surface of the M48 average-throughput contention model. There
-// is deliberately NO per-slot POSITION array here: the ~340-entry per-mode slot-
-// position tables at references/openmsx-21.0/src/video/VDPAccessSlots.cc:14-141
-// stay BANNED and un-transcribed (read for effect only; license-sensitive-scope
-// ban, guardrails license-isolation). Values are the published per-line slot
-// counts from references/fact-sheets/Yamaha V9958 VDP.md §8 line 163: "Actual
+// The three tier-1 per-line CPU/command VRAM ACCESS-SLOT COUNTS of the
+// average-throughput contention model. These three integers
+// (plus kVdpCyclesPerLine=1368 and kCpuTstatesPerVdpCycleRatio=6 above) are
+// the ENTIRE numeric surface of that model. There is deliberately NO per-slot
+// POSITION array here: the ~340-entry per-mode slot-position tables at
+// openMSX 21.0: src/video/VDPAccessSlots.cc:14-141
+// stay BANNED and un-transcribed (read for effect only; GPL license
+// isolation). Values are the published per-line slot
+// counts from the Yamaha V9958 VDP fact sheet §8: "Actual
 // speed depends on access-slot availability: 154 slots/line (screen off), 88
-// (sprites off), 31 (sprites on)."
+// (sprites off), 31 (sprites on)." (DEC-0075)
 constexpr int kSlotsPerLineDisplayOff = 154;  // display OFF / border / vblank
 constexpr int kSlotsPerLineSpritesOff = 88;   // display ON, sprites disabled
 constexpr int kSlotsPerLineSpritesOn = 31;    // display ON, sprites enabled
@@ -124,10 +122,10 @@ constexpr int kSlotsPerLineSpritesOn = 31;    // display ON, sprites enabled
 // the fixed /6 clock ratio -- a single ceiling:
 //   ceil(1368 / slots_per_line / 6)
 //   = ceil(kVdpCyclesPerLine / (kCpuTstatesPerVdpCycleRatio * slots_per_line)).
-// This is an AVERAGE RATE derived PURELY from the slot COUNT (fact-sheet §7
-// line 124 = 1368; §1 line 30/34 = /6); it carries NO positional information --
+// This is an AVERAGE RATE derived PURELY from the slot COUNT (fact sheet
+// §7 = 1368; §1 = /6); it carries NO positional information --
 // that positional knowledge is exactly the banned VDPAccessSlots.cc table. Used
-// by the M48 CPU-priority slot-steal model (Slice 2: one stolen slot's worth of
+// by the CPU-priority slot-steal model (one stolen slot's worth of
 // time per concurrent CPU #98 access). For the three tier-1 counts this yields
 // 154 -> 2, 88 -> 3, 31 -> 8 T-states/slot.
 constexpr int slot_cost_tstates(const int slots_per_line) {
@@ -135,16 +133,16 @@ constexpr int slot_cost_tstates(const int slots_per_line) {
     return (kVdpCyclesPerLine + divisor - 1) / divisor;
 }
 
-// Raster-position derivation (the informational half, planner package §3.2).
+// Raster-position derivation (the purely informational half of this header).
 // Returns the CPU-T-state-granularity position (0..kCpuTstatesPerLine-1)
 // within the current scanline, given CPU T-states elapsed since the
 // machine's most recent on_vsync() call.
 //
-// Documented, tested boundary condition (R-M23-5): this position is
+// Documented, tested boundary condition: this position is
 // relative to the most recent on_vsync() call, or to program start (cycle
-// 0) if on_vsync() has never fired -- true for every existing M21/M22
-// system test, which drive the CPU purely via step_cpu_instruction() loops
-// and never call run_frame() (so never trigger on_vsync()). By-design
+// 0) if on_vsync() has never fired -- true for every system test that
+// drives the CPU purely via step_cpu_instruction() loops
+// and never calls run_frame() (so never triggers on_vsync()). By-design
 // semantic, not an oversight or an undefined value.
 constexpr int cpu_tstate_within_line(std::uint64_t cpu_tstates_since_vsync) {
     return static_cast<int>(cpu_tstates_since_vsync %
@@ -156,8 +154,7 @@ constexpr int cpu_tstate_within_line(std::uint64_t cpu_tstates_since_vsync) {
 // project's clock model advances at CPU-T-state granularity, coarser than
 // the underlying VDP clock, so intermediate VDP-cycle positions within a
 // single CPU T-state are not resolvable from it; the full slot-table/mid-
-// frame reconciliation needed to go finer is out of scope this cycle, §2.1
-// item 1 of the planner package).
+// frame reconciliation needed to go finer is deliberately not modeled).
 constexpr int vdp_cycle_within_line(std::uint64_t cpu_tstates_since_vsync) {
     return cpu_tstate_within_line(cpu_tstates_since_vsync) * kCpuTstatesPerVdpCycleRatio;
 }
@@ -165,7 +162,7 @@ constexpr int vdp_cycle_within_line(std::uint64_t cpu_tstates_since_vsync) {
 // The V9938+/V9958 CPU-VRAM-access scheduler's FLOOR delta (VDP.cc:842-844,
 // `Delta::D16` for V99x8), converted to a lower-bound-only CPU-T-state count
 // via ceil(delta_vdp_cycles / 6). NOT the actual wait a real access would
-// incur -- the full (out-of-scope-this-cycle) per-mode slot table would
+// incur -- the full (unmodeled) per-mode slot table would
 // refine this floor upward depending on raster position and display mode
 // (VDPAccessSlots.cc:14-141; e.g. the screen-off table's slots can leave
 // gaps up to 44 VDP cycles wide even though the floor is only 16).
@@ -174,13 +171,13 @@ constexpr int minimum_request_latency_tstates(VdpAccessDelta delta) {
     return (delta_vdp_cycles + kCpuTstatesPerVdpCycleRatio - 1) / kCpuTstatesPerVdpCycleRatio;
 }
 
-// The V9958 fact-sheet's own, separate, coarser "safe access" software-
-// discipline convention (fact-sheet §2: "The general consensus seems to be
+// The V9958 fact sheet's own, separate, coarser "safe access" software-
+// discipline convention (fact sheet §2: "The general consensus seems to be
 // 'at least 29 Z80 cycles between two accesses'. For example an OUT(#99),A
 // instruction takes 12 cycles (on MSX), so you need 17 extra cycles before
 // the [next access].") -- an empirically-documented MSX-programmer
 // convention, NOT the literal internal scheduler mechanism
-// minimum_request_latency_tstates() models above. A-M23-8: these are two
+// minimum_request_latency_tstates() models above. These are two
 // genuinely different, non-interchangeable hardware facts that do not
 // arithmetically reconcile via simple division (16 VDP cycles / 6 ~= 2.67T,
 // nowhere near a 29T total gap) -- keep them separately named, separately

@@ -18,10 +18,10 @@
 *.ico   binary
 
 # Shell scripts must check out with LF on every platform or the shebang breaks
-# (`bad interpreter: /usr/bin/env bash^M`). Zero churn: the repo tracks NO .sh
-# file today, so this pin only ever applies to newly added ones. NOTE: it does
-# NOT govern tools/bootstrap-build.sh -- /tools/ is gitignored (.gitignore:220),
-# so that script is local-only (as is its bootstrap-build.ps1 twin) and its LF
-# bytes + exec bit live in the working tree, not in a checkout. The pin is here
-# for any future TRACKED .sh.
+# (`bad interpreter: /usr/bin/env bash^M`). This is LOAD-BEARING, not a
+# precaution: the repo now tracks several .sh files that run on macOS, Linux and
+# the Raspberry Pi -- setup/build.sh, setup/kiosk/{launch,install-kiosk}.sh and
+# the tools/capture/*.sh harnesses. A CRLF checkout of any of them fails at the
+# shebang with an error that points at the interpreter rather than the line
+# endings, which is exactly the kind of thing that wastes an afternoon.
 *.sh    text eol=lf

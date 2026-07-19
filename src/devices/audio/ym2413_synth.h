@@ -20,16 +20,17 @@ namespace sony_msx::devices::audio {
 
 class Ym2413Opll;
 
-// YM2413 (OPLL) FM waveform-synthesis engine (M31, backlog E1 -- the
-// formulaically-derivable subset per docs/m31-planner-package.md §1.2, ratified
-// by DEC-0035 from the M28 §2.3(a) finding). Pure, deterministic,
+// YM2413 (OPLL) FM waveform-synthesis engine -- the
+// formulaically-derivable subset of the chip: every element is grounded in
+// independently-available documentation, never in a reference
+// implementation's tables (DEC-0035). Pure, deterministic,
 // self-contained: no clock attachment, advanced only by explicit
 // advance_cycles() calls (the SccWavetable precedent,
 // src/devices/audio/scc_wavetable.h), with the owning Ym2413Opll register file
-// passed in as the live register view (§2.6 register-file-as-truth; the M17
+// passed in as the live register view (register-file-as-truth; the Ym2413Opll
 // decode accessors are reused directly -- no duplicated register decode).
 //
-// GROUNDING (every element -> its independent source, planner §2.1):
+// GROUNDING (every element -> its independent source):
 //   - log-sin/exp operator tables: computed at static construction from
 //     closed-form math (fact-sheet §4 structure: 256-entry 12-bit log-sin,
 //     256-entry 10-bit exp, `expTable[logsin + 128*vol + 16*env]`
@@ -37,8 +38,8 @@ class Ym2413Opll;
 //     description; no table values transcribed from any reference source.
 //   - phase generation: fact-sheet §8 (`dP = F-Num * 2^BLOCK * MUL(/2)` into
 //     a 19-bit accumulator, top 10 bits index the sine, top 2 mirror);
-//     19-bit width is A-M31-4 (a documented choice within §8's "~18-19-bit"
-//     hedge, corroborated by fMSX's /2^19 frequency constant); the §3 MUL
+//     the 19-bit width is a documented choice within §8's "~18-19-bit"
+//     hedge, corroborated by fMSX's /2^19 frequency constant; the §3 MUL
 //     table is carried in x2-integer form to represent the 0 -> 1/2 entry.
 //   - EG decay/release: exact per fact-sheet §5 (128 levels over 48 dB,
 //     0.375 dB/step; effective 6-bit rate = 4*R + Rks; rates 0-3 no change;
@@ -54,31 +55,31 @@ class Ym2413Opll;
 //     exponential shift spanning modulation index 0, pi/16 .. 4pi (§3);
 //     each FB step exactly doubles the modulation index.
 //   - KSR/Rks: Rks = (BLOCK*2 + F-Num[8]) when KSR=1, >>2 when KSR=0 --
-//     A-M31-3, the only natural 0-15 construction satisfying §3's stated
+//     the only natural 0-15 construction satisfying §3's stated
 //     ranges; semantics cross-checked against openMSX YM2413Okazaki.cc
 //     updateRKS (freq >> (KSR ? 8 : 10) over a block<<9|fnum packing --
 //     bit-identical to this construction; semantics only, no tables) and
-//     against fMSX YM2413.c (which has no operator-level KSR handling at all,
-//     planner §2.8 -- no disagreement possible).
+//     against fMSX YM2413.c (which has no operator-level KSR handling at
+//     all -- no disagreement possible).
 //   - rhythm mode: fact-sheet §6 slot commitment (BD = ch6 normal 2-op FM;
 //     TOM = ch8-modulator 1-op; HH/SD on ch7 sharing its frequency; TOM/T-CY
-//     sharing ch8's), $0E bit-keying, $36-$38 nibble volumes via the M17
+//     sharing ch8's), $0E bit-keying, $36-$38 nibble volumes via the Ym2413Opll
 //     accessors, and the double-output quirk as an exact x2 rhythm gain law
 //     (§6 quirk 1 / §7 "output twice ... effectively +6 dB after LPF").
 //   - native rate: one native sample tick per 72 master cycles = exactly
 //     3.579545 MHz / 72 = 49716 Hz (fact-sheet §7).
 //
 // ============================================================================
-// MANDATORY DISCLOSURE BLOCK -- DOCUMENTED APPROXIMATIONS (planner §2.4/§2.1;
-// acceptance criterion 3; NONE of the following is claimed cycle-exact):
+// MANDATORY DISCLOSURE BLOCK -- DOCUMENTED APPROXIMATIONS
+// (NONE of the following is claimed cycle-exact):
 //
-// 1. ATTACK ENVELOPE (THE §2.4 ATTACK POLICY -- the named E1 remainder, new
-//    backlog row E3 item 1): the real chip's per-rate attack step data is,
-//    inside this repository, available ONLY in the GPL pre-generated table
-//    file `references/openmsx-21.0/src/sound/YM2413NukeYktTables.ii`
-//    (per YM2413NukeYKT.cc:106-114), which this project deliberately NEVER
-//    OPENED in any form (license-sensitive-scope rule; the M30 SHA1.c
-//    precedent). The fact-sheet (§5) says only "Attack rises exponentially",
+// 1. ATTACK ENVELOPE (deferred future work): the real chip's per-rate
+//    attack step data is available to this project ONLY in openMSX's GPL
+//    pre-generated table
+//    file (openMSX 21.0: src/sound/YM2413NukeYktTables.ii,
+//    per YM2413NukeYKT.cc:106-114), which this project deliberately NEVER
+//    OPENED in any form (license-sensitive-scope
+//    rule). The fact-sheet (§5) says only "Attack rises exponentially",
 //    that rates 0-3 never complete and 60-63 are ~instant ("Attack times are
 //    separately tabulated" -- without reproducing them). This implementation
 //    therefore ships a DISCLOSED EXPONENTIAL-APPROACH APPROXIMATION: at each
@@ -92,7 +93,7 @@ class Ym2413Opll;
 //    termination), with effective rate 0-3 -> no change (infinite) and
 //    60-63 -> instant, both per §5's own statements. The approximation's
 //    per-rate durations are NOT hardware-exact and are never claimed to be.
-// 2. EG RATE 52-59 ANOMALY (E3 item 2): real hardware deviates from the
+// 2. EG RATE 52-59 ANOMALY: real hardware deviates from the
 //    naive 8-entry-select algorithm at rates 52-59 (fact-sheet §5/§9 names
 //    the anomaly; the required 16-entry tables are not reproduced anywhere
 //    independently). This implementation uses the naive mechanism's natural
@@ -100,7 +101,7 @@ class Ym2413Opll;
 //    56-59, which reproduces §5's own closed-form totals s={127,102,85,73}
 //    at 1-sample event spacing) -- the measured-hardware deviation is NOT
 //    modeled.
-// 3. VIBRATO / PM TABLE (E3 item 3): the exact 8x8 PM table values and LFO
+// 3. VIBRATO / PM TABLE: the exact 8x8 PM table values and LFO
 //    counter widths are not independently available. Implemented as the
 //    documented derived law: an 8-step, zero-mean triangle F-Num offset
 //    {0,+p/2,+p,+p/2,0,-p/2,-p,-p/2} with peak p = F-Num >> 7 (== +-fnum/128
@@ -112,7 +113,7 @@ class Ym2413Opll;
 //    measured 4.8 dB); the step counter (one step per 512 native samples ->
 //    49716/13312 = 3.734 Hz, within 1% of the measured ~3.7 Hz) is a
 //    documented counter choice, not a measured hardware divider.
-// 5. SD / HH / T-CY SYNTHESIS (E3 item 4): §6 gives "1-bit noise + square,
+// 5. SD / HH / T-CY SYNTHESIS: §6 gives "1-bit noise + square,
 //    phase-generator override" for SD and only "special synthesis" for
 //    HH/T-CY -- no derivable formula exists in the fact-sheet. Disclosed
 //    approximations: SD = +-magnitude signed by (ch7 phase top bit XOR
@@ -120,28 +121,28 @@ class Ym2413Opll;
 //    signed by (ch8 phase top bit XOR ch7 phase top bit -- the §6
 //    "optimal 3:1 ch7:ch8 ratio" square mix idea). BD and TOM are full
 //    synthesis (2-op FM / 1-op sine) per §6's own structural description.
-// 6. NOISE LFSR (E3 item 4): a standard maximal-length 23-bit Fibonacci LFSR
+// 6. NOISE LFSR: a standard maximal-length 23-bit Fibonacci LFSR
 //    (taps x^23 + x^18 + 1, seed 1), clocked once per native sample -- a
 //    documented standard choice; the real OPLL's exact LFSR width/taps are
 //    not independently available.
-// 7. KSL BASE CURVE (E3 item 5): §3 gives the dB/octave rates
+// 7. KSL BASE CURVE: §3 gives the dB/octave rates
 //    (0 / 1.5 / 3.0 / 6.0). The per-note base curve is approximated as
 //    attenuation = rate * max(0, block*8 + (F-Num >> 6) - 8) / 8 octaves
 //    (pitch position in 1/8-octave steps from one octave above absolute
 //    bottom); the real chip's exact breakpoint table is not reproduced.
-// 8. KEY-ON PHASE RESET (A-M31-5, E3 item 6): key-on resets the operator
+// 8. KEY-ON PHASE RESET: key-on resets the operator
 //    phase accumulator (and the channel's 2-deep feedback history) and
 //    enters attack from the CURRENT attenuation. The fact-sheet does not
 //    state phase-reset behaviour either way; the real chip's damp-then-attack
 //    key-on sequence is NukeYKT-era knowledge without independent grounding
 //    here. Deterministic either way.
-// 9. DIGITAL SUMMING (E3 item 7): channels are summed digitally with an
+// 9. DIGITAL SUMMING: channels are summed digitally with an
 //    exact x2 rhythm gain (a disclosed divergence from the adder-less
 //    time-division-multiplexed 9-bit DAC, §7); per-code DAC nonlinearity
 //    beyond §7's per-volume peak series (511 codes, missing -256, NMOS
 //    crossover) is not modeled. Operator output width (+-2048 linear before
 //    the per-channel >>3 presentation scale) is a documented width choice
-//    (R-M31-2) -- the §7 measured per-volume peak series is the unit-test
+//    -- the §7 measured per-volume peak series is the unit-test
 //    oracle pinning the observable 3 dB/step law.
 // ============================================================================
 class Ym2413Synth {
@@ -156,26 +157,26 @@ public:
     enum class EgState : std::uint8_t { Idle, Attack, Decay, Sustain, Release };
 
     // Documented power-on state: all operators Idle at maximum attenuation,
-    // phases/counters zero, LFSR seeded to 1, held sample 0 (§2.3 determinism
+    // phases/counters zero, LFSR seeded to 1, held sample 0 (the determinism
     // contract; the global EG counter is part of documented state).
     void reset();
 
     // Recomputes the 18 effective slot key signals from the register file and
-    // processes key-on/key-off edges (planner §2.6: melody keys from $20-$28
-    // bit4 -- suppressed for ch6-8 while rhythm mode is on, D-M31-3
-    // arbitration: registers store what is written, drum key bits simply have
+    // processes key-on/key-off edges (melody keys from $20-$28
+    // bit4 -- suppressed for ch6-8 while rhythm mode is on;
+    // registers store what is written, drum key bits simply have
     // no effect while rhythm is off -- drum keys from $0E bits 0-4 gated by
     // $0E bit5). Called by Ym2413Opll on every accepted data write.
     void refresh_keys(const Ym2413Opll& regs);
 
     // Deterministic advance in 3.58 MHz MASTER cycles: one native FM sample
     // tick (all 18 operators) per 72 cycles; the latest native sample is held
-    // (zero-order hold, §2.5 resampling policy). Never touches CPU T-state
+    // (zero-order hold). Never touches CPU T-state
     // accounting.
     void advance_cycles(std::uint64_t delta_cycles, const Ym2413Opll& regs);
 
     // The held latest native sample (ZOH). EXACTLY 0 whenever every operator
-    // is idle (never keyed / fully released) -- the S5 zero-YM2413
+    // is idle (never keyed / fully released) -- the zero-YM2413
     // byte-identity oracle depends on this exact-zero guarantee.
     [[nodiscard]] std::int32_t sample() const { return held_sample_; }
 
@@ -211,7 +212,7 @@ public:
 
 private:
     struct SlotState {
-        std::uint32_t phase = 0;  // 19-bit phase accumulator (A-M31-4)
+        std::uint32_t phase = 0;  // 19-bit phase accumulator (see grounding note)
         EgState state = EgState::Idle;
         std::int32_t level = kEgSilent;  // 0..127 EG attenuation
         bool key = false;                // effective (role-resolved) key signal

@@ -12,7 +12,7 @@
 # ============================================================================
 
 param(
-    [string]$ProgramBin = "tests/parity/m14_vdp_probe.bin",
+    [string]$ProgramBin = "tests/parity/vdp_probe.bin",
     [string]$BaseHex = "C000",
     [string]$Emulator = "build/Debug/sony_msx_headless.exe",
     [string]$TraceA = "build/m14_vdp_parity_A.txt",
@@ -34,7 +34,7 @@ param(
 #   B = openMSX 19.x on WSL running the GENUINE Sony HB-F1XV machine (with a real
 #       V9958 in its machine XML), driven over the SAME CPU->VDP program.
 #
-# The probe (tests/parity/m14_vdp_probe.bin) is a flat RAM-only Z80 program that:
+# The probe (tests/parity/vdp_probe.bin) is a flat RAM-only Z80 program that:
 #   - sets R#0=0, R#1=0, R#14=0 (deterministic non-planar addressing),
 #   - sets a write address and FILLS physical VRAM[0..255] with a 0..255 ramp via
 #     #98 auto-increment,

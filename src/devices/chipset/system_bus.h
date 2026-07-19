@@ -19,10 +19,9 @@
 
 namespace sony_msx::devices::chipset {
 
-// The composed CPU-facing bus (M11-S5): memory accesses route through the
+// The composed CPU-facing bus: memory accesses route through the
 // slot-decode fabric (SlotBus), I/O accesses through the port-dispatch fabric
-// (IoBus). This is the concrete core::Bus the CPU talks to, replacing the flat
-// DRAM Hbf1xvMachine::MachineBus.
+// (IoBus). This is the concrete core::Bus the CPU talks to.
 //
 // SystemBus does not own the fabrics — the machine owns SlotBus/IoBus and their
 // devices and injects them here — so composition stays in machine/ and decode

@@ -77,7 +77,7 @@ if ($RunTests) {
         ctest --test-dir build -C $Config --output-on-failure
     } else {
         Write-Host "[bootstrap] running fast-subset ctest ($Config) -- ZEXALL excluded per standing cadence"
-        ctest --test-dir build -C $Config --output-on-failure -LE m24_slow_full_sweep
+        ctest --test-dir build -C $Config --output-on-failure -LE slow_cpu_sweep
     }
     if ($LASTEXITCODE -ne 0) { throw "[bootstrap] ctest reported failures" }
 }

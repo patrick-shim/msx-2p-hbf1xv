@@ -214,7 +214,7 @@ int main() {
 
     run("Bit3MemHl_MemoryOperand_UndocXYFromWzHiByteTiming12",
         [](ArrayBus& b, cpu::Z80aCpu& c) {
-            // M12-S3 (gap #4): BIT n,(HL) sources undocumented X/Y from the WZ
+            // BIT n,(HL) sources undocumented X/Y from the WZ
             // high byte, NOT the tested value. Here the tested byte 0x08 has bit3
             // set but bit3 of the WZ high byte (0x08 -> bit3 set) is what feeds X;
             // Y comes from WZ-hi bit5 (0x28 -> also bit5 set), independent of the

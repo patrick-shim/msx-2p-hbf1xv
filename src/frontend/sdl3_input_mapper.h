@@ -35,30 +35,30 @@ struct ScancodeBinding {
 };
 
 // SDL3 real-input -> KeyboardMatrix/JoystickPorts/PAUSE/Speed-Controller/
-// Ren-Sha-Turbo mapper (M26-S6, docs/m26-planner-package.md §2.7).
+// Ren-Sha-Turbo mapper.
 //
 // **Keyboard.** Keyed off `SDL_KeyboardEvent::scancode` (a PHYSICAL,
 // layout-independent key identity -- matches KeyboardMatrix's own physical
 // row/column semantics, per SDL_events.h:380's "SDL physical key code" doc).
 // `kScancodeMap` below is the standard MSX international 11x8 keyboard
 // matrix layout (rows 0-8; the two numeric-keypad rows 9-10 are not mapped
-// this cycle, a disclosed scope limit) -- cross-checked against this
-// project's own M25 ground truth: `peripherals::RenshaTurbo`'s doc comment
+// -- a disclosed scope limit) -- cross-checked against this
+// project's own ground truth: `peripherals::RenshaTurbo`'s doc comment
 // (src/peripherals/rensha_turbo.h) cites "keyboard row 8 bit 0 (SPACE)" as
 // the real autofire attach point, matching `kScancodeMap`'s own
-// row=8,column=0 = SDL_SCANCODE_SPACE entry exactly. `references/openmsx-
-// 21.0/src/input/UnicodeKeymap.hh` is openMSX's own generic host-key ->
+// row=8,column=0 = SDL_SCANCODE_SPACE entry exactly. openMSX 21.0's
+// `src/input/UnicodeKeymap.hh` is openMSX's own generic host-key ->
 // MSX-matrix translation MECHANISM and may be consulted as an
 // implementation-TECHNIQUE reference only -- never copied verbatim (GPL
 // isolation).
 //
 // **Joystick.** Digital direction from axis 0/1 (a documented threshold, no
 // analog depth) and triggers A/B from button indices 0/1 -- bound to port
-// index 0 only this cycle (single-controller support; multi-controller port
+// index 0 only (single-controller support; multi-controller port
 // routing is an out-of-scope depth item, not attempted).
 //
-// **PAUSE / Speed Controller / Ren-Sha Turbo (A-M26-7 -- new, disclosed,
-// first-principles PC-keybinding CHOICES, extending the M25 numeric-model
+// **PAUSE / Speed Controller / Ren-Sha Turbo (disclosed,
+// first-principles PC-keybinding CHOICES, extending the numeric-model
 // design defaults to a physical PC key; NOT a hardware fact -- no PC
 // keyboard has a physical PAUSE-toggle/slow-motion-slider/autofire-slider in
 // the Sony sense):**
@@ -68,7 +68,7 @@ struct ScancodeBinding {
 //   - Ren-Sha Turbo step down/up (steps of 10, clamped [0,100]) ->
 //     SDL_SCANCODE_F8/F9.
 // All three are revisable defaults if this project ever adds a remapping
-// layer (explicitly out of scope this cycle).
+// layer (explicitly out of scope).
 class Sdl3InputMapper {
 public:
     static constexpr SDL_Scancode kPauseButtonScancode = SDL_SCANCODE_PAUSE;
@@ -76,14 +76,14 @@ public:
     static constexpr SDL_Scancode kSpeedUpScancode = SDL_SCANCODE_F7;
     static constexpr SDL_Scancode kReshaDownScancode = SDL_SCANCODE_F8;
     static constexpr SDL_Scancode kReshaUpScancode = SDL_SCANCODE_F9;
-    static constexpr SDL_Scancode kDiskSwapScancode = SDL_SCANCODE_F11;  // M35-S3: F11 for multi-disk swap
+    static constexpr SDL_Scancode kDiskSwapScancode = SDL_SCANCODE_F11;  // F11 for multi-disk swap
     static constexpr int kReshaStep = 10;
     // Digital joystick axis threshold (Sint16 range -32768..32767) -- a
     // documented, first-principles simplification (no analog depth).
     static constexpr Sint16 kJoystickAxisThreshold = 16000;
 
     // The full keyboard scancode->(row,column) table (rows 0-8), exposed so
-    // both production code and the exhaustive M26-S6 ctest (`SDL_PushEvent`-
+    // both production code and the exhaustive ctest (`SDL_PushEvent`-
     // injected, one case per entry) share the SAME single source of truth --
     // never duplicated/hand-copied between the two.
     static const std::array<ScancodeBinding, 72>& scancode_map();

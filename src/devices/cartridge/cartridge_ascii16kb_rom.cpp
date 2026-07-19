@@ -37,7 +37,7 @@ void CartridgeAscii16kbRom::set_logical_bank(const int bank, const unsigned bloc
 void CartridgeAscii16kbRom::reset() {
     // RomAscii16kB.cc:24-27. Both middle banks start at the SAME image bank
     // (0), not sequential 0/1 -- a genuine quirk of the real hardware/openMSX
-    // model, not a bug to "fix" (R-M19-2).
+    // model, not a bug to "fix".
     window_.set_unmapped(0);
     window_.set_unmapped(1);
     set_logical_bank(1, 0);

@@ -12,7 +12,7 @@
 # ============================================================================
 
 param(
-    [string]$RegressionTest = "build/tests/Debug/hbf1xv_m34_ultrasonic_regression_system_test.exe",
+    [string]$RegressionTest = "build/tests/Debug/ultrasonic_regression_system_test.exe",
     [string]$GameRom = "roms/game.rom",
     [string]$WorkDir = "build/m34-ab",
     [int]$RecordStartSeconds = 33,
@@ -27,7 +27,7 @@ param(
 # pipelines have different resamplers/gains by design):
 #
 #   Side A (ours): the committed regression test
-#   tests/system/hbf1xv_m34_ultrasonic_regression_system_test.cpp --
+#   tests/system/ultrasonic_regression_system_test.cpp --
 #   the recorded m32 smoke recipe (KonamiSCC explicit, SPACE holds at frames
 #   600/1500/2100, real frame loop), section-2.6.4 ZCR burst metric over
 #   frames 2150-2350. Its oracle: ZERO burst blocks on both stereo sides

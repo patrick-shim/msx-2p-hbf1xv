@@ -20,7 +20,7 @@
 
 #include "machine/hbf1xv_machine.h"
 
-// Suite: Machine_Hbf1xvBiosBoot_Integration  (M13-S4)
+// Suite: Machine_Hbf1xvBiosBoot_Integration
 //
 // Proves the authentic reset (#A8 = 0) boots the CPU from the slot-0 BIOS ROM:
 //   1. the bus-visible byte at 0x0000 equals the loaded BIOS image byte 0 (the
@@ -32,8 +32,9 @@
 //   3. the run is deterministic: two cold_boot+run cycles produce the identical
 //      PC/opcode sequence and reach the same PC.
 //
-// The absolute PC/trace values are cross-validated against openMSX in S5; this
-// test only asserts image-grounded, self-consistent, deterministic execution.
+// The absolute PC/trace values are cross-validated against openMSX by the
+// separate parity-checkpoint tests; this test only asserts image-grounded,
+// self-consistent, deterministic execution.
 //
 // The real bios directory is injected as an absolute path by CMake.
 

@@ -19,29 +19,27 @@
 
 namespace sony_msx::peripherals {
 
-// Symbolic key-name -> (row, column) lookup for the MSX 11x8 keyboard matrix
-// (M27-S6, "Production Hardening + Debug/Test Tooling" item 3,
-// docs/m27-planner-package.md §2.4).
+// Symbolic key-name -> (row, column) lookup for the MSX 11x8 keyboard matrix.
 //
 // Every entry below re-expresses `Sdl3InputMapper::scancode_map()`'s own
-// already-tested array literal (src/frontend/sdl3_input_mapper.cpp, M26) --
+// already-tested array literal (src/frontend/sdl3_input_mapper.cpp) --
 // rows 0-8 only (the same numeric-keypad-rows-9-10-excluded boundary that
 // table already established, `sdl3_input_mapper.h:33-34`, inherited here for
-// consistency, never silently extended, per docs/m27-planner-package.md
-// §1.2). Row 2 column 0 (the MSX ":"/"*" key) is bound to "RCTRL", mirroring
+// consistency, never silently
+// extended). Row 2 column 0 (the MSX ":"/"*" key) is bound to "RCTRL", mirroring
 // `scancode_map()`'s SDL_SCANCODE_RCTRL binding (Right-Ctrl -> ":",
 // Shift+Right-Ctrl -> "*").
 //
 // Names are the literal `SDL_Scancode` enumerator suffix for every entry
 // with a direct SDL3 counterpart (e.g. "MINUS" <-> SDL_SCANCODE_MINUS,
-// "LSHIFT" <-> SDL_SCANCODE_LSHIFT), enabling a mechanical M27-S7
+// "LSHIFT" <-> SDL_SCANCODE_LSHIFT), enabling a mechanical
 // cross-consistency test
 // (`tests/integration/frontend/
 // sdl3_input_mapper_key_names_consistency_integration_test.cpp`) against
 // `sdl3_input_mapper.cpp`'s own table, never an independently re-derived
-// value (R-M27-4). This header is intentionally SDL3-independent (no
+// value. This header is intentionally SDL3-independent (no
 // `SDL_Scancode` type appears here) so it stays headless-buildable, per
-// A-M27-8's `src/peripherals/`-is-frontend-independent boundary rule.
+// the `src/peripherals/`-is-frontend-independent boundary rule.
 [[nodiscard]] std::optional<std::pair<int, int>> key_name_to_row_col(std::string_view name);
 
 // Exact inverse of key_name_to_row_col(): the (row, column) -> symbolic key-name

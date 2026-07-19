@@ -13,7 +13,7 @@
 
 #include "frontend/sdl3_menu.h"
 
-#include <iostream>  // M63: log_io_geometry diagnostic
+#include <iostream>  // log_io_geometry diagnostic
 
 #include "imgui.h"
 #include "imgui_impl_sdl3.h"
@@ -33,13 +33,13 @@ MenuState snapshot(const Sdl3App& app) {
     MenuState s;
     const machine::Hbf1xvMachine& machine = app.machine();
     s.disk_count = app.disk_count();
-    s.slot1_loaded = machine.cartridge_slot1().loaded();  // M56: Eject Cartridge enablement
+    s.slot1_loaded = machine.cartridge_slot1().loaded();  // Eject Cartridge enablement
     s.slot2_loaded = machine.cartridge_slot2().loaded();
     s.paused = machine.pause_controller().button_engaged();
     s.speed_level = machine.pause_controller().speed_level();
     s.rensha_speed = machine.rensha_turbo().speed();
     s.dram_kb = machine.dram_size() / 1024u;
-    s.bios_dir = app.bios_dir();  // M60 (DEC-0089): label shows the current dir basename
+    s.bios_dir = app.bios_dir();  // label shows the current dir basename (DEC-0089)
     s.fullscreen = app.fullscreen();
     s.scale = app.window_scale();
     if (app.video_presenter() != nullptr) {
@@ -52,8 +52,8 @@ MenuState snapshot(const Sdl3App& app) {
     s.master_volume = app.master_volume();
     s.fast_disk = machine.fast_disk();
     s.disk_writable = app.disk_writable();
-    s.recent = app.recent_entries();  // DEC-0095: File > Recent MRU (empty unless enabled)
-    // DEC-0096: bottom status-bar fields.
+    s.recent = app.recent_entries();  // File > Recent MRU, empty unless enabled (DEC-0095)
+    // Bottom status-bar fields (DEC-0096).
     s.fdd_motor = machine.disk_drive().motor_on(machine.elapsed_cycles());
     s.disk_name = app.current_disk_name();
     s.fdd_track = machine.disk_drive().physical_track();
@@ -94,18 +94,19 @@ Sdl3Menu::Sdl3Menu(SDL_Window* window, SDL_Renderer* renderer) {
     ImGuiIO& io = ImGui::GetIO();
     io.IniFilename = nullptr;   // never write imgui.ini beside the exe (presentation-only chrome)
     io.LogFilename = nullptr;
-    // R3: keyboard navigation OFF so ImGui never binds Alt (never opens the menu
+    // Keyboard navigation OFF so ImGui never binds Alt (never opens the menu
     // bar via Alt) and never raises WantCaptureKeyboard outside a focused text
     // widget (v1 has none) -- the host Alt+letter hotkeys stay unshadowed.
     io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableKeyboard;
     io.ConfigFlags &= ~ImGuiConfigFlags_NavEnableGamepad;
     ImGui_ImplSDL3_InitForSDLRenderer(window, renderer);
     ImGui_ImplSDLRenderer3_Init(renderer);
-    // M57 (DEC-0085, §4.1): prime one empty frame so ImGui builds its font atlas
+    // Prime one empty frame so ImGui builds its font atlas
     // and sets io.FontGlobalScale/FontSize -> ImGui::GetFrameHeight() (bar_height())
     // returns the true bar height immediately, letting Sdl3App::init() size the
     // window (+strip height) and set the presenter inset BEFORE the first render.
     // A NewFrame/EndFrame pair is a valid empty frame (no draw data submitted).
+    // (DEC-0085)
     ImGui_ImplSDLRenderer3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
@@ -113,7 +114,7 @@ Sdl3Menu::Sdl3Menu(SDL_Window* window, SDL_Renderer* renderer) {
 }
 
 Sdl3Menu::~Sdl3Menu() {
-    // R7: backends shut down while the SDL_Renderer is still alive (Sdl3App resets
+    // Backends shut down while the SDL_Renderer is still alive (Sdl3App resets
     // this before SDL_DestroyRenderer). Renderer backend first, then platform.
     ImGui_ImplSDLRenderer3_Shutdown();
     ImGui_ImplSDL3_Shutdown();
@@ -133,7 +134,7 @@ bool Sdl3Menu::wants_mouse() const {
 }
 
 int Sdl3Menu::bar_height() const {
-    // ImGui::GetFrameHeight() = FontSize + 2*FramePadding.y (A5, imgui.cpp
+    // ImGui::GetFrameHeight() = FontSize + 2*FramePadding.y (imgui.cpp
     // BeginMainMenuBar). Rounded UP so the reserved strip never leaves a 1px
     // sliver of the picture under the bar. Valid from construction (primed frame).
     const float h = ImGui::GetFrameHeight();
@@ -141,8 +142,8 @@ int Sdl3Menu::bar_height() const {
 }
 
 int Sdl3Menu::status_bar_height() const {
-    // DEC-0096: same GetFrameHeight() basis as the top bar (rounded up), so the
-    // bottom strip reserves exactly the space the status window fills.
+    // Same GetFrameHeight() basis as the top bar (rounded up), so the
+    // bottom strip reserves exactly the space the status window fills. (DEC-0096)
     const float h = ImGui::GetFrameHeight();
     return h > 0.0f ? static_cast<int>(h + 0.999f) : 0;
 }
@@ -210,7 +211,7 @@ void Sdl3Menu::render_status_bar(Sdl3App& app) {
 
 void Sdl3Menu::render(SDL_Renderer* renderer) {
     ImGui::Render();
-    // §4.2 bracket: ImGui computes vertices in WINDOW-PIXEL coordinates
+    // Logical-presentation bracket: ImGui computes vertices in WINDOW-PIXEL coordinates
     // (io.DisplaySize from SDL_GetWindowSize), but the renderer is currently in
     // 320x240 LETTERBOX logical presentation -- submitting there would reinterpret
     // the geometry in the tiny logical space. Save, disable (1:1 pixels), draw,
@@ -225,7 +226,7 @@ void Sdl3Menu::render(SDL_Renderer* renderer) {
 }
 
 void Sdl3Menu::log_io_geometry(const char* tag) const {
-    // M63 diagnostic: dump what ImGui itself sees -- io.DisplaySize (the space
+    // Diagnostic: dump what ImGui itself sees -- io.DisplaySize (the space
     // the menu bar lays out + hit-tests in) and io.DisplayFramebufferScale
     // (points->pixels). Paired with the SDL window/pixel/render-output sizes
     // Sdl3App prints, this pins the Pi fullscreen mis-scaling to real numbers
@@ -276,7 +277,7 @@ void Sdl3Menu::render_help_windows() {
         if (ImGui::Begin("About", &show_about_window_)) {
             ImGui::TextUnformatted("Sony HB-F1XV  -  MSX2+ emulator (1988)");
             ImGui::TextUnformatted("Z80A @ 3.58 MHz | Yamaha V9958 VDP (128 KB VRAM)");
-            // LOW-2 (M56): SCC is a CARTRIDGE-side chip (present only with an SCC
+            // SCC is a CARTRIDGE-side chip (present only with an SCC
             // game cart), NOT built-in. Keep the built-in/cartridge boundary explicit.
             ImGui::TextUnformatted("Built-in audio: PSG (YM2149) + MSX-MUSIC FM (YM2413)");
             ImGui::TextUnformatted("Cartridge audio (when inserted): Konami SCC, external FM-PAC");
@@ -299,17 +300,18 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
         case MenuAction::EjectDisk: app.eject_disk(); break;
         case MenuAction::EjectCartridgeSlot1: app.eject_cartridge(1); break;
         case MenuAction::EjectCartridgeSlot2: app.eject_cartridge(2); break;
-        case MenuAction::OpenRecent: app.open_recent(param); break;  // DEC-0095
+        case MenuAction::OpenRecent: app.open_recent(param); break;  // Recent-file open (DEC-0095)
         case MenuAction::Exit: app.request_quit(); break;
         // Machine
         case MenuAction::Reset: app.request_reset(); break;
         case MenuAction::Pause: machine.pause_controller().press_pause_button(); break;
         case MenuAction::SetSpeed: machine.pause_controller().set_speed_level(param); break;
         case MenuAction::SetRensha: machine.rensha_turbo().set_speed(param); break;
-        // M57 (DEC-0085-AMENDMENT-A): Machine>RAM live power-cycle. param is the KB
+        // Machine>RAM live power-cycle. param is the KB
         // size; rebuild the machine at param*1024 ONLY when it differs from the live
         // size (re-selecting the current size is inert -- the TogglePersistenceMode
         // guard precedent). The orchestrator emits the stderr note.
+        // (DEC-0085-AMENDMENT-A)
         case MenuAction::SetRam: {
             const std::size_t want_bytes = static_cast<std::size_t>(param) * 1024u;
             if (want_bytes != machine.dram_size()) {
@@ -317,9 +319,10 @@ void Sdl3Menu::dispatch(const MenuAction action, const int param, Sdl3App& app) 
             }
             break;
         }
-        // M60 (DEC-0089): Machine > BIOS Folder... -- launch the async folder
+        // Machine > BIOS Folder... -- launch the async folder
         // picker; the drained selection is transactionally validated + applied
         // in Sdl3App::apply_bios_folder (power-cycle into the chosen dir).
+        // (DEC-0089)
         case MenuAction::OpenBiosFolder: app.open_bios_folder_dialog(); break;
         // Video
         case MenuAction::ToggleFullscreen: app.toggle_fullscreen(); break;

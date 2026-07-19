@@ -21,10 +21,10 @@
 
 namespace sony_msx::devices::chipset {
 
-// Expanded / switched-I/O controller on ports #40-#4F (M11-S4).
+// Expanded / switched-I/O controller on ports #40-#4F.
 //
-// Models the MSX device-switch mechanism (openMSX
-// references/openmsx-21.0/src/MSXDeviceSwitch.cc — behaviour reference, not
+// Models the MSX device-switch mechanism (openMSX 21.0:
+// src/MSXDeviceSwitch.cc — behaviour reference, not
 // copied): writing #40 (port & 0x0F == 0) selects an 8-bit device ID; the
 // selected SwitchedDevice then answers #40-#4F, dispatched on port & 0x0F.
 //

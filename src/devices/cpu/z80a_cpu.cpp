@@ -51,10 +51,10 @@ std::uint32_t Z80aCpu::step() {
     trace_begin_instruction();
 
     // Reset the per-step M1 counter; it accrues one tick per opcode-fetch (and
-    // the interrupt-ack M1) via increment_refresh_register() (M11-S1).
+    // the interrupt-ack M1) via increment_refresh_register().
     m1_cycle_count_ = 0;
 
-    // Q latch (M12-S4): snapshot the Q produced by the previous instruction, then
+    // Q latch: snapshot the Q produced by the previous instruction, then
     // clear the live latch so that only a flag write by THIS instruction re-sets
     // it (fact-sheet §8). A step that never writes F — including interrupt
     // acceptance below — therefore leaves Q = 0 for the next instruction.
@@ -69,17 +69,18 @@ std::uint32_t Z80aCpu::step() {
     } else if (!blocked_this_step && state_.maskable_interrupt_pending() && state_.iff1()) {
         tstates = service_maskable_interrupt();
     } else if (state_.halted()) {
-        // Halted "idle" step (M23-S1, DEC-0004). Real Z80 silicon refetches the
+        // Halted "idle" step. Real Z80 silicon refetches the
         // current opcode every HALT-loop machine cycle -- a phantom M1 that both
         // ticks the refresh register and (via the S1985's machine-level
         // +1-per-M1 formula) advances the clock; the two effects share one
-        // mechanism on real hardware (references/openmsx-21.0/src/cpu/Z80.hh:
+        // mechanism on real hardware (openMSX 21.0: src/cpu/Z80.hh:
         // 19-21 HALT_STATES; CPUCore.cc:2508-2511 incR(advanceHalt(...))).
         // This core keeps publishing the bare datasheet T-state count (4;
-        // A-M23-1 invariant: the core's own return value never becomes 5, only
+        // the invariant: the core's own return value never becomes 5, only
         // the machine-level `datasheet + m1_wait` sum does). Calling
-        // increment_refresh_register() here is the only change -- it registers
+        // increment_refresh_register() here registers
         // one M1 cycle so the existing S1985 wait arithmetic applies unmodified.
+        // (DEC-0004)
         increment_refresh_register();
         tstates = 4;
     } else {
@@ -170,7 +171,7 @@ void Z80aCpu::request_maskable_interrupt(const std::uint8_t bus_vector) {
 }
 
 void Z80aCpu::clear_maskable_interrupt() {
-    // Thin pass-through (M14-S4). Lets a level-holding device (the V9958 /INT
+    // Thin pass-through. Lets a level-holding device (the V9958 /INT
     // owner) release the maskable-interrupt request without reaching into the
     // CPU state directly. No interrupt-acceptance logic is added or altered.
     state_.clear_maskable_interrupt();
@@ -608,11 +609,12 @@ void Z80aCpu::alu_cpl() {
 }
 
 void Z80aCpu::alu_scf() {
-    // Genuine-Zilog NMOS SCF undocumented X/Y (M12-S4, gap #20/#21): X/Y are bits
+    // Genuine-Zilog NMOS SCF undocumented X/Y: X/Y are bits
     // 3/5 of ((Q ^ F) | A), where Q is the flag byte latched by the previous
     // instruction (0 if it did not modify flags). Fact-sheet §8 (Patrik-Rak).
     // NOTE: this deliberately diverges from openMSX's (F | A) OR-form
-    // (CPUCore.cc:4268-4269), which omits the Q latch — see planner A-4/R-2.
+    // (CPUCore.cc:4268-4269), which omits the Q latch — the real-hardware
+    // rule is followed in preference to the reference implementation.
     const std::uint8_t f = state_.regs().f();
     const std::uint8_t xy_source = static_cast<std::uint8_t>((q_prev_ ^ f) | state_.regs().a());
     std::uint8_t flags = static_cast<std::uint8_t>(f & (kS | kZ | kPV));
@@ -623,7 +625,8 @@ void Z80aCpu::alu_scf() {
 
 void Z80aCpu::alu_ccf() {
     // Genuine-Zilog NMOS CCF: same ((Q ^ F) | A) X/Y rule as SCF; H takes the old
-    // carry (fact-sheet §8). Diverges from openMSX (F | A) form (A-4/R-2).
+    // carry (fact-sheet §8). Deliberately diverges from openMSX's (F | A)
+    // form, exactly as in alu_scf() above.
     const std::uint8_t f = state_.regs().f();
     const std::uint8_t old_carry = static_cast<std::uint8_t>(f & kC);
     const std::uint8_t xy_source = static_cast<std::uint8_t>((q_prev_ ^ f) | state_.regs().a());
@@ -936,7 +939,7 @@ std::uint32_t Z80aCpu::execute_unprefixed(const std::uint8_t opcode) {
             }
             case 1:  // CB prefix
                 return execute_cb_prefixed();
-            case 2: {  // OUT (n),A  -- port = (A<<8)|n, data = A (M11-S1 I/O seam).
+            case 2: {  // OUT (n),A  -- port = (A<<8)|n, data = A.
                 const std::uint8_t n = read_imm8();
                 const std::uint16_t port =
                     static_cast<std::uint16_t>((static_cast<std::uint16_t>(state_.regs().a()) << 8) | n);
@@ -1043,7 +1046,7 @@ std::uint32_t Z80aCpu::execute_cb_prefixed() {
     if (x == 1) {  // BIT y, r[z]
         bool memory = false;
         const std::uint8_t value = read_reg_index(z, memory);
-        // M12-S3 (gap #4): for BIT n,(HL) the undocumented X/Y bits come from the
+        // For BIT n,(HL) the undocumented X/Y bits come from the
         // high byte of WZ/MEMPTR (bits 11/13 of WZ), NOT the tested value
         // (fact-sheet §4; openMSX bit_N_xhl(), CPUCore.cc:3420). Register-operand
         // BIT still sources X/Y from the tested register value.
@@ -1198,15 +1201,15 @@ void Z80aCpu::ld_a_ir(const std::uint8_t value) {
     if (state_.iff2()) {
         flags |= kPV;  // P/V reflects IFF2 for LD A,I / LD A,R.
     }
-    // NMOS LD A,I / LD A,R interrupt bug (M12-S5, gap #31): on genuine Zilog NMOS,
+    // NMOS LD A,I / LD A,R interrupt bug: on genuine Zilog NMOS,
     // P/V reads 0 (despite IFF2 set) if a maskable interrupt is accepted during
     // this instruction (fact-sheet §5; openMSX fixes it up at IRQ accept,
     // CPUCore.cc:2476-2496). This instruction-atomic core approximates the race
     // at the boundary: an IRQ pending with IFF1 set is treated as accepted at the
     // step immediately following LD A,I/R (which never arms an EI-delay, so that
     // boundary is never EI-blocked -- matching openMSX's note that the quirk is
-    // independent of a preceding EI, CPUCore.cc:2490-2493). Approximation only
-    // (planner R-4); not exercised by ZEXALL, so unit-proven only.
+    // independent of a preceding EI, CPUCore.cc:2490-2493). Approximation only;
+    // not exercised by ZEXALL, so unit-proven only.
     if (state_.maskable_interrupt_pending() && state_.iff1()) {
         flags &= static_cast<std::uint8_t>(~kPV);
     }
@@ -1428,7 +1431,7 @@ std::uint32_t Z80aCpu::execute_ed_prefixed() {
             alu_neg();
             return 8;
         case 5:  // RETN (y!=1) / RETI (y==1): all ED-prefixed RETxx copy IFF2->IFF1
-            // M12-S5 (gap #30): RETI is functionally identical to RETN inside the
+            // RETI is functionally identical to RETN inside the
             // CPU — both restore IFF1 from IFF2 (fact-sheet §5; openMSX retn() is
             // also reti(), CPUCore.cc:3911-3915). WZ = return address.
             state_.regs().pc = pop16();
@@ -1756,7 +1759,7 @@ std::uint32_t Z80aCpu::execute_indexed_cb(const bool use_iy) {
     // nor the sub-opcode is an M1 fetch, so R is not incremented for them.
     const std::int8_t d = static_cast<std::int8_t>(read_imm8());
     const std::uint16_t address = index_displaced_address(use_iy, d);
-    // M12-S3 (gap #5/#35): WZ = index+d for every DDCB/FDCB access (§4;
+    // WZ = index+d for every DDCB/FDCB access (§4;
     // openMSX bit_N_xix() setMemPtr, CPUCore.cc:3426). BIT n,(IX+d) then sources
     // X/Y from WZ hi == address hi, which this keeps consistent.
     state_.regs().wz = address;
@@ -1793,7 +1796,7 @@ std::uint32_t Z80aCpu::service_nmi() {
     state_.clear_nmi();
     state_.set_halted(false);
     // The NMI-acknowledge special M1 (5T bare) ticks the refresh register like any
-    // M1 — openMSX nmi() calls incR(1) (references/openmsx-21.0/src/cpu/CPUCore.cc:
+    // M1 — openMSX nmi() calls incR(1) (openMSX 21.0: src/cpu/CPUCore.cc:
     // 769) — but takes NO S1985 +1-per-M1 wait (openMSX CC_NMI = 5+3+3 = 11,
     // Z80.hh; the M1 wait is not folded into the ack constants). Using
     // tick_refresh_only() ticks R without billing a wait cycle, so NMI stays 11T.

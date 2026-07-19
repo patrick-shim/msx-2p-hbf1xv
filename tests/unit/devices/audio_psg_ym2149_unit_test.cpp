@@ -16,7 +16,7 @@
 
 #include "devices/audio/psg_ym2149.h"
 
-// Suite: Devices_AudioPsgYm2149_Unit  (M15-S1, backlog B1)
+// Suite: Devices_AudioPsgYm2149_Unit
 //
 // YM2149 register model: address-latch mask, tone/noise/envelope period decode,
 // R7 mixer/IO-direction MSX masking, YM register-readback-as-written, 5-bit
@@ -234,16 +234,16 @@ int main() {
     }
 
     // =====================================================================
-    // M34 additive take_integrated_sample() cases (DEC-0043 Defect A,
-    // docs/m34-planner-package.md §2.6.5). Every oracle below is dwell
-    // arithmetic authored by hand BEFORE execution (R-M34-9): a period-1
-    // tone from reset toggles at every 16-cycle generator step, and the
-    // §2.3.3 boundary convention puts the completing cycle's dwell on the
-    // PRE-step level, so level(t) = 31 iff floor((t-1)/16) is odd
-    // (cycles 1..16 low, 17..32 high, ...).
+    // Box-average take_integrated_sample() cases. Every oracle below is
+    // dwell arithmetic authored by hand BEFORE execution, so it cannot be
+    // back-derived from the code under test: a period-1 tone from reset
+    // toggles at every 16-cycle generator step, and the boundary convention
+    // puts the completing cycle's dwell on the PRE-step level, so
+    // level(t) = 31 iff floor((t-1)/16) is odd
+    // (cycles 1..16 low, 17..32 high, ...). (DEC-0043 Defect A)
     // =====================================================================
 
-    // --- M34: period-1 dwell hand-oracle at W=81 (§2.6.5). Window k covers
+    // --- Period-1 dwell hand-oracle at W=81. Window k covers
     //     cycles [81k+1, 81k+81]. Hand-computed high-dwell per window:
     //       w0: [17-32]+[49-64]+[81]          = 16+16+1 = 33 -> 31*33=1023 -> 13
     //       w1: [82-96]+[113-128]+[145-160]   = 15+16+16 = 47 -> 1457 -> 18
@@ -251,7 +251,7 @@ int main() {
     //       w3: [244-256]+[273-288]+[305-320] = 13+16+16 = 45 -> 1395 -> 17
     //       w4: [337-352]+[369-384]+[401-405] = 16+16+5 = 37 -> 1147 -> 14
     //       w5: [406-416]+[433-448]+[465-480] = 11+16+16 = 43 -> 1333 -> 16
-    //     (dwells 33,47,35,45,37,43 -- inside the package's 33..48 band;
+    //     (dwells 33,47,35,45,37,43 -- all inside the 33..48 band;
     //     round-half-away-from-zero of sum/81 gives 13,18,13,17,14,16.)
     //     Cross-checked below against an INDEPENDENT per-cycle level model
     //     (pure arithmetic over the ideal square, not chip state). ---
@@ -290,7 +290,7 @@ int main() {
         }
     }
 
-    // --- M34: constant fixed-point property (§2.3.4): all generators
+    // --- Constant fixed-point property: all generators
     //     disabled (R7=0x3F) at fixed volumes A=15/B=8/C=4 -> constant
     //     levels 31/17/9 -> integrated == point == {48, 40} exactly, for
     //     both an odd (81) and a tie-prone even (16) window. ---
@@ -319,10 +319,10 @@ int main() {
     }
 
     // =====================================================================
-    // DEF-M41-PSGENV FIX — PSG hardware-envelope RATE (openMSX
+    // PSG hardware-envelope RATE fix (openMSX
     // AY8910.cc:447-456). The YM2149 envelope clocks TWICE as fast: advance()
     // does `count += generator_steps*2` (the pre-fix `++count` HALVED the rate,
-    // measured in M41-S3 as f_clk/(512*EP*2) instead of f_clk/(512*EP)). These
+    // measured as f_clk/(512*EP*2) instead of f_clk/(512*EP)). These
     // cases RE-DERIVE the correct rate from first principles (NOT by flipping
     // the old numbers) and pin it, alongside the shape/waveform behaviour.
     //
@@ -332,7 +332,7 @@ int main() {
     // (period = 2*EP and count += 2/tick => one step per EP ticks), i.e. every
     // EP*16 CPU cycles/step; a full 32-step ramp = 32*EP*16 = 512*EP CPU
     // cycles. That IS the datasheet envelope period f_E = f_clk/(512*EP) with
-    // f_clk = 3,579,545 Hz. Cross-check vs the M41-S3 openMSX 19.1 A/B:
+    // f_clk = 3,579,545 Hz. Cross-check vs an openMSX 19.1 A/B capture:
     //   EP=2048 -> 512*2048 = 1,048,576 cyc -> 3.414 Hz  (openMSX 3.37; ours
     //             now 3.41 -- was the half-rate 1.65);
     //   EP=1024 -> 512*1024 =   524,288 cyc -> 6.827 Hz  (openMSX 6.73; ours
@@ -399,12 +399,12 @@ int main() {
         }
     }
 
-    // --- M34 box-average + corrected envelope rate: envelope mid-window
+    // --- Box-average + corrected envelope rate: envelope mid-window
     //     segmenting RE-DERIVED for the openMSX-doubled rate. EP=1 (R11=1) ->
     //     one envelope step every 16 CPU cycles; shape 0x00 (\___) descends
     //     31,30,29,28,27,26,... Channel A follows the envelope, all generators
     //     off -> level == envelope volume. One 81-cycle box integrates the six
-    //     dwell segments (pre-step levels, §2.3.3 boundary convention):
+    //     dwell segments (pre-step levels, per the boundary convention):
     //       31*16 + 30*16 + 29*16 + 28*16 + 27*16 + 26*1
     //       = 496+480+464+448+432+26 = 2346 -> round(2346/81) = round(28.96)
     //       = 29 (the point sample at cycle 81 is 26 -- the integral is
@@ -434,7 +434,7 @@ int main() {
         }
     }
 
-    // --- M34: W=0 guard (§2.3.5) + integral reset semantics: a take with
+    // --- W=0 guard + integral reset semantics: a take with
     //     window 0 returns silence; accumulated dwell is discarded so the
     //     next window starts clean. ---
     {
@@ -459,7 +459,7 @@ int main() {
         }
     }
 
-    // --- M34: point sample() is UNTOUCHED by integration bookkeeping --
+    // --- Point sample() is UNTOUCHED by integration bookkeeping --
     //     interleaved take_integrated_sample() calls never perturb the
     //     generator trajectory (state identity vs a twin that never takes). ---
     {

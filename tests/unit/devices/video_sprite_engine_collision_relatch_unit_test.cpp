@@ -15,7 +15,7 @@
 //
 // Line-granular S#0 collision (C, bit5) re-latching against the live raster
 // position. Real hardware checks sprites PROGRESSIVELY as the raster scans
-// (references/openmsx-21.0/src/video/SpriteChecker.hh:70-100 sync()/
+// (openMSX 21.0: src/video/SpriteChecker.hh:70-100 sync()/
 // checkSprites -- behavior reference, never copied): after an S#0 read
 // clears C, the NEXT colliding line the raster scans re-latches it. The
 // HB-F1XV MSX2+ boot-logo wobble effect (SUB-ROM loop polling S#0 bit5, one
@@ -64,7 +64,7 @@ public:
 
 // --- engine-level harness (sprite mode 1, GRAPHIC1) ------------------------
 // Two 8x8 sprites fully overlapping at (x=50, y=9): both visible on output
-// lines 10..17 (the A-M22-9 1-pixel vertical shift), so the frame carries
+// lines 10..17 (sprites display one line below their Y attribute), so the frame carries
 // one collision event per line 10..17 at x=50 (S#3/S#5 report +12/+8:
 // x=62, y=line+8).
 

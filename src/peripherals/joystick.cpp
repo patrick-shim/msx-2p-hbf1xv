@@ -76,8 +76,8 @@ std::uint8_t JoystickPorts::encode(const PortState& state) const {
 
 std::uint8_t JoystickPorts::read_port_a() {
     std::uint8_t bits = encode(ports_[static_cast<std::size_t>(selected_)]);
-    // M18-S3 (A-M18-10): unattached leaves bit7 exactly as encode() set it
-    // (unconditionally 1) -- byte-for-byte identical to pre-M18 behavior
+    // Unattached leaves bit7 exactly as encode() set it
+    // (unconditionally 1) -- byte-for-byte identical to the no-cassette behavior
     // (regression guard). Attached, bit7 reflects the live source.
     if (cassette_source_ != nullptr) {
         if (cassette_source_->cassette_input_high()) {
@@ -86,12 +86,12 @@ std::uint8_t JoystickPorts::read_port_a() {
             bits = static_cast<std::uint8_t>(bits & ~kCassetteInputBit);
         }
     }
-    // Ren-Sha Turbo autofire (M25, A-M25-7): PSG R14 bit4 = trigger A,
+    // Ren-Sha Turbo autofire: PSG R14 bit4 = trigger A,
     // applied to the selected port's already-computed value (matches
     // openMSX's ports[selectedPort]-after-mux wiring). Unattached leaves
-    // bits exactly as computed above -- byte-for-byte identical to pre-M25
-    // behavior (regression guard, M25-S3). OR-only: can only force a 0 bit
-    // (pressed) to 1 (a periodic release), never the reverse (R-M25-6).
+    // bits exactly as computed above -- byte-for-byte identical to the
+    // no-autofire behavior (regression guard). OR-only: can only force a 0 bit
+    // (pressed) to 1 (a periodic release), never the reverse.
     if (rensha_ != nullptr) {
         bits = static_cast<std::uint8_t>(bits | rensha_->joystick_trigger_a_or_mask());
     }

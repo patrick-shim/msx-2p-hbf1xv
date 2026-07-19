@@ -92,7 +92,7 @@ bool transactional_pre_read(const std::vector<std::string>& paths,
 
 int main() {
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "hbf1xv_m56_disk_replace";
+        std::filesystem::temp_directory_path() / "hbf1xv_disk_replace";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
 

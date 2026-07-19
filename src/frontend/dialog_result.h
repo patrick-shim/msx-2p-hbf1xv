@@ -13,11 +13,11 @@
 
 #pragma once
 
-// M56 (DEC-0084, planner §3.1 / §9 test 1): the SDL-free classification of an
-// SDL file-dialog callback's `filelist` argument, extracted as a pure function
-// so it is unit-testable OUTSIDE the SONY_MSX_ENABLE_SDL3 guard (the same
-// SDL-free-frontend-logic pattern as menu_captures_event in menu_model.h). The
-// SDL_dialog contract (references/sdl3/include/SDL3/SDL_dialog.h:81-88):
+// The SDL-free classification of an SDL file-dialog callback's `filelist`
+// argument, extracted as a pure function so it is unit-testable OUTSIDE the
+// SONY_MSX_ENABLE_SDL3 guard (the same SDL-free-frontend-logic pattern as
+// menu_captures_event in menu_model.h). (DEC-0084) The SDL_dialog contract
+// (src/external/sdl3/include/SDL3/SDL_dialog.h):
 //   * filelist == NULL      -> an error occurred (SDL_GetError()).
 //   * filelist[0] == NULL   -> the user cancelled / chose nothing.
 //   * filelist[0] != NULL   -> one or more chosen UTF-8 paths.

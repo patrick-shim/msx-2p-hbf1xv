@@ -17,7 +17,7 @@ namespace sony_msx::peripherals {
 
 void PrinterPort::reset() {
     // Set fields directly (NOT via set_strobe/write_data) so no falling edge
-    // is observed and no spurious capture occurs (A-M18-6, class-doc note).
+    // is observed and no spurious capture occurs (see the class-doc note).
     strobe_ = true;
     data_ = 0;
     captured_bytes_.clear();
@@ -40,8 +40,8 @@ core::BusData PrinterPort::io_read(const core::BusAddress port) {
     switch (port & 0x03) {
     case 0:
         // Status byte: unused_bits(0x00) | (busy ? 0b10 : 0). Always ready
-        // (busy=0) in this milestone -- a disclosed divergence from openMSX's
-        // *unplugged* default (A-M18-7, class-doc note).
+        // (busy=0) -- a disclosed divergence from openMSX's
+        // *unplugged* default (see the class-doc note).
         return 0x00;
     default:
         // case 1: open-bus (write-only). case 2/3: inert / unimplemented.

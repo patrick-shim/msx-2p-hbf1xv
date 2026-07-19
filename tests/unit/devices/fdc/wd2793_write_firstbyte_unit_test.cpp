@@ -11,10 +11,10 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793WriteFirstByte_Unit  (DEF-M45-WRITEDRQ window fix)
+// Suite: Devices_Fdc_Wd2793WriteFirstByte_Unit
 //
 // ANTI-REGRESSION for the WD2793 Write Sector FIRST-BYTE CHECK_WRITE window that
-// the original M45 fix made TOO SHORT and which then ABORTED a legitimate
+// an earlier write-DRQ fix made TOO SHORT and which then ABORTED a legitimate
 // multi-disk-RPG-title
 // in-game disk SAVE (worse than the corruption it replaced: the user could no
 // longer save at all -- a Type-I Step/Restore retry hang after the write aborted
@@ -25,7 +25,7 @@
 // 8-byte CHECK_WRITE tail ~= 1140 cycles. On a real WD2793 / openMSX the first
 // data-byte DRQ is asserted only AFTER head-load + the ROTATIONAL sector-search
 // (up to ~a full revolution): startWriteSector schedules DRQ + CHECK_WRITE from
-// type2Search/getNextSector's POST-search time (references/openmsx-21.0/src/fdc/
+// type2Search/getNextSector's POST-search time (openMSX 21.0: src/fdc/
 // WD2793.cc:646-701, understanding only -- never copied, GPL isolation). A game
 // that does save-buffer setup before writing byte 1 easily exceeds 1140 cycles,
 // so the old gate mis-fired on a VALID write.

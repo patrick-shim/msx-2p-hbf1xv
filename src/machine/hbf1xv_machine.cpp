@@ -33,9 +33,9 @@ constexpr std::uint64_t kFrameCycles = 228 * 262;
 }  // namespace
 
 void Hbf1xvMachine::CpuIrqAdapter::set_irq(const bool asserted) {
-    // Forward the V9958's level-held /INT to the M12 Z80A. Asserting requests a
+    // Forward the V9958's level-held /INT to the Z80A. Asserting requests a
     // maskable interrupt; releasing clears it. No acceptance logic is added here
-    // — the IM1 accept path (14T, proven in M12) is reused unchanged.
+    // — the IM1 accept path (14T) is reused unchanged.
     if (asserted) {
         cpu_.request_maskable_interrupt();
     } else {
@@ -45,20 +45,20 @@ void Hbf1xvMachine::CpuIrqAdapter::set_irq(const bool asserted) {
 
 Hbf1xvMachine::Hbf1xvMachine(const std::size_t dram_bytes)
     : dram_(dram_bytes), cpu_bus_client_(bus_), cpu_(cpu_bus_client_) {
-    // M42 (DEC-0061): dram_ is sized from the constructor argument (default
+    // dram_ is sized from the constructor argument (default
     // kDramBytes == stock 64 KB, so every default construction is byte-identical).
     // ram_mapper_ derives its segment count from dram_.size() -- it is declared
-    // after dram_, so dram_ is already sized when the mapper reads it.
+    // after dram_, so dram_ is already sized when the mapper reads it. (DEC-0061)
     wire_bus();
 }
 
 void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
-    // M32-S2 (docs/m32-planner-package.md §2.3): commit the display lines the
+    // Commit the display lines the
     // beam has already passed from the PRE-write state before the write mutates
     // anything -- openMSX's sync-before-change protocol at line granularity
-    // (references/openmsx-21.0/src/video/PixelRenderer.cc:253-394, 549-571).
+    // (openMSX 21.0: src/video/PixelRenderer.cc:253-394, 549-571).
     // Suspended while the non-perturbing debug_io_write() seam drives the bus
-    // (§2.3 documented exclusion). Negative raster (border/vblank) clamps to a
+    // (a documented exclusion). Negative raster (border/vblank) clamps to a
     // no-op inside sync_to_line() -- vblank writes affect the whole next frame.
     if (suspended_) {
         return;
@@ -70,12 +70,12 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     if (line < 0) {
         return;
     }
-    // M39 (DEC-0060) render-sync commit boundary -- the ACTIVE-DISPLAY LEFT
-    // MARGIN rounding. The commit boundary here is the openMSX LINE-accuracy
+    // Render-sync commit boundary -- the ACTIVE-DISPLAY LEFT
+    // MARGIN rounding (DEC-0060). The commit boundary here is the openMSX LINE-accuracy
     // renderer's `renderUntil()` rounding, NOT a raw scanline boundary:
     // openMSX rounds the sync point with the left margin --
     //   limitY = (limitTicks + TICKS_PER_LINE - 400) / TICKS_PER_LINE
-    // (references/openmsx-21.0/src/video/PixelRenderer.cc:566-567) -- so a
+    // (openMSX 21.0: src/video/PixelRenderer.cc:566-567) -- so a
     // register write is committed against the line whose ACTIVE pixels have
     // already been drawn, which lands one display line LATER than our raw
     // `raster_display_line()` (floor(tstates / kCpuTstatesPerLine), quantized at
@@ -85,7 +85,7 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // L+2.
     //
     // CALIBRATION (openMSX 19.1 Sony_HB-F1XV, a scrolling-shooter title's
-    // gameplay, raw captures debug/m39-hud/omsx_hud_*.png -- 4 stable frames):
+    // gameplay, 4 stable raw frame captures):
     // the title holds a fixed
     // top HUD over a vertically-scrolling playfield via cycle-timed R#1 (BL) +
     // R#23 (vertical scroll) writes with NO line interrupt. The BL-off write is
@@ -102,15 +102,15 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
     // render-sync rounding is independent of the VDP line-interrupt counter).
     const int target = line + 2;
-    // M51 Task 2 trace: the beam seam's commit decision inputs (context for
-    // event classes 1-4; identifies which VDP write opened/advanced the split).
+    // Sprite-trace diagnostic: the beam seam's commit decision inputs (context
+    // for event classes 1-4; identifies which VDP write opened/advanced the split).
     if (devices::video::m51_sprite_trace_enabled()) {
         devices::video::m51_sprite_trace(
             "SEAM raster=%d target=%d acc_wm=%d sprite_wm=%d last_beam=%d", line, target,
             machine_.scanline_accumulator_.watermark(),
             machine_.vdp_.sprite_engine().watermark(), last_beam_commit_target_);
     }
-    // M49-S2 (docs/m49-planner-package.md §3 S2, backlog D9): keep the incremental
+    // Keep the incremental
     // sprite plane in pace with the background BEFORE the background commits, at the
     // IDENTICAL beam+2 boundary. Driving the sprite check FIRST (from the CURRENT
     // pre-write registers/VRAM) makes the background read a per-line-live sprite
@@ -118,11 +118,11 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // relevant register change -- whose new value has NOT yet applied at this point
     // (io_write calls on_before_state_change before decode/commit, incl. the #99
     // two-write DATA byte) -- split the sprite plane at exactly the same line as the
-    // background split (AC-S2). commit_sprite_split()'s check_until is advance-only,
+    // background split. commit_sprite_split()'s check_until is advance-only,
     // so a non-sprite write is a cheap no-op once the beam's line is already checked.
     // `wrap` uses the same raster-DECREASE test the background uses below.
     machine_.vdp_.commit_sprite_split(target, target < last_beam_commit_target_);
-    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine row sink can
+    // The command-engine row sink (DEC-0065) can
     // advance the accumulator watermark PAST the beam within a frame (committing
     // command rows at their destination lines). A subsequent same-frame seam
     // write would then have target < watermark and trip sync_to_line()'s
@@ -132,7 +132,8 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // finalize (call sync_to_line unconditionally, as before). Otherwise the
     // raster is monotonic within the frame -> ADVANCE-ONLY (never finalize).
     //
-    // Byte-identical to the pre-M44 seam for every non-command path: with the
+    // Byte-identical, for every non-command path, to the seam as it behaved
+    // before the command sink existed: with the
     // command sink inert the watermark only ever advances via this seam, so the
     // beam is monotonic and target >= watermark always held -- the advance-only
     // branch then calls sync_to_line exactly when the old unconditional call
@@ -147,46 +148,48 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
 }
 
 void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line) {
-    // M44 (DEF-M44-CMDSYNC Phase 1, DEC-0065): the command-engine per-
-    // destination-row commit primitive. V9958Vdp::command_row_sync has already
+    // The command-engine per-
+    // destination-row commit primitive (DEC-0065). V9958Vdp::command_row_sync has already
     // applied the bitmap-mode / visible-page / active-display gates and computed
     // `display_line` = the exact vertical-scroll inverse of the destination row.
     //
-    // M62 BEAM CLAMP (DEC-0091-AMENDMENT-A) -- the background-register half of
-    // the M51 sibling defect. This sink previously committed [watermark,
+    // BEAM CLAMP -- the background-register half of
+    // a two-part defect (the sprite half is the pacing fix below). This sink
+    // previously committed [watermark,
     // display_line) even when the destination rows lay far AHEAD of the render
     // beam, sealing every swept row with the COMMIT-TIME state: the frame-start
     // R#26/R#27 horizontal-scroll pair + R#25/R#23 (a racing title's straight-road
-    // full-scene flash, docs/m62-investigation-report.md -- a dashboard blit
+    // full-scene flash -- a dashboard blit
     // landing at raster ~2 sealed ~145 rows once per ~13-frame beat) and the
-    // instantaneous sprite buffers via the M51 pacing (the racing title's
+    // instantaneous sprite buffers via the sprite pacing (the racing title's
     // vanishing car: the
     // SAT written later in the frame was never seen by the sealed rows).
     //
     // On real hardware a command writing VRAM rows ahead of the beam has NO
     // early-display effect: each display line is generated when the beam scans
     // it, from the register file and sprite state live AT THAT LINE
-    // (references/fact-sheets/Yamaha V9958 VDP.md §6 per-scanline model,
-    // tier 1). openMSX renders strictly the BACKLOG on every command write --
+    // (Yamaha V9958 VDP fact sheet, §6 per-scanline model
+    // -- the real-hardware spec). openMSX renders strictly the BACKLOG on every command write --
     // renderUntil(current time), never ahead ("Subsystem synchronisation should
     // happen before the commit, to be able to draw backlog using old state",
-    // references/openmsx-21.0/src/video/VDPVRAM.hh:575-593;
+    // openMSX 21.0: src/video/VDPVRAM.hh:575-593;
     // PixelRenderer.cc:549-571) -- EFFECT re-expressed here, never copied.
     //
-    // The clamp: never advance the accumulator (or the M51 sprite pacing) past
-    // the io-write seam's beam boundary `raster + 2` -- the SAME M39-calibrated
+    // The clamp: never advance the accumulator (or the sprite pacing) past
+    // the io-write seam's beam boundary `raster + 2` -- the SAME calibrated
     // left-margin rounding on_before_state_change uses (hbf1xv_machine.cpp
     // above), so the sink and the seam agree on a single "displayed so far"
     // frontier. Rows in [watermark, min(display_line, raster+2)) still commit
-    // pre-write (the M44 backlog capture: rows the beam already passed keep the
+    // pre-write (the backlog capture: rows the beam already passed keep the
     // pre-command state); rows AHEAD of the beam are simply LEFT for the beam
     // path -- subsequent io-write seam syncs and the vsync finalize render them
     // per-line-live (their then-current R#26/R#27/R#25/R#23 and SAT), exactly
-    // like every non-command write path (the M32 seam) already does. Since
+    // like every non-command write path (the io-write seam) already does. Since
     // every state change between the command and a row's beam crossing fires
     // the hooked io-write seam first, each row's committed content equals the
     // state as of the last hooked write before its beam+2 crossing -- the
-    // hardware contract at the M49 line-granular ceiling.
+    // hardware contract at this renderer's line-granular ceiling.
+    // (DEC-0091-AMENDMENT-A)
     if (suspended_) {
         return;  // debug_io_write exclusion (same as on_before_state_change)
     }
@@ -197,11 +200,11 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     }
     const int beam_limit = raster + 2;
     const int target = display_line < beam_limit ? display_line : beam_limit;
-    // WRAP guard (§2.4 step 4): ADVANCE-ONLY. Skip when the commit target is at
+    // WRAP guard: ADVANCE-ONLY. Skip when the commit target is at
     // or below the accumulation point -- that row was already swept (it
     // reappears next frame, exactly as on real hardware) and a sync_to_line
     // below the watermark would otherwise seal a partial frame mid-command.
-    // With the M62 clamp this is also the common ahead-of-beam case: the
+    // With the beam clamp this is also the common ahead-of-beam case: the
     // io-write seam at the command-issuing OUT already committed to raster+2.
     if (target <= machine_.scanline_accumulator_.watermark()) {
         if (devices::video::m51_sprite_trace_enabled()) {
@@ -212,7 +215,7 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
         }
         return;
     }
-    // M51 Task 2 trace (event classes 3+4): the command-row commit range
+    // Sprite-trace diagnostic (event classes 3+4): the command-row commit range
     // [acc_wm, target) with the SPRITE watermark at this instant, plus
     // the per-line visible-sprite counts the imminent sync_to_line() will
     // composite from, over the designated player band
@@ -242,20 +245,20 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
                 line >= sprite_wm ? 1 : 0);
         }
     }
-    // M51 (DEC-0078) fix, branch (a) shape (i): pace the render-only sprite
+    // Pace the render-only sprite
     // pass to the SAME exclusive boundary BEFORE the background commits, so no
     // committed row composites from a per-line buffer that is empty purely
     // because of the lazy-open clear (the scrolling-shooter / sprite-scroll /
     // split-screen regression titles'
-    // sprite-disappearance mechanism -- Task 2 trace: "CMDCOMMIT range=[69,231)
+    // sprite-disappearance mechanism -- trace evidence: "CMDCOMMIT range=[69,231)
     // sprite_wm=69" sealing plane rows 148-175 with visible=0). This is the
     // consumer-side sync contract openMSX documents and implements
     // (PixelRenderer.cc:580-584 / SpriteChecker.hh:242-247, effect only) and
-    // the M49 seam already applies on the beam path (commit_sprite_split at
+    // the beam path already applies (commit_sprite_split at
     // on_before_state_change); the command sink honors it too, at the SAME
-    // M62 beam-clamped boundary (never pacing the sprite pass ahead of the
+    // beam-clamped boundary (never pacing the sprite pass ahead of the
     // beam either -- the SAT half of the racing-title defect).
-    // Advance-only-when-active: see V9958Vdp::commit_sprite_rows.
+    // Advance-only-when-active: see V9958Vdp::commit_sprite_rows. (DEC-0078)
     machine_.vdp_.commit_sprite_rows(target);
     machine_.scanline_accumulator_.sync_to_line(target);
 }
@@ -263,10 +266,9 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
 void Hbf1xvMachine::wire_bus() {
     // --- Memory fabric (SlotBus) ---
     // HB-F1XV slot/sub-slot/page population, from the machine XML
-    // references/openmsx-21.0/share/machines/Sony_HB-F1XV.xml (§2 of
-    // docs/m13-planner-package.md). Both primary slots 0 and 3 are expanded
-    // (each has four <secondary> children: XML lines 85-116 and 123-199; A-6
-    // corrects the M11 wiring that expanded only slot 3).
+    // (openMSX 21.0: share/machines/Sony_HB-F1XV.xml).
+    // Both primary slots 0 and 3 are expanded
+    // (each has four <secondary> children: XML lines 85-116 and 123-199).
     slot_bus_.set_expanded(0, true);
     slot_bus_.set_expanded(3, true);
 

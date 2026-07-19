@@ -20,11 +20,11 @@
 #include "peripherals/cassette_interface.h"
 #include "peripherals/keyboard_matrix.h"
 
-// Suite: Peripherals_CassetteInterface_Unit  (M18-S3, part of backlog C7)
+// Suite: Peripherals_CassetteInterface_Unit
 //
-// Motor/output derivation is a pure, on-demand read of the existing M15
-// Ppi8255 (A-M18-9, zero edit to Ppi8255); the synthetic-tape input model
-// advances READ-ONLY off an injected CassetteClockSource (A-M18-11/A-M18-12).
+// Motor/output derivation is a pure, on-demand read of the existing Ppi8255
+// (zero edit to Ppi8255 itself); the synthetic-tape input model advances
+// READ-ONLY off an injected CassetteClockSource.
 
 namespace {
 
@@ -62,7 +62,7 @@ int main() {
     KeyboardMatrix kb;
     kb.reset();
 
-    // --- Motor/output track a real Ppi8255's port-C writes LIVE (A-M18-9). ---
+    // --- Motor/output track a real Ppi8255's port-C writes LIVE. ---
     {
         Ppi8255 ppi(slot_bus, kb);
         ppi.reset();
@@ -85,7 +85,7 @@ int main() {
         expect(!cassette.output_level(), "PortCBit5Clear_OutputLevelFalse");
     }
 
-    // --- No-tape default is ALWAYS idle-high (A-M18-11), with or without an
+    // --- No-tape default is ALWAYS idle-high, with or without an
     //     attached clock source. ---
     {
         Ppi8255 ppi(slot_bus, kb);
@@ -171,7 +171,7 @@ int main() {
         expect(cassette.cassette_input_high(), "EjectTape_RevertsToIdleHigh");
     }
 
-    // --- sample_output() is an explicit, caller-driven utility (A-M18-12) --
+    // --- sample_output() is an explicit, caller-driven utility --
     //     not a production hook; verify it records what the caller asks. ---
     {
         Ppi8255 ppi(slot_bus, kb);

@@ -11,10 +11,10 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Thin entry point for the standalone host-side msx-diskutil utility (M53,
-// DEC-0080). Links ONLY msx_diskutil -- no sony_msx_core, no emulator header --
+// Thin entry point for the standalone host-side msx-diskutil
+// utility. Links ONLY msx_diskutil -- no sony_msx_core, no emulator header --
 // so the shipped binary is provably isolated from the emulator (one-way build
-// isolation). All logic lives in the unit-testable cli/run seam.
+// isolation, DEC-0080). All logic lives in the unit-testable cli/run seam.
 
 #include <iostream>
 

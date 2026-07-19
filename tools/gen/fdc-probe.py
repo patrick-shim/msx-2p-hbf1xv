@@ -12,26 +12,25 @@
 #  rights holders and are NOT licensed by this notice.
 # ============================================================================
 
-"""M16-S6 openMSX A/B FDC register-sequence probe assembler.
+"""openMSX A/B FDC register-sequence probe assembler.
 
-Produces `tests/parity/m16_fdc_probe.bin`: the EXACT SAME Z80 byte sequence as
+Produces `tests/parity/fdc_probe.bin`: the EXACT SAME Z80 byte sequence as
 `build_restore_read_sector_probe()` in
-`tests/integration/machine/hbf1xv_m16_fdc_integration_test.cpp` (already proven,
+`tests/integration/machine/hbf1xv_fdc_integration_test.cpp` (already proven,
 via that passing test, to drive the Sony WD2793 FDC end-to-end over the real
-M11 bus: page-1 -> slot(3,2), side/drive/motor latch, Type I Restore, Type II
-Read Sector of LBA 0, streaming 512 DRQ bytes into RAM). Assembling it here
-(rather than re-deriving it by hand) guarantees the openMSX-side probe is
-byte-identical to the internally-tested program (planner Section 7 "Subject
-sequence").
+machine bus: page-1 -> slot(3,2), side/drive/motor latch, Type I Restore,
+Type II Read Sector of LBA 0, streaming 512 DRQ bytes into RAM). Assembling it
+here (rather than re-deriving it by hand) guarantees the openMSX-side probe is
+byte-identical to the internally-tested program.
 
 Run from a flat-RAM base (0xC000) via this emulator's `--parity-trace` mode
 (which already calls `map_flat_ram()` first) and, on the openMSX side, via the
 existing `tools/openmsx/trace-parity.ps1` harness convention, with the
-IDENTICAL `tests/parity/m16_boot.dsk` (see tools/gen/boot-disk.py) mounted
+IDENTICAL `tests/parity/boot.dsk` (see tools/gen/boot-disk.py) mounted
 as drive A so both emulators service the Read Sector from the same medium.
 
 Usage:
-  python tools/gen/fdc-probe.py [-o tests/parity/m16_fdc_probe.bin]
+  python tools/gen/fdc-probe.py [-o tests/parity/fdc_probe.bin]
   python tools/gen/fdc-probe.py --self-check
 """
 import argparse
@@ -97,8 +96,8 @@ def build_restore_read_sector_probe():
 
 def main(argv):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("-o", "--output", default="tests/parity/m16_fdc_probe.bin",
-                        help="output path (default tests/parity/m16_fdc_probe.bin)")
+    parser.add_argument("-o", "--output", default="tests/parity/fdc_probe.bin",
+                        help="output path (default tests/parity/fdc_probe.bin)")
     parser.add_argument("--self-check", action="store_true",
                         help="verify determinism (two assemblies byte-identical) and exit")
     args = parser.parse_args(argv[1:])

@@ -11,10 +11,11 @@
 //  rights holders and are NOT licensed by this notice.
 // ============================================================================
 
-// Suite: Devices_Fdc_Wd2793WriteEarlyByte_Unit  (M47 / DEF-M47-DISKWRITE, DEC-0072)
+// Suite: Devices_Fdc_Wd2793WriteEarlyByte_Unit
 //
 // ANTI-REGRESSION for the residual WD2793 disk-WRITE corruption that survived
-// M45/M45b and destroyed a real RPG-title save (DEC-0072). ROOT CAUSE: the M45
+// the earlier write-stall fix and destroyed a real RPG-title save (DEC-0072).
+// ROOT CAUSE: the old
 // model committed a Write Sector byte ONLY when transfer_drq(t) was true and
 // SILENTLY DROPPED the CPU byte otherwise (data_reg_ updated, but buffer_/
 // data_index_/data_available_ NOT advanced). A real WD2793 ALWAYS lays down
@@ -26,24 +27,25 @@
 // write / a 2-bytes-per-DRQ burst / a fixed cadence running AHEAD of our
 // rotational first-DRQ), producing the sporadic coherent-shifted save data.
 //
-// The M45 wd2793_write_stall suite only drove LATE / stalling cadences (which
-// M45 already handled by committing on transfer_drq + re-basing), so the DROP of
-// an EARLY / BURST byte was never exercised. This suite drives EARLY and BURST
-// cadences (the CPU writes AHEAD of our DRQ deadline), which the M45 else-drop
-// corrupts, and asserts EXACTLY-512-in-order byte-perfect output post-fix.
+// The wd2793_write_stall suite only drove LATE / stalling cadences (which the
+// earlier fix already handled by committing on transfer_drq + re-basing), so the
+// DROP of an EARLY / BURST byte was never exercised. This suite drives EARLY and
+// BURST cadences (the CPU writes AHEAD of our DRQ deadline), which the old
+// else-drop corrupts, and asserts EXACTLY-512-in-order byte-perfect output
+// post-fix.
 //
 // The fix (Wd2793::write_data -> commit_write_sector_byte) LATCHES the CPU byte
 // then COMMITS it in-order at the current position ALWAYS -- the byte-POSITION
 // is decoupled from the CPU-write TIMING (early OR late), never dropped. The
 // un-serviced-slot 0x00 substitution lives in sync() (mid-transfer abandoned
-// write) + the first-byte CHECK_WRITE gate. H4: the target CHS is LATCHED at
+// write) + the first-byte CHECK_WRITE gate. The target CHS is LATCHED at
 // begin_write_sector so a mid-transfer side/track change cannot redirect the
 // committed sector.
 //
-// NON-TAUTOLOGY (captured in the M47 implementation report): restoring the M45
+// NON-TAUTOLOGY: restoring the old
 // else-drop (`if (phase_ == WriteSector && transfer_drq(t)) { commit } // else
 // DROP`) makes Cases A, B and C FAIL (dropped/shifted bytes), and restoring the
-// pre-H4 live-CHS commit (`drive_->write_sector(...)` in finish_write_sector)
+// old live-CHS commit (`drive_->write_sector(...)` in finish_write_sector)
 // makes Case E FAIL (the sector lands on side 1). It passes against the fix.
 
 #include <cstdint>
@@ -138,7 +140,7 @@ bool sector_byte_exact(DiskImage& image, std::uint8_t track, std::uint8_t side,
 int main() {
     // --- (A) BURST cadence: after the rotational first DRQ, the CPU streams all
     //     512 bytes AHEAD of the per-byte DRQ deadline (inter-byte < cycles_per_
-    //     byte). The M45 else-drop discards every byte that lands before its DRQ
+    //     byte). The old else-drop discards every byte that lands before its DRQ
     //     window -> a densely-corrupted sector; the fix commits each byte
     //     in-order regardless of timing -> BYTE-PERFECT, in BOTH --fast-disk
     //     modes. (Adversarial-revert of the else-drop FAILS this case.) ---
@@ -172,7 +174,7 @@ int main() {
 
     // --- (B) SINGLE INJECTED EARLY write at byte 100: a well-behaved poll loop
     //     that writes byte 100 WITHOUT waiting for its DRQ (one byte lands early).
-    //     The M45 else-drop discards byte 100 and every later byte shifts down one
+    //     The old else-drop discards byte 100 and every later byte shifts down one
     //     (truncated tail); the fix commits byte 100 in place -> position
     //     preserved, BYTE-PERFECT, in BOTH modes. ---
     for (bool fast : {false, true}) {
@@ -204,10 +206,11 @@ int main() {
     }
 
     // --- (C) MULTI-SECTOR (0xB0) at the RPG-title save geometry: track 0, side 1,
-    //     sectors 7 & 8 == LBA 15 & 16 (the two adjacent corrupt save-slot
-    //     records of DEC-0072). Bursting straight through the sector boundary
-    //     under the adversarial early cadence, EACH sector lands byte-exact on
-    //     ITS OWN LBA with no cross-sector shift, in BOTH modes. ---
+    //     sectors 7 & 8 == LBA 15 & 16 (the two adjacent save-slot records
+    //     corrupted in the original defect). Bursting straight through the sector
+    //     boundary under the adversarial early cadence, EACH sector lands
+    //     byte-exact on ITS OWN LBA with no cross-sector shift, in BOTH modes
+    //     (DEC-0072). ---
     for (bool fast : {false, true}) {
         Fixture f(fast);
         const std::uint8_t track = 0;
@@ -245,7 +248,7 @@ int main() {
 
     // --- (D) ALL-CHS SWEEP: every (track 0..79, side 0..1, sector 1..9) written
     //     under the adversarial early/burst cadence and read back BYTE-PERFECT
-    //     (DEC-0072 "byte-perfect across ALL CHS"). One shared image + drive so a
+    //     ("byte-perfect across ALL CHS", DEC-0072). One shared image + drive so a
     //     leak onto the wrong CHS surfaces as a later mismatch. Fast-disk mode
     //     keeps the 1440-sector sweep quick (rotational latency collapses); the
     //     write model is identical in both modes (Cases A-C prove accurate). ---
@@ -293,12 +296,13 @@ int main() {
         }
     }
 
-    // --- (E) H4 CHS LATCH: a WriteSector begun on SIDE 0 is committed to side 0
+    // --- (E) CHS LATCH: a WriteSector begun on SIDE 0 is committed to side 0
     //     even when a mid-transfer glue-register side latch flips the drive to
     //     side 1 (the openMSX/hardware rule: the head can't move / the CHS is
-    //     fixed while BUSY). All 3 DEC-0072 corrupt sectors were side 1, redirected
-    //     by exactly such a mid-write side change. Pre-H4 (live-CHS commit) this
-    //     lands on side 1; post-fix it lands on side 0 and side 1 is untouched. ---
+    //     fixed while BUSY). All 3 corrupt sectors in the original save-corruption
+    //     defect were side 1, redirected by exactly such a mid-write side change.
+    //     With the old live-CHS commit this lands on side 1; post-fix it lands on
+    //     side 0 and side 1 is untouched (DEC-0072). ---
     for (bool fast : {false, true}) {
         Fixture f(fast);
         const std::uint8_t track = 0;

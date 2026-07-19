@@ -97,7 +97,7 @@ int main() {
     set_dummy_drivers();
 
     const std::filesystem::path dir =
-        std::filesystem::temp_directory_path() / "hbf1xv_m56_open_disks";
+        std::filesystem::temp_directory_path() / "hbf1xv_open_disks";
     std::error_code ec;
     std::filesystem::create_directories(dir, ec);
     const std::filesystem::path a = dir / "a.dsk";
