@@ -99,7 +99,7 @@ bool write_psg_audio_dump(const std::filesystem::path& debug_root, const std::st
 // via MachineAudioMixer rather than pumping the PSG in isolation. Deterministic:
 // pure serialization of the provided bytes (no gain/filter/resample), reusing
 // machine::debug_dump::serialize_region()'s folded-hex routine. Converts to a
-// real WAV via tools/audio-dump-to-wav.py, exactly like the PSG dump.
+// real WAV via tools/convert/audio-dump-to-wav.py, exactly like the PSG dump.
 [[nodiscard]] std::string serialize_pcm_audio_dump(const std::vector<std::int16_t>& pcm_stereo,
                                                    std::uint64_t sample_rate_hz);
 bool write_pcm_audio_dump(const std::filesystem::path& debug_root, const std::string& filename,

@@ -27,7 +27,7 @@ inline constexpr const char* kFrameDumpFormatTag = "HBF1XV-FRAME-DUMP v1";
 // Deterministic decoded-FrameBuffer dump serializer (M26-S4, the one new
 // debug/testing capability this milestone authorizes -- docs/m26-planner-
 // package.md §2.5). Dumps the DECODED FrameBuffer (M21 VdpFrameRenderer
-// output, RGB555 pixels) -- not raw VRAM bytes (tools/mem-to-png.py, M10-S5,
+// output, RGB555 pixels) -- not raw VRAM bytes (tools/convert/mem-to-png.py, M10-S5,
 // is insufficient for this: it visualizes raw memory as grayscale noise with
 // zero VDP-mode/palette awareness).
 //

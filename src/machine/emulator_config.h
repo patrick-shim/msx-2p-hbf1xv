@@ -66,8 +66,9 @@ struct EmulatorConfig {
     // explicit flag resolves disk-writable ON (owner-requested; a real MSX writes
     // its floppies). `--no-disk-writable` is the escape hatch. The Sdl3AppConfig
     // struct default stays false (anti-drift, planner §2.4); headless src/main.cpp
-    // default also stays OFF (determinism guard). The shipped sony_msx_hbf1xv.xml
-    // ships <disk-writable enabled="true"/> so the round-trip identity holds.
+    // default also stays OFF (determinism guard). A persisted sony_msx_hbf1xv.xml
+    // therefore carries <disk-writable enabled="true"/>, keeping the emitter/parser
+    // round-trip identity (frontend_config_xml_writer_unit_test).
     bool disk_writable = true;            // <defaults><disk-writable enabled>
     // M52 (DEC-0079, docs/m52-planner-package.md §2.2): SDL3 master-volume percent
     // [0,100], default 100 (unity/full -- byte-identical to every pre-M52 session).

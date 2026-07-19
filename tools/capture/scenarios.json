@@ -1,0 +1,26 @@
+[
+  {
+    "id": "baseline_cart_g2",
+    "kind": "video",
+    "guest": "cart",
+    "guest_path": "debug/m38/carts/s10_g2_baseline.rom",
+    "frames": 700,
+    "omx_seconds": 10,
+    "ox": 32,
+    "oy": 24,
+    "expected": "MATCH",
+    "note": "Phase-0 baseline (WORKING): SCREEN2/Graphic2 INIT-autostart cart, settled static scene. Gates the loop. Cart path bypasses the ~20s boot logo and the disk-boot hang."
+  },
+  {
+    "id": "baseline_disk_circle",
+    "kind": "video",
+    "guest": "disk",
+    "autoexec": "debug/m41/guests/baseline_circle.bas",
+    "frames": 1800,
+    "omx_seconds": 24,
+    "ox": 32,
+    "oy": 24,
+    "expected": "BLOCKED",
+    "note": "Phase-0 A-2 FALSE: AUTOEXEC.BAS does not auto-run; and our headless HANGS (DI:HALT disk-ROM pc=0x4005) booting a blank-format disk while openMSX reaches Disk-BASIC Ok. Disk-BASIC guest path blocked on our side -> escalate. Kept for regression tracking."
+  }
+]

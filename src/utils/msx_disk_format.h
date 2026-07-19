@@ -21,7 +21,7 @@
 // emulator header. The 720 KB FAT12 layout facts below are tiny public
 // FAT12/hardware constants re-expressed from the documented spec (planner
 // package docs/m53-planner-package.md §2.2), NOT a code dependency on the
-// emulator. Sources of truth cross-checked: tools/format-blank-disk.ps1:82-133
+// emulator. Sources of truth cross-checked: tools/gen/format-blank-disk.ps1:82-133
 // (the A/B-validated M41 blank), src/devices/fdc/disk_image.cpp:43-85 (boot
 // sector/BPB/FAT seed, machine's OWN expectation).
 namespace sony_msx::utils {
@@ -42,7 +42,7 @@ struct DiskFormat {
 // Build a byte-exact, deterministic, EMPTY formatted 720 KB MSX-DOS FAT12
 // blank image (737,280 bytes). A pure function of the constants above: no
 // wall-clock, no host input, no volume serial -- so two calls are byte-identical
-// and the SHA256 equals the tools/format-blank-disk.ps1 default blank. Boot code
+// and the SHA256 equals the tools/gen/format-blank-disk.ps1 default blank. Boot code
 // region (offset 0x1E..0x1FD) is ALL ZERO (a genuinely empty, non-bootable
 // data/files medium), the two FAT copies are seeded F9 FF FF, and the root
 // directory + data area are ALL ZERO (an empty filesystem => zero files).

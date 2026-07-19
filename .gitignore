@@ -71,89 +71,14 @@ CMakeUserPresets.json
 /debug/snapshot/stream_*/
 /debug/traces/stream_*_trace.txt
 
-# M26 exception: one real, committed decoded-FrameBuffer-capture example
-# (backlog C9's authorized debug/testing capability, docs/m26-planner-
-# package.md §2.5) -- genuine evidence, not a regenerable runtime artifact.
-!/debug/frames/m26-example-boot.png
-!/debug/frames/m26-example-boot.frame
-
-# M27 exception: one real, committed decoded-PSG-audio-capture example
-# (item 2, docs/m27-planner-package.md §2.3) -- genuine evidence, not a
-# regenerable runtime artifact.
-!/debug/sounds/m27-example-tone.wav
-!/debug/sounds/m27-example-tone.dump
-
-# DEC-0029 exception: the sprite-mode-2 fix's before/after/reference evidence
-# (docs/sprite-invisibility-investigation.md, docs/sprite-fix-qa-review.md --
-# QA reproduced both PNGs SHA256-identical from an independent harness).
-!/debug/frames/mg-sprite-invisibility-before.png
-!/debug/frames/mg-sprite-invisibility-after.png
-!/debug/frames/mg-sprite-invisibility-openmsx-reference.png
-
-# DEC-0031 exception: the border + boot-logo fixes' before/after/reference
-# evidence (docs/border-and-boot-logo-investigation.md,
-# docs/border-boot-logo-qa-review.md).
-!/debug/frames/boot-logo-before-f0135-no-logo.png
-!/debug/frames/boot-logo-after-f0150-letters-sliding.png
-!/debug/frames/boot-logo-after-f0210-mainram64k.png
-!/debug/frames/boot-logo-openmsx-reference-t2500ms.png
-!/debug/frames/boot-logo-openmsx-reference-t3500ms.png
-!/debug/frames/border-before-f0300-active-area-only.png
-!/debug/frames/border-after-f0300-basic-skyblue-border.png
-!/debug/frames/border-openmsx-reference-basic-t15s.png
-!/debug/frames/border-openmsx-reference-screen0-text.png
-
-# Konami-splash color-0 backdrop fix: before/after/reference evidence
-# (docs/konami-splash-regression-investigation.md).
-!/debug/frames/konami-splash-before-f0750-black-background.png
-!/debug/frames/konami-splash-after-f0750-white-background.png
-!/debug/frames/konami-splash-openmsx-reference-t12s.png
-!/debug/frames/boot-logo-post-colorfix-f0210-mainram64k.png
-
-# M29 exception: the Aleste-2-under-KonamiSCC real-ROM smoke evidence
-# (docs/m29-implementation-report.md).
-!/debug/frames/m29-aleste-f240.png
-!/debug/frames/m29-aleste-f500.png
-!/debug/frames/m29-aleste-f899.png
-
-# M31 RC exception: the release-candidate smoke-matrix headline evidence
-# (docs/m31-implementation-report.md, docs/m31-qa-signoff.md).
-!/debug/frames/m31-rc-bios-f210.png
-!/debug/frames/m31-rc-metalgear-f1100.png
-!/debug/frames/m31-rc-aleste-f900.png
-!/debug/frames/m31-rc-mg2-f1260.png
-!/debug/frames/m31-rc-dos-f1000.png
-!/debug/sounds/m31-mg2-scc-title.wav
-!/debug/sounds/m31-fm-aleste-fmON.wav
-!/debug/sounds/m31-fm-aleste-fmOFF.wav
-
-# DEC-0034 exception: the C5 (full-boot) closure evidence -- unattended cold
-# boot with a real MSX-DOS disk mounted, settled at the Disk-BASIC-ready
-# prompt after 11 real FDC sector reads.
-!/debug/frames/c5-verify-settled.png
-
-# M32 exception: the DEC-0039 defect-pair evidence (docs/m32-implementation-
-# report.md) -- the Aleste 2 gameplay-split smoke (the human repro resolved),
-# the openMSX split A/B artifacts (PARITY, docs/m32-parity-trace-diff.md),
-# the AC-6 divergence escalation set (root-caused raster-truth shifts, never
-# rebaselined -- coordinator arbitration pending), and the k=21 fmON/fmOFF
-# re-capture pair.
-!/debug/frames/m32-aleste-play-f2600.png
-!/debug/frames/m32-aleste-play-f2900.png
-!/debug/frames/m32-aleste-play-f3000.png
-!/debug/frames/m32-aleste-play-f3200.png
-!/debug/frames/m32-aleste-play-f3600.png
-!/debug/frames/m32-split-ab-ours.png
-!/debug/frames/m32-split-ab-openmsx-raw.png
-!/debug/frames/m32-split-ab-openmsx-noie1-raw.png
-!/debug/frames/m32-divergence-bios-f150-m32.png
-!/debug/frames/m32-divergence-metalgear-f1100-m32.png
-!/debug/frames/m32-divergence-metalgear-f1100-v1032.png
-!/debug/frames/m32-divergence-metalgear-f1400-m32.png
-!/debug/frames/m32-divergence-metalgear-f1400-v1032.png
-!/debug/frames/m32-divergence-mg2-f1700-m32.png
-!/debug/sounds/m32-fm-aleste-fmON.wav
-!/debug/sounds/m32-fm-aleste-fmOFF.wav
+# NOTE: the former `!/debug/...` committed-evidence exceptions (M26/M27/M29/M31/
+# M32, DEC-0029/0031/0034) were REMOVED in v1.7.0. They were dead rules: the
+# local-only carve-out below excludes the whole `/debug/` DIRECTORY, and git
+# cannot re-include a path whose parent directory is excluded -- so not one of
+# them had any effect (zero debug/ files are tracked). They also named game
+# titles in a PUBLISHED file, which contradicts the private-titles decision
+# (DEC-0047-AMENDMENT-E). Debug captures are regenerable runtime output; evidence
+# worth keeping lives in the local-only docs/ reports.
 
 # --- Non-redistributable third-party assets: bios/, roms/, disks/ ---
 # DEC-0093 (2026-07-18): the project no longer TRACKS OR PUBLISHES any proprietary
@@ -166,9 +91,10 @@ CMakeUserPresets.json
 # Users provide their own BIOS/firmware images separately. Only the human-authored
 # READMEs + .gitkeep markers stay tracked, so the directory skeleton is visible on the
 # remote but empty of proprietary content.
-# NOTE: these binaries REMAIN IN PRE-DEC-0093 HISTORY (and in any pre-existing tag); a
-# full history purge (git filter-repo / BFG) is a separate owner-run step. The v1.5.0
-# release TREE/tarball itself, however, contains none of them.
+# HISTORY: purged. DEC-0093-AMENDMENT-A (2026-07-18) rewrote EVERY commit and tag
+# with git-filter-repo, so these binaries no longer exist anywhere in this
+# repository -- not in the tip, not in history, not in any tag. Verified with
+# `git rev-list --all --objects` returning zero .rom/.dsk/.sram blobs.
 /bios/*
 !/bios/.gitkeep
 !/bios/README.md
@@ -211,8 +137,8 @@ Desktop.ini
 # tracked or published -- only the human-authored READMEs + .gitkeep skeleton are on
 # the remote; users provide their own BIOS/firmware/ROM/disk images locally (see the IP
 # notice in bios/README.md). This REVERSES DEC-0047's public bios/ + FM-PAC hosting.
-# Older BIOS/ROM/disk binaries nonetheless REMAIN IN PRE-DEC-0093 git history (and in
-# tags cut before it); purging them is a separate owner-run history rewrite.
+# The history was PURGED of them as well (DEC-0093-AMENDMENT-A): every commit and
+# tag was rewritten, so no proprietary binary survives anywhere in this repository.
 # Everything non-proprietary (references/, tests/, tools/, docs/, debug/, .claude/, etc.)
 # is tracked per its own rules; the /debug/**/* pattern ignores above still apply
 # (regenerable runtime captures untracked; committed evidence keeps its `!` exceptions).
@@ -220,19 +146,24 @@ Desktop.ini
 # --- Local-only development apparatus (DEC-0082-AMENDMENT-B, 2026-07-16) ---
 # The brief DEC-0082 publication of the coordination set (docs/, agent-protocol/,
 # .claude/, CLAUDE.md files; pushed as 17fe2f3/ea5894a) was REVERSED by owner
-# direction: removed from the remote TIP via `git rm -r --cached` (history
-# retention accepted — the trees remain in prior commits, same posture as
-# DEC-0047 and the original 2026-07-10 carve-out; full history purge declined).
+# direction: removed from the remote TIP via `git rm -r --cached`. These trees are
+# NON-proprietary project material, so the DEC-0093-AMENDMENT-A purge deliberately
+# left them alone -- they may still appear in earlier commits, which is harmless.
 # All of these stay fully present and usable on the LOCAL filesystem of both
 # machines; cross-machine sync is by manual copy (recorded limitation).
 # debug/'s pattern ignores + committed-evidence `!` exceptions above still apply.
+#
+# DEC-0099 (v1.7.0): tools/ is NO LONGER local-only -- it is PUBLISHED. It was
+# first reorganised into purpose-folders (gates/ openmsx/ gen/ convert/ analyze/
+# capture/ input-scripts/) with milestone numbers and GAME TITLES removed from
+# every filename and from file contents, since game titles are private
+# (DEC-0047-AMENDMENT-E) and publishing them would have undone the history scrub.
 /.claude/
 /agent-protocol/
 /debug/
 /docs/
 /references/
 /tests/
-/tools/
 
 # AI assistant memory files — local-only, hidden from the remote (owner request)
 /CLAUDE.md

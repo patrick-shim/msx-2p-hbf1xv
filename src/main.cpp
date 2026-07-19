@@ -122,7 +122,7 @@ int load_cartridges_from_args(sony_msx::machine::Hbf1xvMachine& machine, const s
 // per-instruction trace-export (M10-S1), and single-steps until HALT (or a
 // step ceiling). The trace is written in CpuTraceSink text format for a
 // line-for-line diff against the openMSX-side trace
-// (tools/openmsx-trace-parity.ps1).
+// (tools/openmsx/trace-parity.ps1).
 //
 // `cli_args` (M19-S6): when it carries --cart1/--cart1-type (and/or --cart2/
 // --cart2-type), load_cartridges_from_args mounts the cartridge(s) right
@@ -200,7 +200,7 @@ int run_parity_trace(const std::string& bin_path, std::uint16_t base, std::uint3
 // indirect, and the read-ahead path) like parity-trace, then dumps the
 // comparable VDP state: physical VRAM, 14-bit VRAM pointer, R#14, and the
 // control-register file. The same program runs on openMSX's V9958
-// (tools/openmsx-vdp-parity.ps1) for a diff. VRAM is now comparable (it was
+// (tools/openmsx/vdp-parity.ps1) for a diff. VRAM is now comparable (it was
 // excluded from M13's diff).
 int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_t max_steps,
                    std::uint32_t vram_bytes, const std::string& out_path) {
@@ -277,7 +277,7 @@ int run_vdp_parity(const std::string& bin_path, std::uint16_t base, std::uint32_
 }
 
 // M21-S7 VDP RENDER parity mode (backlog D1/D5/D6/D7-display-path). Runs a
-// flat RAM-only Z80 program (tools/gen-m21-vdp-render-probe.py) that writes
+// flat RAM-only Z80 program (tools/gen/vdp-render-probe.py) that writes
 // VRAM/registers/palette via the same #98/#99/#9A ports as run_vdp_parity,
 // then emits: R#0-R#27, the 16-entry palette (raw 9-bit GRB, matching
 // openMSX's "VDP palette" SimpleDebuggable byte layout: 2 bytes/entry,
@@ -379,7 +379,7 @@ int run_vdp_render_parity(const std::string& bin_path, std::uint16_t base, std::
 }
 
 // M22-S8 sprite/command-engine A/B parity mode (backlog D2/D3, closes D7).
-// Runs a flat RAM-only Z80 program (tools/gen-m22-sprite-cmd-probe.py, using
+// Runs a flat RAM-only Z80 program (tools/gen/sprite-command-probe.py, using
 // the same OUT (#98)/(#99)/(#9B) port sequence a real CPU uses for sprites
 // and the R#32-46 command engine) like run_vdp_render_parity, then emits:
 // the full R#0-R#46 control + command-engine register file (openMSX's "VDP
@@ -485,10 +485,10 @@ int run_sprite_cmd_parity(const std::string& bin_path, std::uint16_t base, std::
 }
 
 // M17-S5 YM2413 (OPLL) register-parity mode. Runs a flat RAM-only Z80 program
-// (tools/gen-m17-ym2413-probe.py, using `OUT (#7C),reg ; OUT (#7D),value`)
+// (tools/gen/ym2413-probe.py, using `OUT (#7C),reg ; OUT (#7D),value`)
 // like run_parity_trace, then dumps the YM2413 register file (all 64 bytes,
 // $00-$3F) via the debug-only `register_value(addr)` accessor (A-M17-6). The
-// same program runs on openMSX's YM2413 (tools/openmsx-ym2413-parity.ps1),
+// same program runs on openMSX's YM2413 (tools/openmsx/ym2413-parity.ps1),
 // read via its "MSX Music regs" SimpleDebuggable
 // (references/openmsx-21.0/src/sound/YM2413.hh:40-44), for a per-address
 // diff.
@@ -550,10 +550,10 @@ int run_ym2413_parity(const std::string& bin_path, std::uint16_t base, std::uint
 // GRAPHIC4 (SCREEN5) test scene through the real #98/#99/#9A VDP port
 // protocol via the non-perturbing debug_io_write() seam (M13) -- no CPU
 // driver program needed (same port-write sequences as
-// tools/gen-m21-vdp-render-probe.py, re-expressed here in C++). Vertical
+// tools/gen/vdp-render-probe.py, re-expressed here in C++). Vertical
 // color bars spanning all 16 palette entries, with a vivid hand-chosen
 // palette -- a recognizable picture, not a blank boot screen.
-// machine.write_frame_dump() produces the raw dump; tools/frame-to-png.py
+// machine.write_frame_dump() produces the raw dump; tools/convert/frame-to-png.py
 // converts it to the committed PNG.
 int run_frame_dump_demo(const std::string& out_path) {
     sony_msx::machine::Hbf1xvMachine machine;
@@ -619,7 +619,7 @@ int run_frame_dump_demo(const std::string& out_path) {
 // Cold-boots with real ROM assets from <bios_dir> (bios/f1xvfirm.rom,
 // unmodified -- this local file's SHA1 was independently confirmed
 // byte-identical to the installed WSL openMSX system ROM, planner
-// §2.6/A-M20, tools/openmsx-m20-halnote-parity.ps1), routes the entire
+// §2.6/A-M20, tools/openmsx/halnote-parity.ps1), routes the entire
 // Halnote 64 KB window into view via the debug-harness technique (no CPU
 // driver program needed -- Halnote's mem_read/mem_write are pure functions
 // of the raw 16-bit address, planner §2.5), then runs the same write/read
@@ -730,7 +730,7 @@ struct DebugSessionOptions {
     std::optional<std::string> input_script_path;
     // M32 closure additions (QA condition, docs/m32-qa-signoff.md: committed
     // evidence needs RECORDED, re-runnable recipes; consumed by
-    // tools/capture-metalgear-evidence.ps1). Both additive; absent flags
+    // tools/capture/cartridge-evidence.ps1). Both additive; absent flags
     // leave every pre-M32 invocation byte-identical.
     //   --frames <N>: drive N frames via the real frame-loop shape
     //     (step_cpu_instruction() to each frame boundary, then
@@ -807,7 +807,7 @@ struct DebugSessionOptions {
     // (PSG + SCC + built-in FM + FM-PAC + the M39 1-bit-DAC click) every frame
     // via MachineAudioMixer -- the same law the SDL3 frontend uses -- and writes
     // the voice-window PCM to <debug_root>/sounds/<name> ("HBF1XV-AUDIO-DUMP
-    // v1", -> WAV via tools/audio-dump-to-wav.py). --frames mode only. Enables
+    // v1", -> WAV via tools/convert/audio-dump-to-wav.py). --frames mode only. Enables
     // click-DAC capture unless --audio-no-click (the BEFORE/no-click A/B leg,
     // click term forced 0). --audio-from/--audio-to bound the appended frame
     // window (all generators still advance every frame to stay in lockstep).

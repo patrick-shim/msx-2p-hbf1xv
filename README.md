@@ -200,7 +200,7 @@ Requirements: the Xcode Command Line Tools (`xcode-select --install`) for AppleC
 REQUIRED)` locates it with no `CMAKE_PREFIX_PATH` argument. To build SDL3 from the vendored
 source instead (a machine with no Homebrew SDL3), `setup/build.sh --vendored-sdl3` mirrors what
 the Windows bootstrap does. `brew install powershell` is optional and only needed to run the
-`tools/*.ps1` asset gates; the test suite itself is pure C++ and needs no PowerShell.
+`tools/gates/*.ps1` asset gates; the test suite itself is pure C++ and needs no PowerShell.
 
 ### Linux / Raspberry Pi
 
@@ -572,14 +572,14 @@ the FM-PAC firmware; older binaries nonetheless remain in pre-DEC-0093 git histo
 have placed your assets, validate the required set with:
 
 ```powershell
-./tools/validate-assets.ps1
+./tools/gates/validate-assets.ps1
 ```
 
 On macOS (PowerShell 7 via `brew install powershell`; drop the Windows-only
 `-ExecutionPolicy Bypass`):
 
 ```bash
-pwsh -File tools/validate-assets.ps1
+pwsh -File tools/gates/validate-assets.ps1
 ```
 
 ## License

@@ -21,7 +21,7 @@
 //
 // HARD BOUNDARY (DEC-0080, both ways): this TU NEVER #includes src/utils/*
 // and NEVER links msx_diskutil. The layout facts are re-expressed from the
-// documented spec (tools/format-blank-disk.ps1:82-133 + the DEC-0080 golden
+// documented spec (tools/gen/format-blank-disk.ps1:82-133 + the DEC-0080 golden
 // SHA256), not via a code dependency. Compiled into sony_msx_core (SDL-free) so
 // its unit test registers OUTSIDE the SONY_MSX_ENABLE_SDL3 guard.
 //

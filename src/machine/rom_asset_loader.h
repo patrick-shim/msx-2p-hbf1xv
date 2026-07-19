@@ -30,7 +30,7 @@ namespace sony_msx::machine {
 //   image filled with open-bus 0xFF of the exact expected size, plus a
 //   human-readable diagnostic note appended to `diagnostics()`. Never a
 //   silent zero-fill, never fabricated SHA/provenance (guardrails "Asset and
-//   Script Safety"; planner A-7). The overall `tools/validate-assets.ps1`
+//   Script Safety"; planner A-7). The overall `tools/gates/validate-assets.ps1`
 //   gate still fails if a required BIOS is missing, so a green run always
 //   has real assets; the fill path exists for determinism/robustness and is
 //   unit-tested with a bad path.

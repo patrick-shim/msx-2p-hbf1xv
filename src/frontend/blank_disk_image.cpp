@@ -18,7 +18,7 @@ namespace sony_msx::frontend {
 namespace {
 
 // The 720 KB (2DD) MSX-DOS FAT12 geometry (re-expressed from the documented
-// tools/format-blank-disk.ps1:82-133 spec -- NOT a code dependency on
+// tools/gen/format-blank-disk.ps1:82-133 spec -- NOT a code dependency on
 // src/utils, DEC-0080 both-ways build isolation).
 constexpr std::uint32_t kSectorSize = 512;
 constexpr std::uint32_t kSectorsPerTrack = 9;

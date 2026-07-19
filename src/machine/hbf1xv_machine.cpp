@@ -608,7 +608,7 @@ void Hbf1xvMachine::load_rom_assets() {
 
     // filename / expected window size / slot-role label. Sizes are the XML <mem>
     // window sizes (§2). Local SHA1s were confirmed to match the XML "confirmed
-    // by Meits" revisions via tools/checksum-assets.ps1 (A-1) — never asserted here.
+    // by Meits" revisions via tools/gates/checksum-assets.ps1 (A-1) — never asserted here.
     // M50-S3 (DEC-0077): the FILENAME comes from bios_filenames_ (config-fed,
     // default = the strict HB-F1XV spec set) so a user can point at differently-
     // named BIOS files via config; the expected size + role label stay code-owned

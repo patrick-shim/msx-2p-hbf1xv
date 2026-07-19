@@ -18,18 +18,18 @@ namespace sony_msx::utils {
 std::vector<std::uint8_t> build_blank_image() {
     // Zero-initialized image: an empty formatted filesystem. Everything not
     // explicitly set below stays 0x00 (boot code region, root directory, data
-    // area). Mirrors tools/format-blank-disk.ps1:90-133 byte-for-byte.
+    // area). Mirrors tools/gen/format-blank-disk.ps1:90-133 byte-for-byte.
     std::vector<std::uint8_t> image(DiskFormat::kImageBytes, 0x00);
 
     // --- Boot sector + BPB at LBA 0 (standard MSX 720 KB FAT12) ---
     // Multi-byte fields are little-endian. Values verified identical in
-    // tools/format-blank-disk.ps1:94-122 AND src/devices/fdc/disk_image.cpp:43-73.
+    // tools/gen/format-blank-disk.ps1:94-122 AND src/devices/fdc/disk_image.cpp:43-73.
     image[0] = 0xEB;  // JMP short
     image[1] = 0xFE;
     image[2] = 0x90;  // NOP
 
     // OEM name "SONYMSX " (the M41-A/B-validated prior-art value,
-    // format-blank-disk.ps1:98). The BIOS/Disk ROM reads BPB geometry to mount,
+    // tools/gen/format-blank-disk.ps1:98). The BIOS/Disk ROM reads BPB geometry to mount,
     // not this string, so it does not affect mountability (planner §1.3 A3).
     const char oem[8] = {'S', 'O', 'N', 'Y', 'M', 'S', 'X', ' '};
     for (int i = 0; i < 8; ++i) {

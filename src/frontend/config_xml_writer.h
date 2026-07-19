@@ -21,9 +21,10 @@
 // strict `<hbf1xv-config>` XML the machine-layer parser reads. This is the
 // first-ever emitter for that schema (the parser shipped without one -- see
 // src/machine/emulator_config.cpp). It exists so the SDL3 frontend can PERSIST
-// interactive settings to `sony_msx_hbf1xv.xml` (the same file the auto-load
-// search already consults) and so the shipped reference config can be
-// regenerated.
+// interactive settings to `sony_msx_hbf1xv.xml` at the PROJECT ROOT (the same
+// file the auto-load search consults). There is no longer a shipped reference
+// config in the repository -- the emulator writes the file itself on first
+// change, so this emitter IS how a user's config comes into existence.
 //
 // DELIBERATELY SDL-free + pure, and DELIBERATELY here (frontend) rather than as
 // an EmulatorConfig member: the persistence feature is a frontend concern and

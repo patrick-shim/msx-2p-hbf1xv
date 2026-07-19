@@ -51,7 +51,7 @@ namespace {
 
 // Reverses debug_dump::serialize_region()'s folded-hex format for one named
 // region: a '*' line means the previous printed 16-byte line repeats until
-// the next printed offset (mirrors tools/mem-to-png.py's Python
+// the next printed offset (mirrors tools/convert/mem-to-png.py's Python
 // parse_region_from_dump(), independently re-expressed in C++ for this
 // project's round-trip test -- never copied, no external reference).
 std::vector<std::uint8_t> parse_region(const std::vector<std::string>& lines, std::size_t start,

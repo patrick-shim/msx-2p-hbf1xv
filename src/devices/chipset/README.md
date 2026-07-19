@@ -38,7 +38,7 @@ independent decode fabrics**.
 
 ## A/B parity
 
-`tools/openmsx-io-parity.ps1` drives the genuine **Sony HB-F1XV** machine
+`tools/openmsx/io-parity.ps1` drives the genuine **Sony HB-F1XV** machine
 (real `<S1985>`) in openMSX on WSL over `tests/parity/m11_bus_probe.bin` and
 diffs architectural state vs this emulator; the captured result is
 `docs/m11-parity-trace-diff.md` (M11 achieved an EMPTY diff).

@@ -52,10 +52,10 @@ list what you want to add (`--scale`, `--cart1`, `--volume`, …).
 
 ## What `launch.sh` handles for you
 
-- **Working directory.** The emulator resolves `bios/`, `roms/`, `disks/` and
-  `sony_msx_hbf1xv.xml` relative to the working directory. Autostart entries begin in
-  `/` or `$HOME`, so a bare command would launch with no BIOS. The launcher always
-  `cd`s to the repo root first.
+- **Working directory.** As of v1.7.0 the emulator locates the project root from its own
+  executable, so it finds `bios/`, `roms/`, `disks/` and the config wherever it is launched
+  from — autostart included. The launcher still `cd`s to the repo root first, which keeps any
+  relative path you pass in an args file (e.g. `--disk games/disks/...`) resolving as written.
 - **Missing BIOS.** This project ships no proprietary BIOS (you supply your own — see
   [`../../bios/README.md`](../../bios/README.md)). Without it the machine boots a
   `0xFF`-filled ROM and shows a black screen, which is baffling on a kiosk with no

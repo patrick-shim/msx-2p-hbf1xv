@@ -203,7 +203,7 @@ GOOD TO KNOW
     - Game saves: to SRAM -> add the FM-PAC cartridge; to disk -> ON by default
       now (a real MSX writes its floppies); pass --no-disk-writable for read-only.
     - A save disk must be a FORMATTED .dsk. Create one with the bundled disk
-      tool (msx-diskutil --create yourdisk.dsk), or tools/format-blank-disk.ps1 --
+      tool (msx-diskutil --create yourdisk.dsk), or tools/gen/format-blank-disk.ps1 --
       an all-zero blank has no filesystem and a game cannot write to it.
     - Quit by closing the window normally (do not force-kill / Ctrl+C) so disk
       and SRAM saves are flushed to their files.
