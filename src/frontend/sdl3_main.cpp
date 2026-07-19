@@ -554,6 +554,11 @@ int main(int argc, char** argv) {
         };
         config.settings_save_path = persist_to("sony_msx_hbf1xv.xml");
         config.recent_save_path = persist_to("sony_msx_recent.txt");
+        // DEC-0097: hand the app the root so it can persist asset paths RELATIVE
+        // to it (portable + survives moving the project directory).
+        if (project_root.has_value()) {
+            config.project_root = project_root->string();
+        }
     }
 
     // Copy (not move) config into the app so it stays valid for the startup

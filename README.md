@@ -81,9 +81,9 @@ against openMSX. Around the core:
 - a deterministic test suite (274 tests) including the full ZEXALL/ZEXDOC Z80
   instruction exercisers.
 
-**Current release: [v1.6.2](#build-history)** — fixes FM-PAC auto-load silently failing (empty
-cartridge slot 2) when launched from outside the project directory, on top of v1.6.1's activity LED
-and status bar. See [Build History](#build-history) for the full release log.
+**Current release: [v1.6.3](#build-history)** — the emulator now finds its BIOS, ROMs and config
+from the project root regardless of where you launch it from, on every platform. See
+[Build History](#build-history) for the full release log.
 
 ## Architecture
 
@@ -414,6 +414,20 @@ hand-edit it from there.
 
 Newest first. Each release was gated by the full deterministic test suite and, for
 behavior-affecting changes, screen/trace A/B comparison against openMSX.
+
+### v1.6.3 — assets resolve from the project root, on every platform
+- **Fixed: BIOS and FM-PAC failing to load depending on where you launched from.** Asset paths
+  were resolved against the *current directory*, so running the emulator from `build/` (or
+  anywhere but the project root) left every relative path unresolvable — a blank machine, an empty
+  slot 2, and no error explaining why.
+- The emulator now locates the **project root from its own executable**, walking up until it finds
+  `bios/`. That covers `build\Debug\` on Windows, `build/` on macOS and Linux, and a flat install —
+  one mechanism, no per-platform special-casing. **Launch directory no longer matters.**
+- The settings file and File ▸ Recent list move back to the **project root**, beside the assets
+  they name, so the layout is identical on every platform.
+- Persisted asset paths are now **relative to the project root** (with forward slashes), so the
+  config survives renaming or moving the project directory and can be shared between machines.
+  Paths you deliberately point elsewhere — e.g. a BIOS folder picked via the menu — stay absolute.
 
 ### v1.6.2 — FM-PAC auto-load path fix
 - **Fixed: cartridge slot 2 coming up empty.** FM-PAC failed to auto-load — silently, with no

@@ -2178,19 +2178,24 @@ std::string Sdl3App::current_settings_xml() {
     // Folder... updates config_.bios_dir; the role filenames travel with it).
     c.bios_dir = config_.bios_dir;
     c.bios_roms = config_.bios_roms;
-    // DEC-0095-AMENDMENT-D: persist asset paths ABSOLUTE. The settings file lives
-    // beside the EXE, but relative asset paths resolve against the WORKING
-    // DIRECTORY -- so a persisted `roms/fmpac.rom` silently stopped resolving
-    // whenever the emulator was launched from anywhere but the repo root, and
-    // FM-PAC auto-load skipped with an empty slot 2 and no error. Rewriting to
-    // the path THIS session actually resolved keeps the file working regardless
-    // of where it is launched from next (frontend/config_paths.h). current_path()
-    // can throw (deleted CWD) -- on failure just emit what we have rather than
-    // lose the settings write entirely.
-    std::error_code ec;
-    const std::filesystem::path cwd = std::filesystem::current_path(ec);
-    if (!ec) {
-        c = with_absolute_asset_paths(c, cwd);
+    // DEC-0097: persist asset paths RELATIVE to the project root. At runtime they
+    // are absolute (resolved from the exe's location at startup), but baking that
+    // into the file would break the moment the project directory is renamed or
+    // moved, and would make the file useless on another machine. Relative-to-root
+    // survives both. Paths OUTSIDE the root (e.g. a BIOS folder picked elsewhere
+    // via the menu) stay absolute -- see frontend/config_paths.h.
+    //
+    // Fallback when no project root was found (a detached/installed binary):
+    // absolutize against the CWD, the DEC-0095-AMENDMENT-D behavior, which at
+    // least keeps the file working from a different launch directory.
+    if (config_.project_root.has_value()) {
+        c = with_relative_asset_paths(c, std::filesystem::path(*config_.project_root));
+    } else {
+        std::error_code ec;
+        const std::filesystem::path cwd = std::filesystem::current_path(ec);
+        if (!ec) {
+            c = with_absolute_asset_paths(c, cwd);
+        }
     }
     return emulator_config_to_xml(c);
 }

@@ -129,4 +129,51 @@ template <typename IsRootPredicate>
     return out;
 }
 
+// ---------------------------------------------------------------------------
+// DEC-0097: the INVERSE, applied when PERSISTING. Runtime wants absolute paths
+// (resolved against the project root at startup); the saved FILE wants them
+// relative, for two concrete reasons:
+//   * renaming or moving the project directory would otherwise break every
+//     baked-in absolute path -- resurfacing as "my ROMs stopped loading", the
+//     exact failure class this whole area keeps producing;
+//   * a relative config is shareable between machines (Windows/macOS/Pi), which
+//     an absolute one never is.
+//
+// A path UNDER `root` becomes root-relative and is emitted with FORWARD SLASHES
+// (generic_string) so the same file reads correctly on every platform. A path
+// OUTSIDE the root -- a BIOS folder the user deliberately picked elsewhere, or
+// one on another drive -- stays ABSOLUTE, because making it relative would be
+// both ugly ("../../elsewhere") and fragile.
+// ---------------------------------------------------------------------------
+[[nodiscard]] inline machine::EmulatorConfig with_relative_asset_paths(
+    const machine::EmulatorConfig& cfg, const std::filesystem::path& root) {
+    machine::EmulatorConfig out = cfg;
+
+    const auto relativize = [&root](std::string& value) {
+        if (value.empty()) {
+            return;
+        }
+        const std::filesystem::path p(value);
+        if (p.is_relative()) {
+            return;  // already relative -- nothing to do
+        }
+        const std::filesystem::path rel = p.lexically_relative(root);
+        if (rel.empty()) {
+            return;  // no relation (e.g. a different Windows drive) -> keep absolute
+        }
+        if (rel.begin() != rel.end() && *rel.begin() == "..") {
+            return;  // outside the project root -> keep absolute (user's own location)
+        }
+        value = rel.generic_string();  // '/' separators: portable across platforms
+    };
+
+    relativize(out.bios_dir);
+    relativize(out.cartridge_dir);
+    relativize(out.disk_dir);
+    relativize(out.fmpac_rom);
+    relativize(out.fmpac_sram);
+    relativize(out.softwaredb_path);
+    return out;
+}
+
 }  // namespace sony_msx::frontend

@@ -276,6 +276,12 @@ struct Sdl3AppConfig {
     // sets it (beside the exe, CWD fallback) only for a genuinely interactive
     // launch with no explicit --config. THE determinism gate for this feature.
     std::optional<std::string> settings_save_path;
+    // DEC-0097: the discovered project root (the directory holding bios/ etc.).
+    // Used ONLY when persisting, to write asset paths RELATIVE to it so the file
+    // survives moving/renaming the project and stays shareable between machines.
+    // std::nullopt (no root found, and always headless) falls back to the older
+    // absolutize-against-CWD behavior.
+    std::optional<std::string> project_root;
     // Where to load/save the File > Recent sidecar list. Same gate as
     // settings_save_path (interactive-only) -> never read or written headless.
     std::optional<std::string> recent_save_path;
