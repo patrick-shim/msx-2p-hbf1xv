@@ -772,8 +772,8 @@ struct DebugSessionOptions {
     // M36 deterministic repro/testing enabler: swap to the next disk in the
     // repeatable --disk list at this frame (frame-loop mode only). Reuses
     // M35's multi-disk cache + swap semantics headlessly so a two-disk game
-    // (e.g. YS II's "INSERT DATADISK" prompt) can be driven deterministically
-    // without the SDL3 window / F11.
+    // (e.g. a multi-disk RPG title's "INSERT DATADISK" prompt) can be driven
+    // deterministically without the SDL3 window / F11.
     std::optional<std::uint32_t> swap_disk_frame;
     // M36-S-d: FM-PAC peripheral cartridge battery-SRAM .sram persistence.
     // When set, the machine loads this .sram on FM-PAC insertion (absent file
@@ -825,7 +825,7 @@ struct DebugSessionOptions {
     // M39-A: isolate the PSG in the --audio-dump (drop SCC/FM/FM-PAC/click), so
     // the BEFORE(batch)/AFTER(sync) A/B differs ONLY in the PSG production
     // method -- cleanly exposing the software-PCM voice without the SCC music
-    // (which Aleste 2 plays loudly) masking it.
+    // (which a scrolling-shooter title plays loudly) masking it.
     bool audio_psg_only = false;
     // DEC-0072 replay-fidelity diagnostic (M47-followup, this run). The default
     // --input-script replay applies key edges AFTER the frame's first instruction
@@ -849,7 +849,8 @@ struct DebugSessionOptions {
     std::optional<std::string> watch_save_name;
     // DEC-0072 physical-DRAM memory-write WATCHPOINT (M47 kill-step). --watch-mem
     // <LO> <HI> <out.csv> traps every CPU write whose folded PHYSICAL DRAM address
-    // is in [LO, HI) (both hex, e.g. E000 E200 -- the YS II save-build buffer) and
+    // is in [LO, HI) (both hex, e.g. E000 E200 -- a multi-disk RPG title's
+    // save-build buffer) and
     // logs the writing instruction's PC + live A/BC/DE/HL/IX/IY/SP + cycle to the
     // CSV. --watch-from/--watch-to bound the logged FRAME window (default: whole
     // run). Opt-in, off by default; byte-identical when absent.

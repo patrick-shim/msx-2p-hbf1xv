@@ -24,8 +24,7 @@ namespace sony_msx::devices::cartridge {
 // `Ascii8kB` MVP mapper type (M19-S2), grounds
 // references/openmsx-21.0/src/memory/RomAscii8kB.cc (header comment lines
 // 1-10 + code lines 18-52; behaviour reference only, never copied -- GPL
-// isolation). Used by many Japanese-only cartridges (Valis, Dragon Slayer,
-// Outrun, ...).
+// isolation). Used by many Japanese-only cartridge titles.
 //
 // Load-time validation (A-M19-7): image size must be a positive multiple of
 // 0x2000 (8 KB).

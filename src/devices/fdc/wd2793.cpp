@@ -324,8 +324,8 @@ void Wd2793::write_data(const std::uint8_t value) {
     // data_index_/data_available_ NOT advanced) any byte that did not land
     // exactly inside the DRQ window -- an early / 2-bytes-per-DRQ-burst /
     // fixed-cadence-ahead-of-our-rotational-first-DRQ write. A dropped byte
-    // shifts every later byte of the fully-committed sector -> the sporadic YS
-    // II save corruption (DEC-0072: 3 coherent-shifted side-1 sectors). The real
+    // shifts every later byte of the fully-committed sector -> the sporadic
+    // multi-disk-RPG save corruption (DEC-0072: 3 coherent-shifted side-1 sectors). The real
     // WD2793 NEVER drops: it lays down EXACTLY 512 in-order bytes, substituting
     // 0x00 + LOST_DATA only for a genuinely UN-SERVICED slot while the position
     // ALWAYS advances (fact-sheet "FDC for Sony HB-F1XV.md" §8; openMSX
@@ -581,7 +581,7 @@ void Wd2793::begin_write_sector(const std::uint64_t t) {
     // command is BUSY, so finish_write_sector commits to THESE latched
     // coordinates -- NOT the live drive->physical_track()/side(), which a
     // mid-transfer glue-register write (Sony 0x7FFC side latch / a seek) could
-    // have changed and thereby redirected the committed sector (all 3 YS II
+    // have changed and thereby redirected the committed sector (all 3 observed
     // corrupt sectors were side 1). Mirrors the read path capturing at START
     // (begin_read_sector reads the drive position before the DRQ stream).
     write_track_num_ = drive_->physical_track();
@@ -601,7 +601,8 @@ void Wd2793::begin_write_sector(const std::uint64_t t) {
     // type2Search/getNextSector's post-search time), NOT a fixed offset from
     // command issue. The M45 fix wrongly used the fixed 2-byte read_start_cycles()
     // here (zero rotational latency), so DRQ + the CHECK_WRITE window fired ~1140
-    // cycles after the command -- ABORTING a valid game (e.g. YS II) whose in-game
+    // cycles after the command -- ABORTING a valid game (e.g. a multi-disk RPG
+    // title) whose in-game
     // save does buffer setup before writing byte 1. sector_reg_ is validated 1..9
     // by the caller (start_type2 / finish_write_sector multi), so sector_reg_ - 1
     // is a valid 0-based sector index (mirrors begin_read_sector). Fast-disk

@@ -51,7 +51,8 @@ public:
 // on_sector_write once the full sector is flushed to the (LATCHED) CHS. Same
 // hard contract as FdcSectorReadObserver: an implementation MUST NOT mutate
 // FDC/drive/timing state, issue reads, or advance any clock -- it only inspects
-// the supplied values (e.g. to log a per-byte trace so a live YS II save can be
+// the supplied values (e.g. to log a per-byte trace so a live in-game disk save
+// can be
 // byte-diffed against the raw .dsk). A pure diagnostic sink, isolated from
 // emulation.
 class FdcSectorWriteObserver {
@@ -140,7 +141,8 @@ public:
     // latches the first byte only while DRQ is up, WD2793.cc:235-247). Our model
     // can present a small (unlucky sector angle) or --fast-disk-collapsed
     // rotational wait while the CPU still runs real-time, so an 8-byte tail would
-    // wrongly abort a valid slow-first-byte write (the DEF-M45 YS II in-game-save
+    // wrongly abort a valid slow-first-byte write (the DEF-M45 multi-disk-RPG
+    // in-game-save
     // hang). We therefore allow a FULL further disk revolution after the DRQ --
     // the natural disk timescale, far beyond any real save-buffer setup, so a
     // valid write is NEVER aborted while a genuinely-absent first byte still

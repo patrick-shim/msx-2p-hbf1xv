@@ -483,7 +483,7 @@ public:
     // --- DEC-0052 live STREAM-CAPTURE (crash-trajectory diagnostic; additive,
     //     default-off). Extends the M36 Phase-3 snapshot + the M10/M27
     //     CPU-trace facility to record the trajectory INTO a control-flow crash
-    //     (the M36 Bug B YS-II building-entry HALT). Armed at a chosen moment
+    //     (the M36 Bug B multi-disk-RPG building-entry HALT). Armed at a chosen moment
     //     (F10 in the SDL frontend, or set_stream_capture_enabled() at the
     //     machine level); while armed it
     //       (1) writes a full per-component snapshot bundle at EVERY frame
@@ -507,18 +507,18 @@ public:
     //     (ZEXALL withheld). ---
     //
     //     DEC-0052 enhancement (M36 Bug B): the finalize trigger ALSO fires on a
-    //     STACK RUNAWAY, not only on HALT. The YS-II building-entry crash is not
-    //     a clean Z80 HALT -- PC derails into a data region, garbage CALLs push
-    //     the stack down ~2 KB/frame until it collapses into an RST-38 loop
+    //     STACK RUNAWAY, not only on HALT. The multi-disk-RPG building-entry crash
+    //     is not a clean Z80 HALT -- PC derails into a data region, garbage CALLs
+    //     push the stack down ~2 KB/frame until it collapses into an RST-38 loop
     //     (PC=0x0038, HALT=0), which the HALT-only trigger never caught. When
     //     the stack pointer underflows kStreamStackFloor (an address normal
-    //     execution never reaches -- the YS-II stack lives ~0xDAxx), the
+    //     execution never reaches -- that title's stack lives ~0xDAxx), the
     //     capture finalizes itself into a distinct CRASH_ bundle (see
     //     finalize_stream_capture). ---
     static constexpr std::size_t kStreamTraceRingCapacity = 1u << 20;  // 1,048,576 records
 
     // DEC-0052 stack-runaway finalize floor. SP < this is an unambiguous
-    // runaway: the YS-II stack lives ~0xDAxx and normal MSX execution never
+    // runaway: the observed game stack lives ~0xDAxx and normal MSX execution never
     // runs the stack below 0x4000, whereas the RST-38 crash loop drives SP
     // down hard right after the derail. Firing here still keeps the derail
     // inside the 1M-record ring (~2.8 s ~= ~170 frames): at the observed
@@ -527,8 +527,8 @@ public:
     static constexpr std::uint16_t kStreamStackFloor = 0x4000;
 
     // --- DEC-0052 "stream-light" mode (M36 Bug B long-session upstream hunt). A
-    //     lightweight streaming variant for a long armed session (YS-II game
-    //     start -> walking to a building -> entering it) that the heavy
+    //     lightweight streaming variant for a long armed session (a multi-disk
+    //     RPG title's game start -> walking to a building -> entering it) that the heavy
     //     per-frame snapshot bundle would bog down. When light mode is armed:
     //       (a) the per-vsync full-snapshot bundle is suppressed, replaced by a
     //           coarse anchor snapshot every kStreamLightSnapshotInterval
@@ -613,8 +613,8 @@ private:
     // DEF-M47-DISKWRITE: append deterministic per-byte + per-sector Write Sector
     // trace lines to <debug_root>/traces/stream_<id>_fdcwrite.log while streaming
     // (via the FdcWriteStreamObserver installed on fdc_). Non-perturbing: only
-    // inspects the committed bytes + writes a host file. Lets a live YS II save be
-    // byte-diffed against the raw .dsk / a pristine reference.
+    // inspects the committed bytes + writes a host file. Lets a live in-game disk
+    // save be byte-diffed against the raw .dsk / a pristine reference.
     void log_stream_fdc_write_byte(std::uint8_t command, std::uint8_t track, std::uint8_t side,
                                    std::uint8_t sector, std::uint32_t lba, int data_index,
                                    std::uint8_t value, bool substituted, std::uint64_t drq_deadline);

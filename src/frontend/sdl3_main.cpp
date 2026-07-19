@@ -86,7 +86,7 @@ GETTING STARTED  (copy a line, then change the paths to your files)
 
   A game that saves TO SRAM -- the FM-PAC auto-loads into slot 2 by default, so
   a slot-1 game and the FM-PAC coexist (its save auto-persists):
-    sony_msx_sdl3 --disk games/disks/ys2/ys2-d1.dsk
+    sony_msx_sdl3 --disk games/disks/rpg-d1.dsk
 
   Bigger + sharper window (RAM is already 512 KB by default):
     sony_msx_sdl3 --slot1 games/roms/game.rom --scale 4 --filter nearest

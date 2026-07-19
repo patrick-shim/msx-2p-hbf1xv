@@ -24,8 +24,8 @@ namespace sony_msx::devices::cartridge {
 // `Konami` MVP mapper type, NO SCC (M19-S2), grounds
 // references/openmsx-21.0/src/memory/RomKonami.cc (behaviour reference only,
 // never copied -- GPL isolation). The single most common real-world MSX
-// MegaROM scheme (Nemesis, Penguin Adventure, Metal Gear, The Maze of
-// Galious, ...). The SCC-chip-bearing sibling is CartridgeKonamiScc
+// MegaROM scheme, used by many classic Konami cartridge titles (including
+// a stealth-action cartridge title). The SCC-chip-bearing sibling is CartridgeKonamiScc
 // (cartridge_konami_scc_rom.h, added M29, backlog G1).
 //
 // Construction: set_block_mask(31) -- "Konami mapper is 256kB in size, even

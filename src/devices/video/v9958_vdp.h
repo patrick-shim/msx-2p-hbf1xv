@@ -186,8 +186,8 @@ public:
 
     // DEC-0072 diagnostic knob (M47-followup, NOT committed): add a signed
     // T-state bias to the CE busy-window duration computed in
-    // arm_command_busy_window(). Lets a diagnostic sweep probe whether the YS II
-    // save-build corruption is causally gated by the command-engine CE/finish
+    // arm_command_busy_window(). Lets a diagnostic sweep probe whether a multi-disk
+    // RPG title's save-build corruption is causally gated by the command-engine CE/finish
     // timing (the named #1 suspect vs openMSX calcFinishTime). Default 0 =
     // byte-for-byte unchanged.
     void set_cmd_busy_bias(std::int64_t bias_tstates) { cmd_busy_bias_tstates_ = bias_tstates; }
@@ -230,7 +230,8 @@ public:
     // background rows PAST the render-only sprite watermark while the per-line
     // buffers above it were still empty from commit_sprite_split's lazy-open
     // begin_frame() clear, sealing those rows sprite-less for the whole frame
-    // (the Aleste 2 / Firebird / Laydock 2 sprite-disappearance defect; trace
+    // (the scrolling-shooter / sprite-scroll / split-screen regression titles'
+    // sprite-disappearance defect; trace
     // evidence docs/m51-implementation-report.md). openMSX makes the CONSUMER
     // responsible for pacing the checker before reading it: every renderUntil()
     // calls spriteChecker.checkUntil(time) BEFORE rasterizing, regardless of

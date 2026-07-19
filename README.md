@@ -269,18 +269,18 @@ resolved relative to the current directory).
 
 ```powershell
 build\Debug\sony_msx_sdl3.exe                                       # plain BIOS boot to BASIC
-build\Debug\sony_msx_sdl3.exe --slot1 "games\roms\Aleste 2\aleste2.rom"   # cartridge in slot 1 (FM-PAC auto-loads into slot 2)
+build\Debug\sony_msx_sdl3.exe --slot1 "games\roms\<title>\game.rom"      # cartridge in slot 1 (FM-PAC auto-loads into slot 2)
 build\Debug\sony_msx_sdl3.exe --disk disks\msxdos23.dsk             # MSX-DOS boot floppy
-build\Debug\sony_msx_sdl3.exe --disk games\disks\ys2\ys2-d1.dsk --disk games\disks\ys2\ys2-d2.dsk --disk-writable   # multi-disk game (F11 swaps; saves persist)
+build\Debug\sony_msx_sdl3.exe --disk "games\disks\<title>\game-d1.dsk" --disk "games\disks\<title>\game-d2.dsk" --disk-writable   # multi-disk game (F11 swaps; saves persist)
 ```
 
 The same lines on **macOS** — the binary sits in `build/` with no `.exe`, and paths use `/`:
 
 ```bash
 ./build/sony_msx_sdl3                                          # plain BIOS boot to BASIC
-./build/sony_msx_sdl3 --slot1 "games/roms/Aleste 2/aleste2.rom" # cartridge in slot 1
+./build/sony_msx_sdl3 --slot1 "games/roms/<title>/game.rom"    # cartridge in slot 1
 ./build/sony_msx_sdl3 --disk disks/msxdos23.dsk                 # MSX-DOS boot floppy
-./build/sony_msx_sdl3 --disk games/disks/ys2/ys2-d1.dsk --disk games/disks/ys2/ys2-d2.dsk --disk-writable
+./build/sony_msx_sdl3 --disk "games/disks/<title>/game-d1.dsk" --disk "games/disks/<title>/game-d2.dsk" --disk-writable
 ```
 
 (The game library is organized one folder per title, and several titles contain spaces — quote
@@ -449,17 +449,17 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 - Also in this release: the host disk utility was renamed `msx-disk` → **`msx-diskutil`**
   (source now under `src/utils/`).
 
-### v1.5.0 — Raspberry Pi / Linux support, small-display polish, F-1 Spirit fix
+### v1.5.0 — Raspberry Pi / Linux support, small-display polish, racing-title flicker fix
 - **Raspberry Pi & Linux are now first-class build targets** (GCC, including aarch64) alongside
   Windows (MSVC, incl. ARM64) and macOS (AppleClang) — one codebase, one `CMakeLists.txt`, one
   `build/` tree, toolchain auto-detected, and the source audits clean for case-sensitivity and
   ARM signedness. A published one-command bootstrap now lives in [`setup/`](setup/) —
   `setup/build.ps1` (Windows) and `setup/build.sh` (macOS / Linux / Raspberry Pi) — so a fresh
   clone builds out of the box.
-- **F-1 Spirit 3D Special flicker fixed** — the command-row sink no longer seals rows *ahead*
+- **Racing-title flicker fixed** — the command-row sink no longer seals rows *ahead*
   of the render beam with frame-start scroll registers and a not-yet-written sprite table, so
-  the racing view is stable (a permanent regression oracle guards it, and *Aleste 2* /
-  *Firebird* / *Laydock 2* stay flicker-free). Classified as an emulator defect — not authentic
+  the racing view is stable (a permanent regression oracle guards it, and the scrolling-shooter /
+  sprite-scroll / split-screen regression titles stay flicker-free). Classified as an emulator defect — not authentic
   sprite multiplex — by a decisive openMSX A/B.
 - **Raspberry Pi / small-display polish** — the interactive window now fits itself to the usable
   screen bounds at launch (so it never opens larger than, e.g., a 7" 800×480 panel) and re-clamps
@@ -478,9 +478,9 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 - Previously, an unselected-drive probe consumed the notification, so after a mid-game disk
   swap MSX-DOS could keep the previous disk's FAT and read every file on the new disk through
   stale filesystem state — whole-screen garbage in multi-disk titles that load after a swap.
-- Root-caused and verified with *Sangokushi 2 (Romance of the Three Kingdoms 2)*, which now
+- Root-caused and verified with a multi-disk strategy title, which now
   renders correctly; a permanent regression oracle guards it. Swap-then-save flows
-  (e.g. YS II's save disk) are now protocol-correct.
+  (e.g. a multi-disk RPG title's save disk) are now protocol-correct.
 - Also in this release: third-party build inputs vendored under `src/external/`
   (ImGui / SDL3 / ZEXALL, licenses in-tree), so a fresh clone builds out of the box.
 
@@ -519,7 +519,7 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 ### v1.2.1 — V9958 sprite-visibility fix
 - Rows redrawn by the VDP command engine (blits) are now sprite-paced before being sealed into
   the frame, so sprites no longer vanish or flicker in games that rebuild scrolling terrain
-  with command blits (*Aleste 2*, *Firebird*, *Laydock 2*) — a v1.1.6 regression, root-caused
+  with command blits (the scrolling-shooter / sprite-scroll / split-screen regression titles) — a v1.1.6 regression, root-caused
   by bisect and verified frame-for-frame against openMSX at a zero-flicker match.
 
 ### v1.2.0 — external configuration
@@ -530,8 +530,7 @@ behavior-affecting changes, screen/trace A/B comparison against openMSX.
 ### The v1.1.x line
 - **v1.1.8** — MSX-logo Windows app icon.
 - **v1.1.7** — optional phosphor-persistence flicker softener (`--persistence`, Alt+B / Alt+M).
-- **v1.1.6** — per-line-live V9958 sprite rendering (split-screen HUD titles like
-  *Space Manbow* / *Laydock 2*).
+- **v1.1.6** — per-line-live V9958 sprite rendering (split-screen HUD titles).
 - **v1.1.5** — the V9958 command-engine access-slot contention model.
 - **v1.1.4** — Z80A / V9958 / PSG timing parity with the real Sony hardware
   (interrupt-acknowledge timings, command-engine durations, PSG counter phase).

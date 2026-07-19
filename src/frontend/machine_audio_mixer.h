@@ -141,7 +141,7 @@ public:
     // m32-planner-package.md §2.8): the honestly-derived FM presentation
     // scale, replacing M31's k=5 (which left the fully-functional YM2413
     // ~29 dB under the PSG -- coordinator-measured from the committed
-    // debug/sounds/m31-fm-aleste-fmON/fmOFF.wav pair: FM peak 900 on the
+    // M31 fmON/fmOFF WAV capture pair under debug/sounds/: FM peak 900 on the
     // +-32,767 scale vs PSG effects at 24,800).
     //
     // Reference ratio: openMSX's own machine definition balances this
@@ -200,7 +200,8 @@ public:
     // M39-A (digitized-voice fix): the MSX 1-bit key-click DAC on PPI port-C
     // bit 7 -- a FIFTH additive source, the ONLY sub-frame audio path on a bare
     // HB-F1XV (games bit-bang bit 7 as PWM/PDM to synthesize sampled speech;
-    // Aleste 2 "(c)1989 COMPILE" voice, Laydock speech). See ClickDac for the
+    // a scrolling-shooter title's copyright voice line, a split-screen title's
+    // speech). See ClickDac for the
     // openMSX KeyClick->DACSound grounding + the AC-coupled box reconstruction.
     //
     // AMPLITUDE (same PER-CHANNEL-loudness method as kFmAmplitudeScale). The

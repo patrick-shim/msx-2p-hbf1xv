@@ -124,7 +124,7 @@ public:
     // accessor the FDC register read at 0x7FFD uses (mirrors the mutating
     // readMem path PhilipsFDC.cc:37, vs. the const peekMem :90). Without it a
     // swapped medium keeps DSKCHG asserted forever, so a game that re-checks the
-    // disk after a swap (e.g. YS II's building-interior loader) sees a
+    // disk after a swap (e.g. a multi-disk RPG title's building-interior loader) sees a
     // perpetually-"changed" medium, retries/aborts (Force Interrupt) and drops
     // into DI;HALT -- the universal media-change freeze (M36 Bug B).
     [[nodiscard]] bool take_disk_changed() {
@@ -154,7 +154,7 @@ public:
     // being committed. The FDC captures (physical_track_, side_) at
     // begin_write_sector and finishes through THIS path, so a live side/track
     // change during the DRQ stream cannot land the sector on the wrong CHS (all
-    // 3 YS II corrupt sectors were side 1). `side` is masked to bit 0 exactly as
+    // 3 observed corrupt sectors were side 1). `side` is masked to bit 0 exactly as
     // set_side() does, so the two paths address identically.
     bool write_sector_at(std::uint8_t track, std::uint8_t side, std::uint8_t sector,
                          const std::uint8_t* in);

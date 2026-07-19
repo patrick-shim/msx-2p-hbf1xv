@@ -46,7 +46,8 @@ public:
 // Fires on every write to a selected register (the #A1 data path). PURELY
 // PASSIVE: it inspects (reg, value) only and must never mutate PSG state, so
 // determinism is preserved. Used to measure the R8/R9/R10 (channel-volume)
-// software-PCM write RATE at the Aleste-2/Laydock voice window, to distinguish
+// software-PCM write RATE at the scroll-shooter / split-screen titles' voice
+// window, to distinguish
 // the 1-bit-DAC voice hypothesis (Fix A) from a PSG software-PCM one (Fix B).
 // Nullable + default-unattached -> zero behaviour change.
 class PsgWriteObserver {
@@ -103,7 +104,8 @@ public:
 
     // ------------------------------------------------------------------
     // M39-A Fix B: sync-before-change seam (the digitized-voice fix). The
-    // CONFIRMED voice mechanism (Aleste 2 "(c)1989 COMPILE" voice, Laydock
+    // CONFIRMED voice mechanism (a scrolling-shooter title's copyright voice
+    // line, a split-screen title's
     // speech) is PSG SOFTWARE-PCM: the game hammers a channel-volume register
     // (R8/R9/R10) hundreds of times per frame (~312/frame measured) so the
     // volume sequence IS the PCM waveform. The M34 box-average is produced ONCE

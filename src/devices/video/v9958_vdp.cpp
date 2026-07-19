@@ -598,13 +598,13 @@ void V9958Vdp::change_register(const std::uint8_t reg, const std::uint8_t value)
         recompute_mode();
         break;
     case 1:  // M1..M2 + IE0 (R#1 bit5, VBlank-int enable)
-        // M36 Bug B (the YS II building-interior crash): an R#1 write that
+        // M36 Bug B (a multi-disk RPG title's building-interior crash): an R#1 write that
         // TOGGLES IE0 re-evaluates the vertical /INT on the write itself -- the
         // path the pre-fix code missed (it only called recompute_mode(), so a
         // held /INT survived an IE0-clear until the next S#0 read, letting the
         // ISR's later EI re-fire forever -> nested-VBLANK stack overflow).
         // openMSX VDP.cc:1186-1198: IE0 set -> re-assert ONLY if F is already
-        // pending (the documented Andonis/Zanac case, VDP.cc:1189-1194); IE0
+        // pending (the case openMSX documents at VDP.cc:1189-1194); IE0
         // clear -> de-assert immediately (VDP.cc:1196, irqVertical.reset()).
         if (change & 0x20) {
             if (value & 0x20) {
@@ -807,7 +807,7 @@ void V9958Vdp::commit_sprite_rows(const int target) {
     // 1-frame-stale fallback), so pacing is neither needed nor wanted (opening
     // here would CLEAR lines the beam already passed). check_until_visible_only
     // clamps to the frame height internally, so a wrap-space destination row
-    // (e.g. Aleste 2's dy inverse mapping to display line 231 > 212) simply
+    // (e.g. a scrolling-shooter title's dy inverse mapping to display line 231 > 212) simply
     // paces the remaining visible rows. RENDER-ONLY: frame-atomic
     // collision/5th-sprite/S#0 stay untouched (DEC-0031).
     if (!sprite_split_active_) {

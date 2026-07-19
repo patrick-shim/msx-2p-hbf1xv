@@ -68,7 +68,7 @@ core::BusData SonyFdc::mem_read(const core::BusAddress address) {
             // the one-shot on the unselected first read and reported "unchanged"
             // to DOS after a disk swap, so DOS kept the previous disk's FAT/DPB
             // and every post-swap file load resolved through a stale FAT (the
-            // M58 Sangokushi 2 scrambled China map). drive_.available() is true
+            // M58 multi-disk-strategy-title scrambled map screen). drive_.available() is true
             // exactly when a PRESENT physical drive (A) is selected
             // (write_drive_register below).
             std::uint8_t res = static_cast<std::uint8_t>(drive_reg_ | 0x04);

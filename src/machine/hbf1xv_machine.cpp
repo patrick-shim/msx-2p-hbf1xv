@@ -84,8 +84,9 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // lines [watermark, L+2) keep the pre-write state, the change applies from
     // L+2.
     //
-    // CALIBRATION (openMSX 19.1 Sony_HB-F1XV, Aleste 2 gameplay, raw captures
-    // debug/m39-hud/omsx_hud_*.png -- 4 stable frames): Aleste holds a fixed
+    // CALIBRATION (openMSX 19.1 Sony_HB-F1XV, a scrolling-shooter title's
+    // gameplay, raw captures debug/m39-hud/omsx_hud_*.png -- 4 stable frames):
+    // the title holds a fixed
     // top HUD over a vertically-scrolling playfield via cycle-timed R#1 (BL) +
     // R#23 (vertical scroll) writes with NO line interrupt. The BL-off write is
     // issued at raster_display_line()==13; openMSX blanks from display line 15
@@ -95,7 +96,7 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_before_state_change() {
     // "letters chopped at the bottom"). L+2 lands the split exactly on openMSX's
     // scanline for ALL three per-frame writes (measured in-line tstates 44/98/
     // 169 -> uniform +1-line delta). This is a register/raster-level rule, not
-    // an Aleste special-case: it shifts EVERY cycle-timed mid-frame VDP write
+    // a title-specific special-case: it shifts EVERY cycle-timed mid-frame VDP write
     // (R#23 splits, R#1 BL bands, R#7/palette raster bars) by the same margin,
     // for every game. raster_display_line() itself is UNCHANGED (line-interrupt
     // matching + S#2 VR/HR still use the raw raster, mirroring openMSX where the
@@ -155,10 +156,11 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // the M51 sibling defect. This sink previously committed [watermark,
     // display_line) even when the destination rows lay far AHEAD of the render
     // beam, sealing every swept row with the COMMIT-TIME state: the frame-start
-    // R#26/R#27 horizontal-scroll pair + R#25/R#23 (F-1 Spirit's straight-road
+    // R#26/R#27 horizontal-scroll pair + R#25/R#23 (a racing title's straight-road
     // full-scene flash, docs/m62-investigation-report.md -- a dashboard blit
     // landing at raster ~2 sealed ~145 rows once per ~13-frame beat) and the
-    // instantaneous sprite buffers via the M51 pacing (F1's vanishing car: the
+    // instantaneous sprite buffers via the M51 pacing (the racing title's
+    // vanishing car: the
     // SAT written later in the frame was never seen by the sealed rows).
     //
     // On real hardware a command writing VRAM rows ahead of the beam has NO
@@ -214,7 +216,8 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // [acc_wm, target) with the SPRITE watermark at this instant, plus
     // the per-line visible-sprite counts the imminent sync_to_line() will
     // composite from, over the designated player band
-    // (SONY_MSX_M51_TRACE_BAND="lo:hi", default 148:176 -- the Aleste 2 plane
+    // (SONY_MSX_M51_TRACE_BAND="lo:hi", default 148:176 -- the scrolling-shooter
+    // title's plane
     // rows; the counts here ARE the composite-time values because
     // sync_to_line() renders synchronously right after this hook).
     if (devices::video::m51_sprite_trace_enabled()) {
@@ -242,7 +245,8 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // M51 (DEC-0078) fix, branch (a) shape (i): pace the render-only sprite
     // pass to the SAME exclusive boundary BEFORE the background commits, so no
     // committed row composites from a per-line buffer that is empty purely
-    // because of the lazy-open clear (the Aleste 2 / Firebird / Laydock 2
+    // because of the lazy-open clear (the scrolling-shooter / sprite-scroll /
+    // split-screen regression titles'
     // sprite-disappearance mechanism -- Task 2 trace: "CMDCOMMIT range=[69,231)
     // sprite_wm=69" sealing plane rows 148-175 with visible=0). This is the
     // consumer-side sync contract openMSX documents and implements
@@ -250,7 +254,7 @@ void Hbf1xvMachine::VdpRenderSyncAdapter::on_commit_up_to(const int display_line
     // the M49 seam already applies on the beam path (commit_sprite_split at
     // on_before_state_change); the command sink honors it too, at the SAME
     // M62 beam-clamped boundary (never pacing the sprite pass ahead of the
-    // beam either -- the SAT half of the F1 defect).
+    // beam either -- the SAT half of the racing-title defect).
     // Advance-only-when-active: see V9958Vdp::commit_sprite_rows.
     machine_.vdp_.commit_sprite_rows(target);
     machine_.scanline_accumulator_.sync_to_line(target);
@@ -886,10 +890,10 @@ std::uint32_t Hbf1xvMachine::step_cpu_instruction() {
     // double-writes):
     //   (a) the HALT transition (a clean Z80 HALT crash), and
     //   (b) a STACK RUNAWAY -- SP underflowing kStreamStackFloor. The M36 Bug
-    //       B YS-II building-entry crash is NOT a HALT: PC derails into data,
-    //       garbage CALLs push the stack down ~2 KB/frame until it collapses
+    //       B multi-disk-RPG building-entry crash is NOT a HALT: PC derails into
+    //       data, garbage CALLs push the stack down ~2 KB/frame until it collapses
     //       into an RST-38 loop (PC=0x0038, HALT=0). SP<0x4000 is unreachable
-    //       in normal execution (the YS-II stack lives ~0xDAxx), so it is an
+    //       in normal execution (that title's stack lives ~0xDAxx), so it is an
     //       unambiguous runaway; firing here still keeps the derail inside
     //       the 1M-record ring (~2.8 s ~= ~170 frames -- see
     //       kStreamStackFloor). Read SP through the existing const accessor

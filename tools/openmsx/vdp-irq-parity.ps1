@@ -27,7 +27,7 @@ param(
 # WHAT IT PROVES
 #   The M36 Bug B fix made V9958Vdp::change_register RE-EVALUATE the vertical
 #   /INT line on an R#1 write that TOGGLES IE0 (bit5) -- so clearing IE0
-#   immediately de-asserts a held VBlank /INT (the YS II interior-load
+#   immediately de-asserts a held VBlank /INT (a multi-disk RPG title's interior-load
 #   interrupt-storm cause) and re-setting IE0 re-asserts it while the F flag is
 #   still pending. This harness reproduces the SAME behavior on REAL openMSX
 #   running the GENUINE Sony_HB-F1XV machine (real V9958), grounding the fix in
@@ -203,7 +203,7 @@ else { [void]$sb.AppendLine("BLOCKED: openMSX produced no OMIRQ line (see $RawOu
 [void]$sb.AppendLine("| Reading | openMSX | Meaning | Grounds |")
 [void]$sb.AppendLine("| --- | --- | --- | --- |")
 [void]$sb.AppendLine("| ``IV_baseline`` | $ivb | IE0 off, F pending -> /INT NOT asserted | latch F without IE0 (VDP.cc:404 gate) |")
-[void]$sb.AppendLine("| ``IV_ie0set_Fpending`` | $iv1 | IE0 set with F pending -> re-assert | VDP.cc:1189-1194 (Andonis/Zanac) |")
+[void]$sb.AppendLine("| ``IV_ie0set_Fpending`` | $iv1 | IE0 set with F pending -> re-assert | VDP.cc:1189-1194 (the documented re-assert case) |")
 [void]$sb.AppendLine("| ``IV_ie0clear`` | $iv2 | IE0 clear -> de-assert immediately | VDP.cc:1196 ``irqVertical.reset()`` |")
 [void]$sb.AppendLine("| ``IV_ie0set2`` | $iv3 | IE0 set again, F still pending -> re-assert | VDP.cc:1189-1194 |")
 [void]$sb.AppendLine("")
@@ -215,7 +215,7 @@ else { [void]$sb.AppendLine("BLOCKED: openMSX produced no OMIRQ line (see $RawOu
 [void]$sb.AppendLine("``IV_ie0set*=1`` re-assert-while-F-pending edges), which is the same sequence exercised")
 [void]$sb.AppendLine("by ``devices_v9958_ie0_register_write_irq_unit_test``. Before the fix our /INT stayed")
 [void]$sb.AppendLine("asserted after the ISR cleared IE0, so the ISR's trailing ``EI`` re-entered forever")
-[void]$sb.AppendLine("(the YS II interior-load interrupt storm / stack overflow).")
+[void]$sb.AppendLine("(a multi-disk RPG title's interior-load interrupt storm / stack overflow).")
 if ($exit -ne 0) {
     [void]$sb.AppendLine("")
     if ($exit -eq 2) {

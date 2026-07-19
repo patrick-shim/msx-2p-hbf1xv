@@ -201,15 +201,15 @@ void SpriteEngine::process_segment(const int lo, const int hi, const bool collec
     // Table base formulas (VDP.hh:262-268, A-M22-16).
     const std::uint32_t attrib_base = (static_cast<std::uint32_t>(regs[11]) << 15) |
                                        (static_cast<std::uint32_t>(regs[5]) << 7);
-    // Sprite mode 2 attribute-table addressing (the Metal Gear sprite-
-    // invisibility fix): the effective address of a mode-2 table read is
+    // Sprite mode 2 attribute-table addressing (a stealth-action cartridge
+    // title's sprite-invisibility fix): the effective address of a mode-2 table read is
     //   baseMask & (indexMask | index)
     // with baseMask = (R#11<<15) | (R#5<<7) | 0x7F and indexMask = ~0x3FF
     // (VDP.cc:1357-1371 updateSpriteAttributeBase; VDPVRAM.hh:263-279
     // readNP/getReadArea apply `effectiveBaseMask & index` with unused index
     // bits set to one). R#5's low 3 bits are therefore AND-mask bits in mode
     // 2, not base-address bits: with the universal software convention of
-    // setting them to 1 (BIOS SCREEN5 R#5=0xEF, Metal Gear R#5=0xE7), the
+    // setting them to 1 (BIOS SCREEN5 R#5=0xEF, the stealth-action title's R#5=0xE7), the
     // table is a 1KB-aligned region -- per-line colors at offsets 0-511, the
     // Y/X/pattern sub-table at offsets 512-1023. Treating R#5's full value as
     // a plain base (the pre-fix code) landed every mode-2 Y/X/pattern read

@@ -19,7 +19,7 @@ games/
         └── <title>.rom
 ```
 
-Folder names may contain spaces (e.g. `Metal Gear 2/`) — **always quote paths** in the shell.
+Folder names may contain spaces — **always quote paths** in the shell.
 
 ## Supported file types
 
@@ -33,13 +33,13 @@ Folder names may contain spaces (e.g. `Metal Gear 2/`) — **always quote paths*
 
 ```powershell
 # Cartridge (slot 1; the FM-PAC auto-loads into slot 2 for SRAM saves):
-build\Debug\sony_msx_sdl3.exe --slot1 "games\roms\Metal Gear\metal_gear.rom"
+build\Debug\sony_msx_sdl3.exe --slot1 "games\roms\<title>\game.rom"
 
 # Single-disk game:
-build\Debug\sony_msx_sdl3.exe --disk "games\disks\undeadline\undeadline.dsk"
+build\Debug\sony_msx_sdl3.exe --disk "games\disks\<title>\game.dsk"
 
 # Multi-disk set (F11 cycles through the list at runtime):
-build\Debug\sony_msx_sdl3.exe --disk "games\disks\ys2\ys2-d1.dsk" --disk "games\disks\ys2\ys2-d2.dsk" --disk "games\disks\ys2\ys2-save.dsk"
+build\Debug\sony_msx_sdl3.exe --disk "games\disks\<title>\game-d1.dsk" --disk "games\disks\<title>\game-d2.dsk" --disk "games\disks\<title>\game-save.dsk"
 ```
 
 Or at runtime via the in-window menu: **File ▸ Open Cartridge…** / **File ▸ Open Disk(s)…**

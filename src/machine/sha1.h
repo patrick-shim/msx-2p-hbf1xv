@@ -31,7 +31,7 @@ namespace sony_msx::machine {
 // opening `references/fmsx-60/source/EMULib/SHA1.c` (or any other emulator's
 // SHA-1); the algorithm is a public NIST standard and this is an independent
 // from-spec implementation, exactly like the from-spec SHA-256 precedent in
-// tests/integration/machine/hbf1xv_m19_aleste_smoke_integration_test.cpp.
+// the M19 scroll-shooter smoke integration test under tests/integration/machine/.
 //
 // Placement note (planner §2.1): src/machine/ -- the cartridge identifier
 // (cartridge_identifier.h) needs it in-process; src/core/ is under the M30

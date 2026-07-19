@@ -23,7 +23,8 @@ namespace sony_msx::devices::audio {
 // at a SUB-FRAME rate to synthesize sampled speech: a game bit-bangs port-C
 // bit 7 (0xFF <-> 0x80 on the analog output) hundreds/thousands of times per
 // frame in a PWM/PDM pattern whose local duty cycle IS the demodulated PCM
-// waveform (Aleste 2's "(c)1989 COMPILE" Japanese voice, Laydock speech). The
+// waveform (a scrolling-shooter title's Japanese copyright voice line, a
+// split-screen title's speech). The
 // PSG plays MUSIC (envelope/tone) during the voice, so by elimination the
 // voice IS this 1-bit DAC -- which had no mixer consumer before M39.
 //

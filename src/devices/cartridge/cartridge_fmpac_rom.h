@@ -29,7 +29,7 @@ namespace sony_msx::devices::cartridge {
 // (behaviour reference only, never copied -- GPL isolation). The FM-PAC adds
 // the 8 KB battery-backed SRAM that the HB-F1XV's *built-in* MSX-MUSIC (OPLL +
 // APRLOPLL BIOS, no SRAM) deliberately lacks: inserting this cartridge is what
-// lets an SRAM-save game (e.g. YS II) find "S-RAM AVAILABLE".
+// lets an SRAM-save game (e.g. a multi-disk RPG title) find "S-RAM AVAILABLE".
 //
 // The device is a PAGE-1 device: it occupies CPU 0x4000-0x7FFF of its slot and
 // presents OPEN BUS (0xFF) on pages 0/2/3 (matching a bare FM-PAC cart, which

@@ -50,8 +50,8 @@ public:
     // M34 (DEC-0043 Defect A, docs/m34-planner-package.md §2.3.6): the
     // returned sample is the chip's EXACT box average over the advanced
     // window (PsgYm2149::take_integrated_sample()), not the instantaneous
-    // point sample() -- point-sampling folded >Nyquist chip content (the
-    // Aleste-2 tone-period-0 ~112 kHz silence idiom) into a loud audible
+    // point sample() -- point-sampling folded >Nyquist chip content (a
+    // scroll-shooter title's tone-period-0 ~112 kHz silence idiom) into a loud audible
     // alias. The pump's advance-exactly-W-then-take shape satisfies the
     // take-API's documented precondition by construction; W == 0 (the M26
     // idle case) stays exactly silent via the chip's zero-window guard.

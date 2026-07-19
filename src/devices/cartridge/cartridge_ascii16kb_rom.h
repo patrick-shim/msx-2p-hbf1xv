@@ -24,7 +24,7 @@ namespace sony_msx::devices::cartridge {
 // `Ascii16kB` MVP mapper type (M19-S2), grounds
 // references/openmsx-21.0/src/memory/RomAscii16kB.cc (header comment + code
 // lines 16-45; behaviour reference only, never copied -- GPL isolation).
-// Used by e.g. Xevious, Fantasy Zone 2, Return of Ishitar.
+// Used by many 16 KB-bank cartridge titles.
 //
 // Composes the shared 8 KB-granularity CartridgeRomWindow via logical 16 KB
 // bank window-slot PAIRS, same convention as Generic16kB.

@@ -411,7 +411,7 @@ bool Sdl3App::init() {
 
     // M39-A: enable the two additive-voice seams for real-time playback --
     // (Fix B, CONFIRMED) the PSG sync-before-change path that makes software-PCM
-    // voice (Aleste 2, Laydock) audible, and (Fix A infra) the 1-bit key-click
+    // voice (a scrolling-shooter title, a split-screen title) audible, and (Fix A infra) the 1-bit key-click
     // DAC capture (keyclicks). Both are inert until driven; enabled here AFTER
     // cold_boot (which resets the sync cursor / click latch). The interleaved
     // audio production below (run_one_frame) drives the PSG sync.
@@ -1152,8 +1152,8 @@ void Sdl3App::on_stream_toggle_hotkey() {
         // Stamp the stream id from the current deterministic frame/cycle id so
         // an identical run toggling at the same frame yields identical stream
         // paths. DEC-0052 stream-light: arm the lightweight mode when
-        // --stream-light was given, so a long armed session (e.g. YS-II game
-        // start -> building entry) isn't bogged down by heavy per-frame I/O.
+        // --stream-light was given, so a long armed session (e.g. a multi-disk
+        // RPG title's game start -> building entry) isn't bogged down by heavy per-frame I/O.
         const std::string stream_id = machine_->snapshot_id();
         machine_->set_stream_capture_enabled(true, stream_id, config_.stream_light);
         std::cerr << "Stream capture ON: stream_" << stream_id

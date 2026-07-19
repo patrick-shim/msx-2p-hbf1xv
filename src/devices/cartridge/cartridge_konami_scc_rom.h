@@ -27,8 +27,8 @@ namespace sony_msx::devices::cartridge {
 // Grounds references/openmsx-21.0/src/memory/RomKonamiSCC.cc (behaviour
 // reference only, never copied -- GPL isolation) and references/fact-sheets/
 // "Konami SCC.md" §2 ("SCC fact-sheet"). Used by the real Konami SCC
-// MegaROM carts (Nemesis 2/3, King's Valley 2, Space Manbow, Solid Snake,
-// Quarth, ...). Owns a real SccWavetable member (the openMSX "RomKonamiSCC
+// MegaROM carts (the later SCC-equipped Konami titles, including an SCC
+// cartridge title and a split-screen HUD title). Owns a real SccWavetable member (the openMSX "RomKonamiSCC
 // owns a real `SCC scc;`" shape).
 //
 // Geometry (SCC fact-sheet §2): 8 kB banks; bank-select registers decode
