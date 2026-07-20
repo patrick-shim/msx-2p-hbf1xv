@@ -222,9 +222,9 @@ int main() {
         const bool no_dir_before = !std::filesystem::exists(root / "snapshot");
         expect(no_dir_before, "NoWrite_NoSnapshotDir");
 
-        const std::string id = m2.snapshot_id();
-        const bool wrote = m2.write_snapshot(id);
-        const std::filesystem::path dir = root / "snapshot" / id;
+        const std::string id2 = m2.snapshot_id();
+        const bool wrote = m2.write_snapshot(id2);
+        const std::filesystem::path dir = root / "snapshot" / id2;
         expect(wrote && std::filesystem::exists(dir / "manifest.txt") &&
                    std::filesystem::exists(dir / "cpu.txt") &&
                    std::filesystem::exists(dir / "vram.txt"),

@@ -155,7 +155,7 @@ int main() {
         // at track 0 -> completes essentially immediately).
         f.fdc.write_command(0x00);   // Restore
         expect(f.fdc.intrq(), "Superseded_RestoreCompletesImmediately_IntrqFromRestore");
-        f.fdc.read_status();  // ack the Restore's own INTRQ
+        (void)f.fdc.read_status();  // ack the Restore's own INTRQ
         expect(!f.fdc.intrq(), "Superseded_IntrqClearedAfterRead");
         // Advance well past what would have been the stale i2 deadline: the
         // superseded schedule must NOT resurrect a spurious INTRQ.

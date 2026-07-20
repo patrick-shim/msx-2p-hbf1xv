@@ -109,9 +109,9 @@ void program_fm_tone_channel(Ym2413Opll& opll, const int channel) {
     write_reg(opll, 0x05, 0xF0);  // car AR=15 (instant)
     write_reg(opll, 0x06, 0x00);
     write_reg(opll, 0x07, 0x00);
-    write_reg(opll, 0x10 + channel, 0x00);
-    write_reg(opll, 0x30 + channel, 0x00);  // user patch, volume 0
-    write_reg(opll, 0x20 + channel, 0x19);  // key-on, block 4, fnum 256
+    write_reg(opll, static_cast<std::uint8_t>(0x10 + channel), 0x00);
+    write_reg(opll, static_cast<std::uint8_t>(0x30 + channel), 0x00);  // user patch, volume 0
+    write_reg(opll, static_cast<std::uint8_t>(0x20 + channel), 0x19);  // key-on, block 4, fnum 256
 }
 
 // The literal zero-FM presenter/mixer arithmetic, reproduced independently:

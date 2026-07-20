@@ -122,7 +122,7 @@ int main() {
             for (std::size_t i = 0; i < writer.size(); ++i) {
                 writer.write(i, static_cast<std::uint8_t>((i ^ 0x5A) & 0xFF));
             }
-            writer.save(p);
+            (void)writer.save(p);  // a failed save is caught by the content compare below
             BatteryBackedSram reader(kHalnoteSramBytes);
             reader.load(p);
             return reader;

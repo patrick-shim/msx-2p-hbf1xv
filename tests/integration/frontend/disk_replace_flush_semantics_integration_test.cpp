@@ -191,7 +191,7 @@ int main() {
             Hbf1xvMachine m;
             m.cold_boot();
             m.disk_image().set_host_path(p);
-            for (std::uint8_t sec : {1u, 3u, 5u}) {
+            for (const std::uint8_t sec : {std::uint8_t{1}, std::uint8_t{3}, std::uint8_t{5}}) {
                 m.disk_drive().write_sector(sec, make_sector(static_cast<std::uint8_t>(sec * 9u)).data());
             }
             m.disk_image().flush();

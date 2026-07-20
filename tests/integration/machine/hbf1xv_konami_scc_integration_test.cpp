@@ -78,17 +78,26 @@ constexpr std::uint16_t kDestBase = 0xC600;  // landing zone, well past the prog
 constexpr std::uint8_t kA8Slot1Pages12 = 0xD7;
 constexpr std::uint8_t kA8Slot2Pages12 = 0xEB;
 
+// A single "write `value` to `addr`" step for build_probe(). An aggregate
+// rather than std::pair: braced init from fitting integer constants is not a
+// narrowing conversion here, so call sites stay `{{0x5000, 4}}` without casts,
+// and the fields say what they are.
+struct ProbeWrite {
+    std::uint16_t addr;
+    std::uint8_t value;
+};
+
 // OUT (#A8),a8 ; then (addr,value) writes via LD A/LD (nn),A ; then reads
 // via LD A,(nn) / LD (kDestBase+i),A ; HALT.
 std::vector<std::uint8_t> build_probe(const std::uint8_t a8_value,
-                                       const std::vector<std::pair<std::uint16_t, std::uint8_t>>& writes,
+                                       const std::vector<ProbeWrite>& writes,
                                        const std::vector<std::uint16_t>& reads) {
     Prog p;
     p.emit({0x3E, a8_value});
     p.emit({0xD3, 0xA8});
     for (const auto& w : writes) {
-        p.emit({0x3E, w.second});
-        p.emit({0x32, static_cast<std::uint8_t>(w.first & 0xFF), static_cast<std::uint8_t>(w.first >> 8)});
+        p.emit({0x3E, w.value});
+        p.emit({0x32, static_cast<std::uint8_t>(w.addr & 0xFF), static_cast<std::uint8_t>(w.addr >> 8)});
     }
     for (std::size_t i = 0; i < reads.size(); ++i) {
         p.emit({0x3A, static_cast<std::uint8_t>(reads[i] & 0xFF), static_cast<std::uint8_t>(reads[i] >> 8)});
@@ -162,7 +171,9 @@ void run_scc_probe(const int slot_number, const std::uint8_t a8_value, const cha
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::KonamiSCC, make_marker_image(16));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::KonamiSCC,
+                                      make_marker_image(16)) == CartridgeLoadResult::Ok,
+               "SccBusTraffic_Setup_KonamiSccLoaded");
 
         const auto program = build_probe(a8_value,
                                           {{0x9000, 0x3F},   // enable SCC (+ bank switch, both-effects)
@@ -213,11 +224,11 @@ int main() {
         expect(machine.scc_chip(3) == nullptr, "SccChip_InvalidSlot3_Nullptr");
 
         // Another mapper type in the bay -> still nullptr.
-        machine.load_cartridge(1, CartridgeMapperType::Konami, make_marker_image(32));
+        expect(machine.load_cartridge(1, CartridgeMapperType::Konami, make_marker_image(32)) == CartridgeLoadResult::Ok, "SccChip_Setup_PlainKonamiLoaded");
         expect(machine.scc_chip(1) == nullptr, "SccChip_PlainKonamiLoaded_Nullptr");
 
         // A KonamiSCC cart -> non-null for THAT bay only.
-        machine.load_cartridge(2, CartridgeMapperType::KonamiSCC, make_marker_image(16));
+        expect(machine.load_cartridge(2, CartridgeMapperType::KonamiSCC, make_marker_image(16)) == CartridgeLoadResult::Ok, "SccChip_Setup_KonamiSccLoaded");
         expect(machine.scc_chip(2) != nullptr, "SccChip_KonamiSccInSlot2_NonNull");
         expect(machine.scc_chip(1) == nullptr, "SccChip_Slot1StillPlainKonami_Nullptr");
 

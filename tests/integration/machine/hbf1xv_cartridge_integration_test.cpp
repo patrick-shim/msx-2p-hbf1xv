@@ -106,17 +106,26 @@ constexpr std::uint16_t kDestBase = 0xC400;  // landing zone for read-back bytes
 constexpr std::uint8_t kA8Slot1Page1 = 0xF7;
 constexpr std::uint8_t kA8Slot2Page1 = 0xFB;
 
+// A single "write `value` to `addr`" step for build_probe(). An aggregate
+// rather than std::pair: braced init from fitting integer constants is not a
+// narrowing conversion here, so call sites stay `{{0x4000, 3}}` without casts,
+// and the fields say what they are.
+struct ProbeWrite {
+    std::uint16_t addr;
+    std::uint8_t value;
+};
+
 // Builds: OUT (#A8),a8_value ; for each (addr,value) in writes: LD A,value /
 // LD (addr),A ; for each addr in reads: LD A,(addr) / LD (kDestBase+i),A ; HALT.
 std::vector<std::uint8_t> build_probe(const std::uint8_t a8_value,
-                                       const std::vector<std::pair<std::uint16_t, std::uint8_t>>& writes,
+                                       const std::vector<ProbeWrite>& writes,
                                        const std::vector<std::uint16_t>& reads) {
     Prog p;
     p.emit({0x3E, a8_value});  // LD A, a8_value
     p.emit({0xD3, 0xA8});      // OUT (#A8), A
     for (const auto& w : writes) {
-        p.emit({0x3E, w.second});
-        p.emit({0x32, static_cast<std::uint8_t>(w.first & 0xFF), static_cast<std::uint8_t>(w.first >> 8)});
+        p.emit({0x3E, w.value});
+        p.emit({0x32, static_cast<std::uint8_t>(w.addr & 0xFF), static_cast<std::uint8_t>(w.addr >> 8)});
     }
     for (std::size_t i = 0; i < reads.size(); ++i) {
         p.emit({0x3A, static_cast<std::uint8_t>(reads[i] & 0xFF), static_cast<std::uint8_t>(reads[i] >> 8)});
@@ -180,7 +189,8 @@ void run_all_mapper_types_probe(const int slot_number, const std::uint8_t a8_val
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok,
+               (std::string(case_prefix) + "_Generic8kB_CartridgeLoaded").c_str());
         const auto program = build_probe(a8_value, {{0x4000, 3}}, {0x4000, 0x6000});
         expect(run_to_halt(machine, program), (std::string(case_prefix) + "_Generic8kB_ReachesHalt").c_str());
         expect(machine.read_memory(kDestBase + 0) == 3,
@@ -196,7 +206,8 @@ void run_all_mapper_types_probe(const int slot_number, const std::uint8_t a8_val
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::Ascii8kB, make_marker_image(4, 0x2000));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::Ascii8kB, make_marker_image(4, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok,
+               (std::string(case_prefix) + "_Ascii8kB_CartridgeLoaded").c_str());
         const auto program = build_probe(a8_value, {{0x6000, 3}}, {0x4000, 0x6000});
         expect(run_to_halt(machine, program), (std::string(case_prefix) + "_Ascii8kB_ReachesHalt").c_str());
         expect(machine.read_memory(kDestBase + 0) == 3,
@@ -212,7 +223,8 @@ void run_all_mapper_types_probe(const int slot_number, const std::uint8_t a8_val
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::Ascii16kB, make_marker_image(8, 0x2000));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::Ascii16kB, make_marker_image(8, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok,
+               (std::string(case_prefix) + "_Ascii16kB_CartridgeLoaded").c_str());
         const auto program = build_probe(a8_value, {{0x6000, 2}}, {0x4000, 0x6000});
         expect(run_to_halt(machine, program), (std::string(case_prefix) + "_Ascii16kB_ReachesHalt").c_str());
         expect(machine.read_memory(kDestBase + 0) == 4,
@@ -228,7 +240,8 @@ void run_all_mapper_types_probe(const int slot_number, const std::uint8_t a8_val
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::Generic16kB, make_marker_image(8, 0x2000));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::Generic16kB, make_marker_image(8, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok,
+               (std::string(case_prefix) + "_Generic16kB_CartridgeLoaded").c_str());
         const auto program = build_probe(a8_value, {{0x4000, 2}}, {0x4000, 0x6000});
         expect(run_to_halt(machine, program), (std::string(case_prefix) + "_Generic16kB_ReachesHalt").c_str());
         expect(machine.read_memory(kDestBase + 0) == 4,
@@ -244,7 +257,8 @@ void run_all_mapper_types_probe(const int slot_number, const std::uint8_t a8_val
         Hbf1xvMachine machine;
         machine.cold_boot();
         machine.map_flat_ram();
-        machine.load_cartridge(slot_number, CartridgeMapperType::Konami, make_marker_image(32, 0x2000));
+        expect(machine.load_cartridge(slot_number, CartridgeMapperType::Konami, make_marker_image(32, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok,
+               (std::string(case_prefix) + "_Konami_CartridgeLoaded").c_str());
         const auto program = build_probe(a8_value, {{0x6000, 9}}, {0x4000, 0x6000});
         expect(run_to_halt(machine, program), (std::string(case_prefix) + "_Konami_ReachesHalt").c_str());
         expect(machine.read_memory(kDestBase + 0) == 0,
@@ -285,8 +299,8 @@ int main() {
                 image2[static_cast<std::size_t>(bank) * 0x2000 + i] = marker;
             }
         }
-        machine.load_cartridge(1, CartridgeMapperType::Generic8kB, image1);
-        machine.load_cartridge(2, CartridgeMapperType::Generic8kB, image2);
+        expect(machine.load_cartridge(1, CartridgeMapperType::Generic8kB, image1) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok, "Independence_Setup_Slot1CartridgeLoaded");
+        expect(machine.load_cartridge(2, CartridgeMapperType::Generic8kB, image2) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok, "Independence_Setup_Slot2CartridgeLoaded");
 
         machine.debug_io_write(0xA8, kA8Slot1Page1);
         expect(machine.debug_bus_read(0x4000) == 0, "Independence_Slot1_Page1_ReadsOwnImage_Bank0");
@@ -319,7 +333,7 @@ int main() {
     {
         Hbf1xvMachine machine;
         machine.cold_boot();
-        machine.load_cartridge(1, CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000));
+        expect(machine.load_cartridge(1, CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000)) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok, "ColdBootKeepsCartridge_Setup_CartridgeLoaded");
 
         machine.debug_io_write(0xA8, kA8Slot1Page1);
         // Bank-switch away from the reset default (bank0 at slot2/0x4000).

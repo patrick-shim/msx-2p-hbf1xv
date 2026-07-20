@@ -170,7 +170,7 @@ int main() {
             Hbf1xvMachine m;
             m.cold_boot();
             // write OFF, then late-ON bind + flush (the (c) path).
-            for (std::uint8_t sec : {2u, 4u, 7u}) {
+            for (const std::uint8_t sec : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{7}}) {
                 m.disk_drive().write_sector(sec, make_sector(static_cast<std::uint8_t>(sec * 5u)).data());
             }
             m.disk_image().set_host_path(p);

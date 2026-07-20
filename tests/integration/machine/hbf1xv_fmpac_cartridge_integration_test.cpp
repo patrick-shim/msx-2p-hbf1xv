@@ -189,7 +189,7 @@ int main() {
         machine.set_asset_root(SONY_MSX_BIOS_DIR);
         machine.set_fmpac_sram_path(std::filesystem::temp_directory_path() / "m36_fmpac_absent.sram");
         machine.cold_boot();
-        machine.load_cartridge(1, CMT::FmPac, fmpac_rom);
+        expect(machine.load_cartridge(1, CMT::FmPac, fmpac_rom) == sony_msx::devices::cartridge::CartridgeLoadResult::Ok, "AbsentSram_Setup_FmPacLoaded");
         expect(machine.fmpac(1)->sram().read(0) == 0x00, "AbsentSram_ZeroDefault");
     }
 

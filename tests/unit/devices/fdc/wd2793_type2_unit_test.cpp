@@ -146,7 +146,7 @@ int main() {
         const std::uint64_t first_drq = f.fdc.drq_deadline();
         expect(first_drq == kReadSectorHeaderCycles, "ReadSector_FirstDrq_Sector1Phase0_HeaderOnly");
         f.clock.cycles = first_drq + 5 * kCyclesPerByte;
-        f.fdc.read_data();
+        (void)f.fdc.read_data();
         const std::uint8_t status = f.fdc.peek_status();
         expect((status & 0x04) != 0, "ReadSector_MissedDrq_LostDataSet");
     }
@@ -234,7 +234,7 @@ int main() {
         for (int sector_index = 0; sector_index < 2; ++sector_index) {
             for (std::uint32_t i = 0; i < DiskImage::kSectorSize; ++i) {
                 f.wait_for_drq();
-                f.fdc.read_data();
+                (void)f.fdc.read_data();
                 ++bytes_read;
             }
         }

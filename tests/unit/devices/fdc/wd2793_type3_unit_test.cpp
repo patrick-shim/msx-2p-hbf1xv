@@ -197,7 +197,7 @@ int main() {
         // Consume a few bytes so the command is genuinely mid-flight.
         for (int i = 0; i < 10; ++i) {
             f.wait_for_drq();
-            f.fdc.read_data();
+            (void)f.fdc.read_data();
         }
         expect((f.fdc.peek_status() & 0x01) != 0, "PreFI_MidRead_BusyStillSet");
 

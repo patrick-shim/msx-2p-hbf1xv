@@ -421,7 +421,7 @@ int main() {
         });
 
     run("LdBcMemNn_LoadWordLittleEndianTiming20",
-        [](ArrayBus& b, cpu::Z80aCpu& c) {
+        [](ArrayBus& b, cpu::Z80aCpu&) {
             b.memory[0x4000] = 0x78;
             b.memory[0x4001] = 0x56;
             b.memory[0x0000] = 0xED;
@@ -446,7 +446,7 @@ int main() {
         });
 
     run("LdDeMemNn_LoadWordTiming20",
-        [](ArrayBus& b, cpu::Z80aCpu& c) {
+        [](ArrayBus& b, cpu::Z80aCpu&) {
             b.memory[0x4000] = 0xEF;
             b.memory[0x4001] = 0xBE;
             b.memory[0x0000] = 0xED;
@@ -487,7 +487,7 @@ int main() {
         });
 
     run("Im2_SetsInterruptModeTiming8",
-        [](ArrayBus& b, cpu::Z80aCpu& c) {
+        [](ArrayBus& b, cpu::Z80aCpu&) {
             b.memory[0x0000] = 0xED;
             b.memory[0x0001] = 0x5E;  // IM 2
         },

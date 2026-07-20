@@ -128,7 +128,7 @@ int main() {
     // --- unload() reverts to the identical empty-slot default. ---
     {
         CartridgeSlot slot(1);
-        slot.load(CartridgeMapperType::Mirrored, make_marker_image(2, 0x2000));
+        expect(slot.load(CartridgeMapperType::Mirrored, make_marker_image(2, 0x2000)) == CartridgeLoadResult::Ok, "Unload_Setup_LoadSucceeded");
         expect(slot.loaded(), "Unload_Setup_Loaded");
         slot.unload();
         expect(!slot.loaded(), "Unload_NoLongerLoaded");
@@ -138,7 +138,7 @@ int main() {
     // --- reset() reinitializes bank state without unloading. ---
     {
         CartridgeSlot slot(1);
-        slot.load(CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000));
+        expect(slot.load(CartridgeMapperType::Generic8kB, make_marker_image(4, 0x2000)) == CartridgeLoadResult::Ok, "Reload_Setup_FirstLoadSucceeded");
         slot.mem_write(0x4000, 3);
         expect(slot.mem_read(0x4000) == 3, "Reset_Setup_BankSwitchedAway");
         slot.reset();
@@ -151,7 +151,7 @@ int main() {
     {
         auto run = [] {
             CartridgeSlot slot(2);
-            slot.load(CartridgeMapperType::Ascii8kB, make_marker_image(4, 0x2000));
+            expect(slot.load(CartridgeMapperType::Ascii8kB, make_marker_image(4, 0x2000)) == CartridgeLoadResult::Ok, "Reload_Setup_SecondLoadSucceeded");
             slot.mem_write(0x6000, 2);
             slot.mem_write(0x7800, 1);
             std::vector<std::uint8_t> reads;

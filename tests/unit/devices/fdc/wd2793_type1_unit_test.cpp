@@ -121,7 +121,7 @@ int main() {
         f.fdc.write_data(42);
         f.fdc.write_command(0x10);  // Seek, rate0, no V
         f.clock.cycles += 200000ull;  // past any plausible step/settle deadline
-        f.fdc.read_status();
+        (void)f.fdc.read_status();
         expect(f.fdc.track_register() == 42, "Seek_TrackRegister_MatchesDataRegister");
     }
 
@@ -194,7 +194,7 @@ int main() {
         f.fdc.write_command(0x00);  // Restore, already at track 0 -> completes fast
         f.clock.cycles += 1;
         expect(f.fdc.intrq(), "Intrq_SetAfterRestoreCompletes");
-        f.fdc.read_status();
+        (void)f.fdc.read_status();
         expect(!f.fdc.intrq(), "Intrq_ClearedByReadStatus");
     }
 

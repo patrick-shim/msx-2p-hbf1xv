@@ -328,7 +328,7 @@ int main() {
         });
 
     run("Jr_Backward_NegativeDisplacementTiming12",
-        [](ArrayBus& b, cpu::Z80aCpu& c) {
+        [](ArrayBus& b, cpu::Z80aCpu&) {
             b.memory[0x0000] = 0x18;  // JR d
             b.memory[0x0001] = 0xFE;  // -2
         },
@@ -454,12 +454,12 @@ int main() {
             b.memory[0x0001] = 0x00;
             b.memory[0x0002] = 0x40;
         },
-        [](ArrayBus& b, cpu::Z80aCpu& c, std::uint32_t t) {
+        [](ArrayBus& b, cpu::Z80aCpu&, std::uint32_t t) {
             return t == 16 && b.memory[0x4000] == 0xCD && b.memory[0x4001] == 0xAB;
         });
 
     run("LdHlMemNn_LoadWord_LittleEndianTiming16",
-        [](ArrayBus& b, cpu::Z80aCpu& c) {
+        [](ArrayBus& b, cpu::Z80aCpu&) {
             b.memory[0x4000] = 0xCD;
             b.memory[0x4001] = 0xAB;
             b.memory[0x0000] = 0x2A;  // LD HL,(nn)

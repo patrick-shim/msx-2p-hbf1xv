@@ -102,7 +102,7 @@ int main() {
             Hbf1xvMachine m;
             m.cold_boot();
             m.disk_image().set_host_path(p);
-            for (std::uint8_t sector : {2u, 4u, 7u, 9u}) {
+            for (const std::uint8_t sector : {std::uint8_t{2}, std::uint8_t{4}, std::uint8_t{7}, std::uint8_t{9}}) {
                 std::vector<std::uint8_t> s(DiskImage::kSectorSize);
                 for (std::size_t i = 0; i < s.size(); ++i) {
                     s[i] = static_cast<std::uint8_t>((sector * 17u + i) & 0xFFu);
